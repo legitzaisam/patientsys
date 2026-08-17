@@ -1,0 +1,221 @@
+import { useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
+import { Check, Mail, MessageSquare, Phone, X } from "lucide-react";
+import { deleteRecallTask, listOpenRecallTasks, setRecallTaskStatus } from "@/lib/clinic.functions";
+import { can } from "@/lib/permissions";
+import { useIdentity } from "@/lib/use-identity";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+type Channel = "phone" | "email" | "message";
+
+const STORE_KEY = "recall-task-channels";
+
+function readChannels(): Record<string, Channel> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(STORE_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+/** Outstanding patient follow-ups (e.g. after a no show) for the signed-in user. */
+export function FollowUpTasks() {
+  const queryClient = useQueryClient();
+  const fetchTasks = useServerFn(listOpenRecallTasks);
+  const { data: identity } = useIdentity();
+  const { data: tasks } = useQuery({ queryKey: ["recall-tasks", "open"], queryFn: () => fetchTasks() });
+  const [channels, setChannels] = useState<Record<string, Channel>>(() => readChannels());
+
+  const markChannel = (taskId: string, channel: Channel) => {
+    setChannels((prev) => {
+      const next = { ...prev, [taskId]: channel };
+      try {
+        window.localStorage.setItem(STORE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
+  const clearChannel = (taskId: string) => {
+    setChannels((prev) => {
+      const { [taskId]: _, ...next } = prev;
+      try {
+        window.localStorage.setItem(STORE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
+  const update = useMutation({
+    mutationFn: useServerFn(setRecallTaskStatus),
+    onSuccess: () => {
+      toast.success("Task updated");
+      queryClient.invalidateQueries({ queryKey: ["recall-tasks"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: useServerFn(deleteRecallTask),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recall-tasks"] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+      queryClient.invalidateQueries({ queryKey: ["recall-tasks"] });
+    },
+  });
+
+  /** Deletes are held for a few seconds so they can be undone. */
+  const [pending, setPending] = useState<string[]>([]);
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => {
+    const store = timers.current;
+    return () => {
+      Object.values(store).forEach(clearTimeout);
+    };
+  }, []);
+
+  const requestDelete = (taskId: string, name: string) => {
+    setPending((prev) => [...prev, taskId]);
+    timers.current[taskId] = setTimeout(() => {
+      delete timers.current[taskId];
+      remove.mutate({ data: { task_id: taskId } });
+    }, 6000);
+    toast.success(`Task deleted — ${name}`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const timer = timers.current[taskId];
+          if (timer) clearTimeout(timer);
+          delete timers.current[taskId];
+          setPending((prev) => prev.filter((id) => id !== taskId));
+          toast.success("Task restored");
+        },
+      },
+      duration: 6000,
+    });
+  };
+
+  const visible = (tasks ?? []).filter((t: any) => !pending.includes(t.id));
+  if (!visible.length) return null;
+
+  return (
+    <section>
+      <div className="mb-4">
+        <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My tasks</h2>
+        <p className="text-xs text-muted-foreground">Patients to contact and rebook by chat, phone or email.</p>
+      </div>
+      <Card className="divide-y divide-glass-line p-0">
+        {visible.map((t: any) => {
+          const name = `${t.patients?.first_name ?? ""} ${t.patients?.last_name ?? ""}`.trim() || "Patient";
+          const contacted = t.status === "contacted" || t.status === "completed";
+          const used = channels[t.id];
+          const channelClass = (c: Channel) =>
+            cn(
+              "h-8 w-8 rounded-full",
+              contacted && used === c && "bg-success-bg text-success hover:brightness-105",
+            );
+          return (
+            <div key={t.id} className="flex flex-wrap items-center gap-3 p-4">
+              <div className="min-w-0 flex-1">
+                <Link
+                  to="/patients/$id"
+                  params={{ id: t.patient_id }}
+                  className="text-sm font-medium text-foreground hover:underline"
+                >
+                  {name}
+                </Link>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">{t.note ?? "Follow-up required"}</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {t.patients?.phone && (
+                  <Button asChild size="icon" variant="ghost" className={channelClass("phone")} title="Call">
+                    <a href={`tel:${t.patients.phone}`} onClick={() => markChannel(t.id, "phone")}>
+                      <Phone className="h-3.5 w-3.5" />
+                    </a>
+                  </Button>
+                )}
+                {t.patients?.email && (
+                  <Button asChild size="icon" variant="ghost" className={channelClass("email")} title="Email">
+                    <a href={`mailto:${t.patients.email}`} onClick={() => markChannel(t.id, "email")}>
+                      <Mail className="h-3.5 w-3.5" />
+                    </a>
+                  </Button>
+                )}
+                <Button asChild size="icon" variant="ghost" className={channelClass("message")} title="Message">
+                  <Link
+                    to="/patients/$id"
+                    params={{ id: t.patient_id }}
+                    onClick={() => markChannel(t.id, "message")}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+                {t.status === "sent" ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 text-2xs"
+                    disabled={update.isPending}
+                    onClick={() => update.mutate({ data: { task_id: t.id, status: "contacted" } })}
+                  >
+                    Mark contacted
+                  </Button>
+                ) : t.status === "contacted" ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="inline-flex h-8 items-center gap-1 bg-success-bg px-3 text-2xs font-semibold text-success hover:brightness-105 hover:text-success"
+                    disabled={update.isPending}
+                    onClick={() => {
+                      clearChannel(t.id);
+                      update.mutate({ data: { task_id: t.id, status: "sent" } });
+                    }}
+                  >
+                    <Check className="h-3 w-3" /> Contacted
+                  </Button>
+                ) : (
+                  <span className="inline-flex h-8 items-center gap-1 rounded-full bg-success-bg px-3 text-2xs font-semibold text-success shadow-inset-hi">
+                    <Check className="h-3 w-3" /> Contacted
+                  </span>
+                )}
+                <Button
+                  size="sm"
+                  className="h-8 text-2xs"
+                  disabled={update.isPending}
+                  onClick={() => update.mutate({ data: { task_id: t.id, status: "completed" } })}
+                >
+                  Complete
+                </Button>
+                {can(identity, "tasks.delete") && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    title="Delete task"
+                    aria-label="Delete task"
+                    className="h-8 w-8 text-muted-foreground hover:bg-destructive-bg hover:text-destructive"
+                    onClick={() => requestDelete(t.id, name)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+    </section>
+  );
+}

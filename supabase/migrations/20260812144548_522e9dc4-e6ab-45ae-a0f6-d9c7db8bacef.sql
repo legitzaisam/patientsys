@@ -1,0 +1,1 @@
+CREATE POLICY "owners manage catalogue" ON public.treatment_catalogue FOR ALL TO authenticated USING (public.has_role(auth.uid(), 'owner')) WITH CHECK (public.has_role(auth.uid(), 'owner'));

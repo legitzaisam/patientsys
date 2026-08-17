@@ -1,0 +1,30 @@
+/** Day boundaries in the clinic's local timezone (Europe/London), returned as ISO strings. */
+export const CLINIC_TZ = "Europe/London";
+
+function tzOffsetMs(date: Date, timeZone: string) {
+  const asUTC = new Date(date.toLocaleString("en-US", { timeZone: "UTC" }));
+  const asLocal = new Date(date.toLocaleString("en-US", { timeZone }));
+  return asLocal.getTime() - asUTC.getTime();
+}
+
+/** Local calendar day (yyyy-mm-dd) in the clinic timezone. */
+export function clinicDayKey(now: Date = new Date(), timeZone: string = CLINIC_TZ) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+/** [start, end) of the clinic-local day containing `now`, as UTC ISO strings. */
+export function clinicDayRange(now: Date = new Date(), timeZone: string = CLINIC_TZ) {
+  const key = clinicDayKey(now, timeZone);
+  const offset = tzOffsetMs(now, timeZone);
+  const start = new Date(Date.parse(`${key}T00:00:00Z`) - offset);
+  const end = new Date(start.getTime() + 86400000);
+  // Re-resolve the end boundary in case of a DST shift across the day.
+  const endOffset = tzOffsetMs(end, timeZone);
+  const adjustedEnd = new Date(end.getTime() + (offset - endOffset));
+  return { dayKey: key, startISO: start.toISOString(), endISO: adjustedEnd.toISOString() };
+}

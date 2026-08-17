@@ -1,0 +1,2210 @@
+/**
+ * Demo stand-in for `clinic.functions.ts`.
+ *
+ * Same exported names and return shapes, but every handler reads from the
+ * in-memory fixture clinic in `./demo/data` instead of Supabase, and none of
+ * them require an authenticated session. Vite swaps this module in when the
+ * app is started with `npm run dev:demo`.
+ */
+import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
+import {
+  CLINIC_ID,
+  DEMO_ACCOUNTS,
+  USERS,
+  db,
+  newId,
+  profileName,
+  type DemoRole,
+} from "@/lib/demo/data";
+
+export const PERMISSION_KEYS = [
+  "reports.retention",
+  "reports.performance",
+  "team.view",
+  "team.approve_changes",
+  "settings.treatments",
+  "notifications.delete",
+  "tasks.delete",
+] as const;
+export type PermissionKey = (typeof PERMISSION_KEYS)[number];
+
+const patients = db.patients as any[];
+const profiles = db.profiles as any[];
+const userRoles = db.userRoles as any[];
+const rolePermissions = db.rolePermissions as any[];
+const catalogue = db.catalogue as any[];
+const treatments = db.treatments as any[];
+const appointments = db.appointments as any[];
+const appointmentNotes = db.appointmentNotes as any[];
+const documents = db.documents as any[];
+const messages = db.messages as any[];
+const medicalHistory = db.medicalHistory as any[];
+const photos = db.photos as any[];
+const recallTasks = db.recallTasks as any[];
+const retentionOutreach = db.retentionOutreach as any[];
+const staffNotifications = db.staffNotifications as any[];
+const messageTemplates = db.messageTemplates as any[];
+const treatmentColours = db.treatmentColours as any[];
+const colourThemes = db.colourThemes as any[];
+const profileChangeRequests = db.profileChangeRequests as any[];
+const staffDocuments = db.staffDocuments as any[];
+const userNotes = db.userNotes as any[];
+
+/* ---------------------------------------------------------------- */
+/* identity — driven by the demo_role cookie                          */
+/* ---------------------------------------------------------------- */
+
+function currentRole(): DemoRole {
+  let cookie = "";
+  try {
+    cookie = getRequest()?.headers.get("cookie") ?? "";
+  } catch {
+    cookie = "";
+  }
+  const value = /(?:^|;\s*)demo_role=([^;]+)/.exec(cookie)?.[1];
+  if (
+    value === "practitioner" ||
+    value === "front_desk" ||
+    value === "patient" ||
+    value === "owner"
+  ) {
+    return value;
+  }
+  return "owner";
+}
+
+type Identity = {
+  userId: string;
+  email: string;
+  roles: string[];
+  isStaff: boolean;
+  isOwner: boolean;
+  isManager: boolean;
+  canDelete: boolean;
+  isPatient: boolean;
+  permissions: string[];
+  profile: any;
+  patient: any;
+};
+
+function identity(): Identity {
+  const role = currentRole();
+  const account = DEMO_ACCOUNTS[role];
+  const isStaff = role !== "patient";
+  const isManager = role === "owner";
+  const permissions = isManager
+    ? [...PERMISSION_KEYS]
+    : rolePermissions
+        .filter((p) => p.enabled && p.role === role)
+        .map((p) => p.permission as string);
+  const profile = profiles.find((p) => p.id === account.userId) ?? null;
+  const linked = patients.find((p) => p.user_id === account.userId);
+  return {
+    userId: account.userId,
+    email: account.email,
+    roles: [role],
+    isStaff,
+    isOwner: isManager,
+    isManager,
+    canDelete: isManager,
+    isPatient: !isStaff,
+    permissions,
+    profile,
+    patient: linked
+      ? { id: linked.id, first_name: linked.first_name, last_name: linked.last_name }
+      : null,
+  };
+}
+
+function requireStaff() {
+  const me = identity();
+  if (!me.isStaff) throw new Error("Staff access only");
+  return me;
+}
+
+/* ---------------------------------------------------------------- */
+/* lookups and joins                                                  */
+/* ---------------------------------------------------------------- */
+
+const patientById = (id: string) => patients.find((p) => p.id === id) ?? null;
+
+function patientJoin(id: string) {
+  const p = patientById(id);
+  if (!p) return null;
+  return {
+    first_name: p.first_name,
+    last_name: p.last_name,
+    reference: p.reference,
+    email: p.email,
+    phone: p.phone,
+    id: p.id,
+  };
+}
+
+function appointmentView(a: any) {
+  const doc = a.consent_document_id ? documents.find((d) => d.id === a.consent_document_id) : null;
+  return {
+    ...a,
+    patients: patientJoin(a.patient_id),
+    profiles: a.practitioner_id ? { full_name: profileName(a.practitioner_id) } : null,
+    documents: doc ? { status: doc.status, title: doc.title } : null,
+  };
+}
+
+function isoDaysAgo(days: number) {
+  return new Date(Date.now() - days * 86400000).toISOString();
+}
+
+function sortDesc(list: any[], key: string) {
+  return [...list].sort((a, b) => (a[key] < b[key] ? 1 : -1));
+}
+
+function sortAsc(list: any[], key: string) {
+  return [...list].sort((a, b) => (a[key] > b[key] ? 1 : -1));
+}
+
+/* ---------------------------------------------------------------- */
+/* identity + dashboard                                               */
+/* ---------------------------------------------------------------- */
+
+export const getMe = createServerFn({ method: "GET" }).handler(async () => identity());
+
+export const getDashboard = createServerFn({ method: "GET" }).handler(async () => {
+  const me = identity();
+  const today = new Date();
+  const in30 = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
+  const weekAhead = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+  const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString();
+  const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+
+  // The fixtures build the day in local time so the dashboard and the diary
+  // (which renders in the browser's timezone) agree on what "today" contains.
+  const range = {
+    startISO: new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString(),
+    endISO: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString(),
+  };
+  const isManager = me.isManager;
+  const isPractitioner = me.roles.includes("practitioner");
+  const isFrontDesk = me.roles.includes("front_desk");
+
+  const all = patients;
+  let due = sortAsc(
+    treatments.filter((t) => t.next_due_at && t.next_due_at <= in30),
+    "next_due_at",
+  )
+    .slice(0, 12)
+    .map((t) => ({ ...t, patients: patientJoin(t.patient_id) }));
+  let monthTreats = treatments.filter((t) => t.performed_at >= monthStart);
+  let prevMonthTreats = treatments.filter(
+    (t) => t.performed_at >= prevMonthStart && t.performed_at < prevMonthEnd,
+  );
+  let todayAppts = sortAsc(
+    appointments.filter((a) => a.starts_at >= range.startISO && a.starts_at < range.endISO),
+    "starts_at",
+  ).map(appointmentView);
+
+  if (isPractitioner && !isManager) {
+    due = due.filter((t) => t.practitioner_id === me.userId || !t.practitioner_id);
+    monthTreats = monthTreats.filter((t) => t.practitioner_id === me.userId);
+    prevMonthTreats = prevMonthTreats.filter((t) => t.practitioner_id === me.userId);
+    todayAppts = todayAppts.filter((a) => a.practitioner_id === me.userId);
+  }
+
+  const active = all.filter((p) => p.status === "active").length;
+  const inactive = all.filter((p) => p.status !== "active").length;
+
+  const yearAgoMs = today.getTime() - 365 * 86400000;
+  const twoYearsAgoMs = today.getTime() - 730 * 86400000;
+  const seen = new Map<string, number>();
+  const seenPrev = new Map<string, number>();
+  for (const t of treatments) {
+    const ms = new Date(t.performed_at).getTime();
+    if (ms >= yearAgoMs) seen.set(t.patient_id, (seen.get(t.patient_id) ?? 0) + 1);
+    else if (ms >= twoYearsAgoMs) seenPrev.set(t.patient_id, (seenPrev.get(t.patient_id) ?? 0) + 1);
+  }
+  const returning = [...seen.values()].filter((n) => n > 1).length;
+  const retention = seen.size ? Math.round((returning / seen.size) * 100) : 0;
+  const returningPrev = [...seenPrev.values()].filter((n) => n > 1).length;
+  const retentionPrev = seenPrev.size ? Math.round((returningPrev / seenPrev.size) * 100) : 0;
+
+  const revenue = monthTreats.reduce((sum, t) => sum + Number(t.price ?? 0), 0);
+  const prevRevenue = prevMonthTreats.reduce((sum, t) => sum + Number(t.price ?? 0), 0);
+  const revenueChange = prevRevenue ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100) : 0;
+
+  const newPatientsThisMonth = all.filter(
+    (p) => new Date(p.created_at) >= new Date(monthStart),
+  ).length;
+  const newPatientsPrevMonth = all.filter(
+    (p) => p.created_at >= prevMonthStart && p.created_at < prevMonthEnd,
+  ).length;
+  const patientChange = newPatientsPrevMonth
+    ? Math.round(((newPatientsThisMonth - newPatientsPrevMonth) / newPatientsPrevMonth) * 100)
+    : 0;
+
+  const pendingDocs = sortAsc(
+    documents.filter((d) => d.status === "sent" || d.status === "viewed"),
+    "sent_at",
+  )
+    .slice(0, 10)
+    .map((d) => ({ ...d, patients: patientJoin(d.patient_id) }));
+
+  const historyFlags = sortDesc(
+    medicalHistory.filter((h) => !h.reviewed_at && h.source === "patient"),
+    "created_at",
+  )
+    .slice(0, 10)
+    .map((h) => ({ ...h, patients: patientJoin(h.patient_id) }));
+
+  const unread = sortDesc(
+    messages.filter((m) => !m.read_at && m.author === "patient"),
+    "created_at",
+  ).slice(0, 10);
+
+  const pendingConsents = pendingDocs.filter((d) => d.kind === "consent").length;
+
+  const attentionItems: any[] = [];
+  for (const a of todayAppts) {
+    const stage =
+      a.stage ??
+      (a.status === "no_show" ? "no_show" : a.status === "attended" ? "complete" : "booked");
+    const who = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim();
+    const at = new Date(a.starts_at).toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    if (stage === "no_show") {
+      attentionItems.push({
+        id: `no-show-${a.id}`,
+        kind: "no_show",
+        urgency: "urgent",
+        title: `${who} — no show`,
+        subtitle: `${a.treatment_name} · ${at}`,
+        patientId: a.patient_id,
+        appointmentId: a.id,
+      });
+    }
+    if (a.documents?.status !== "signed") {
+      attentionItems.push({
+        id: `consent-${a.id}`,
+        kind: "consent_due",
+        urgency: "urgent",
+        title: `${who} — consent due`,
+        subtitle: `${a.treatment_name}`,
+        patientId: a.patient_id,
+        appointmentId: a.id,
+      });
+    }
+    if (a.payment_status === "unpaid" || a.payment_status === "deposit_paid") {
+      attentionItems.push({
+        id: `payment-${a.id}`,
+        kind: a.payment_status === "deposit_paid" ? "balance_due" : "payment_due",
+        urgency: "urgent",
+        title: `${who} — ${a.payment_status === "deposit_paid" ? "balance due" : "unpaid"}`,
+        subtitle: `${a.treatment_name}`,
+        patientId: a.patient_id,
+        appointmentId: a.id,
+      });
+    }
+  }
+  for (const t of due.filter((x) => x.next_due_at && x.next_due_at <= weekAhead)) {
+    attentionItems.push({
+      id: `due-${t.id}`,
+      kind: "treatment_due",
+      urgency: "this_week",
+      title: `${t.patients?.first_name ?? ""} ${t.patients?.last_name ?? ""} — ${t.name}`,
+      subtitle: `Due ${new Date(t.next_due_at).toLocaleDateString("en-GB")}`,
+      patientId: t.patient_id,
+    });
+  }
+  for (const m of unread) {
+    const p = patientById(m.patient_id);
+    attentionItems.push({
+      id: `msg-${m.id}`,
+      kind: "message",
+      urgency: "this_week",
+      title: `${p?.first_name ?? ""} ${p?.last_name ?? ""} — new message`,
+      subtitle: m.body.slice(0, 60) + (m.body.length > 60 ? "…" : ""),
+      patientId: m.patient_id,
+    });
+  }
+
+  return {
+    kpis: {
+      totalClients: all.length,
+      activeClients: active,
+      inactiveClients: inactive,
+      retention,
+      retentionChange: retentionPrev ? retention - retentionPrev : 0,
+      repeatClients: returning,
+      oneVisitClients: seen.size - returning,
+      treatmentsDue: due.length,
+      pendingConsents,
+      revenueMonth: revenue,
+      treatmentsMonth: monthTreats.length,
+      revenueChange,
+      patientChange,
+    },
+    todayAppointments: todayAppts,
+    attentionItems,
+    due,
+    pendingDocuments: pendingDocs,
+    historyFlags,
+    role: { isManager, isPractitioner, isFrontDesk },
+  };
+});
+
+/* ---------------------------------------------------------------- */
+/* patients                                                           */
+/* ---------------------------------------------------------------- */
+
+export const listPatients = createServerFn({ method: "GET" }).handler(async () => {
+  const nowIso = new Date().toISOString();
+  return [...patients]
+    .sort(
+      (a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name),
+    )
+    .map((p) => {
+      const mine = treatments.filter((t) => t.patient_id === p.id);
+      const last = sortDesc(mine, "performed_at")[0] ?? null;
+      const dueRow =
+        sortAsc(
+          mine.filter((t) => t.next_due_at),
+          "next_due_at",
+        )[0] ?? null;
+      const next =
+        sortAsc(
+          appointments.filter(
+            (a) => a.patient_id === p.id && a.starts_at >= nowIso && a.status === "booked",
+          ),
+          "starts_at",
+        )[0] ?? null;
+      return {
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        title: p.title,
+        date_of_birth: p.date_of_birth,
+        status: p.status,
+        reference: p.reference,
+        last_visit_at: p.last_visit_at,
+        allergies: p.allergies,
+        avatar_url: p.avatar_url,
+        lastTreatment: last
+          ? { name: last.name, performed_at: last.performed_at, next_due_at: last.next_due_at }
+          : null,
+        nextDue: dueRow
+          ? {
+              name: dueRow.name,
+              performed_at: dueRow.performed_at,
+              next_due_at: dueRow.next_due_at,
+            }
+          : null,
+        nextAppointment: next
+          ? {
+              treatment_name: next.treatment_name,
+              treatment_number: next.treatment_number,
+              starts_at: next.starts_at,
+              status: next.status,
+            }
+          : null,
+        outstandingDocuments: documents.filter(
+          (d) => d.patient_id === p.id && (d.status === "sent" || d.status === "viewed"),
+        ).length,
+      };
+    });
+});
+
+export const getPatient = createServerFn({ method: "GET" })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const patient = patientById(data.id);
+    if (!patient) throw new Error("Patient not found");
+    const nowIso = new Date().toISOString();
+    const mine = sortDesc(
+      treatments.filter((t) => t.patient_id === data.id),
+      "performed_at",
+    ).map((t) => ({
+      ...t,
+      profiles: { full_name: profileName(t.practitioner_id) },
+    }));
+    const upcoming = appointments.filter(
+      (a) =>
+        a.patient_id === data.id &&
+        a.starts_at >= nowIso &&
+        a.status !== "cancelled" &&
+        a.status !== "no_show",
+    );
+    const { patientRetention } = await import("./retention.server");
+    return {
+      patient,
+      treatments: mine,
+      photos: sortAsc(
+        photos.filter((p) => p.patient_id === data.id),
+        "taken_at",
+      ).map((p) => ({
+        ...p,
+        url: p.storage_path,
+      })),
+      documents: sortDesc(
+        documents.filter((d) => d.patient_id === data.id),
+        "created_at",
+      ),
+      messages: sortAsc(
+        messages.filter((m) => m.patient_id === data.id),
+        "created_at",
+      ),
+      history: sortDesc(
+        medicalHistory.filter((h) => h.patient_id === data.id),
+        "created_at",
+      ),
+      retention: patientRetention(
+        mine.map((t) => ({ performed_at: t.performed_at, next_due_at: t.next_due_at })),
+        upcoming.length > 0,
+      ),
+      nextAppointmentAt: sortAsc(upcoming, "starts_at")[0]?.starts_at ?? null,
+    };
+  });
+
+export const savePatient = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      id?: string;
+      first_name: string;
+      last_name: string;
+      title?: string;
+      email?: string;
+      phone?: string;
+      date_of_birth?: string;
+      status?: string;
+      allergies?: string;
+      medications?: string;
+      conditions?: string;
+      notes?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    if (data.id) {
+      const row = patientById(data.id);
+      if (row) Object.assign(row, { ...data, updated_at: new Date().toISOString() });
+      return { id: data.id };
+    }
+    const created = {
+      id: newId("d9"),
+      clinic_id: CLINIC_ID,
+      user_id: null,
+      reference: `AV-${Math.floor(1000 + Math.random() * 8999)}`,
+      title: data.title ?? null,
+      first_name: data.first_name.trim(),
+      last_name: data.last_name.trim(),
+      date_of_birth: data.date_of_birth ?? null,
+      email: data.email ?? null,
+      phone: data.phone ?? null,
+      status: data.status ?? "active",
+      allergies: data.allergies ?? null,
+      medications: data.medications ?? null,
+      conditions: data.conditions ?? null,
+      notes: data.notes ?? null,
+      avatar_url: null,
+      last_visit_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    patients.push(created);
+    return { id: created.id };
+  });
+
+/* ---------------------------------------------------------------- */
+/* catalogue, practitioners, appointments                             */
+/* ---------------------------------------------------------------- */
+
+export const getCatalogue = createServerFn({ method: "GET" }).handler(async () =>
+  catalogue
+    .filter((c) => c.active)
+    .sort((a, b) => String(a.category).localeCompare(String(b.category))),
+);
+
+export const listPractitioners = createServerFn({ method: "GET" }).handler(async () => {
+  const ids = userRoles.filter((r) => r.role === "practitioner").map((r) => r.user_id);
+  return profiles
+    .filter((p) => ids.includes(p.id))
+    .map((p) => ({ id: p.id, full_name: p.full_name, job_title: p.job_title }))
+    .sort((a, b) => a.full_name.localeCompare(b.full_name));
+});
+
+export const listAppointments = createServerFn({ method: "GET" })
+  .validator((data: { from: string; to: string }) => data)
+  .handler(async ({ data }) =>
+    sortAsc(
+      appointments.filter((a) => a.starts_at >= data.from && a.starts_at < data.to),
+      "starts_at",
+    ).map(appointmentView),
+  );
+
+export const saveAppointment = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      id?: string;
+      patient_id: string;
+      practitioner_id?: string;
+      catalogue_id?: string;
+      treatment_name: string;
+      treatment_number: number;
+      starts_at: string;
+      duration_minutes: number;
+      price?: number;
+      payment_status?: string;
+      consent_document_id?: string;
+      notes?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = identity();
+    const start = new Date(data.starts_at);
+    const payload = {
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      practitioner_id: data.practitioner_id || me.userId,
+      catalogue_id: data.catalogue_id || null,
+      treatment_name: data.treatment_name,
+      treatment_number: data.treatment_number,
+      starts_at: start.toISOString(),
+      ends_at: new Date(start.getTime() + (data.duration_minutes || 30) * 60000).toISOString(),
+      price: data.price ?? null,
+      payment_status: data.payment_status ?? "unpaid",
+      consent_document_id: data.consent_document_id || null,
+      notes: data.notes || null,
+      created_by: me.userId,
+      status: "booked",
+      stage: "booked",
+      updated_at: new Date().toISOString(),
+    };
+
+    if (data.id) {
+      const row = appointments.find((a) => a.id === data.id);
+      if (row) Object.assign(row, payload);
+      return { id: data.id };
+    }
+
+    const created = { id: newId("a8"), created_at: new Date().toISOString(), ...payload };
+    appointments.push(created);
+
+    const patient = patientById(data.patient_id);
+    const when = start.toLocaleString("en-GB", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/London",
+    });
+    const practitioner = profileName(payload.practitioner_id);
+    const confirmation =
+      `Hi ${patient?.first_name ?? "there"}, your ${data.treatment_name} appointment is confirmed for ${when}` +
+      `${practitioner ? ` with ${practitioner}` : ""}. ` +
+      `Please arrive 5 minutes early and let us know if you need to reschedule.`;
+
+    messages.push({
+      id: newId("h9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      author: "staff",
+      author_id: me.userId,
+      body: confirmation,
+      attachments: [],
+      read_at: null,
+      created_at: new Date().toISOString(),
+    });
+
+    return {
+      id: created.id,
+      confirmation,
+      email: patient?.email ?? null,
+      phone: patient?.phone ?? null,
+    };
+  });
+
+export const updateAppointmentState = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      id: string;
+      status?: "booked" | "attended" | "cancelled" | "no_show";
+      payment_status?: "unpaid" | "deposit_paid" | "paid" | "refunded";
+      stage?:
+        "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const row = appointments.find((a) => a.id === data.id);
+    if (!row) return { ok: true };
+    if (data.status) row.status = data.status;
+    if (data.payment_status) row.payment_status = data.payment_status;
+    if (data.stage) {
+      row.stage = data.stage;
+      row.status =
+        data.stage === "no_show" ? "no_show" : data.stage === "booked" ? "booked" : "attended";
+    }
+    row.updated_at = new Date().toISOString();
+    return { ok: true };
+  });
+
+export const rescheduleAppointment = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      id: string;
+      starts_at: string;
+      duration_minutes?: number;
+      practitioner_id?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const start = new Date(data.starts_at);
+    if (Number.isNaN(start.getTime())) throw new Error("Invalid date and time");
+    const row = appointments.find((a) => a.id === data.id);
+    if (!row) return { ok: true };
+    const minutes =
+      data.duration_minutes ??
+      Math.max(
+        5,
+        Math.round((new Date(row.ends_at).getTime() - new Date(row.starts_at).getTime()) / 60000),
+      );
+    row.starts_at = start.toISOString();
+    row.ends_at = new Date(start.getTime() + minutes * 60000).toISOString();
+    row.stage = "booked";
+    row.status = "booked";
+    if (data.practitioner_id) row.practitioner_id = data.practitioner_id;
+    return { ok: true };
+  });
+
+export const getAppointmentNote = createServerFn({ method: "GET" })
+  .validator((data: { appointment_id: string }) => ({
+    appointment_id: String(data.appointment_id),
+  }))
+  .handler(async ({ data }) => {
+    const row = appointmentNotes.find((n) => n.appointment_id === data.appointment_id);
+    return {
+      body: row?.body ?? "",
+      updatedAt: row?.updated_at ?? null,
+      updatedBy: row?.updated_by_label ?? null,
+    };
+  });
+
+export const saveAppointmentNote = createServerFn({ method: "POST" })
+  .validator((data: { appointment_id: string; body: string }) => ({
+    appointment_id: String(data.appointment_id),
+    body: String(data?.body ?? "").slice(0, 20000),
+  }))
+  .handler(async ({ data }) => {
+    const me = identity();
+    const appointment = appointments.find((a) => a.id === data.appointment_id);
+    const now = new Date().toISOString();
+    let row = appointmentNotes.find((n) => n.appointment_id === data.appointment_id);
+    if (!row) {
+      row = {
+        id: newId("r1"),
+        appointment_id: data.appointment_id,
+        clinic_id: appointment?.clinic_id ?? CLINIC_ID,
+        patient_id: appointment?.patient_id ?? null,
+        created_at: now,
+      };
+      appointmentNotes.push(row);
+    }
+    row.body = data.body;
+    row.updated_by = me.userId;
+    row.updated_by_label = me.profile?.full_name ?? null;
+    row.updated_at = now;
+    return { body: row.body, updatedAt: row.updated_at, updatedBy: row.updated_by_label };
+  });
+
+/* ---------------------------------------------------------------- */
+/* treatments, photos, documents                                      */
+/* ---------------------------------------------------------------- */
+
+export const addTreatment = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      catalogue_id?: string;
+      name: string;
+      product?: string;
+      dose?: string;
+      area?: string;
+      notes?: string;
+      price?: number;
+      performed_at: string;
+      next_due_at?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = identity();
+    const created = {
+      id: newId("e9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      catalogue_id: data.catalogue_id || null,
+      practitioner_id: me.userId,
+      name: data.name,
+      product: data.product || null,
+      dose: data.dose || null,
+      area: data.area || null,
+      notes: data.notes || null,
+      price: data.price ?? null,
+      performed_at: data.performed_at,
+      next_due_at: data.next_due_at || null,
+      status: "completed",
+      consent_document_id: null,
+      commission_rate_snapshot: Number(me.profile?.commission_rate ?? 0),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    treatments.unshift(created);
+    const patient = patientById(data.patient_id);
+    if (patient) {
+      patient.last_visit_at = data.performed_at;
+      patient.status = "active";
+    }
+    return { id: created.id };
+  });
+
+export const addPhoto = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      treatment_id?: string;
+      storage_path: string;
+      kind: "before" | "after";
+      caption?: string;
+      marketing_consent?: boolean;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    photos.push({
+      id: newId("g9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      treatment_id: data.treatment_id || null,
+      storage_path: data.storage_path,
+      kind: data.kind,
+      caption: data.caption || null,
+      taken_at: new Date().toISOString(),
+      marketing_consent: data.marketing_consent ?? false,
+      visible_to_patient: true,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  });
+
+export const sendDocument = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      kind: "consent" | "treatment_plan" | "consultation" | "aftercare" | "other";
+      title: string;
+      body?: string;
+      treatment_id?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = identity();
+    const now = new Date().toISOString();
+    const created = {
+      id: newId("f9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      treatment_id: data.treatment_id || null,
+      kind: data.kind,
+      title: data.title,
+      body: data.body || null,
+      fields: {},
+      responses: null,
+      status: "sent",
+      access_token: newId("f8"),
+      sent_at: now,
+      viewed_at: null,
+      signed_at: null,
+      signed_name: null,
+      signature_data: null,
+      signed_ip: null,
+      expires_at: null,
+      created_by: me.userId,
+      created_at: now,
+      updated_at: now,
+    };
+    documents.unshift(created);
+    messages.push({
+      id: newId("h9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      author: "staff",
+      author_id: me.userId,
+      body: `${data.title} has been sent to you. Please review and sign it in your patient portal.`,
+      attachments: [],
+      read_at: null,
+      created_at: now,
+    });
+    return { id: created.id };
+  });
+
+export const resendDocument = createServerFn({ method: "POST" })
+  .validator((data: { id: string; patient_id: string }) => data)
+  .handler(async ({ data }) => {
+    const row = documents.find((d) => d.id === data.id);
+    if (row) {
+      row.status = "sent";
+      row.sent_at = new Date().toISOString();
+    }
+    return { ok: true };
+  });
+
+export const signDocument = createServerFn({ method: "POST" })
+  .validator((data: { id: string; signed_name: string }) => data)
+  .handler(async ({ data }) => {
+    const name = data.signed_name.trim().slice(0, 120);
+    if (!name) throw new Error("Please type your full name to sign");
+    const row = documents.find((d) => d.id === data.id);
+    if (row) {
+      row.status = "signed";
+      row.signed_at = new Date().toISOString();
+      row.signed_name = name;
+      row.signature_data = name;
+    }
+    return { ok: true };
+  });
+
+/* ---------------------------------------------------------------- */
+/* messaging                                                          */
+/* ---------------------------------------------------------------- */
+
+export const sendMessage = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      body: string;
+      as: "staff" | "patient";
+      attachments?: { path: string; name: string; type: string; size: number }[];
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = identity();
+    const body = data.body.trim().slice(0, 2000);
+    const attachments = (data.attachments ?? []).slice(0, 5);
+    if (!body && attachments.length === 0) throw new Error("Message cannot be empty");
+    messages.push({
+      id: newId("h9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      author: data.as,
+      author_id: me.userId,
+      body: body || (attachments.length === 1 ? "Sent an attachment" : "Sent attachments"),
+      attachments,
+      read_at: null,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  });
+
+export const getUnreadMessages = createServerFn({ method: "GET" }).handler(async () => {
+  const me = identity();
+  if (me.isPatient) {
+    if (!me.patient) return { total: 0, items: [] as any[] };
+    const list = sortDesc(
+      messages.filter((m) => m.patient_id === me.patient.id && m.author === "staff" && !m.read_at),
+      "created_at",
+    );
+    return {
+      total: list.length,
+      items: list.length
+        ? [
+            {
+              patient_id: me.patient.id,
+              name: "Your clinic",
+              count: list.length,
+              last: list[0].body,
+            },
+          ]
+        : [],
+    };
+  }
+  const rows = sortDesc(
+    messages.filter((m) => m.author === "patient" && !m.read_at),
+    "created_at",
+  );
+  const grouped = new Map<
+    string,
+    { patient_id: string; name: string; count: number; last: string }
+  >();
+  for (const row of rows) {
+    const existing = grouped.get(row.patient_id);
+    if (existing) existing.count += 1;
+    else {
+      const p = patientById(row.patient_id);
+      grouped.set(row.patient_id, {
+        patient_id: row.patient_id,
+        name: `${p?.first_name ?? ""} ${p?.last_name ?? ""}`.trim() || "Patient",
+        count: 1,
+        last: row.body,
+      });
+    }
+  }
+  const items = [...grouped.values()];
+  return { total: items.reduce((sum, i) => sum + i.count, 0), items };
+});
+
+export const markMessagesRead = createServerFn({ method: "POST" })
+  .validator((data: { patient_id: string }) => data)
+  .handler(async ({ data }) => {
+    const me = identity();
+    const author = me.isPatient ? "staff" : "patient";
+    for (const m of messages) {
+      if (m.patient_id === data.patient_id && m.author === author && !m.read_at) {
+        m.read_at = new Date().toISOString();
+      }
+    }
+    return { ok: true };
+  });
+
+export const listMessageTemplates = createServerFn({ method: "GET" }).handler(async () =>
+  [...messageTemplates].sort(
+    (a, b) =>
+      String(a.category).localeCompare(String(b.category)) ||
+      String(a.title).localeCompare(String(b.title)),
+  ),
+);
+
+export const saveMessageTemplate = createServerFn({ method: "POST" })
+  .validator((data: { id?: string; title: string; body: string; category?: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const title = data.title.trim();
+    const body = data.body.trim();
+    if (!title || !body) throw new Error("Title and message are required");
+    if (data.id) {
+      const row = messageTemplates.find((t) => t.id === data.id);
+      if (row) Object.assign(row, { title, body, category: data.category?.trim() || null });
+      return { ok: true };
+    }
+    messageTemplates.push({
+      id: newId("m9"),
+      clinic_id: CLINIC_ID,
+      title,
+      body,
+      category: data.category?.trim() || null,
+      created_by: me.userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  });
+
+export const deleteMessageTemplate = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const me = identity();
+    if (!me.canDelete) throw new Error("Only managers can delete templates");
+    const index = messageTemplates.findIndex((t) => t.id === data.id);
+    if (index >= 0) messageTemplates.splice(index, 1);
+    return { ok: true };
+  });
+
+/* ---------------------------------------------------------------- */
+/* staff notifications and directory                                  */
+/* ---------------------------------------------------------------- */
+
+export const listStaffNotifications = createServerFn({ method: "GET" }).handler(async () => {
+  const me = identity();
+  return sortDesc(
+    staffNotifications.filter((n) => !n.read_at && n.recipient_id === me.userId),
+    "created_at",
+  )
+    .slice(0, 20)
+    .map((n) => ({ ...n, sender_name: profileName(n.sender_id) }));
+});
+
+export const markStaffNotificationRead = createServerFn({ method: "POST" })
+  .validator((data: { id?: string; all?: boolean }) => data)
+  .handler(async ({ data }) => {
+    const me = identity();
+    const now = new Date().toISOString();
+    for (const n of staffNotifications) {
+      if (n.read_at || n.recipient_id !== me.userId) continue;
+      if (data.id && n.id !== data.id) continue;
+      n.read_at = now;
+    }
+    return { ok: true };
+  });
+
+export const listStaffDirectory = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = userRoles.filter((r) => r.role !== "patient");
+  const ids = [...new Set(staff.map((r) => r.user_id))];
+  return profiles
+    .filter((p) => ids.includes(p.id))
+    .map((p) => ({
+      id: p.id,
+      full_name: p.full_name,
+      job_title: p.job_title,
+      roles: staff.filter((r) => r.user_id === p.id).map((r) => r.role),
+    }))
+    .sort((a, b) => a.full_name.localeCompare(b.full_name));
+});
+
+export const sendStaffAlert = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      audience: "managers" | "front_desk" | "all" | "user";
+      recipientId?: string;
+      title: string;
+      body: string;
+      urgent?: boolean;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    let recipients: string[];
+    if (data.audience === "user") {
+      recipients = data.recipientId ? [data.recipientId] : [];
+    } else {
+      const wanted =
+        data.audience === "managers"
+          ? ["owner"]
+          : data.audience === "front_desk"
+            ? ["front_desk"]
+            : ["owner", "front_desk", "practitioner"];
+      recipients = [
+        ...new Set(userRoles.filter((r) => wanted.includes(r.role)).map((r) => r.user_id)),
+      ];
+    }
+    recipients = recipients.filter((rid) => rid !== me.userId);
+    if (recipients.length === 0) throw new Error("No recipients found");
+    const from = me.profile?.full_name || me.email || "A colleague";
+    const now = new Date().toISOString();
+    for (const rid of recipients) {
+      staffNotifications.unshift({
+        id: newId("l9"),
+        clinic_id: CLINIC_ID,
+        recipient_id: rid,
+        sender_id: me.userId,
+        urgent: !!data.urgent,
+        kind: data.urgent ? "urgent" : "staff_message",
+        title: `${data.urgent ? "Urgent" : "Message"} from ${from}: ${data.title}`,
+        body: data.body,
+        patient_id: null,
+        appointment_id: null,
+        read_at: null,
+        created_at: now,
+      });
+    }
+    return { sent: recipients.length };
+  });
+
+export const getPractitionerDay = createServerFn({ method: "GET" })
+  .validator((data: { practitionerId: string; date: string }) => data)
+  .handler(async ({ data }) => {
+    const base = new Date(`${data.date}T00:00:00`);
+    const from = new Date(base.getFullYear(), base.getMonth(), base.getDate()).toISOString();
+    const to = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1).toISOString();
+    const booked = sortAsc(
+      appointments.filter(
+        (a) =>
+          a.practitioner_id === data.practitionerId &&
+          a.starts_at >= from &&
+          a.starts_at < to &&
+          a.status !== "cancelled",
+      ),
+      "starts_at",
+    );
+
+    const DAY_START = 9 * 60;
+    const DAY_END = 18 * 60;
+    const mins = (value: string) => {
+      const d = new Date(value);
+      return d.getHours() * 60 + d.getMinutes();
+    };
+    const free: { from: number; to: number }[] = [];
+    let cursor = DAY_START;
+    for (const a of booked) {
+      const s = Math.max(mins(a.starts_at), DAY_START);
+      const e = Math.min(mins(a.ends_at), DAY_END);
+      if (s > cursor) free.push({ from: cursor, to: s });
+      cursor = Math.max(cursor, e);
+    }
+    if (cursor < DAY_END) free.push({ from: cursor, to: DAY_END });
+
+    return {
+      bookedCount: booked.length,
+      bookedMinutes: booked.reduce(
+        (sum, a) => sum + Math.max(0, mins(a.ends_at) - mins(a.starts_at)),
+        0,
+      ),
+      free: free.filter((f) => f.to - f.from >= 15).slice(0, 4),
+      alerts: sortDesc(
+        staffNotifications.filter((n) => n.sender_id === data.practitionerId && n.urgent),
+        "created_at",
+      ).slice(0, 3),
+    };
+  });
+
+/* ---------------------------------------------------------------- */
+/* medical history and patient portal                                 */
+/* ---------------------------------------------------------------- */
+
+export const reviewHistory = createServerFn({ method: "POST" })
+  .validator((data: { id: string; patient_id: string }) => data)
+  .handler(async ({ data }) => {
+    const me = identity();
+    const row = medicalHistory.find((h) => h.id === data.id);
+    if (row) {
+      row.reviewed_by = me.userId;
+      row.reviewed_at = new Date().toISOString();
+    }
+    return { ok: true };
+  });
+
+export const getMyRecord = createServerFn({ method: "GET" }).handler(async () => {
+  const me = identity();
+  const patient = patients.find((p) => p.user_id === me.userId) ?? null;
+  if (!patient) return null;
+  return {
+    patient,
+    treatments: sortDesc(
+      treatments.filter((t) => t.patient_id === patient.id),
+      "performed_at",
+    ),
+    documents: sortDesc(
+      documents.filter((d) => d.patient_id === patient.id),
+      "created_at",
+    ),
+    messages: sortAsc(
+      messages.filter((m) => m.patient_id === patient.id),
+      "created_at",
+    ),
+    history: sortDesc(
+      medicalHistory.filter((h) => h.patient_id === patient.id),
+      "created_at",
+    ),
+    photos: photos
+      .filter((p) => p.patient_id === patient.id && p.visible_to_patient)
+      .map((p) => ({ ...p, url: p.storage_path })),
+  };
+});
+
+export const submitHistoryUpdate = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      medications: string;
+      allergies: string;
+      conditions: string;
+      diet: string;
+      pregnancy: string;
+      other: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = identity();
+    const patient = patients.find((p) => p.user_id === me.userId);
+    if (!patient) throw new Error("No patient record linked to this account");
+    medicalHistory.unshift({
+      id: newId("i9"),
+      clinic_id: CLINIC_ID,
+      patient_id: patient.id,
+      data,
+      summary: "Patient updated their medical and lifestyle information",
+      source: "patient",
+      changed_by: me.userId,
+      reviewed_by: null,
+      reviewed_at: null,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  });
+
+/* ---------------------------------------------------------------- */
+/* team administration                                                */
+/* ---------------------------------------------------------------- */
+
+function roleFor(userId: string) {
+  return userRoles.find((r) => r.user_id === userId && r.role !== "patient")?.role ?? "";
+}
+
+export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
+  const me = identity();
+  if (!me.isStaff) throw new Error("Staff access only");
+  if (!me.isManager && !me.permissions.includes("team.view")) {
+    throw new Error("You do not have access to this area");
+  }
+  return userRoles
+    .filter((r) => r.role !== "patient")
+    .map((r) => {
+      const profile = profiles.find((p) => p.id === r.user_id);
+      return {
+        userId: r.user_id,
+        role: r.role,
+        email: db.staffEmails[r.user_id] ?? "",
+        fullName: profile?.full_name ?? "",
+        jobTitle: profile?.job_title ?? "",
+        registrationBody: profile?.registration_body ?? "",
+        registrationNumber: profile?.registration_number ?? "",
+        isSelf: r.user_id === me.userId,
+        hasSignedIn: true,
+      };
+    })
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+});
+
+export const createStaffAccount = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      email: string;
+      password: string;
+      fullName: string;
+      jobTitle?: string;
+      role: "owner" | "practitioner" | "front_desk";
+      registrationBody?: string;
+      registrationNumber?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const userId = newId("s9");
+    profiles.push({
+      id: userId,
+      clinic_id: CLINIC_ID,
+      full_name: data.fullName,
+      job_title: data.jobTitle ?? null,
+      registration_body: data.registrationBody ?? null,
+      registration_number: data.registrationNumber ?? null,
+      avatar_url: null,
+      commission_rate: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    userRoles.push({
+      id: newId("a1"),
+      user_id: userId,
+      role: data.role,
+      created_at: new Date().toISOString(),
+    });
+    db.staffEmails[userId] = data.email;
+    return { userId };
+  });
+
+export const updateStaffMember = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      userId: string;
+      role: "owner" | "practitioner" | "front_desk";
+      fullName: string;
+      jobTitle?: string;
+      registrationBody?: string;
+      registrationNumber?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = identity();
+    if (data.userId === me.userId && data.role !== "owner") {
+      throw new Error("You cannot remove your own manager access");
+    }
+    const profile = profiles.find((p) => p.id === data.userId);
+    if (profile) {
+      profile.full_name = data.fullName;
+      profile.job_title = data.jobTitle ?? null;
+      profile.registration_body = data.registrationBody ?? null;
+      profile.registration_number = data.registrationNumber ?? null;
+    }
+    const role = userRoles.find((r) => r.user_id === data.userId && r.role !== "patient");
+    if (role) role.role = data.role;
+    return { ok: true };
+  });
+
+export const inviteStaffMember = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      email: string;
+      fullName: string;
+      jobTitle?: string;
+      role: "owner" | "practitioner" | "front_desk";
+      registrationBody?: string;
+      registrationNumber?: string;
+      redirectTo: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const email = data.email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Enter a valid work email");
+    const userId = newId("s8");
+    profiles.push({
+      id: userId,
+      clinic_id: CLINIC_ID,
+      full_name: data.fullName,
+      job_title: data.jobTitle ?? null,
+      registration_body: data.registrationBody ?? null,
+      registration_number: data.registrationNumber ?? null,
+      avatar_url: null,
+      commission_rate: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    userRoles.push({
+      id: newId("a1"),
+      user_id: userId,
+      role: data.role,
+      created_at: new Date().toISOString(),
+    });
+    db.staffEmails[userId] = email;
+    return {
+      userId,
+      email,
+      role: data.role,
+      setupLink: `${data.redirectTo}#demo-invite-token`,
+    };
+  });
+
+export const revokeStaffAccess = createServerFn({ method: "POST" })
+  .validator((data: { userId: string }) => data)
+  .handler(async ({ data }) => {
+    const me = identity();
+    if (data.userId === me.userId) throw new Error("You cannot revoke your own access");
+    for (let i = userRoles.length - 1; i >= 0; i--) {
+      const row = userRoles[i];
+      if (row.user_id === data.userId && row.role !== "patient") userRoles.splice(i, 1);
+    }
+    return { ok: true };
+  });
+
+export const setStaffPassword = createServerFn({ method: "POST" })
+  .validator((data: { userId: string; password: string }) => data)
+  .handler(async ({ data }) => {
+    if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
+    return { ok: true };
+  });
+
+export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handler(async () => ({
+  patients: patients
+    .filter((p) => p.status !== "archived" && (!p.email || !p.phone || !p.date_of_birth))
+    .map((p) => ({
+      id: p.id,
+      name: [p.title, p.first_name, p.last_name].filter(Boolean).join(" "),
+      phone: p.phone ?? null,
+      missingEmail: !String(p.email ?? "").trim(),
+      gaps: [
+        !String(p.email ?? "").trim() ? "email" : null,
+        !String(p.phone ?? "").trim() ? "phone" : null,
+        !p.date_of_birth ? "date of birth" : null,
+      ].filter(Boolean) as string[],
+    })),
+  staff: userRoles
+    .filter((r) => r.role !== "patient" && !db.staffEmails[r.user_id])
+    .map((r) => {
+      const profile = profiles.find((p) => p.id === r.user_id);
+      return {
+        userId: r.user_id,
+        role: r.role,
+        fullName: profile?.full_name ?? "Unnamed staff member",
+        jobTitle: profile?.job_title ?? "",
+      };
+    }),
+}));
+
+export const setPatientEmail = createServerFn({ method: "POST" })
+  .validator((data: { patientId: string; email: string }) => data)
+  .handler(async ({ data }) => {
+    const email = data.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address");
+    const patient = patientById(data.patientId);
+    if (patient) patient.email = email;
+    return { ok: true };
+  });
+
+export const setStaffEmail = createServerFn({ method: "POST" })
+  .validator((data: { userId: string; email: string }) => data)
+  .handler(async ({ data }) => {
+    const email = data.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address");
+    db.staffEmails[data.userId] = email;
+    return { ok: true };
+  });
+
+/* ---------------------------------------------------------------- */
+/* performance and earnings                                           */
+/* ---------------------------------------------------------------- */
+
+function earningsInputs(from: string, to: string) {
+  return {
+    treatments: treatments
+      .filter((t) => t.performed_at >= from && t.performed_at <= to)
+      .map((t) => ({
+        id: t.id,
+        practitioner_id: t.practitioner_id,
+        patient_id: t.patient_id,
+        name: t.name,
+        price: t.price,
+        performed_at: t.performed_at,
+        commission_rate_snapshot: t.commission_rate_snapshot,
+      })),
+    appointments: appointments
+      .filter((a) => a.starts_at >= from && a.starts_at <= to)
+      .map((a) => ({
+        practitioner_id: a.practitioner_id,
+        price: a.price,
+        payment_status: a.payment_status,
+        status: a.status,
+        starts_at: a.starts_at,
+      })),
+    yearTreatments: treatments
+      .filter((t) => t.performed_at >= isoDaysAgo(365))
+      .map((t) => ({ practitioner_id: t.practitioner_id, patient_id: t.patient_id })),
+    firstSeen: new Map<string, string>(
+      patients.map((p) => [p.id as string, p.created_at as string]),
+    ),
+  };
+}
+
+export const getPractitionerPerformance = createServerFn({ method: "POST" })
+  .validator((data: { from: string; to: string }) => data)
+  .handler(async ({ data }) => {
+    const me = identity();
+    if (!me.isStaff) throw new Error("Staff access only");
+    if (!me.isManager && !me.permissions.includes("reports.performance")) {
+      throw new Error("You do not have access to this area");
+    }
+    const { buildStats, buildTrend } = await import("./earnings.server");
+    const inputs = earningsInputs(data.from, data.to);
+
+    const staffIds = [
+      ...new Set(
+        userRoles
+          .filter((r) => r.role === "owner" || r.role === "practitioner")
+          .map((r) => r.user_id),
+      ),
+    ];
+    const staff = staffIds.map((sid) => {
+      const p = profiles.find((x) => x.id === sid);
+      return {
+        userId: sid,
+        fullName: p?.full_name || "Unnamed",
+        jobTitle: p?.job_title ?? "",
+        commissionRate: Number(p?.commission_rate ?? 0),
+      };
+    });
+
+    const rows = buildStats(
+      staff,
+      inputs.treatments as never,
+      inputs.appointments as never,
+      inputs.yearTreatments as never,
+      inputs.firstSeen,
+      { from: data.from, to: data.to },
+    ).sort((a, b) => b.earned - a.earned);
+
+    const totals = rows.reduce(
+      (acc, r) => ({
+        earned: acc.earned + r.earned,
+        collected: acc.collected + r.collected,
+        toPractitioners: acc.toPractitioners + r.earnedShare,
+        toClinic: acc.toClinic + r.clinicEarnedShare,
+        treatments: acc.treatments + r.treatments,
+        patients: acc.patients + r.patients,
+        newPatients: acc.newPatients + r.newPatients,
+        appointments: acc.appointments + r.appointments,
+        attended: acc.attended + r.attended,
+        noShows: acc.noShows + r.noShows,
+        cancelled: acc.cancelled + r.cancelled,
+        outstanding: acc.outstanding + r.outstanding,
+      }),
+      {
+        earned: 0,
+        collected: 0,
+        toPractitioners: 0,
+        toClinic: 0,
+        treatments: 0,
+        patients: 0,
+        newPatients: 0,
+        appointments: 0,
+        attended: 0,
+        noShows: 0,
+        cancelled: 0,
+        outstanding: 0,
+      },
+    );
+
+    const settled = totals.attended + totals.noShows;
+    const clinic = {
+      ...totals,
+      attendance: settled ? Math.round((totals.attended / settled) * 100) : 0,
+      averageValue: totals.treatments
+        ? Math.round((totals.earned / totals.treatments) * 100) / 100
+        : 0,
+      retention: rows.length
+        ? Math.round(rows.reduce((s, r) => s + r.retention, 0) / rows.length)
+        : 0,
+      averageCommission: rows.length
+        ? Math.round((rows.reduce((s, r) => s + r.commissionRate, 0) / rows.length) * 10) / 10
+        : 0,
+    };
+
+    const trend = buildTrend(staff, inputs.treatments as never, inputs.appointments as never, {
+      from: data.from,
+      to: data.to,
+    });
+
+    return { rows, totals, clinic, trend };
+  });
+
+export const getMyEarnings = createServerFn({ method: "POST" })
+  .validator((data: { from: string; to: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const { buildStats } = await import("./earnings.server");
+    const inputs = earningsInputs(data.from, data.to);
+    const rate = Number(me.profile?.commission_rate ?? 0);
+    const mine = inputs.treatments.filter((t) => t.practitioner_id === me.userId);
+
+    const stats = buildStats(
+      [
+        {
+          userId: me.userId,
+          fullName: me.profile?.full_name ?? "",
+          jobTitle: me.profile?.job_title ?? "",
+          commissionRate: rate,
+        },
+      ],
+      inputs.treatments as never,
+      inputs.appointments as never,
+      inputs.yearTreatments.filter((t) => t.practitioner_id === me.userId) as never,
+      inputs.firstSeen,
+      { from: data.from, to: data.to },
+    )[0]!;
+
+    return {
+      earnedShare: stats.earnedShare,
+      collectedShare: stats.collectedShare,
+      treatments: stats.treatments,
+      patients: stats.patients,
+      newPatients: stats.newPatients,
+      retention: stats.retention,
+      averageValue: stats.averageValue,
+      lines: sortDesc(mine, "performed_at").map((t) => ({
+        id: t.id,
+        performedAt: t.performed_at,
+        name: t.name,
+        patient: (() => {
+          const p = patientById(t.patient_id);
+          return p ? `${p.first_name} ${p.last_name}` : "—";
+        })(),
+        share: Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,
+      })),
+    };
+  });
+
+export const setCommissionRate = createServerFn({ method: "POST" })
+  .validator((data: { userId: string; rate: number }) => data)
+  .handler(async ({ data }) => {
+    const rate = Math.min(100, Math.max(0, Number(data.rate) || 0));
+    const profile = profiles.find((p) => p.id === data.userId);
+    if (profile) profile.commission_rate = rate;
+    return { ok: true };
+  });
+
+/* ---------------------------------------------------------------- */
+/* profile self-service                                               */
+/* ---------------------------------------------------------------- */
+
+export const submitProfileChange = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      fullName: string;
+      jobTitle?: string;
+      registrationBody?: string;
+      registrationNumber?: string;
+      note?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!data.fullName?.trim()) throw new Error("Full name is required");
+    profileChangeRequests.unshift({
+      id: newId("o9"),
+      clinic_id: CLINIC_ID,
+      user_id: me.userId,
+      full_name: data.fullName.trim(),
+      job_title: data.jobTitle?.trim() || null,
+      registration_body: data.registrationBody?.trim() || null,
+      registration_number: data.registrationNumber?.trim() || null,
+      note: data.note?.trim() || null,
+      status: "pending",
+      reviewed_by: null,
+      reviewed_at: null,
+      reviewer_note: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  });
+
+export const getMyProfile = createServerFn({ method: "GET" }).handler(async () => {
+  const me = requireStaff();
+  return {
+    profile: me.profile,
+    isManager: me.isManager,
+    requests: sortDesc(
+      profileChangeRequests.filter((r) => r.user_id === me.userId),
+      "created_at",
+    ).slice(0, 20),
+  };
+});
+
+export const listProfileChangeRequests = createServerFn({ method: "GET" }).handler(async () => {
+  const me = requireStaff();
+  if (!me.isManager && !me.permissions.includes("team.approve_changes")) {
+    throw new Error("You do not have access to this area");
+  }
+  return sortDesc(profileChangeRequests, "created_at")
+    .slice(0, 50)
+    .map((r) => ({
+      ...r,
+      current: profiles.find((p) => p.id === r.user_id) ?? null,
+    }));
+});
+
+export const reviewProfileChange = createServerFn({ method: "POST" })
+  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const req = profileChangeRequests.find((r) => r.id === data.id);
+    if (!req) throw new Error("Request not found");
+    if (req.status !== "pending") throw new Error("This request has already been reviewed");
+    if (data.approve) {
+      const profile = profiles.find((p) => p.id === req.user_id);
+      if (profile) {
+        profile.full_name = req.full_name ?? "";
+        profile.job_title = req.job_title;
+        profile.registration_body = req.registration_body;
+        profile.registration_number = req.registration_number;
+      }
+    }
+    req.status = data.approve ? "approved" : "declined";
+    req.reviewed_by = me.userId;
+    req.reviewed_at = new Date().toISOString();
+    req.reviewer_note = data.reviewerNote?.trim() || null;
+    return { ok: true };
+  });
+
+export const setMyAvatar = createServerFn({ method: "POST" })
+  .validator((data: { path: string | null; targetUserId?: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const profile = profiles.find((p) => p.id === (data.targetUserId ?? me.userId));
+    if (profile) profile.avatar_url = data.path;
+    return { ok: true };
+  });
+
+export const listMyDocuments = createServerFn({ method: "GET" })
+  .validator((data: { targetUserId?: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const target = data.targetUserId ?? me.userId;
+    return sortDesc(
+      staffDocuments.filter((d) => d.user_id === target),
+      "created_at",
+    );
+  });
+
+export const addMyDocument = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      title: string;
+      category: string;
+      path: string;
+      file_name: string;
+      file_type?: string;
+      file_size?: number;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!data.title?.trim()) throw new Error("A document title is required");
+    staffDocuments.unshift({
+      id: newId("p9"),
+      user_id: me.userId,
+      title: data.title.trim().slice(0, 120),
+      category: data.category || "other",
+      path: data.path,
+      file_name: data.file_name,
+      file_type: data.file_type ?? null,
+      file_size: data.file_size ?? null,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  });
+
+export const deleteMyDocument = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const index = staffDocuments.findIndex((d) => d.id === data.id);
+    if (index >= 0) staffDocuments.splice(index, 1);
+    return { ok: true };
+  });
+
+export const getStaffProfile = createServerFn({ method: "GET" })
+  .validator((data: { userId: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!me.isManager && !me.permissions.includes("team.view")) {
+      throw new Error("You do not have access to this area");
+    }
+    return {
+      profile: profiles.find((p) => p.id === data.userId) ?? null,
+      role: roleFor(data.userId),
+      email: db.staffEmails[data.userId] ?? "",
+      documents: sortDesc(
+        staffDocuments.filter((d) => d.user_id === data.userId),
+        "created_at",
+      ),
+      requests: sortDesc(
+        profileChangeRequests.filter((r) => r.user_id === data.userId),
+        "created_at",
+      ).slice(0, 20),
+    };
+  });
+
+/* ---------------------------------------------------------------- */
+/* retention and recalls                                              */
+/* ---------------------------------------------------------------- */
+
+export const getRetention = createServerFn({ method: "GET" }).handler(async () => {
+  const me = requireStaff();
+  if (!me.isManager && !me.permissions.includes("reports.retention")) {
+    throw new Error("You do not have access to retention reports");
+  }
+  const { buildRetention } = await import("./retention.server");
+  const practitionerNames = new Map<string, string>(
+    profiles.map((p) => [p.id as string, p.full_name as string]),
+  );
+  const twoYearsAgo = isoDaysAgo(730);
+
+  const result = buildRetention({
+    patients: patients.map((p) => ({
+      id: p.id,
+      title: p.title,
+      first_name: p.first_name,
+      last_name: p.last_name,
+      status: p.status,
+      email: p.email,
+      phone: p.phone,
+      created_at: p.created_at,
+    })),
+    treatments: treatments
+      .filter((t) => t.performed_at >= twoYearsAgo)
+      .map((t) => ({
+        patient_id: t.patient_id,
+        practitioner_id: t.practitioner_id,
+        name: t.name,
+        price: t.price,
+        performed_at: t.performed_at,
+        next_due_at: t.next_due_at,
+      })),
+    appointments: appointments.map((a) => ({
+      patient_id: a.patient_id,
+      practitioner_id: a.practitioner_id,
+      starts_at: a.starts_at,
+      status: a.status,
+    })),
+    outreach: retentionOutreach.map((o) => ({
+      patient_id: o.patient_id,
+      created_at: o.created_at,
+    })),
+    practitionerNames,
+    // Only a practitioner has a book of their own to scope to; other staff who
+    // hold the permission (e.g. a coordinator) see the whole clinic.
+    practitionerId: me.isManager || !me.roles.includes("practitioner") ? null : me.userId,
+  });
+
+  return {
+    ...result,
+    isManager: me.isManager,
+    practitioners: me.isManager
+      ? [...practitionerNames.entries()].map(([userId, fullName]) => ({ userId, fullName }))
+      : [],
+  };
+});
+
+export const logRetentionOutreach = createServerFn({ method: "POST" })
+  .validator((data: { patient_id: string; channel?: string; note?: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    retentionOutreach.push({
+      id: newId("j9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      contacted_by: me.userId,
+      channel: data.channel ?? "message",
+      note: data.note ?? null,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true };
+  });
+
+export const createRecallTask = createServerFn({ method: "POST" })
+  .validator(
+    (data: { patient_id: string; note?: string; recipients: { id: string; label: string }[] }) =>
+      data,
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const requested = data.recipients.length
+      ? data.recipients
+      : [{ id: me.userId, label: me.profile?.full_name ?? "The team" }];
+    const openTasks = recallTasks.filter(
+      (t) => t.patient_id === data.patient_id && t.status !== "completed",
+    );
+    const alreadyAssigned = new Set(openTasks.map((t) => t.assigned_to));
+    const recipients = requested.filter((r) => !alreadyAssigned.has(r.id));
+    if (!recipients.length) {
+      return { ok: true, duplicate: true, group_id: openTasks[0]?.group_id ?? null };
+    }
+    const groupId = newId("k8");
+    const now = new Date().toISOString();
+    for (const r of recipients) {
+      recallTasks.unshift({
+        id: newId("k9"),
+        clinic_id: CLINIC_ID,
+        patient_id: data.patient_id,
+        group_id: groupId,
+        assigned_to: r.id,
+        assigned_label: r.label,
+        created_by: me.userId,
+        note: data.note ?? null,
+        status: "sent",
+        contacted_at: null,
+        contacted_by: null,
+        completed_at: null,
+        completed_by: null,
+        status_by_label: null,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+    return { ok: true, group_id: groupId };
+  });
+
+export const setRecallTaskStatus = createServerFn({ method: "POST" })
+  .validator((data: { task_id: string; status: "sent" | "contacted" | "completed" }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const now = new Date().toISOString();
+    const actor = me.profile?.full_name || me.email || "A team member";
+    const target = recallTasks.find((t) => t.id === data.task_id);
+    if (!target) return { ok: true };
+    const group = target.group_id
+      ? recallTasks.filter((t) => t.group_id === target.group_id)
+      : [target];
+    for (const task of group) {
+      task.status = data.status;
+      task.contacted_at = data.status === "sent" ? null : now;
+      task.completed_at = data.status === "completed" ? now : null;
+      task.contacted_by = data.status === "sent" ? null : me.userId;
+      task.completed_by = data.status === "completed" ? me.userId : null;
+      task.status_by_label = data.status === "sent" ? null : actor;
+      task.updated_at = now;
+    }
+    return { ok: true };
+  });
+
+export const deleteRecallTask = createServerFn({ method: "POST" })
+  .validator((data: { task_id: string }) => data)
+  .handler(async ({ data }) => {
+    const me = identity();
+    if (!me.isManager && !me.permissions.includes("tasks.delete")) {
+      throw new Error("You do not have access to delete tasks");
+    }
+    const target = recallTasks.find((t) => t.id === data.task_id);
+    if (!target) return { ok: true };
+    for (let i = recallTasks.length - 1; i >= 0; i--) {
+      const task = recallTasks[i];
+      const match = target.group_id ? task.group_id === target.group_id : task.id === target.id;
+      if (match) recallTasks.splice(i, 1);
+    }
+    return { ok: true };
+  });
+
+export const listRecallTasks = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => data)
+  .handler(async ({ data }) => {
+    requireStaff();
+    return sortDesc(
+      recallTasks.filter((t) => t.patient_id === data.patient_id),
+      "created_at",
+    );
+  });
+
+export const listOpenRecallTasks = createServerFn({ method: "GET" }).handler(async () => {
+  const me = requireStaff();
+  return sortDesc(
+    recallTasks.filter(
+      (t) => t.status !== "completed" && (me.isManager || t.assigned_to === me.userId),
+    ),
+    "created_at",
+  )
+    .slice(0, 25)
+    .map((t) => {
+      const p = patientById(t.patient_id);
+      return {
+        ...t,
+        patients: p
+          ? {
+              id: p.id,
+              first_name: p.first_name,
+              last_name: p.last_name,
+              phone: p.phone,
+              email: p.email,
+            }
+          : null,
+      };
+    });
+});
+
+/* ---------------------------------------------------------------- */
+/* settings: colours, catalogue, clinic, permissions, notes           */
+/* ---------------------------------------------------------------- */
+
+function requireSettings() {
+  const me = requireStaff();
+  if (!me.isManager && !me.permissions.includes("settings.treatments")) {
+    throw new Error("You do not have access to change clinic settings");
+  }
+  return me;
+}
+
+export const listTreatmentColours = createServerFn({ method: "GET" }).handler(async () => {
+  const map: Record<string, number | string> = {};
+  for (const row of treatmentColours) map[row.treatment_name] = row.hex ?? row.lane;
+  return map;
+});
+
+export const saveTreatmentColour = createServerFn({ method: "POST" })
+  .validator((data: { treatment_name: string; lane: number | null; hex?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const me = requireSettings();
+    const key = data.treatment_name.trim().toLowerCase();
+    if (!key) throw new Error("Treatment name is required");
+    const hex = data.hex ? data.hex.trim().toLowerCase() : null;
+    if (hex && !/^#[0-9a-f]{6}$/.test(hex)) throw new Error("Invalid colour");
+
+    const index = treatmentColours.findIndex((c) => c.treatment_name === key);
+    if (data.lane === null && !hex) {
+      if (index >= 0) treatmentColours.splice(index, 1);
+      return { ok: true };
+    }
+    const lane = hex ? 1 : data.lane;
+    if (!Number.isInteger(lane) || (lane as number) < 1 || (lane as number) > 8)
+      throw new Error("Invalid colour");
+    const row = {
+      treatment_name: key,
+      lane,
+      hex,
+      updated_by: me.userId,
+      updated_at: new Date().toISOString(),
+    };
+    if (index >= 0) treatmentColours[index] = row;
+    else treatmentColours.push(row);
+    return { ok: true };
+  });
+
+export const listColourThemes = createServerFn({ method: "GET" }).handler(async () =>
+  [...colourThemes].sort((a, b) => String(a.name).localeCompare(String(b.name))),
+);
+
+export const saveColourTheme = createServerFn({ method: "POST" })
+  .validator((data: { name: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireSettings();
+    const name = data.name.trim();
+    if (!name) throw new Error("Theme name is required");
+    const colours: Record<string, number | string> = {};
+    for (const row of treatmentColours) colours[row.treatment_name] = row.hex ?? row.lane;
+    const existing = colourThemes.find((t) => String(t.name).toLowerCase() === name.toLowerCase());
+    if (existing) {
+      existing.name = name;
+      existing.colours = colours;
+      return { ok: true, id: existing.id, replaced: true };
+    }
+    const created = {
+      id: newId("n9"),
+      name,
+      colours,
+      created_by: me.userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    colourThemes.push(created);
+    return { ok: true, id: created.id, replaced: false };
+  });
+
+export const applyColourTheme = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireSettings();
+    const theme = colourThemes.find((t) => t.id === data.id);
+    if (!theme) throw new Error("Theme not found");
+    const colours = (theme.colours ?? {}) as Record<string, number | string>;
+    treatmentColours.length = 0;
+    for (const [treatment_name, value] of Object.entries(colours)) {
+      treatmentColours.push({
+        treatment_name,
+        lane: typeof value === "number" ? value : 1,
+        hex: typeof value === "string" ? value : null,
+        updated_by: me.userId,
+        updated_at: new Date().toISOString(),
+      });
+    }
+    return { ok: true, applied: treatmentColours.length };
+  });
+
+export const deleteColourTheme = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    requireSettings();
+    const index = colourThemes.findIndex((t) => t.id === data.id);
+    if (index >= 0) colourThemes.splice(index, 1);
+    return { ok: true };
+  });
+
+export const listCatalogueItems = createServerFn({ method: "GET" }).handler(async () =>
+  [...catalogue].sort(
+    (a, b) => Number(b.active) - Number(a.active) || String(a.name).localeCompare(String(b.name)),
+  ),
+);
+
+export type CatalogueInput = {
+  id?: string | null;
+  name: string;
+  category?: string | null;
+  description?: string | null;
+  price?: number | null;
+  interval_days?: number | null;
+  cooling_off_hours?: number | null;
+  requires_consent?: boolean;
+  active?: boolean;
+};
+
+export const saveCatalogueItem = createServerFn({ method: "POST" })
+  .validator((data: CatalogueInput) => data)
+  .handler(async ({ data }) => {
+    requireSettings();
+    const name = (data.name ?? "").trim();
+    if (!name) throw new Error("Treatment name is required");
+    const row = {
+      clinic_id: CLINIC_ID,
+      name,
+      category: data.category?.trim() || null,
+      description: data.description?.trim() || null,
+      price: data.price ?? null,
+      interval_days: data.interval_days ?? null,
+      cooling_off_hours: data.cooling_off_hours ?? 0,
+      requires_consent: data.requires_consent ?? true,
+      active: data.active ?? true,
+      updated_at: new Date().toISOString(),
+    };
+    if (data.id) {
+      const existing = catalogue.find((c) => c.id === data.id);
+      if (existing) Object.assign(existing, row);
+      return { ok: true, id: data.id };
+    }
+    const created = { id: newId("c9"), created_at: new Date().toISOString(), ...row };
+    catalogue.push(created);
+    return { ok: true, id: created.id };
+  });
+
+export const setCatalogueItemActive = createServerFn({ method: "POST" })
+  .validator((data: { id: string; active: boolean }) => data)
+  .handler(async ({ data }) => {
+    requireSettings();
+    const row = catalogue.find((c) => c.id === data.id);
+    if (row) row.active = data.active;
+    return { ok: true };
+  });
+
+export const getClinicDetails = createServerFn({ method: "GET" }).handler(async () => ({
+  id: db.clinic["id"],
+  name: db.clinic["name"],
+  address: db.clinic["address"],
+  phone: db.clinic["phone"],
+  email: db.clinic["email"],
+}));
+
+export const updateClinicDetails = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      name: string;
+      address?: string | null;
+      phone?: string | null;
+      email?: string | null;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    requireSettings();
+    const name = (data.name ?? "").trim();
+    if (!name) throw new Error("Clinic name is required");
+    db.clinic["name"] = name;
+    db.clinic["address"] = data.address?.trim() || null;
+    db.clinic["phone"] = data.phone?.trim() || null;
+    db.clinic["email"] = data.email?.trim() || null;
+    return { ok: true };
+  });
+
+export const listRolePermissions = createServerFn({ method: "GET" }).handler(async () => {
+  const me = requireStaff();
+  const grants: Record<string, Record<string, boolean>> = { front_desk: {}, practitioner: {} };
+  for (const role of ["front_desk", "practitioner"]) {
+    for (const key of PERMISSION_KEYS) {
+      grants[role]![key] =
+        rolePermissions.find((r) => r.role === role && r.permission === key)?.enabled ?? false;
+    }
+  }
+  return { grants, canEdit: me.isManager };
+});
+
+export const setRolePermission = createServerFn({ method: "POST" })
+  .validator(
+    (data: { role: "front_desk" | "practitioner"; permission: string; enabled: boolean }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = identity();
+    if (!me.isManager) throw new Error("Manager access only");
+    if (!(PERMISSION_KEYS as readonly string[]).includes(data.permission))
+      throw new Error("Unknown permission");
+    const row = rolePermissions.find(
+      (r) => r.role === data.role && r.permission === data.permission,
+    );
+    if (row) row.enabled = data.enabled;
+    else
+      rolePermissions.push({
+        id: newId("b9"),
+        role: data.role,
+        permission: data.permission,
+        enabled: data.enabled,
+        updated_by: me.userId,
+        updated_at: new Date().toISOString(),
+      });
+    return { ok: true };
+  });
+
+export const getMyNote = createServerFn({ method: "GET" }).handler(async () => {
+  const me = identity();
+  const row = userNotes.find((n) => n.user_id === me.userId);
+  return { body: row?.body ?? "", updatedAt: row?.updated_at ?? null };
+});
+
+export const saveMyNote = createServerFn({ method: "POST" })
+  .validator((data: { body: string }) => ({ body: String(data?.body ?? "").slice(0, 20000) }))
+  .handler(async ({ data }) => {
+    const me = identity();
+    const now = new Date().toISOString();
+    let row = userNotes.find((n) => n.user_id === me.userId);
+    if (!row) {
+      row = { id: newId("q9"), user_id: me.userId, body: "", created_at: now, updated_at: now };
+      userNotes.push(row);
+    }
+    row.body = data.body;
+    row.updated_at = now;
+    return { body: row.body, updatedAt: row.updated_at };
+  });

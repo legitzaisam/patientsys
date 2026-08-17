@@ -1,0 +1,1 @@
+ALTER TABLE public.patients RENAME COLUMN suffix TO title;

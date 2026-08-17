@@ -1,0 +1,2 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS commission_rate numeric NOT NULL DEFAULT 0 CHECK (commission_rate >= 0 AND commission_rate <= 100);
+ALTER TABLE public.treatments ADD COLUMN IF NOT EXISTS commission_rate_snapshot numeric;

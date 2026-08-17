@@ -1,0 +1,367 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+/*
+ * Design system definition — Aetheria pastel liquid glass.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root block defines the actual color values using oklch.
+ * All colors MUST use oklch format. Translucent surfaces carry their alpha in
+ * the oklch slash channel (e.g. oklch(1 0 0 / 52%)) — the glass look depends on
+ * the page wash showing through, so these must not be flattened to opaque.
+ *
+ * To add a new semantic color:
+ * 1. Add the variable to :root
+ * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-teal: var(--teal);
+  --color-teal-foreground: var(--teal-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-consent: var(--consent);
+  --color-arrived: var(--arrived);
+  --color-aftercare: var(--aftercare);
+  --color-subtle: var(--subtle);
+
+  /* Glass vocabulary — translucent surfaces, light edges and the accent wash. */
+  --color-glass: var(--glass);
+  --color-glass-2: var(--glass-2);
+  --color-glass-line: var(--glass-line);
+  --color-edge: var(--edge);
+  --color-edge-2: var(--edge-2);
+  --color-edge-hi: var(--edge-hi);
+  --color-sheen: var(--sheen);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-wash: var(--accent-wash);
+  --color-accent-line: var(--accent-line);
+  --color-accent-hi: var(--accent-hi);
+  --color-accent-deep: var(--accent-deep);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-success-bg: var(--success-bg);
+  --color-destructive-bg: var(--destructive-bg);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-ink: var(--warning-ink);
+  --color-sky: var(--sky);
+  --color-sky-bg: var(--sky-bg);
+  --color-sky-ink: var(--sky-ink);
+  --color-bar: var(--bar);
+  /*
+   * Pastel fills are unreadable as text, so every status colour used for type
+   * has a darker -ink partner. Fill with the base token, write with the ink.
+   */
+  --color-consent-ink: var(--consent-ink);
+  --color-arrived-ink: var(--arrived-ink);
+  --color-aftercare-ink: var(--aftercare-ink);
+  --color-success-ink: var(--success-ink);
+  --color-destructive-ink: var(--destructive-ink);
+
+  --color-lane-1: var(--lane-1);
+  --color-lane-2: var(--lane-2);
+  --color-lane-3: var(--lane-3);
+  --color-lane-4: var(--lane-4);
+  --color-lane-5: var(--lane-5);
+  --color-lane-6: var(--lane-6);
+  --color-lane-7: var(--lane-7);
+  --color-lane-8: var(--lane-8);
+  --color-lane-1-ink: var(--lane-1-ink);
+  --color-lane-2-ink: var(--lane-2-ink);
+  --color-lane-3-ink: var(--lane-3-ink);
+  --color-lane-4-ink: var(--lane-4-ink);
+  --color-lane-5-ink: var(--lane-5-ink);
+  --color-lane-6-ink: var(--lane-6-ink);
+  --color-lane-7-ink: var(--lane-7-ink);
+  --color-lane-8-ink: var(--lane-8-ink);
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --blur-glass: 26px;
+  --shadow-glass:
+    0 1px 1px oklch(0.373 0.07 266 / 5%), 0 18px 44px -24px var(--bloom),
+    inset 0 1px 0 var(--edge-hi);
+  --shadow-bloom: 0 8px 20px -10px var(--bloom), inset 0 1px 0 oklch(1 0 0 / 55%);
+  --shadow-lift: 0 18px 40px -22px oklch(0.373 0.07 266 / 20%);
+  --shadow-inset-hi: inset 0 1px 0 var(--edge-hi);
+}
+
+:root {
+  --radius: 0.875rem;
+
+  /* Page wash: near-white paper under two pastel blooms and notebook rules. */
+  --background: oklch(0.976 0.002 247.8);
+  --wash-1: oklch(0.919 0.081 93.8 / 50%);
+  --wash-2: oklch(0.88 0.048 44.1 / 34%);
+  --rule: oklch(0.28 0.014 250 / 2.5%);
+
+  /* Ink */
+  --foreground: oklch(0.373 0.07 266.2);
+  /*
+   * Opaque rather than alpha: translucent ink over the butter/peach wash shifts
+   * hue depending on where it lands on the page, so the same class would read
+   * khaki near the blooms and grey elsewhere. These are the alpha values
+   * pre-flattened against the wash.
+   */
+  --ink-2: oklch(0.501 0.047 266.7);
+  --ink-3: oklch(0.623 0.028 265.8);
+  --muted-foreground: oklch(0.551 0.039 266.6);
+  --subtle: oklch(0.653 0.023 265.2);
+
+  /* Glass surfaces */
+  --glass: oklch(1 0 0 / 52%);
+  --glass-2: oklch(1 0 0 / 34%);
+  --glass-line: oklch(1 0 0 / 70%);
+  --edge: oklch(1 0 0 / 78%);
+  /* A white edge disappears on a white card, so controls use a faint ink line. */
+  --edge-2: oklch(0.373 0.07 266.2 / 14%);
+  --edge-hi: oklch(1 0 0 / 92%);
+  --sheen: oklch(1 0 0 / 50%);
+  --bloom: oklch(0.77 0.075 88 / 30%);
+  --bar: oklch(0.82 0.008 250 / 42%);
+
+  --card: oklch(1 0 0 / 52%);
+  --card-foreground: oklch(0.373 0.07 266.2);
+  --popover: oklch(0.985 0.004 95 / 88%);
+  --popover-foreground: oklch(0.373 0.07 266.2);
+  --secondary: oklch(1 0 0 / 34%);
+  --secondary-foreground: oklch(0.373 0.07 266.2);
+  --muted: oklch(1 0 0 / 34%);
+  --border: oklch(1 0 0 / 78%);
+  --input: oklch(1 0 0 / 78%);
+
+  /* Butter accent */
+  --primary: oklch(0.875 0.1 91.3);
+  --primary-foreground: oklch(0.298 0.035 94);
+  --accent: oklch(0.875 0.1 91.3);
+  --accent-foreground: oklch(0.298 0.035 94);
+  --accent-hi: oklch(0.946 0.057 93.2);
+  --accent-deep: oklch(0.828 0.114 91.2);
+  --accent-ink: oklch(0.507 0.088 88.4);
+  --accent-soft: oklch(0.875 0.1 91.3 / 30%);
+  --accent-wash: oklch(0.875 0.1 91.3 / 14%);
+  --accent-line: oklch(0.75 0.098 90 / 42%);
+  --ring: oklch(0.828 0.114 91.2);
+  --teal: oklch(0.875 0.1 91.3);
+  --teal-foreground: oklch(0.298 0.035 94);
+
+  /* Status */
+  --destructive: oklch(0.674 0.146 358.1);
+  --destructive-foreground: oklch(0.99 0.005 350);
+  --destructive-bg: oklch(0.85 0.075 350 / 48%);
+  --success: oklch(0.633 0.102 160.5);
+  --success-bg: oklch(0.88 0.06 160 / 55%);
+  --warning: oklch(0.765 0.095 297.3);
+  --warning-bg: oklch(0.88 0.05 297 / 55%);
+  --warning-ink: oklch(0.464 0.117 292.4);
+  --sky: oklch(0.803 0.076 236.4);
+  --sky-bg: oklch(0.88 0.045 236 / 50%);
+  --sky-ink: oklch(0.524 0.082 243.8);
+  --consent: oklch(0.765 0.095 297.3);
+  --arrived: oklch(0.803 0.076 236.4);
+  --aftercare: oklch(0.785 0.112 349.3);
+  --consent-ink: oklch(0.464 0.117 292.4);
+  --arrived-ink: oklch(0.524 0.082 243.8);
+  --aftercare-ink: oklch(0.545 0.135 349);
+  --success-ink: oklch(0.512 0.095 158);
+  --destructive-ink: oklch(0.548 0.145 358);
+
+  /* Practitioner / treatment lanes — pastel fills with darker ink for text. */
+  --lane-1: oklch(0.853 0.059 175.9);
+  --lane-2: oklch(0.86 0.07 150);
+  --lane-3: oklch(0.875 0.1 91.3);
+  --lane-4: oklch(0.803 0.076 236.4);
+  --lane-5: oklch(0.785 0.112 349.3);
+  --lane-6: oklch(0.88 0.048 44.1);
+  --lane-7: oklch(0.765 0.095 297.3);
+  --lane-8: oklch(0.86 0.07 120);
+  --lane-1-ink: oklch(0.512 0.083 176);
+  --lane-2-ink: oklch(0.512 0.095 150);
+  --lane-3-ink: oklch(0.507 0.088 88.4);
+  --lane-4-ink: oklch(0.524 0.082 243.8);
+  --lane-5-ink: oklch(0.545 0.135 349);
+  --lane-6-ink: oklch(0.535 0.095 44);
+  --lane-7-ink: oklch(0.464 0.117 292.4);
+  --lane-8-ink: oklch(0.512 0.09 120);
+
+  --chart-1: oklch(0.875 0.1 91.3);
+  --chart-2: oklch(0.633 0.102 160.5);
+  --chart-3: oklch(0.803 0.076 236.4);
+  --chart-4: oklch(0.765 0.095 297.3);
+  --chart-5: oklch(0.785 0.112 349.3);
+
+  --sidebar: oklch(1 0 0 / 44%);
+  --sidebar-foreground: oklch(0.373 0.07 266.2);
+  --sidebar-primary: oklch(0.875 0.1 91.3);
+  --sidebar-primary-foreground: oklch(0.298 0.035 94);
+  --sidebar-accent: oklch(1 0 0 / 34%);
+  --sidebar-accent-foreground: oklch(0.373 0.07 266.2);
+  --sidebar-border: oklch(1 0 0 / 78%);
+  --sidebar-ring: oklch(0.828 0.114 91.2);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    background-image:
+      radial-gradient(900px 560px at 8% -10%, var(--wash-1), transparent 68%),
+      radial-gradient(820px 520px at 96% 2%, var(--wash-2), transparent 66%),
+      repeating-linear-gradient(
+        0deg,
+        var(--rule) 0px,
+        var(--rule) 1px,
+        transparent 1px,
+        transparent 14px
+      );
+    background-attachment: fixed;
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Tables are hand-rolled <table> markup throughout the app rather than a
+   * shared primitive, so the theme's table vocabulary lives here to reach all
+   * of them at once. Scoped to .glass-table to leave any bespoke grid alone.
+   */
+  .glass-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .glass-table th {
+    padding: 0 0.75rem 0.625rem;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--glass-line);
+    white-space: nowrap;
+  }
+
+  .glass-table td {
+    padding: 0.6875rem 0.75rem;
+    border-bottom: 1px solid var(--glass-line);
+    vertical-align: middle;
+  }
+
+  .glass-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .glass-table tbody tr:hover {
+    background: var(--accent-wash);
+  }
+}
+
+@layer components {
+  /* Frosted panel: translucent fill, blurred backdrop and a lit top edge. */
+  .glass-panel {
+    background: var(--glass);
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.5);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.5);
+    border: 1px solid var(--edge);
+    box-shadow: var(--shadow-glass);
+  }
+
+  /* Diagonal specular highlight across the top-left of a glass surface. */
+  .glass-sheen::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, var(--sheen), transparent 46%);
+    pointer-events: none;
+  }
+
+  /*
+   * The full card surface. Padding is left to the caller so existing spacing is
+   * preserved; the sheen sits behind content via the child stacking rule.
+   */
+  .glass-card {
+    position: relative;
+    border-radius: var(--radius-2xl);
+    border: 1px solid var(--edge);
+    background: var(--glass);
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.5);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.5);
+    box-shadow: var(--shadow-glass);
+  }
+
+  .glass-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, var(--sheen), transparent 46%);
+    pointer-events: none;
+  }
+
+  .glass-card > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /*
+   * Inset well for list rows inside a card (the theme's .fitem). Uses the ink
+   * edge rather than the white one, since these sit on an already-white card.
+   */
+  .glass-item {
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--edge-2);
+    background: var(--glass-2);
+    box-shadow: var(--shadow-inset-hi);
+  }
+}
