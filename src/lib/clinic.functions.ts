@@ -2625,7 +2625,7 @@ export const getMyNote = createServerFn({ method: "GET" })
 
 export const saveMyNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { body: string }) => ({ body: String(data?.body ?? "").slice(0, 20000) }))
+  .validator((data: { body: string }) => ({ body: String(data?.body ?? "").slice(0, 20000) }))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context as Ctx;
     const { data: row, error } = await supabase
@@ -2639,7 +2639,7 @@ export const saveMyNote = createServerFn({ method: "POST" })
 
 export const getAppointmentNote = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { appointment_id: string }) => ({ appointment_id: String(data.appointment_id) }))
+  .validator((data: { appointment_id: string }) => ({ appointment_id: String(data.appointment_id) }))
   .handler(async ({ context, data }) => {
     const { supabase } = context as Ctx;
     const { data: row, error } = await supabase
@@ -2657,7 +2657,7 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
 
 export const saveAppointmentNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { appointment_id: string; body: string }) => ({
+  .validator((data: { appointment_id: string; body: string }) => ({
     appointment_id: String(data.appointment_id),
     body: String(data?.body ?? "").slice(0, 20000),
   }))
