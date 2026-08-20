@@ -105,7 +105,6 @@ function AppointmentCarousel({
   showDay: boolean;
 }) {
   const [api, setApi] = useState<CarouselApi>();
-  const [index, setIndex] = useState(0);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
   const startAt = useMemo(() => upcomingIndex(appointments), [appointments]);
@@ -113,26 +112,35 @@ function AppointmentCarousel({
   useEffect(() => {
     if (!api) return;
     const sync = () => {
-      setIndex(api.selectedScrollSnap());
-      setCanPrev(api.canScrollPrev());
+      const snap = api.selectedScrollSnap();
+      // Hide left control at the upcoming start (and anything before it).
+      setCanPrev(snap > startAt);
       setCanNext(api.canScrollNext());
     };
     sync();
     api.on("select", sync);
     api.on("reInit", sync);
+    api.on("settle", sync);
     return () => {
       api.off("select", sync);
       api.off("reInit", sync);
+      api.off("settle", sync);
     };
-  }, [api]);
+  }, [api, startAt]);
 
   useEffect(() => {
     if (!api) return;
     api.scrollTo(startAt, true);
+    const id = requestAnimationFrame(() => {
+      const snap = api.selectedScrollSnap();
+      setCanPrev(snap > startAt);
+      setCanNext(api.canScrollNext());
+    });
+    return () => cancelAnimationFrame(id);
   }, [api, startAt, appointments.length]);
 
   return (
-    <div className="pb-1">
+    <div>
       <div className="flex items-center gap-2">
         {canPrev && (
           <Button
@@ -153,14 +161,15 @@ function AppointmentCarousel({
             align: "start",
             containScroll: "trimSnaps",
             slidesToScroll: 2,
+            startIndex: startAt,
           }}
           className="min-w-0 flex-1"
         >
-          <CarouselContent className="-ml-4" viewportClassName="overflow-hidden px-1.5 py-3">
+          <CarouselContent className="-ml-4" viewportClassName="px-3 pt-2 pb-4">
             {appointments.map((a) => (
               <CarouselItem
                 key={a.id}
-                className="basis-[min(100%,280px)] pl-4 sm:basis-[280px] lg:basis-[300px]"
+                className="basis-[min(100%,280px)] pt-1 pb-3 pl-4 sm:basis-[280px] lg:basis-[300px]"
               >
                 <TodayCard appointment={a} isManager={isManager} showDay={showDay} />
               </CarouselItem>
@@ -181,12 +190,6 @@ function AppointmentCarousel({
           </Button>
         )}
       </div>
-
-      <p className="mt-3 text-center text-[11px] tabular-nums text-ink-3">
-        {index + 1}
-        <span className="text-muted-foreground"> / </span>
-        {appointments.length}
-      </p>
     </div>
   );
 }
@@ -237,7 +240,8 @@ function TodayCard({
   };
 
   return (
-    <div className="glass-card flex h-full flex-col gap-3 p-4 transition-shadow hover:shadow-lift">
+    <div className="rounded-[22px] shadow-[var(--shadow-glass)] transition-[box-shadow] hover:shadow-[var(--shadow-lift)]">
+      <div className="glass-card flex h-full flex-col gap-3 p-4 !shadow-none">
       {showDay && (
         <p className="text-[11px] font-semibold tracking-[0.02em] text-ink-3">
           {formatDayHeading(clinicDayKey(new Date(a.starts_at)))}
@@ -287,6 +291,7 @@ function TodayCard({
           await setState.mutateAsync({ data: { id: a.id, stage: "no_show" } });
         }}
       />
+      </div>
     </div>
   );
 }

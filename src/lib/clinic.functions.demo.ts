@@ -20,6 +20,10 @@ import {
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import { clinicDayKey } from "@/lib/clinic-time";
 import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
+import {
+  findPractitionerOverlap,
+  PRACTITIONER_OVERLAP_MESSAGE,
+} from "@/lib/appointment-overlap";
 
 export const PERMISSION_KEYS = [
   "reports.retention",
@@ -569,6 +573,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = identity();
     const start = new Date(data.starts_at);
+    const endsAt = new Date(start.getTime() + (data.duration_minutes || 30) * 60000).toISOString();
     const payload = {
       clinic_id: CLINIC_ID,
       patient_id: data.patient_id,
@@ -577,7 +582,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       treatment_name: data.treatment_name,
       treatment_number: data.treatment_number,
       starts_at: start.toISOString(),
-      ends_at: new Date(start.getTime() + (data.duration_minutes || 30) * 60000).toISOString(),
+      ends_at: endsAt,
       price: data.price ?? null,
       payment_status: data.payment_status ?? "unpaid",
       consent_document_id: data.consent_document_id || null,
@@ -587,6 +592,16 @@ export const saveAppointment = createServerFn({ method: "POST" })
       stage: "booked",
       updated_at: new Date().toISOString(),
     };
+
+    if (payload.practitioner_id) {
+      const clash = findPractitionerOverlap({
+        appointments: appointments.filter((a) => a.practitioner_id === payload.practitioner_id),
+        startsAt: payload.starts_at,
+        endsAt: payload.ends_at,
+        excludeAppointmentId: data.id ?? null,
+      });
+      if (clash) throw new Error(PRACTITIONER_OVERLAP_MESSAGE);
+    }
 
     if (data.id) {
       const row = appointments.find((a) => a.id === data.id);
@@ -676,8 +691,20 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
         5,
         Math.round((new Date(row.ends_at).getTime() - new Date(row.starts_at).getTime()) / 60000),
       );
-    row.starts_at = start.toISOString();
-    row.ends_at = new Date(start.getTime() + minutes * 60000).toISOString();
+    const startsAt = start.toISOString();
+    const endsAt = new Date(start.getTime() + minutes * 60000).toISOString();
+    const practitionerId = data.practitioner_id || row.practitioner_id;
+    if (practitionerId) {
+      const clash = findPractitionerOverlap({
+        appointments: appointments.filter((a) => a.practitioner_id === practitionerId),
+        startsAt,
+        endsAt,
+        excludeAppointmentId: data.id,
+      });
+      if (clash) throw new Error(PRACTITIONER_OVERLAP_MESSAGE);
+    }
+    row.starts_at = startsAt;
+    row.ends_at = endsAt;
     row.stage = "booked";
     row.status = "booked";
     if (data.practitioner_id) row.practitioner_id = data.practitioner_id;

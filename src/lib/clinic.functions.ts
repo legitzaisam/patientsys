@@ -3,10 +3,38 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { clinicDayKey, clinicDayRange } from "@/lib/clinic-time";
 import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
+import {
+  PRACTITIONER_OVERLAP_MESSAGE,
+} from "@/lib/appointment-overlap";
 
 const CLINIC_ID = "11111111-1111-4111-8111-111111111111";
 
 type Ctx = { supabase: any; userId: string; claims: Record<string, unknown> };
+
+/** Reject if the practitioner already has a non-cancelled booking overlapping this window. */
+async function assertNoPractitionerOverlap(
+  supabase: any,
+  args: {
+    practitionerId: string | null | undefined;
+    startsAt: string;
+    endsAt: string;
+    excludeAppointmentId?: string | null;
+  },
+) {
+  if (!args.practitionerId) return;
+  let q = supabase
+    .from("appointments")
+    .select("id, starts_at, ends_at, status")
+    .eq("clinic_id", CLINIC_ID)
+    .eq("practitioner_id", args.practitionerId)
+    .neq("status", "cancelled")
+    .lt("starts_at", args.endsAt)
+    .gt("ends_at", args.startsAt);
+  if (args.excludeAppointmentId) q = q.neq("id", args.excludeAppointmentId);
+  const { data, error } = await q.limit(1);
+  if (error) throw new Error(error.message);
+  if (data?.length) throw new Error(PRACTITIONER_OVERLAP_MESSAGE);
+}
 
 /** Capabilities a manager can grant to receptionists and practitioners. */
 export const PERMISSION_KEYS = [
@@ -553,6 +581,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const supabase = (context as Ctx).supabase;
     const start = new Date(data.starts_at);
+    const endsAt = new Date(start.getTime() + (data.duration_minutes || 30) * 60000).toISOString();
     const payload = {
       clinic_id: CLINIC_ID,
       patient_id: data.patient_id,
@@ -561,13 +590,19 @@ export const saveAppointment = createServerFn({ method: "POST" })
       treatment_name: data.treatment_name,
       treatment_number: data.treatment_number,
       starts_at: start.toISOString(),
-      ends_at: new Date(start.getTime() + (data.duration_minutes || 30) * 60000).toISOString(),
+      ends_at: endsAt,
       price: data.price ?? null,
       payment_status: (data.payment_status as "unpaid" | "deposit_paid" | "paid" | "refunded") ?? "unpaid",
       consent_document_id: data.consent_document_id || null,
       notes: data.notes || null,
       created_by: context.userId,
     };
+    await assertNoPractitionerOverlap(supabase, {
+      practitionerId: payload.practitioner_id,
+      startsAt: payload.starts_at,
+      endsAt: payload.ends_at,
+      excludeAppointmentId: data.id ?? null,
+    });
     if (data.id) {
       const { error } = await supabase.from("appointments").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
@@ -2270,13 +2305,13 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     const start = new Date(data.starts_at);
     if (Number.isNaN(start.getTime())) throw new Error("Invalid date and time");
+    const { data: current } = await ctx.supabase
+      .from("appointments")
+      .select("starts_at, ends_at, practitioner_id")
+      .eq("id", data.id)
+      .maybeSingle();
     let minutes = data.duration_minutes;
     if (!minutes) {
-      const { data: current } = await ctx.supabase
-        .from("appointments")
-        .select("starts_at, ends_at")
-        .eq("id", data.id)
-        .maybeSingle();
       minutes =
         current?.starts_at && current?.ends_at
           ? Math.max(
@@ -2287,9 +2322,18 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
             )
           : 30;
     }
+    const startsAt = start.toISOString();
+    const endsAt = new Date(start.getTime() + minutes * 60000).toISOString();
+    const practitionerId = data.practitioner_id || current?.practitioner_id;
+    await assertNoPractitionerOverlap(ctx.supabase, {
+      practitionerId,
+      startsAt,
+      endsAt,
+      excludeAppointmentId: data.id,
+    });
     const patch: Record<string, unknown> = {
-      starts_at: start.toISOString(),
-      ends_at: new Date(start.getTime() + minutes * 60000).toISOString(),
+      starts_at: startsAt,
+      ends_at: endsAt,
       stage: "booked",
       status: "booked" as const,
     };

@@ -59,6 +59,12 @@ import { AppointmentTimeEditor } from "@/components/appointment-time-editor";
 import { NoShowFollowUpDialog } from "@/components/no-show-followup-dialog";
 import { QuickAddAppointment } from "@/components/quick-add-appointment";
 import { durationForCatalogueItem } from "@/lib/treatment-duration";
+import { clinicDayKey } from "@/lib/clinic-time";
+import {
+  assignOverlapLanes,
+  findPractitionerOverlap,
+  PRACTITIONER_OVERLAP_MESSAGE,
+} from "@/lib/appointment-overlap";
 
 import { initialsOf, laneFor, toneForTreatment } from "@/lib/practitioner-colours";
 import { PractitionerHoverCard } from "@/components/practitioner-hovercard";
@@ -227,6 +233,46 @@ function addDays(d: Date, n: number) {
   c.setDate(c.getDate() + n);
   return c;
 }
+
+function dayKeyUtcNoon(key: string) {
+  const [y, m, d] = key.split("-").map(Number);
+  return Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1, 12);
+}
+
+/** Centre control label for the diary jump control. */
+function jumpControlLabel(anchor: Date, view: ViewMode) {
+  if (view === "week") {
+    const from = startOfWeek(anchor);
+    const to = addDays(from, 6);
+    const sameMonth = from.getMonth() === to.getMonth();
+    const fromLabel = sameMonth
+      ? String(from.getDate())
+      : from.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    const toLabel = to.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    return `${fromLabel}–${toLabel}`;
+  }
+  if (view === "month") {
+    return anchor.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+  }
+
+  const todayKey = clinicDayKey();
+  const anchorKey = clinicDayKey(anchor);
+  const dayDiff = Math.round((dayKeyUtcNoon(anchorKey) - dayKeyUtcNoon(todayKey)) / 86_400_000);
+  if (dayDiff === 0) return "Today";
+  if (dayDiff === -1) return "Yesterday";
+  if (dayDiff === 1) return "Tomorrow";
+
+  const [y, m, d] = anchorKey.split("-").map(Number);
+  const labelDate = new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1, 12));
+  const includeYear = anchorKey.slice(0, 4) !== todayKey.slice(0, 4);
+  return labelDate.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(includeYear ? { year: "numeric" } : {}),
+    timeZone: "UTC",
+  });
+}
+
 function rangeFor(view: ViewMode, anchor: Date) {
   if (view === "day") return { from: startOfDay(anchor), to: addDays(startOfDay(anchor), 1) };
   if (view === "week") return { from: startOfWeek(anchor), to: addDays(startOfWeek(anchor), 7) };
@@ -351,7 +397,7 @@ function SchedulePage() {
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="ghost" className="h-7 px-3 text-xs" onClick={() => setAnchor(new Date())}>
-              Today
+              {jumpControlLabel(anchor, view)}
             </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => shift(1)} aria-label="Next">
               <ChevronRight className="h-4 w-4" />
@@ -1204,6 +1250,26 @@ function DayPlanner({
       })()
     : null;
 
+  const dropConflict =
+    confirmDrop && dropTarget
+      ? (() => {
+          const a = confirmDrop.appointment;
+          const duration = Math.max(
+            5,
+            Math.round((+new Date(a.ends_at) - +new Date(a.starts_at)) / 60000),
+          );
+          const practitionerId =
+            confirmDrop.colId === "unassigned" ? a.practitioner_id : confirmDrop.colId;
+          if (!practitionerId) return null;
+          return findPractitionerOverlap({
+            appointments: rows.filter((r) => r.practitioner_id === practitionerId),
+            startsAt: dropTarget,
+            endsAt: new Date(dropTarget.getTime() + duration * 60000),
+            excludeAppointmentId: a.id,
+          });
+        })()
+      : null;
+
   return (
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
       {/* Header */}
@@ -1373,7 +1439,9 @@ function DayPlanner({
                       ),
                     )}
 
-                    {col.items.map((a) => {
+                    {(() => {
+                      const lanes = assignOverlapLanes(col.items);
+                      return col.items.map((a) => {
                       const s = new Date(a.starts_at);
                       const e = new Date(a.ends_at);
                       const dragging = drag?.id === a.id;
@@ -1382,19 +1450,29 @@ function DayPlanner({
                       if (dragging && drag!.colId !== col.id) return null;
                       const top = yFor(startAt);
                       const durationHeight = yFor(startAt + duration) - top - 6;
-                      const height = Math.max(80, durationHeight);
+                      const height = Math.max(56, durationHeight);
                       const isCurrent = current?.id === a.id;
                       const treatmentTone = toneForTreatment(a.treatment_name, treatmentColours);
+                      const pack = lanes.get(a.id) ?? { lane: 0, laneCount: 1 };
+                      const laneCount = dragging ? 1 : pack.laneCount;
+                      const lane = dragging ? 0 : pack.lane;
+                      const gutter = 6;
                       return (
                         <div
                           key={a.id}
-                          style={{ top, height, ...treatmentTone.style }}
+                          style={{
+                            top,
+                            height,
+                            left: `calc(${(lane / laneCount) * 100}% + ${gutter}px)`,
+                            width: `calc(${100 / laneCount}% - ${gutter * 2}px)`,
+                            ...treatmentTone.style,
+                          }}
                           onPointerDown={(ev) => beginDrag(ev, a, col.id)}
                           onPointerMove={moveDrag}
                           onPointerUp={() => endDrag(a)}
-                          className={`absolute inset-x-1.5 flex cursor-grab flex-col justify-center gap-1 overflow-hidden rounded-xl border border-edge border-l-[3px] ${treatmentTone.rail} ${treatmentTone.bg} ${treatmentTone.bgHover} px-3 py-2.5 shadow-inset-hi transition-shadow hover:shadow-lift ${
+                          className={`absolute flex cursor-grab flex-col justify-center gap-1 overflow-hidden rounded-xl border border-edge border-l-[3px] ${treatmentTone.rail} ${treatmentTone.bg} ${treatmentTone.bgHover} px-3 py-2.5 shadow-inset-hi transition-shadow hover:shadow-lift ${
                             dragging ? "z-30 cursor-grabbing opacity-90 shadow-lift" : ""
-                          } ${isCurrent ? "shadow-lift" : ""}`}
+                          } ${isCurrent ? "shadow-lift" : ""} ${laneCount > 1 ? "px-2" : ""}`}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className={`text-2xs font-semibold tabular-nums ${treatmentTone.text}`}>
@@ -1416,7 +1494,8 @@ function DayPlanner({
                           </p>
                         </div>
                       );
-                    })}
+                      });
+                    })()}
                   </div>
                 );
               })}
@@ -1486,6 +1565,11 @@ function DayPlanner({
                 </span>
                 . The patient journey resets to booked.
               </p>
+              {dropConflict ? (
+                <p className="rounded-lg bg-destructive-bg px-3 py-2 text-xs text-destructive-ink">
+                  {PRACTITIONER_OVERLAP_MESSAGE}
+                </p>
+              ) : null}
             </div>
           )}
           <DialogFooter className="flex-col gap-2 sm:flex-row">
@@ -1494,18 +1578,21 @@ function DayPlanner({
             </Button>
             <Button
               className=""
-              disabled={reschedule.isPending}
+              disabled={reschedule.isPending || !!dropConflict}
               onClick={() => {
-                if (!confirmDrop || !dropTarget) return;
+                if (!confirmDrop || !dropTarget || dropConflict) return;
                 const a = confirmDrop.appointment;
+                const duration = Math.max(
+                  5,
+                  Math.round(
+                    (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000,
+                  ),
+                );
                 reschedule.mutate({
                   data: {
                     id: a.id,
                     starts_at: dropTarget.toISOString(),
-                    duration_minutes: Math.max(
-                      5,
-                      Math.round((+new Date(a.ends_at) - +new Date(a.starts_at)) / 60000),
-                    ),
+                    duration_minutes: duration,
                     ...(confirmDrop.colId !== "unassigned" ? { practitioner_id: confirmDrop.colId } : {}),
                   },
                 });
