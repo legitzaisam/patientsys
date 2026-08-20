@@ -19,7 +19,7 @@ export function SuggestedActions({
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2">
-        <Lightbulb className="h-4 w-4 text-accent-ink" aria-hidden />
+        <Lightbulb className="h-4 w-4 text-ink-3" aria-hidden />
         <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Where to focus</h2>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">Small actions that keep patients coming back.</p>

@@ -32,6 +32,7 @@ type Item = {
   description: string | null;
   price: number | null;
   interval_days: number | null;
+  duration_minutes: number;
   cooling_off_hours: number;
   requires_consent: boolean;
   active: boolean;
@@ -43,6 +44,7 @@ type Draft = {
   category: string;
   price: string;
   interval_days: string;
+  duration_minutes: string;
   cooling_off_hours: string;
   requires_consent: boolean;
 };
@@ -52,6 +54,7 @@ const blank: Draft = {
   category: "",
   price: "",
   interval_days: "",
+  duration_minutes: "60",
   cooling_off_hours: "0",
   requires_consent: true,
 };
@@ -117,6 +120,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
         category: draft.category,
         price: draft.price === "" ? null : Number(draft.price),
         interval_days: draft.interval_days === "" ? null : Number(draft.interval_days),
+        duration_minutes: draft.duration_minutes === "" ? 60 : Number(draft.duration_minutes),
         cooling_off_hours: draft.cooling_off_hours === "" ? 0 : Number(draft.cooling_off_hours),
         requires_consent: draft.requires_consent,
       },
@@ -127,12 +131,12 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
     <Card className="space-y-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <ClipboardList className="h-4 w-4 text-accent-ink" />
+          <ClipboardList className="h-4 w-4 text-ink-3" />
           <div>
             <h2 className="text-sm font-semibold text-foreground">Treatments offered</h2>
             <p className="text-xs text-muted-foreground">
               {canEdit
-                ? "Add treatments, set prices, recall intervals, consent rules and diary colours."
+                ? "Add treatments, set prices, appointment length, recall intervals, consent rules and diary colours."
                 : "Treatments your clinic offers and their diary colours, set by your manager."}
             </p>
           </div>
@@ -195,6 +199,17 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                 onChange={(e) => setDraft({ ...draft, interval_days: e.target.value })}
               />
             </Field>
+            <Field label="Appointment length (min)">
+              <Input
+                type="number"
+                min="5"
+                max="480"
+                step="5"
+                value={draft.duration_minutes}
+                placeholder="60"
+                onChange={(e) => setDraft({ ...draft, duration_minutes: e.target.value })}
+              />
+            </Field>
             <Field label="Cooling-off (hours)">
               <Input
                 type="number"
@@ -246,6 +261,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
               <p className="text-2xs tracking-[0.02em] text-muted-foreground">
                 {item.category ?? "Other"}
                 {item.price != null && ` · £${Number(item.price).toFixed(0)}`}
+                {` · ${item.duration_minutes ?? 60} min`}
                 {item.interval_days != null && ` · recall ${item.interval_days}d`}
                 {item.requires_consent && " · consent"}
               </p>
@@ -270,6 +286,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                       category: item.category ?? "",
                       price: item.price == null ? "" : String(item.price),
                       interval_days: item.interval_days == null ? "" : String(item.interval_days),
+                      duration_minutes: String(item.duration_minutes ?? 60),
                       cooling_off_hours: String(item.cooling_off_hours ?? 0),
                       requires_consent: item.requires_consent,
                     })

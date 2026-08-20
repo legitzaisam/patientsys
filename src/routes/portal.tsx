@@ -3,10 +3,11 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
+import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { HeartPulse, CalendarCheck, FileSignature, MessageCircle } from "lucide-react";
+import { CalendarCheck, FileSignature, MessageCircle } from "lucide-react";
 
 export const Route = createFileRoute("/portal")({
   ssr: false,
@@ -79,9 +80,8 @@ function PortalLogin() {
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="relative hidden flex-col justify-between overflow-hidden border-r border-edge bg-gradient-to-br from-lane-4/45 via-glass-2 to-70% to-lane-7/40 p-12 shadow-inset-hi lg:flex">
         <div className="flex items-center gap-2 text-foreground">
-          <HeartPulse className="h-5 w-5 text-accent-ink" />
-          <span className="text-[17px] font-semibold tracking-[-0.016em]">Aetheria</span>
-          <span className="ml-2 rounded-full border border-edge px-2 py-0.5 text-2xs tracking-[0.02em] text-muted-foreground">
+          <BrandLockup />
+          <span className="rounded-full border border-edge px-2 py-0.5 text-2xs tracking-[0.02em] text-muted-foreground">
             Patient portal
           </span>
         </div>
@@ -92,7 +92,7 @@ function PortalLogin() {
           <ul className="space-y-3">
             {highlights.map((h) => (
               <li key={h.text} className="flex items-start gap-3 text-sm text-muted-foreground">
-                <h.icon className="mt-0.5 h-4 w-4 shrink-0 text-accent-ink" />
+                <h.icon className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" />
                 {h.text}
               </li>
             ))}

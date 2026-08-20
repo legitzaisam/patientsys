@@ -1,32 +1,34 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { NotebookPen } from "lucide-react";
 import { getMyNote, saveMyNote } from "@/lib/clinic.functions";
-import {
-  NotesTextarea,
-  NotesToolbar,
-  SaveState,
-  insertBullet,
-  useNotesPrefs,
-} from "@/components/notes/ios-notes-editor";
+import { usePanelWidth } from "@/hooks/use-panel-width";
+import { SaveState, useNotesPrefs } from "@/components/notes/ios-notes-editor";
+import { RichNotesEditor } from "@/components/notes/rich-notes-editor";
+
+const DEFAULT_W = 340;
+const MIN_W = 240;
+const MAX_W = 640;
+
+function clampWidth(value: number) {
+  return Math.min(MAX_W, Math.max(MIN_W, Math.round(value)));
+}
 
 export function NotesPanel() {
   const fetchNote = useServerFn(getMyNote);
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ["my-note"], queryFn: () => fetchNote() });
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
-  const hydrated = useRef(false);
-  const areaRef = useRef<HTMLTextAreaElement>(null);
   const prefs = useNotesPrefs("notes-prefs:my-notes");
+  const [width, setWidth] = usePanelWidth("dashboard-notes-w", DEFAULT_W);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => {
-    if (data && !hydrated.current) {
+    if (data && value === null) {
       setValue(data.body ?? "");
-      hydrated.current = true;
     }
-  }, [data]);
+  }, [data, value]);
 
   const save = useMutation({
     mutationFn: useServerFn(saveMyNote),
@@ -37,7 +39,7 @@ export function NotesPanel() {
   });
 
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty || value === null) return;
     const t = setTimeout(() => save.mutate({ data: { body: value } }), 900);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -48,29 +50,70 @@ export function NotesPanel() {
     setDirty(true);
   };
 
+  function onResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    dragRef.current = { startX: event.clientX, startWidth: width };
+    document.body.classList.add("select-none", "cursor-col-resize");
+
+    function onMove(moveEvent: globalThis.PointerEvent) {
+      const drag = dragRef.current;
+      if (!drag) return;
+      setWidth(clampWidth(drag.startWidth + (drag.startX - moveEvent.clientX)));
+    }
+
+    function onUp() {
+      dragRef.current = null;
+      document.body.classList.remove("select-none", "cursor-col-resize");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-4">
-        <h2 className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.016em] text-foreground">
-          <NotebookPen className="h-4 w-4 text-muted-foreground" />
-          My notes
-        </h2>
-        <p className="text-xs text-muted-foreground">Private to you · saves automatically.</p>
-      </div>
-      <div className="glass-card flex flex-1 flex-col p-4">
-        <NotesTextarea
-          textareaRef={areaRef}
-          value={value}
-          onChange={update}
-          prefs={prefs}
-          placeholder="Jot down reminders, handover notes or things to follow up…"
-          className="min-h-[220px]"
-        />
-        <div className="mt-2 flex scale-95 origin-left items-center justify-between gap-2">
-          <NotesToolbar prefs={prefs} onBullet={() => insertBullet(areaRef.current, value, update)} />
-          <SaveState saving={save.isPending} dirty={dirty} />
+    <aside
+      className="flex w-full shrink-0 flex-col lg:sticky lg:top-14 lg:w-[var(--notes-w)] lg:self-start"
+      style={{ ["--notes-w" as string]: `${clampWidth(width)}px` }}
+    >
+      <div className="mb-4 flex shrink-0 items-start justify-between gap-2">
+        <div>
+          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My notes</h2>
+          <p className="text-xs text-muted-foreground">Private to you · saves automatically.</p>
         </div>
+        <SaveState saving={save.isPending} dirty={dirty} />
       </div>
-    </div>
+      <div className="glass-card relative flex min-h-[180px] flex-col p-4">
+        {value !== null ? (
+          <RichNotesEditor value={value} onChange={update} prefs={prefs} />
+        ) : (
+          <div className="min-h-[140px] rounded-2xl bg-glass-2 p-3.5 text-sm text-muted-foreground">Loading…</div>
+        )}
+
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize notes width"
+          aria-valuemin={MIN_W}
+          aria-valuemax={MAX_W}
+          aria-valuenow={clampWidth(width)}
+          tabIndex={0}
+          onPointerDown={onResizePointerDown}
+          onDoubleClick={() => setWidth(DEFAULT_W)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              setWidth(clampWidth(width + 16));
+            }
+            if (event.key === "ArrowRight") {
+              event.preventDefault();
+              setWidth(clampWidth(width - 16));
+            }
+          }}
+          className="absolute inset-y-3 left-0 z-10 hidden w-3 cursor-col-resize touch-none lg:block after:pointer-events-none after:absolute after:inset-y-0 after:left-0 after:w-px after:rounded-full hover:after:bg-accent-soft"
+        />
+      </div>
+    </aside>
   );
 }

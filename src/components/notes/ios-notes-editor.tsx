@@ -110,7 +110,7 @@ export function NotesToolbar({
   onBullet: () => void;
 }) {
   const btn =
-    "inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-glass-2 hover:text-foreground";
+    "inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent-wash hover:text-foreground";
   return (
     <div className="flex items-center gap-0.5">
       <button type="button" className={btn} title="Bullet list" onClick={onBullet}>
@@ -168,6 +168,7 @@ export function NotesTextarea({
   placeholder,
   className,
   textareaRef,
+  autoGrow = false,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -175,6 +176,7 @@ export function NotesTextarea({
   placeholder?: string;
   className?: string;
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
+  autoGrow?: boolean;
 }) {
   const innerRef = useRef<HTMLTextAreaElement>(null);
   const ref = textareaRef ?? innerRef;
@@ -187,6 +189,13 @@ export function NotesTextarea({
     }
   });
 
+  useEffect(() => {
+    if (!autoGrow || !ref.current) return;
+    const el = ref.current;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [autoGrow, value, prefs.size, prefs.font, ref]);
+
   const theme = THEMES[prefs.theme];
 
   return (
@@ -194,6 +203,7 @@ export function NotesTextarea({
       ref={ref}
       value={value}
       spellCheck
+      rows={autoGrow ? 3 : undefined}
       onChange={(e) => {
         const res = autoBullet(e.target.value, e.target.selectionStart ?? 0);
         pendingCaret.current = res.caret;
@@ -211,7 +221,7 @@ export function NotesTextarea({
       }}
       placeholder={placeholder}
       style={{ fontSize: prefs.size, lineHeight: 1.65 }}
-      className={`flex-1 resize-none rounded-2xl border ${theme.rule} ${theme.surface} ${theme.text} ${FONTS[prefs.font].cls} p-3.5 outline-none transition-colors placeholder:text-muted-foreground focus:border-accent-line ${className ?? ""}`}
+      className={`${autoGrow ? "h-auto overflow-hidden" : "flex-1"} resize-none rounded-2xl border ${theme.rule} ${theme.surface} ${theme.text} ${FONTS[prefs.font].cls} p-3.5 outline-none transition-colors placeholder:text-muted-foreground focus:border-accent-line ${className ?? ""}`}
     />
   );
 }

@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Calendar, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { listPatients, savePatient } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
@@ -27,9 +27,13 @@ type SortDirection = "asc" | "desc";
 type PatientView = "all" | "active" | "inactive" | "due";
 
 export const Route = createFileRoute("/_authenticated/patients/")({
-  validateSearch: (search: Record<string, unknown>): { view?: PatientView } => {
+  validateSearch: (search: Record<string, unknown>): { view?: PatientView; q?: string } => {
     const v = String(search?.["view"] ?? "all");
-    return { view: (["all", "active", "inactive", "due"].includes(v) ? v : "all") as PatientView };
+    const parsed: { view?: PatientView; q?: string } = {
+      view: (["all", "active", "inactive", "due"].includes(v) ? v : "all") as PatientView,
+    };
+    if (typeof search?.["q"] === "string" && search["q"]) parsed.q = search["q"];
+    return parsed;
   },
   head: () => ({
     meta: [
@@ -44,16 +48,20 @@ export const Route = createFileRoute("/_authenticated/patients/")({
 
 function PatientsPage() {
   const { data: identity } = useIdentity();
-  const view = Route.useSearch().view ?? "all";
+  const { view = "all", q } = Route.useSearch();
   const fetchPatients = useServerFn(listPatients);
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(q ?? "");
   const [dobSearch, setDobSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [sort, setSort] = useState<{ column: SortColumn | null; direction: SortDirection }>({
     column: null,
     direction: "asc",
   });
+
+  useEffect(() => {
+    setSearch(q ?? "");
+  }, [q]);
 
   const { data: patients } = useQuery({
     queryKey: ["patients"],
@@ -123,49 +131,21 @@ function PatientsPage() {
 
   return (
     <AppShell identity={identity}>
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="page-header !mb-3">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">Patients</h1>
+          <h1 className="page-title">Patients</h1>
           <p className="mt-1 text-sm text-muted-foreground">{rows.length} records</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {([
-              { key: "all", label: "All" },
-              { key: "active", label: "Active" },
-              { key: "inactive", label: "Inactive" },
-              { key: "due", label: "Treatments due" },
-            ] as { key: PatientView; label: string }[]).map((f) => (
-              <Link
-                key={f.key}
-                to="/patients"
-                search={{ view: f.key }}
-                className={`rounded-full border px-3.5 py-1 text-xs transition-colors ${
-                  view === f.key
-                    ? "border-transparent bg-gradient-to-br from-accent-hi to-accent to-75% font-semibold text-accent-foreground shadow-bloom"
-                    : "border-edge bg-glass-2 font-medium text-muted-foreground shadow-inset-hi hover:bg-glass hover:text-foreground"
-                }`}
-              >
-                {f.label}
-              </Link>
-            ))}
-          </div>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="name-search" className="text-xs text-muted-foreground">
-              Search by name or reference
-            </Label>
-            <Input
-              id="name-search"
-              placeholder="Name or reference"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-10 w-56 rounded-xl"
-            />
-          </div>
-          <div className="relative space-y-1.5">
-            <Label htmlFor="dob-search" className="text-xs text-muted-foreground">
-              Search by date of birth
-            </Label>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <Input
+            id="name-search"
+            placeholder="Name or reference"
+            aria-label="Search by name or reference"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-[34px] w-56 rounded-xl"
+          />
+          <div className="relative">
             <Input
               id="dob-search"
               type="text"
@@ -173,14 +153,14 @@ function PatientsPage() {
               aria-label="Search by date of birth"
               value={dobSearch}
               onChange={(e) => setDobSearch(e.target.value)}
-              className="h-10 w-44 rounded-xl pr-9"
+              className="h-[34px] w-44 rounded-xl pr-9"
             />
             {dobSearch && (
               <button
                 type="button"
                 onClick={() => setDobSearch("")}
                 aria-label="Clear date search"
-                className="absolute right-2 top-[1.85rem] flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:bg-glass-2 hover:text-foreground"
+                className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent-wash hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -188,7 +168,7 @@ function PatientsPage() {
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button className="h-10 ">New patient</Button>
+              <Button>New patient</Button>
             </DialogTrigger>
             <DialogContent className="rounded-xl">
               <DialogHeader>
@@ -244,14 +224,39 @@ function PatientsPage() {
                   <Textarea id="medications" name="medications" rows={2} className="rounded-xl" />
                 </div>
               </form>
-              <DialogFooter>
-                <Button type="submit" form="new-patient" className="" disabled={create.isPending}>
+              <DialogFooter className="flex-row justify-end gap-2 sm:justify-end">
+                <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" form="new-patient" disabled={create.isPending}>
                   Save patient
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
+      </div>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {([
+          { key: "all", label: "All" },
+          { key: "active", label: "Active" },
+          { key: "inactive", label: "Inactive" },
+          { key: "due", label: "Treatments due" },
+        ] as { key: PatientView; label: string }[]).map((f) => (
+          <Link
+            key={f.key}
+            to="/patients"
+            search={{ view: f.key, ...(q ? { q } : {}) }}
+            className={`rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
+              view === f.key
+                ? "border-transparent bg-accent-soft text-accent-ink shadow-inset-hi"
+                : "border-edge bg-glass-2 text-ink-2 shadow-inset-hi hover:border-accent-line hover:bg-accent-wash hover:text-foreground"
+            }`}
+          >
+            {f.label}
+          </Link>
+        ))}
       </div>
 
       <Card className="overflow-hidden rounded-2xl p-0">
@@ -342,7 +347,20 @@ function Field({
   return (
     <div className="space-y-2">
       <Label htmlFor={name}>{label}</Label>
-      <Input id={name} name={name} type={type} required={required} className="rounded-xl" />
+      {type === "date" ? (
+        <div className="relative">
+          <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id={name}
+            name={name}
+            type="date"
+            required={required}
+            className="rounded-xl pl-[34px] pr-2 [&::-webkit-datetime-edit]:p-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-2 [&::-webkit-calendar-picker-indicator]:h-4 [&::-webkit-calendar-picker-indicator]:w-4 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+          />
+        </div>
+      ) : (
+        <Input id={name} name={name} type={type} required={required} className="rounded-xl" />
+      )}
     </div>
   );
 }

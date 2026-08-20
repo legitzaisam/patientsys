@@ -251,7 +251,7 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
                 aria-label="Previous arrival"
                 disabled={index === 0}
                 onClick={() => setCursor(index - 1)}
-                className="rounded-full p-1 hover:bg-glass-2 hover:text-foreground disabled:opacity-30"
+                className="rounded-full p-1 hover:bg-accent-wash hover:text-foreground disabled:opacity-30"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
@@ -260,7 +260,7 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
                 aria-label="Next arrival"
                 disabled={index >= visible.length - 1}
                 onClick={() => setCursor(index + 1)}
-                className="rounded-full p-1 hover:bg-glass-2 hover:text-foreground disabled:opacity-30"
+                className="rounded-full p-1 hover:bg-accent-wash hover:text-foreground disabled:opacity-30"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
@@ -276,14 +276,14 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
                 setCursor(0);
               }
             }}
-            className="rounded-full p-1 hover:bg-glass-2 hover:text-foreground"
+            className="rounded-full p-1 hover:bg-accent-wash hover:text-foreground"
           >
             <Clock className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
             onClick={() => setCollapsed(true)}
-            className="ml-0.5 inline-flex items-center gap-1 rounded-full p-1 hover:bg-glass-2 hover:text-foreground"
+            className="ml-0.5 inline-flex items-center gap-1 rounded-full p-1 hover:bg-accent-wash hover:text-foreground"
           >
             <ChevronDown className="h-3.5 w-3.5" />
           </button>

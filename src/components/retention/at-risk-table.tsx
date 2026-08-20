@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Check } from "lucide-react";
+import { Check, Search, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,7 +59,19 @@ export function AtRiskTable({
   canAssign?: boolean;
 }) {
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [showContacted, setShowContacted] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const searching = searchOpen || !!search.trim();
+
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus();
+  }, [searchOpen]);
+
+  function closeSearch() {
+    setSearch("");
+    setSearchOpen(false);
+  }
 
   const visible = useMemo(() => {
     return rows.filter((r) => {
@@ -74,39 +86,87 @@ export function AtRiskTable({
 
   return (
     <Card className="p-5">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Patients at risk</h2>
-          <p className="text-xs text-muted-foreground">
-            Overdue for a treatment, or not seen recently, with nothing booked in the diary.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name"
-            className="h-9 w-[180px] rounded-xl"
-            aria-label="Search patients at risk"
-          />
-          <div className="flex rounded-full border border-edge-2 bg-glass-2 p-1 shadow-inset-hi">
-            {FILTERS.map((f) => (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div
+              className={cn(
+                "relative h-9 overflow-hidden rounded-full border border-edge bg-glass-2 shadow-inset-hi transition-[width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                searching
+                  ? "w-[180px] focus-within:border-accent-deep"
+                  : "w-9 hover:border-accent-line hover:bg-accent-wash hover:shadow-lift",
+              )}
+            >
+              <Search className="pointer-events-none absolute left-[11px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    closeSearch();
+                  }
+                }}
+                onBlur={() => {
+                  if (!search.trim()) setSearchOpen(false);
+                }}
+                placeholder={searching ? "Search by name" : ""}
+                tabIndex={searching ? 0 : -1}
+                className="h-9 w-[180px] rounded-full border-0 bg-transparent pl-[34px] pr-8 shadow-none focus-visible:border-transparent focus-visible:ring-0"
+                aria-label="Search patients at risk"
+                aria-expanded={searching}
+              />
+              {!searching && (
+                <button
+                  type="button"
+                  className="absolute inset-0 rounded-full"
+                  aria-label="Search patients at risk"
+                  onClick={() => setSearchOpen(true)}
+                />
+              )}
               <button
-                key={f.key}
                 type="button"
-                onClick={() => onFilterChange(f.key)}
+                aria-label="Clear search"
+                tabIndex={searching ? 0 : -1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={closeSearch}
                 className={cn(
-                  "cursor-pointer rounded-full px-3.5 py-1.5 text-xs transition-colors",
-                  filter === f.key
-                    ? "bg-gradient-to-br from-accent-hi to-accent to-75% font-semibold text-accent-foreground shadow-bloom"
-                    : "text-muted-foreground hover:text-foreground",
+                  "absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-opacity duration-200 hover:text-foreground",
+                  searching ? "opacity-100" : "pointer-events-none opacity-0",
                 )}
               >
-                {f.label}
+                <X className="h-3.5 w-3.5" />
               </button>
-            ))}
+            </div>
+            <div
+              role="tablist"
+              className="inline-flex h-9 items-center justify-center gap-0.5 rounded-full border border-edge bg-glass-2 p-1 text-ink-2 shadow-inset-hi"
+            >
+              {FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === f.key}
+                  onClick={() => onFilterChange(f.key)}
+                  className={cn(
+                    "inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-full px-3.5 py-1 text-[12.5px] font-medium transition-all hover:text-foreground",
+                    filter === f.key
+                      ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
+                      : "text-ink-2",
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Overdue for a treatment, or not seen recently, with nothing booked in the diary.
+        </p>
       </div>
 
       <div className="overflow-x-auto">
@@ -210,9 +270,11 @@ export function AtRiskTable({
               </tr>
             ))}
             {visible.length === 0 && (
-              <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  Nobody to chase here — everyone is booked in or recently seen.
+              <tr className="hover:bg-transparent">
+                <td colSpan={9} className="p-2">
+                  <div className="rounded-2xl p-8 text-center text-sm text-muted-foreground transition-colors hover:bg-accent-wash hover:text-foreground">
+                    Nobody to chase here — everyone is booked in or recently seen.
+                  </div>
                 </td>
               </tr>
             )}

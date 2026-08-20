@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ShieldCheck, Camera, MessagesSquare, ClipboardCheck } from "lucide-react";
+import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
@@ -34,12 +35,7 @@ function Landing() {
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 border-b border-edge bg-sidebar shadow-inset-hi backdrop-blur-glass backdrop-saturate-150">
         <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
-          <span className="flex items-center gap-2.5 text-[17px] font-semibold tracking-[-0.016em]">
-            <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent-hi to-accent to-70% text-accent-foreground shadow-bloom">
-              <ShieldCheck className="h-4 w-4" />
-            </span>
-            Aetheria
-          </span>
+          <BrandLockup />
           <Button asChild className="ml-auto ">
             <Link to="/auth">Sign in</Link>
           </Button>
@@ -67,7 +63,7 @@ function Landing() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {features.map((f) => (
             <div key={f.title} className="glass-card p-6">
-              <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-accent-soft text-accent-ink shadow-inset-hi">
+              <span className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-glass-2 text-ink-3 shadow-inset-hi">
                 <f.icon className="h-4 w-4" />
               </span>
               <h2 className="mt-4 text-[17px] font-semibold tracking-[-0.016em] text-foreground">{f.title}</h2>

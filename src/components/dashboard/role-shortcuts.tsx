@@ -73,7 +73,7 @@ export function RoleShortcuts({ identity }: { identity: Identity }) {
       {items.map((item) => (
         <Link key={item.to} to={item.to}>
           <Card className="h-full p-4 transition-colors hover:border-accent-line">
-            <item.icon className="h-4 w-4 text-accent-ink" aria-hidden />
+            <item.icon className="h-4 w-4 text-ink-3" aria-hidden />
             <p className="mt-3 text-sm font-medium text-foreground">{item.label}</p>
             <p className="mt-1 text-xs text-muted-foreground">{item.blurb}</p>
           </Card>

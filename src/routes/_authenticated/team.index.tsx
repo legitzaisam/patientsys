@@ -163,12 +163,65 @@ function TeamPage() {
 
   return (
     <AppShell identity={identity}>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">Team &amp; access</h1>
+          <h1 className="page-title">Team &amp; access</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {(team ?? []).length} staff accounts{canAdmin ? " · you hold manager access" : ""}
           </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        {canAdmin && <InviteStaffDialog onInvited={invalidate} />}
+        {canAdmin && (
+          <Button variant="outline" onClick={() => setOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create with password
+          </Button>
+        )}
+
+        {canApprove && (
+        <Button
+          variant="outline"
+          onClick={() => requestsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        >
+          <Bell className="mr-2 h-4 w-4" />
+          Review requests
+          {(requests ?? []).filter((r: any) => r.status === "pending").length > 0 && (
+            <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-2xs font-medium text-destructive-foreground">
+              {(requests ?? []).filter((r: any) => r.status === "pending").length}
+            </span>
+          )}
+        </Button>
+        )}
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost">
+              <HelpCircle className="mr-2 h-4 w-4" />
+              Role help
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 rounded-xl" align="start">
+            <p className="mb-3 text-sm font-medium text-foreground">Access levels</p>
+            <div className="space-y-3">
+              {ROLES.map((r) => (
+                <div key={r.value} className="flex gap-3">
+                  <div className="mt-0.5 shrink-0">
+                    {r.value === "owner" ? (
+                      <ShieldCheck className="h-4 w-4 text-ink-3" />
+                    ) : (
+                      <Users className="h-4 w-4 text-ink-3" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm text-foreground">{r.label}</p>
+                    <p className="text-xs text-muted-foreground">{r.blurb}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
         </div>
       </div>
 
@@ -229,61 +282,6 @@ function TeamPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        {canAdmin && <InviteStaffDialog onInvited={invalidate} />}
-        {canAdmin && (
-          <Button variant="outline" onClick={() => setOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create with password
-          </Button>
-        )}
-
-        {canApprove && (
-        <Button
-          variant="outline"
-          className=""
-          onClick={() => requestsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        >
-          <Bell className="mr-2 h-4 w-4" />
-          Review requests
-          {(requests ?? []).filter((r: any) => r.status === "pending").length > 0 && (
-            <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-2xs font-medium text-destructive-foreground">
-              {(requests ?? []).filter((r: any) => r.status === "pending").length}
-            </span>
-          )}
-        </Button>
-        )}
-
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" className="">
-              <HelpCircle className="mr-2 h-4 w-4" />
-              Role help
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 rounded-xl" align="start">
-            <p className="mb-3 text-sm font-medium text-foreground">Access levels</p>
-            <div className="space-y-3">
-              {ROLES.map((r) => (
-                <div key={r.value} className="flex gap-3">
-                  <div className="mt-0.5 shrink-0">
-                    {r.value === "owner" ? (
-                      <ShieldCheck className="h-4 w-4 text-accent-ink" />
-                    ) : (
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm text-foreground">{r.label}</p>
-                    <p className="text-xs text-muted-foreground">{r.blurb}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>
 
       <div className="space-y-3">
         {(team ?? []).map((m: any) => (

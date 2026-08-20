@@ -33,7 +33,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
   return (
     <Card className="space-y-5 p-5">
       <div className="flex items-center gap-2">
-        <ShieldCheck className="h-4 w-4 text-accent-ink" />
+        <ShieldCheck className="h-4 w-4 text-ink-3" />
         <div>
           <h2 className="text-sm font-semibold text-foreground">Staff access</h2>
           <p className="text-xs text-muted-foreground">

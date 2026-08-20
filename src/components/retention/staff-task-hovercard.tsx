@@ -141,7 +141,7 @@ export function StaffTaskHoverCard({
                 checked={checked.includes(m.userId)}
                 onCheckedChange={() => toggle(m.userId)}
               />
-              <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+              <UserRound className="h-3.5 w-3.5 text-ink-3" />
               <span className="text-foreground">{m.fullName || m.email}</span>
               <span className="text-2xs text-muted-foreground">{ROLE_LABEL[m.role] ?? m.role}</span>
             </label>

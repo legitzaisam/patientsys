@@ -91,7 +91,7 @@ function ProfilePage() {
   return (
     <AppShell identity={identity}>
       <div className="mb-6">
-        <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">My profile</h1>
+        <h1 className="page-title">My profile</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Changes to your name, role or registration details are reviewed by a manager before they go live.
         </p>

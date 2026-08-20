@@ -17,6 +17,9 @@ import {
   profileName,
   type DemoRole,
 } from "@/lib/demo/data";
+import { clampDurationMinutes } from "@/lib/treatment-duration";
+import { clinicDayKey } from "@/lib/clinic-time";
+import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 
 export const PERMISSION_KEYS = [
   "reports.retention",
@@ -190,12 +193,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   const isFrontDesk = me.roles.includes("front_desk");
 
   const all = patients;
-  let due = sortAsc(
-    treatments.filter((t) => t.next_due_at && t.next_due_at <= in30),
-    "next_due_at",
-  )
-    .slice(0, 12)
-    .map((t) => ({ ...t, patients: patientJoin(t.patient_id) }));
+  let dueAll = treatments.filter((t) => t.next_due_at && t.next_due_at <= in30);
   let monthTreats = treatments.filter((t) => t.performed_at >= monthStart);
   let prevMonthTreats = treatments.filter(
     (t) => t.performed_at >= prevMonthStart && t.performed_at < prevMonthEnd,
@@ -206,11 +204,18 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   ).map(appointmentView);
 
   if (isPractitioner && !isManager) {
-    due = due.filter((t) => t.practitioner_id === me.userId || !t.practitioner_id);
+    dueAll = dueAll.filter((t) => t.practitioner_id === me.userId || !t.practitioner_id);
     monthTreats = monthTreats.filter((t) => t.practitioner_id === me.userId);
     prevMonthTreats = prevMonthTreats.filter((t) => t.practitioner_id === me.userId);
     todayAppts = todayAppts.filter((a) => a.practitioner_id === me.userId);
   }
+
+  const todayISO = clinicDayKey(today);
+  const treatmentsOverdue = dueAll.filter((t) => t.next_due_at && t.next_due_at < todayISO).length;
+  const treatmentsDueSoon = dueAll.filter((t) => t.next_due_at && t.next_due_at >= todayISO).length;
+  let due = sortAsc(dueAll, "next_due_at")
+    .slice(0, 12)
+    .map((t) => ({ ...t, patients: patientJoin(t.patient_id) }));
 
   const active = all.filter((p) => p.status === "active").length;
   const inactive = all.filter((p) => p.status !== "active").length;
@@ -339,7 +344,9 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
       retentionChange: retentionPrev ? retention - retentionPrev : 0,
       repeatClients: returning,
       oneVisitClients: seen.size - returning,
-      treatmentsDue: due.length,
+      treatmentsDue: treatmentsDueSoon + treatmentsOverdue,
+      treatmentsDueSoon,
+      treatmentsOverdue,
       pendingConsents,
       revenueMonth: revenue,
       treatmentsMonth: monthTreats.length,
@@ -2081,6 +2088,7 @@ export type CatalogueInput = {
   description?: string | null;
   price?: number | null;
   interval_days?: number | null;
+  duration_minutes?: number | null;
   cooling_off_hours?: number | null;
   requires_consent?: boolean;
   active?: boolean;
@@ -2099,6 +2107,7 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
       description: data.description?.trim() || null,
       price: data.price ?? null,
       interval_days: data.interval_days ?? null,
+      duration_minutes: clampDurationMinutes(data.duration_minutes),
       cooling_off_hours: data.cooling_off_hours ?? 0,
       requires_consent: data.requires_consent ?? true,
       active: data.active ?? true,
@@ -2195,7 +2204,9 @@ export const getMyNote = createServerFn({ method: "GET" }).handler(async () => {
 });
 
 export const saveMyNote = createServerFn({ method: "POST" })
-  .validator((data: { body: string }) => ({ body: String(data?.body ?? "").slice(0, 20000) }))
+  .validator((data: { body: string }) => ({
+    body: sanitizeNoteHtml(String(data?.body ?? "")),
+  }))
   .handler(async ({ data }) => {
     const me = identity();
     const now = new Date().toISOString();

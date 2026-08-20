@@ -1,3 +1,5 @@
+import { defaultDurationMinutes } from "@/lib/treatment-duration";
+
 /**
  * Deterministic in-memory clinic used by demo mode.
  *
@@ -289,6 +291,7 @@ export const catalogue: Row[] = CATALOGUE_SPECS.map((spec) => ({
   description: spec.description,
   price: spec.price,
   interval_days: spec.interval,
+  duration_minutes: defaultDurationMinutes(spec.name),
   cooling_off_hours: spec.consent ? 48 : 0,
   requires_consent: spec.consent,
   active: spec.active ?? true,

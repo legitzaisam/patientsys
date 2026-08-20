@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Calendar,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   DoorOpen,
   FileSignature,
   Heart,
@@ -15,8 +17,15 @@ import {
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
+import { clinicDayKey } from "@/lib/clinic-time";
 import { updateAppointmentState, sendMessage } from "@/lib/clinic.functions";
 import { Button } from "@/components/ui/button";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  type CarouselApi,
+} from "@/components/ui/carousel";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { AppointmentTimeEditor } from "@/components/appointment-time-editor";
 import { NoShowFollowUpDialog } from "@/components/no-show-followup-dialog";
@@ -46,29 +55,168 @@ function stageOf(a: any): Stage {
   return (a.stage ?? (a.status === "no_show" ? "no_show" : a.status === "attended" ? "complete" : "booked")) as Stage;
 }
 
-export function TodaySnapshot({ appointments, isManager }: { appointments: any[]; isManager: boolean }) {
+function sortByStart(appointments: any[]) {
+  return [...appointments].sort(
+    (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(),
+  );
+}
+
+/** Index of the soonest upcoming (or in-progress) appointment; falls back to 0. */
+function upcomingIndex(appointments: any[]) {
+  const now = Date.now();
+  const idx = appointments.findIndex((a) => new Date(a.ends_at).getTime() >= now);
+  return idx >= 0 ? idx : 0;
+}
+
+export function TodaySnapshot({
+  appointments,
+  isManager,
+  span = "day",
+}: {
+  appointments: any[];
+  isManager: boolean;
+  span?: "day" | "week";
+}) {
+  const ordered = useMemo(() => sortByStart(appointments), [appointments]);
+
   if (appointments.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-edge bg-glass-2 p-8 text-center text-sm text-muted-foreground">
-        No appointments today.
-      </div>
+      <Link
+        to="/schedule"
+        className="block rounded-2xl bg-glass-2 p-8 text-center text-sm text-muted-foreground transition-colors hover:bg-accent-wash hover:text-foreground"
+      >
+        {span === "week" ? "No appointments this week." : "No appointments today."}
+      </Link>
     );
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {appointments.map((a) => (
-        <TodayCard key={a.id} appointment={a} isManager={isManager} />
-      ))}
+    <AppointmentCarousel appointments={ordered} isManager={isManager} showDay={span === "week"} />
+  );
+}
+
+function AppointmentCarousel({
+  appointments,
+  isManager,
+  showDay,
+}: {
+  appointments: any[];
+  isManager: boolean;
+  showDay: boolean;
+}) {
+  const [api, setApi] = useState<CarouselApi>();
+  const [index, setIndex] = useState(0);
+  const [canPrev, setCanPrev] = useState(false);
+  const [canNext, setCanNext] = useState(false);
+  const startAt = useMemo(() => upcomingIndex(appointments), [appointments]);
+
+  useEffect(() => {
+    if (!api) return;
+    const sync = () => {
+      setIndex(api.selectedScrollSnap());
+      setCanPrev(api.canScrollPrev());
+      setCanNext(api.canScrollNext());
+    };
+    sync();
+    api.on("select", sync);
+    api.on("reInit", sync);
+    return () => {
+      api.off("select", sync);
+      api.off("reInit", sync);
+    };
+  }, [api]);
+
+  useEffect(() => {
+    if (!api) return;
+    api.scrollTo(startAt, true);
+  }, [api, startAt, appointments.length]);
+
+  return (
+    <div className="pb-1">
+      <div className="flex items-center gap-2">
+        {canPrev && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-full border-edge-2 bg-card shadow-lift"
+            onClick={() => api?.scrollPrev()}
+            aria-label="Previous appointments"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
+
+        <Carousel
+          setApi={setApi}
+          opts={{
+            align: "start",
+            containScroll: "trimSnaps",
+            slidesToScroll: 2,
+          }}
+          className="min-w-0 flex-1"
+        >
+          <CarouselContent className="-ml-4" viewportClassName="overflow-hidden px-1.5 py-3">
+            {appointments.map((a) => (
+              <CarouselItem
+                key={a.id}
+                className="basis-[min(100%,280px)] pl-4 sm:basis-[280px] lg:basis-[300px]"
+              >
+                <TodayCard appointment={a} isManager={isManager} showDay={showDay} />
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+        </Carousel>
+
+        {canNext && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-full border-edge-2 bg-card shadow-lift"
+            onClick={() => api?.scrollNext()}
+            aria-label="Next appointments"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      <p className="mt-3 text-center text-[11px] tabular-nums text-ink-3">
+        {index + 1}
+        <span className="text-muted-foreground"> / </span>
+        {appointments.length}
+      </p>
     </div>
   );
 }
 
-function TodayCard({ appointment: a, isManager }: { appointment: any; isManager: boolean }) {
+function formatDayHeading(dayKey: string) {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  return new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1, 12)).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+function TodayCard({
+  appointment: a,
+  isManager,
+  showDay = false,
+}: {
+  appointment: any;
+  isManager: boolean;
+  showDay?: boolean;
+}) {
   const queryClient = useQueryClient();
   const setState = useMutation({
     mutationFn: useServerFn(updateAppointmentState),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-week"] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -89,35 +237,45 @@ function TodayCard({ appointment: a, isManager }: { appointment: any; isManager:
   };
 
   return (
-    <div className="glass-card p-4 transition-shadow hover:shadow-lift">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <AppointmentTimeEditor appointment={a}>
-            <button
-              type="button"
-              className="rounded-full text-xs font-medium tabular-nums text-accent-ink underline-offset-4 hover:underline"
+    <div className="glass-card flex h-full flex-col gap-3 p-4 transition-shadow hover:shadow-lift">
+      {showDay && (
+        <p className="text-[11px] font-semibold tracking-[0.02em] text-ink-3">
+          {formatDayHeading(clinicDayKey(new Date(a.starts_at)))}
+        </p>
+      )}
+      <div className="space-y-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-1">
+            <AppointmentTimeEditor appointment={a}>
+              <button
+                type="button"
+                className="text-left text-xs font-medium tabular-nums text-accent-ink underline-offset-4 hover:underline"
+              >
+                {new Date(a.starts_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                {" – "}
+                {new Date(a.ends_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+              </button>
+            </AppointmentTimeEditor>
+            <Link
+              to="/patients/$id"
+              params={{ id: a.patient_id }}
+              className="block text-[15px] font-semibold leading-snug tracking-[-0.012em] text-foreground text-balance hover:text-accent-ink"
             >
-              {new Date(a.starts_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-              {" – "}
-              {new Date(a.ends_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-            </button>
-          </AppointmentTimeEditor>
-          <Link
-            to="/patients/$id"
-            params={{ id: a.patient_id }}
-            className="mt-0.5 block text-[15px] font-semibold tracking-[-0.012em] text-foreground hover:text-accent-ink"
-          >
-            {a.patients?.first_name} {a.patients?.last_name}
-          </Link>
-          <p className="text-xs text-muted-foreground">
-            {a.treatment_name} · #{a.treatment_number}
-            {isManager && a.profiles?.full_name && ` · ${a.profiles.full_name}`}
-          </p>
+              {a.patients?.first_name} {a.patients?.last_name}
+            </Link>
+          </div>
+          <div className="shrink-0">
+            <StageBadge stage={stage} StageIcon={StageIcon} onChange={handleStage} />
+          </div>
         </div>
-        <StageBadge stage={stage} StageIcon={StageIcon} onChange={handleStage} />
+        <p className="text-xs leading-snug text-muted-foreground">{a.treatment_name}</p>
+        <p className="text-xs leading-snug text-muted-foreground whitespace-nowrap">
+          #{a.treatment_number}
+          {isManager && a.profiles?.full_name ? ` · ${a.profiles.full_name}` : null}
+        </p>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-auto flex flex-wrap items-center gap-2">
         <ConsentChip appointment={a} signed={consentSigned} />
         <PaymentChip appointment={a} status={paymentStatus} />
       </div>
@@ -146,7 +304,7 @@ function StageBadge({
   const trigger = (
     <button
       type="button"
-      className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-2xs font-semibold shadow-inset-hi ${STAGE_TONE[stage]}`}
+      className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-2xs font-semibold shadow-inset-hi transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9] ${STAGE_TONE[stage]}`}
     >
       <StageIcon className="h-3 w-3" />
       {label}
@@ -158,10 +316,16 @@ function StageBadge({
   return (
     <HoverCard openDelay={80} closeDelay={140}>
       <HoverCardTrigger asChild>{trigger}</HoverCardTrigger>
-      <HoverCardContent className="w-56 rounded-2xl" align="end">
+      <HoverCardContent
+        side="bottom"
+        align="end"
+        sideOffset={8}
+        collisionPadding={12}
+        className="w-56 rounded-2xl border-edge-2 bg-card p-3.5"
+      >
         <p className="text-sm font-semibold text-foreground">Patient journey</p>
-        <p className="text-xs text-muted-foreground">Set current stage.</p>
-        <div className="mt-2 space-y-1">
+        <p className="text-xs text-ink-2">Set current stage.</p>
+        <div className="mt-2.5 space-y-0.5">
           {STAGES.map((s) => {
             const Icon = s.icon;
             const active = s.key === stage;
@@ -173,7 +337,7 @@ function StageBadge({
                 className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
                   active
                     ? "bg-accent-soft font-semibold text-accent-ink"
-                    : "text-muted-foreground hover:bg-glass-2 hover:text-foreground"
+                    : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
                 }`}
               >
                 <Icon className="h-3 w-3" /> {s.label}
@@ -183,7 +347,7 @@ function StageBadge({
           <button
             type="button"
             onClick={() => onChange("no_show")}
-            className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-destructive-bg ${
+            className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-destructive-bg active:bg-destructive-bg ${
               stage === "no_show" ? "bg-destructive-bg font-semibold text-destructive-ink" : "text-destructive-ink"
             }`}
           >
@@ -226,7 +390,7 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
 
   const chip = (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold shadow-inset-hi ${
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold shadow-inset-hi transition-[filter,box-shadow] ${
         signed ? "bg-success-bg text-success-ink" : "bg-warning-bg text-consent-ink"
       }`}
     >
@@ -240,9 +404,14 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
   return (
     <HoverCard openDelay={80} closeDelay={120}>
       <HoverCardTrigger asChild>
-        <button type="button">{chip}</button>
+        <button
+          type="button"
+          className="cursor-pointer rounded-full transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9]"
+        >
+          {chip}
+        </button>
       </HoverCardTrigger>
-      <HoverCardContent className="w-64 rounded-2xl" align="start">
+      <HoverCardContent side="bottom" align="start" sideOffset={8} className="w-64 rounded-2xl border-edge-2 bg-card p-3.5">
         <p className="text-sm font-semibold text-foreground">Consent outstanding</p>
         <p className="mt-1 text-xs text-muted-foreground">Send a reminder to complete the consent form.</p>
         <div className="mt-3 flex gap-2">
@@ -325,9 +494,14 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
   return (
     <HoverCard openDelay={80} closeDelay={140}>
       <HoverCardTrigger asChild>
-        <button type="button">{chip}</button>
+        <button
+          type="button"
+          className="cursor-pointer rounded-full transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9]"
+        >
+          {chip}
+        </button>
       </HoverCardTrigger>
-      <HoverCardContent className="w-72 rounded-2xl" align="end">
+      <HoverCardContent side="bottom" align="end" sideOffset={8} className="w-72 rounded-2xl border-edge-2 bg-card p-3.5">
         <div className="space-y-3 text-xs">
           {paid ? (
             <>

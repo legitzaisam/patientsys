@@ -107,7 +107,7 @@ function PortalPage() {
   return (
     <AppShell identity={identity}>
       <div className="mb-6">
-        <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">Hello {p.first_name}</h1>
+        <h1 className="page-title">Hello {p.first_name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Your treatments, forms and messages with the clinic.
         </p>

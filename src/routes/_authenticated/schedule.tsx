@@ -58,6 +58,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AppointmentTimeEditor } from "@/components/appointment-time-editor";
 import { NoShowFollowUpDialog } from "@/components/no-show-followup-dialog";
 import { QuickAddAppointment } from "@/components/quick-add-appointment";
+import { durationForCatalogueItem } from "@/lib/treatment-duration";
 
 import { initialsOf, laneFor, toneForTreatment } from "@/lib/practitioner-colours";
 import { PractitionerHoverCard } from "@/components/practitioner-hovercard";
@@ -173,7 +174,7 @@ function StageTracker({
                 key={s.key}
                 type="button"
                 onClick={() => set(s.key)}
-                className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-glass-2 ${
+                className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent-wash ${
                   active ? "bg-accent-soft font-semibold text-accent-ink" : "text-muted-foreground"
                 }`}
               >
@@ -272,6 +273,20 @@ function SchedulePage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["appointments"] });
   const [newPatient, setNewPatient] = useState(false);
+  const [bookingDuration, setBookingDuration] = useState("60");
+  const seededBookingDuration = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      seededBookingDuration.current = false;
+      return;
+    }
+    if (seededBookingDuration.current) return;
+    const first = (catalogue ?? [])[0];
+    if (!first) return;
+    setBookingDuration(String(durationForCatalogueItem(first)));
+    seededBookingDuration.current = true;
+  }, [open, catalogue]);
 
   const book = useMutation({
     mutationFn: useServerFn(saveAppointment),
@@ -283,6 +298,9 @@ function SchedulePage() {
       setNewPatient(false);
       invalidate();
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["sidebar-diary-count"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-week"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -321,33 +339,33 @@ function SchedulePage() {
 
   return (
     <AppShell identity={identity}>
-      <div>
-        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="page-header">
           <div className="min-w-0">
-            <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">Clinic diary</h1>
+            <h1 className="page-title">Clinic diary</h1>
             <p className="mt-1 truncate text-sm text-muted-foreground">{heading}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <div className="flex items-center gap-1 rounded-full border border-edge bg-glass-2 p-1 shadow-inset-hi">
-            <Button variant="ghost" size="icon" className="h-8 w-8 " onClick={() => shift(-1)} aria-label="Previous">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => shift(-1)} aria-label="Previous">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => setAnchor(new Date())}>
+            <Button variant="ghost" className="h-7 px-3 text-xs" onClick={() => setAnchor(new Date())}>
               Today
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 " onClick={() => shift(1)} aria-label="Next">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => shift(1)} aria-label="Next">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex gap-1 rounded-full border border-edge bg-glass-2 p-1 shadow-inset-hi">
+          <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
             {(["day", "week", "month"] as ViewMode[]).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`cursor-pointer rounded-full px-4 py-1.5 text-xs capitalize tracking-[0.02em] transition-colors ${
+                className={`h-7 cursor-pointer rounded-full px-3.5 text-xs capitalize tracking-[0.02em] transition-colors ${
                   view === v
-                    ? "bg-gradient-to-br from-accent-hi to-accent to-75% font-semibold text-accent-foreground shadow-bloom"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
+                    : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
                 }`}
               >
                 {v}
@@ -357,7 +375,7 @@ function SchedulePage() {
 
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button className="h-10 px-5 text-xs tracking-[0.02em]">New booking</Button>
+              <Button>New booking</Button>
             </DialogTrigger>
             <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl">
               <DialogHeader>
@@ -450,7 +468,14 @@ function SchedulePage() {
                     </option>
                   ))}
                 </SelectField>
-                <SelectField name="catalogue_id" label="Treatment">
+                <SelectField
+                  name="catalogue_id"
+                  label="Treatment"
+                  onChange={(e) => {
+                    const item = (catalogue ?? []).find((c: any) => c.id === e.target.value);
+                    setBookingDuration(String(durationForCatalogueItem(item)));
+                  }}
+                >
                   {(catalogue ?? []).map((c: any) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -458,7 +483,13 @@ function SchedulePage() {
                   ))}
                 </SelectField>
                 <TextField name="treatment_number" label="Treatment number" type="number" defaultValue="1" />
-                <TextField name="duration_minutes" label="Duration (min)" type="number" defaultValue="30" />
+                <TextField
+                  name="duration_minutes"
+                  label="Duration (min)"
+                  type="number"
+                  value={bookingDuration}
+                  onChange={setBookingDuration}
+                />
                 <TextField name="starts_at" label="Date & time" type="datetime-local" required />
                 <TextField name="price" label="Price (£)" type="number" />
                 <SelectField name="payment_status" label="Payment">
@@ -546,7 +577,7 @@ function TreatmentLegend({ rows, isManager }: { rows: any[]; isManager: boolean 
   if (entries.length === 0) return null;
 
   return (
-    <div className="glass-card mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+    <div className="glass-card mb-4 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
       <span className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">
         Treatment colours
       </span>
@@ -1174,9 +1205,9 @@ function DayPlanner({
     : null;
 
   return (
-    <Card className="overflow-hidden p-0">
+    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-semibold tracking-[0.02em] text-foreground">Day planner</span>
           <span aria-hidden>·</span>
@@ -1214,11 +1245,11 @@ function DayPlanner({
       )}
 
       {columns.length === 0 ? (
-        <div className="p-12 text-center text-sm text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center p-12 text-center text-sm text-muted-foreground">
           No bookings on {date.toLocaleDateString("en-GB")}.
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
           <div className="min-w-[680px]">
             {/* Practitioner header */}
             <div className="sticky top-0 z-20 flex border-b border-glass-line bg-glass shadow-inset-hi backdrop-blur-glass">
@@ -1331,7 +1362,7 @@ function DayPlanner({
                                   return nextSet;
                                 })
                               }
-                              className="cursor-pointer rounded-full px-3 py-1 text-2xs text-muted-foreground transition-colors hover:bg-glass hover:text-foreground"
+                              className="cursor-pointer rounded-full px-3 py-1 text-2xs text-muted-foreground transition-colors hover:bg-accent-wash hover:text-foreground"
                             >
                               {Math.round(((o.row as { from: number; to: number }).to - (o.row as { from: number; to: number }).from) / 60) || 1} quiet hour
                               {(o.row as { from: number; to: number }).to - (o.row as { from: number; to: number }).from > 60 ? "s" : ""} ·{" "}
@@ -1526,7 +1557,7 @@ function NowNextTile({ appointment, kind }: { appointment: any; kind: "now" | "n
   const treatmentColours = useTreatmentColours();
   if (!appointment) {
     return (
-      <div className="flex min-w-[220px] flex-1 items-center gap-3 rounded-xl border border-dashed border-edge bg-glass-2 px-4 py-2.5">
+      <div className="flex min-w-[220px] flex-1 items-center gap-3 rounded-xl border border-dashed border-edge-2 bg-glass-2 px-4 py-2.5">
         <span className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">
           {kind === "now" ? "Now" : "Next"}
         </span>
@@ -1593,8 +1624,8 @@ function WeekView({
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const today = new Date().toDateString();
   return (
-    <Card className="overflow-hidden rounded-3xl p-0">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
+    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl p-0">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-semibold tracking-[0.02em] text-foreground">Week planner</span>
           <span aria-hidden>·</span>
@@ -1616,7 +1647,7 @@ function WeekView({
           <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
         </div>
       </div>
-      <div className="grid grid-cols-1 divide-y divide-glass-line sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 divide-y divide-glass-line sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 xl:grid-cols-7">
         {days.map((day, i) => {
           const items = rows
             .filter((a) => new Date(a.starts_at).toDateString() === day.toDateString())
@@ -1626,7 +1657,7 @@ function WeekView({
           return (
             <div
               key={day.toISOString()}
-              className={`flex min-w-0 flex-col ${i > 0 ? "xl:border-l xl:border-glass-line" : ""} ${
+              className={`flex min-h-0 min-w-0 flex-1 flex-col ${i > 0 ? "xl:border-l xl:border-glass-line" : ""} ${
                 isWeekend ? "bg-glass-2" : ""
               } ${isToday ? "bg-accent-wash" : ""}`}
             >
@@ -1655,7 +1686,7 @@ function WeekView({
               </div>
               <div className="flex flex-1 flex-col gap-2 p-2.5">
                 {items.length === 0 ? (
-                  <div className="flex min-h-[64px] flex-1 items-center justify-center rounded-xl border border-dashed border-edge px-2 py-4">
+                  <div className="flex min-h-[64px] flex-1 items-center justify-center rounded-xl border border-dashed border-edge-2 px-2 py-4">
                     <span className="text-2xs font-medium tracking-[0.02em] text-muted-foreground/60">
                       Free
                     </span>
@@ -1738,8 +1769,8 @@ function MonthView({
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   const today = new Date().toDateString();
   return (
-    <Card className="overflow-hidden rounded-3xl p-0">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
+    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl p-0">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-semibold tracking-[0.02em] text-foreground">Month planner</span>
           <span aria-hidden>·</span>
@@ -1761,15 +1792,15 @@ function MonthView({
           <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
         </div>
       </div>
-      <div className="p-3">
-      <div className="grid grid-cols-7 pb-2 text-center text-2xs tracking-[0.02em] text-muted-foreground">
+      <div className="flex min-h-0 flex-1 flex-col p-3">
+      <div className="grid shrink-0 grid-cols-7 pb-2 text-center text-2xs tracking-[0.02em] text-muted-foreground">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div key={d} className="py-1">
             {d}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1.5">
         {days.map((day) => {
           const items = rows
             .filter((a) => new Date(a.starts_at).toDateString() === day.toDateString())
@@ -1780,7 +1811,7 @@ function MonthView({
             <button
               key={day.toISOString()}
               onClick={() => onPick(day)}
-              className={`min-h-28 cursor-pointer rounded-xl border border-edge bg-glass-2 p-2 text-left align-top shadow-inset-hi transition-colors hover:bg-glass ${
+              className={`h-full min-h-0 cursor-pointer rounded-xl border border-edge bg-glass-2 p-2 text-left align-top shadow-inset-hi transition-colors hover:bg-glass ${
                 outside ? "opacity-40" : ""
               } ${isToday ? "border-accent-line bg-accent-wash" : ""}`}
             >
@@ -1822,12 +1853,16 @@ function TextField({
   type = "text",
   required,
   defaultValue,
+  value,
+  onChange,
 }: {
   name: string;
   label: string;
   type?: string;
   required?: boolean;
   defaultValue?: string;
+  value?: string;
+  onChange?: (value: string) => void;
 }) {
   return (
     <div className="space-y-2">
@@ -1837,7 +1872,9 @@ function TextField({
         name={name}
         type={type}
         required={required}
-        defaultValue={defaultValue}
+        defaultValue={value === undefined ? defaultValue : undefined}
+        value={value}
+        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         className="rounded-xl"
       />
     </div>
@@ -1849,11 +1886,13 @@ function SelectField({
   label,
   children,
   className,
+  onChange,
 }: {
   name: string;
   label: string;
   children: React.ReactNode;
   className?: string;
+  onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
 }) {
   return (
     <div className={`space-y-2 ${className ?? ""}`}>
@@ -1861,6 +1900,7 @@ function SelectField({
       <select
         id={name}
         name={name}
+        onChange={onChange}
         className="h-10 w-full rounded-md border border-edge bg-glass-2 px-3 text-sm shadow-inset-hi"
       >
         {children}

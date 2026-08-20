@@ -6,7 +6,6 @@ import {
   Users,
   HeartPulse,
   LogOut,
-  ShieldCheck,
   CalendarDays,
   UserCog,
   Settings as SettingsIcon,
@@ -16,11 +15,14 @@ import {
   ChevronDown,
   Repeat,
   Megaphone,
-  BarChart3,
+  PanelLeft,
+  PanelLeftClose,
+  Search,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrivalAlerts } from "@/components/arrival-alerts";
+import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,14 +31,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { NotificationBell } from "@/components/notification-bell";
 import { StaffAlertDialog } from "@/components/staff-alert-dialog";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
-import { listStaffNotifications } from "@/lib/clinic.functions";
+import { listAppointments, listPractitioners, listStaffNotifications } from "@/lib/clinic.functions";
+import { clinicDayRange } from "@/lib/clinic-time";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { can } from "@/lib/permissions";
-import { initialsOf } from "@/lib/practitioner-colours";
+import { initialsOf, laneFor } from "@/lib/practitioner-colours";
 import { cn } from "@/lib/utils";
 
 type Identity = {
@@ -49,12 +53,321 @@ type Identity = {
   patient: { first_name: string; last_name: string } | null;
 };
 
+type NavLink = { to: string; label: string; icon: typeof LayoutDashboard; badge?: number };
+
+function NavItem({
+  item,
+  active,
+  onNavigate,
+}: {
+  item: NavLink;
+  active: boolean;
+  onNavigate?: (() => void) | undefined;
+}) {
+  return (
+    <Link
+      to={item.to}
+      onClick={onNavigate}
+      className={cn(
+        "flex items-center gap-2.5 rounded-[11px] px-2.5 py-2.5 text-[13px] font-medium transition-colors",
+        active
+          ? "bg-[linear-gradient(96deg,var(--accent-soft),transparent_96%)] font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge),inset_0_1px_0_var(--edge-hi)]"
+          : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.12)]",
+      )}
+    >
+      <span
+        className={cn(
+          "grid h-5 w-5 shrink-0 place-items-center rounded-[6px] border",
+          active
+            ? "border-transparent bg-[linear-gradient(140deg,var(--accent-hi),var(--accent))] text-accent-foreground shadow-bloom"
+            : "border-edge bg-glass-2 text-ink-2",
+        )}
+      >
+        <item.icon className="h-3 w-3" />
+      </span>
+      <span className="flex-1 truncate">{item.label}</span>
+      {item.badge != null && item.badge > 0 && (
+        <span className="text-[11px] font-medium tabular-nums text-ink-3">{item.badge}</span>
+      )}
+    </Link>
+  );
+}
+
+function NavGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <p className="px-1.5 pb-2 pt-1 text-[10.5px] font-semibold tracking-[0.02em] text-ink-3">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function ToolbarAlerts({
+  identity,
+  urgentUnread,
+  scrolled,
+}: {
+  identity: Identity;
+  urgentUnread: number;
+  scrolled: boolean;
+}) {
+  const iconHover =
+    "hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground hover:shadow-lift active:bg-[rgba(47,63,102,0.14)]";
+  return (
+    <>
+      {identity.isStaff && (
+        <StaffAlertDialog>
+          <Button
+            variant={scrolled ? "outline" : "ghost"}
+            size="icon"
+            className={cn("relative h-9 w-9", iconHover, !scrolled && "border border-transparent")}
+            aria-label={`Alert team${urgentUnread ? `, ${urgentUnread} urgent unread` : ""}`}
+          >
+            <Megaphone className="h-4 w-4" />
+            {urgentUnread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-medium text-destructive-foreground">
+                {urgentUnread > 9 ? "9+" : urgentUnread}
+              </span>
+            )}
+          </Button>
+        </StaffAlertDialog>
+      )}
+      <NotificationBell isStaff={identity.isStaff} scrolled={scrolled} />
+    </>
+  );
+}
+
+function AccountMenu({
+  identity,
+  displayName,
+  roleLabel,
+  canTeam,
+  canSettings,
+  signOut,
+}: {
+  identity: Identity;
+  displayName: string;
+  roleLabel: string;
+  canTeam: boolean;
+  canSettings: boolean;
+  signOut: () => void;
+}) {
+  const navigate = useNavigate();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex max-w-[220px] cursor-pointer items-center gap-2 rounded-full py-1 pl-1 pr-2.5 text-left hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
+          aria-label="Account menu"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground shadow-bloom">
+            {initialsOf(displayName)}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[12.5px] font-semibold leading-tight text-foreground">{displayName}</span>
+            <span className="block truncate text-[11px] capitalize text-ink-2">{roleLabel}</span>
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        {identity.isStaff ? (
+          <>
+            <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
+              <IdCard className="h-4 w-4" />
+              My profile
+            </DropdownMenuItem>
+            {canTeam && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/team" })}>
+                <UserCog className="h-4 w-4" />
+                Team
+              </DropdownMenuItem>
+            )}
+            {(identity.isManager || canSettings) && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
+                <SettingsIcon className="h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+            )}
+          </>
+        ) : (
+          <DropdownMenuItem onClick={() => navigate({ to: "/my-record" })}>
+            <HeartPulse className="h-4 w-4" />
+            My record
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={signOut}>
+          <LogOut className="h-4 w-4" />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SidebarChrome({
+  identity,
+  pathname,
+  clinicLinks,
+  reportLinks,
+  extraLinks,
+  practitioners,
+  canTeam,
+  query,
+  setQuery,
+  searchRef,
+  onSearch,
+  onNavigate,
+  onCollapse,
+}: {
+  identity: Identity;
+  pathname: string;
+  clinicLinks: NavLink[];
+  reportLinks: NavLink[];
+  extraLinks: NavLink[];
+  practitioners: { id: string; full_name: string | null }[];
+  canTeam: boolean;
+  query: string;
+  setQuery: (value: string) => void;
+  searchRef?: RefObject<HTMLInputElement | null> | undefined;
+  onSearch: (e?: FormEvent) => void;
+  onNavigate?: (() => void) | undefined;
+  onCollapse: () => void;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-5 px-4 py-5">
+      <div className="flex items-center gap-1">
+        <BrandLockup to={identity.isStaff ? "/dashboard" : "/my-record"} className="min-w-0 flex-1 px-1.5" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 text-ink-3 hover:text-foreground"
+          onClick={onCollapse}
+          aria-label="Close sidebar"
+        >
+          <PanelLeftClose className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {identity.isStaff && (
+        <form onSubmit={onSearch} className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            ref={searchRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search patients"
+            aria-label="Search patients"
+            className="h-auto rounded-[11px] border-edge bg-glass-2 py-2 pl-[34px] pr-3 text-[12.5px]"
+          />
+        </form>
+      )}
+
+      <nav className="mt-1 min-h-0 flex-1 space-y-6 overflow-y-auto pb-5">
+        <NavGroup label={identity.isStaff ? "Clinic" : "Care"}>
+          {clinicLinks.map((item) => (
+            <NavItem key={item.to} item={item} active={pathname.startsWith(item.to)} onNavigate={onNavigate} />
+          ))}
+        </NavGroup>
+
+        {reportLinks.length > 0 && (
+          <NavGroup label="Reports">
+            {reportLinks.map((item) => (
+              <NavItem key={item.to} item={item} active={pathname.startsWith(item.to)} onNavigate={onNavigate} />
+            ))}
+          </NavGroup>
+        )}
+
+        {extraLinks.length > 0 && (
+          <NavGroup label="You">
+            {extraLinks.map((item) => (
+              <NavItem key={item.to} item={item} active={pathname.startsWith(item.to)} onNavigate={onNavigate} />
+            ))}
+          </NavGroup>
+        )}
+
+        {identity.isStaff && practitioners.length > 0 && (
+          <NavGroup label="Practitioners">
+            {practitioners.map((p) => {
+              const name = p.full_name || "Practitioner";
+              const tone = laneFor(p.id);
+              const active = pathname === `/team/${p.id}`;
+              const className = cn(
+                "flex items-center gap-2.5 rounded-[11px] px-2.5 py-2.5 text-[13px] font-medium transition-colors",
+                active
+                  ? "bg-[linear-gradient(96deg,var(--accent-soft),transparent_96%)] font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge),inset_0_1px_0_var(--edge-hi)]"
+                  : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.12)]",
+              );
+              const body = (
+                <>
+                  <span
+                    className={cn(
+                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-accent-foreground",
+                      tone.edge,
+                    )}
+                  >
+                    {initialsOf(name)}
+                  </span>
+                  <span className="truncate">{name}</span>
+                </>
+              );
+              return canTeam ? (
+                <Link key={p.id} to="/team/$id" params={{ id: p.id }} onClick={onNavigate} className={className}>
+                  {body}
+                </Link>
+              ) : (
+                <span key={p.id} className={className}>
+                  {body}
+                </span>
+              );
+            })}
+          </NavGroup>
+        )}
+      </nav>
+    </div>
+  );
+}
+
+const SIDEBAR_KEY = "aetheria.sidebar";
+const SIDEBAR_WIDTH_KEY = "aetheria.sidebarWidth";
+const SIDEBAR_DEFAULT = 238;
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 420;
+
+function clampSidebarWidth(value: number) {
+  return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(value)));
+}
+
+function readStoredWidth() {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+    const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+    if (Number.isFinite(parsed)) return clampSidebarWidth(parsed);
+  } catch {
+    /* ignore */
+  }
+  return SIDEBAR_DEFAULT;
+}
+
 export function AppShell({ identity, children }: { identity: Identity; children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const sessionReady = useAuthSessionReady();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
+  const [scrolled, setScrolled] = useState(false);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
   const fetchAlerts = useServerFn(listStaffNotifications);
+  const fetchPractitioners = useServerFn(listPractitioners);
+  const fetchAppointments = useServerFn(listAppointments);
+  const { startISO, endISO } = clinicDayRange();
+
   const { data: staffAlerts } = useQuery({
     queryKey: ["staff-notifications"],
     queryFn: () => fetchAlerts(),
@@ -63,34 +376,52 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   });
   const urgentUnread = (staffAlerts ?? []).filter((a) => a.urgent).length;
 
+  const { data: practitioners } = useQuery({
+    queryKey: ["practitioners"],
+    queryFn: () => fetchPractitioners(),
+    enabled: identity.isStaff && sessionReady,
+  });
+
+  const { data: todayAppointments } = useQuery({
+    queryKey: ["sidebar-diary-count", startISO],
+    queryFn: () => fetchAppointments({ data: { from: startISO, to: endISO } }),
+    refetchInterval: 60_000,
+    enabled: identity.isStaff && sessionReady,
+  });
+  const diaryCount = (todayAppointments ?? []).length;
+
   const canRetention = can(identity, "reports.retention");
   const canPerformance = can(identity, "reports.performance");
   const canTeam = can(identity, "team.view");
   const canSettings = can(identity, "settings.treatments");
   const isPractitioner = identity.roles.includes("practitioner");
 
-  const reportLinks = [
+  const clinicLinks: NavLink[] = identity.isStaff
+    ? [
+        { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+        { to: "/schedule", label: "Diary", icon: CalendarDays, badge: diaryCount },
+        { to: "/patients", label: "Patients", icon: Users },
+      ]
+    : [{ to: "/my-record", label: "My record", icon: HeartPulse }];
+
+  const reportLinks: NavLink[] = [
     ...(canRetention ? [{ to: "/retention", label: "Retention", icon: Repeat }] : []),
     ...(canPerformance ? [{ to: "/performance", label: "Performance", icon: TrendingUp }] : []),
   ];
 
-  const nav = identity.isStaff
-    ? [
-        { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-        { to: "/schedule", label: "Diary", icon: CalendarDays },
-        { to: "/patients", label: "Patients", icon: Users },
-        ...(reportLinks.length > 1
-          ? [{ label: "Reports", icon: BarChart3, children: reportLinks }]
-          : reportLinks),
-        ...(isPractitioner && !identity.isManager
-          ? [{ to: "/earnings", label: "My earnings", icon: Wallet }]
-          : []),
-      ]
-    : [{ to: "/my-record", label: "My record", icon: HeartPulse }];
+  const extraLinks: NavLink[] =
+    identity.isStaff && isPractitioner && !identity.isManager
+      ? [{ to: "/earnings", label: "My earnings", icon: Wallet }]
+      : [];
 
   const displayName =
     identity.profile?.full_name ||
     (identity.patient ? `${identity.patient.first_name} ${identity.patient.last_name}` : identity.email);
+  const roleLabel = identity.isStaff
+    ? identity.isManager
+      ? "Manager"
+      : identity.profile?.job_title || identity.roles[0]?.replace("_", " ") || "Staff"
+    : "Patient";
 
   async function signOut() {
     await queryClient.cancelQueries();
@@ -99,162 +430,176 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     navigate({ to: "/auth", replace: true });
   }
 
-  return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-edge bg-sidebar shadow-inset-hi backdrop-blur-glass backdrop-saturate-150">
-        <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-8 px-6">
-          <Link to="/" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-gradient-to-br from-accent-hi to-accent to-70% text-accent-foreground shadow-bloom">
-              <ShieldCheck className="h-4 w-4" />
-            </span>
-            <span className="text-lg font-semibold tracking-[-0.016em] text-foreground">Aetheria</span>
-          </Link>
-          <nav className="flex items-center gap-1">
-            {nav.map((item) => {
-              if ("children" in item) {
-                const active = item.children.some((c) => pathname.startsWith(c.to));
-                return (
-                  <DropdownMenu key={item.label}>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className={cn(
-                          "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                          active
-                            ? "bg-gradient-to-r from-accent-soft to-96% to-transparent font-semibold text-foreground shadow-inset-hi ring-1 ring-inset ring-edge"
-                            : "text-muted-foreground hover:bg-glass-2 hover:text-foreground",
-                        )}
-                      >
-                        <item.icon className="h-4 w-4" />
-                        {item.label}
-                        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="rounded-xl">
-                      {item.children.map((child) => (
-                        <DropdownMenuItem key={child.to} asChild>
-                          <Link
-                            to={child.to}
-                            className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm"
-                          >
-                            <child.icon className="h-4 w-4" />
-                            {child.label}
-                          </Link>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                );
-              }
+  function setOpen(next: boolean) {
+    setSidebarOpen(next);
+    try {
+      localStorage.setItem(SIDEBAR_KEY, next ? "open" : "closed");
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }
 
-              const active = pathname.startsWith(item.to);
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-gradient-to-r from-accent-soft to-96% to-transparent font-semibold text-foreground shadow-inset-hi ring-1 ring-inset ring-edge"
-                      : "text-muted-foreground hover:bg-glass-2 hover:text-foreground",
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="ml-auto flex items-center gap-2">
-            {identity.isStaff && (
-              <StaffAlertDialog>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative h-9 w-9 hover:bg-transparent hover:text-foreground"
-                  aria-label={`Alert team${urgentUnread ? `, ${urgentUnread} urgent unread` : ""}`}
-                >
-                  <Megaphone className="h-4 w-4" />
-                  {urgentUnread > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-medium text-destructive-foreground">
-                      {urgentUnread > 9 ? "9+" : urgentUnread}
-                    </span>
-                  )}
-                </Button>
-              </StaffAlertDialog>
+  function submitSearch(e?: FormEvent) {
+    e?.preventDefault();
+    if (!identity.isStaff) return;
+    const q = query.trim();
+    void navigate({
+      to: "/patients",
+      search: q ? { view: "all", q } : { view: "all" },
+    });
+  }
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(SIDEBAR_KEY) === "closed") setSidebarOpen(false);
+      setSidebarWidth(readStoredWidth());
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    setScrolled(false);
+  }, [pathname]);
+
+  function persistWidth(next: number) {
+    const width = clampSidebarWidth(next);
+    setSidebarWidth(width);
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function onResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    dragRef.current = { startX: event.clientX, startWidth: sidebarWidth };
+    document.body.classList.add("select-none", "cursor-col-resize");
+
+    function onMove(moveEvent: globalThis.PointerEvent) {
+      const drag = dragRef.current;
+      if (!drag) return;
+      persistWidth(drag.startWidth + (moveEvent.clientX - drag.startX));
+    }
+
+    function onUp() {
+      dragRef.current = null;
+      document.body.classList.remove("select-none", "cursor-col-resize");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "[" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const target = event.target as HTMLElement | null;
+        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+          return;
+        }
+        event.preventDefault();
+        setOpen(!sidebarOpen);
+        return;
+      }
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+      event.preventDefault();
+      if (!sidebarOpen) setOpen(true);
+      requestAnimationFrame(() => searchRef.current?.focus());
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
+
+  const chrome = {
+    identity,
+    pathname,
+    clinicLinks,
+    reportLinks,
+    extraLinks,
+    practitioners: (practitioners ?? []) as { id: string; full_name: string | null }[],
+    canTeam,
+    query,
+    setQuery,
+    onSearch: submitSearch,
+    onCollapse: () => setOpen(false),
+  };
+
+  return (
+    <div className="flex h-dvh overflow-hidden">
+      {sidebarOpen && (
+        <aside
+          className="relative flex h-dvh shrink-0 flex-col border-r border-edge bg-sidebar shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass"
+          style={{ width: sidebarWidth }}
+        >
+          <SidebarChrome {...chrome} searchRef={searchRef} />
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            aria-valuemin={SIDEBAR_MIN}
+            aria-valuemax={SIDEBAR_MAX}
+            aria-valuenow={sidebarWidth}
+            tabIndex={0}
+            onPointerDown={onResizePointerDown}
+            onDoubleClick={() => persistWidth(SIDEBAR_DEFAULT)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                persistWidth(sidebarWidth - 16);
+              }
+              if (event.key === "ArrowRight") {
+                event.preventDefault();
+                persistWidth(sidebarWidth + 16);
+              }
+            }}
+            className="absolute inset-y-0 right-0 z-10 w-1 cursor-col-resize touch-none hover:bg-accent-soft"
+          />
+        </aside>
+      )}
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <main
+          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-5 sm:px-[26px]"
+          onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 8)}
+        >
+          <div className="pointer-events-none sticky top-0 z-20 -mx-5 flex h-14 shrink-0 items-center gap-3 px-5 sm:-mx-[26px] sm:px-7">
+            {!sidebarOpen && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="pointer-events-auto h-9 w-9"
+                onClick={() => setOpen(true)}
+                aria-label="Open sidebar"
+              >
+                <PanelLeft className="h-4 w-4" />
+              </Button>
             )}
-            <NotificationBell isStaff={identity.isStaff} />
-            {identity.isStaff ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="flex h-auto items-center gap-2.5 rounded-lg border border-edge bg-glass-2 px-2.5 py-1.5 shadow-inset-hi hover:bg-glass hover:text-foreground"
-                  >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-2xs font-semibold text-accent-foreground shadow-bloom">
-                      {initialsOf(displayName)}
-                    </span>
-                    <span className="hidden text-left sm:block">
-                      <span className="block text-sm font-semibold leading-tight text-foreground">
-                        {displayName}
-                      </span>
-                      <span className="block text-xs capitalize text-muted-foreground">
-                        {identity.isManager
-                          ? "Manager"
-                          : identity.profile?.job_title ||
-                            identity.roles[0]?.replace("_", " ") ||
-                            "Staff"}
-                      </span>
-                    </span>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
-                    <IdCard className="h-4 w-4" />
-                    My profile
-                  </DropdownMenuItem>
-                  {canTeam && (
-                    <DropdownMenuItem onClick={() => navigate({ to: "/team" })}>
-                      <UserCog className="h-4 w-4" />
-                      Team
-                    </DropdownMenuItem>
-                  )}
-                  {(identity.isManager || canSettings) && (
-                    <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
-                      <SettingsIcon className="h-4 w-4" />
-                      Settings
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={signOut}>
-                    <LogOut className="h-4 w-4" />
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <>
-                <div className="hidden items-center gap-2.5 rounded-lg border border-edge bg-glass-2 px-2.5 py-1.5 shadow-inset-hi sm:flex">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-2xs font-semibold text-accent-foreground shadow-bloom">
-                    {initialsOf(displayName)}
-                  </span>
-                  <span className="text-left">
-                    <span className="block text-sm font-semibold leading-tight text-foreground">
-                      {displayName}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">Patient</span>
-                  </span>
-                </div>
-                <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out">
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </>
-            )}
+            <div className="pointer-events-auto ml-auto flex items-center gap-2">
+              <ToolbarAlerts identity={identity} urgentUnread={urgentUnread} scrolled={scrolled} />
+              <AccountMenu
+                identity={identity}
+                displayName={displayName}
+                roleLabel={roleLabel}
+                canTeam={canTeam}
+                canSettings={canSettings}
+                signOut={signOut}
+              />
+            </div>
           </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-[1400px] px-6 py-8">{children}</main>
+          <div className="mx-auto flex w-full max-w-[1400px] flex-1 shrink-0 flex-col">
+            {children}
+          </div>
+        </main>
+      </div>
+
       {identity.isStaff && <ArrivalAlerts roles={identity.roles} />}
       {DEMO_MODE && <DemoRoleSwitcher />}
     </div>

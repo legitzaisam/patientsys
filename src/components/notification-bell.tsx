@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 /** Unread-message alerts: live badge, dropdown and toast for new incoming messages. */
-export function NotificationBell({ isStaff }: { isStaff: boolean }) {
+export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boolean; scrolled?: boolean }) {
   const { data: identity } = useIdentity();
   const canClear = can(identity, "notifications.delete");
   const queryClient = useQueryClient();
@@ -84,7 +84,14 @@ export function NotificationBell({ isStaff }: { isStaff: boolean }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative hover:bg-transparent hover:text-foreground" aria-label={`Notifications${total ? `, ${total} unread` : ""}`}>
+        <Button
+          variant={scrolled ? "outline" : "ghost"}
+          size="icon"
+          className={`relative hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground hover:shadow-lift active:bg-[rgba(47,63,102,0.14)] ${
+            scrolled ? "" : "border border-transparent"
+          }`}
+          aria-label={`Notifications${total ? `, ${total} unread` : ""}`}
+        >
           <Bell className="h-4 w-4" />
           {total > 0 && (
             <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-2xs font-medium text-accent-foreground">

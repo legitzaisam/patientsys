@@ -90,7 +90,7 @@ function StaffProfilePage() {
       </Link>
 
       <div className="mb-6">
-        <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">Staff profile</h1>
+        <h1 className="page-title">Staff profile</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Review and update {data?.profile?.full_name || "this team member"}'s details.
         </p>

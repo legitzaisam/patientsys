@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Check, Mail, MessageSquare, Phone, X } from "lucide-react";
+import { Check, ClipboardList, Mail, MessageSquare, Phone, X } from "lucide-react";
 import { deleteRecallTask, listOpenRecallTasks, setRecallTaskStatus } from "@/lib/clinic.functions";
 import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
@@ -109,15 +109,27 @@ export function FollowUpTasks() {
   };
 
   const visible = (tasks ?? []).filter((t: any) => !pending.includes(t.id));
-  if (!visible.length) return null;
 
   return (
     <section>
-      <div className="mb-4">
-        <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My tasks</h2>
-        <p className="text-xs text-muted-foreground">Patients to contact and rebook by chat, phone or email.</p>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My tasks</h2>
+          <p className="text-xs text-muted-foreground">Patients to contact and rebook by chat, phone or email.</p>
+        </div>
+        {visible.length > 0 && (
+          <span className="shrink-0 rounded-full border border-edge bg-glass-2 px-2 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground shadow-inset-hi">
+            {visible.length} open
+          </span>
+        )}
       </div>
-      <Card className="divide-y divide-glass-line p-0">
+      {!visible.length ? (
+        <div className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 p-8 text-center">
+          <ClipboardList className="mx-auto h-5 w-5 text-ink-3" />
+          <p className="mt-2 text-sm text-muted-foreground">Nothing on your list right now.</p>
+        </div>
+      ) : (
+        <Card className="max-h-[22rem] divide-y divide-glass-line overflow-y-auto p-0">
         {visible.map((t: any) => {
           const name = `${t.patients?.first_name ?? ""} ${t.patients?.last_name ?? ""}`.trim() || "Patient";
           const contacted = t.status === "contacted" || t.status === "completed";
@@ -137,7 +149,9 @@ export function FollowUpTasks() {
                 >
                   {name}
                 </Link>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">{t.note ?? "Follow-up required"}</p>
+                <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">
+                  {t.note ?? "Follow-up required"}
+                </p>
               </div>
               <div className="flex items-center gap-1.5">
                 {t.patients?.phone && (
@@ -216,6 +230,7 @@ export function FollowUpTasks() {
           );
         })}
       </Card>
+      )}
     </section>
   );
 }

@@ -344,7 +344,7 @@ export function StaffDocuments({
                       onClick={() => void openSigned(d.path)}
                       className="flex min-w-0 items-center gap-3 text-left"
                     >
-                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <FileText className="h-4 w-4 shrink-0 text-ink-3" />
                       <span className="min-w-0">
                         <span className="block truncate text-sm text-foreground underline-offset-2 hover:underline">
                           {d.title}
@@ -378,7 +378,7 @@ export function StaffDocuments({
               .map((d) => (
                 <div key={d.id} className="flex items-center justify-between gap-3 rounded-2xl border border-glass-line p-3">
                   <button type="button" onClick={() => void openSigned(d.path)} className="flex min-w-0 items-center gap-3 text-left">
-                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <FileText className="h-4 w-4 shrink-0 text-ink-3" />
                     <span className="min-w-0 truncate text-sm text-foreground">{d.title}</span>
                   </button>
                   <Badge variant="outline" className="rounded-xl text-2xs uppercase">

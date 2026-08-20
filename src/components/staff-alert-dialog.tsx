@@ -137,7 +137,7 @@ export function StaffAlertDialog({
             )}
           >
             <div className="flex items-center gap-2">
-              <AlertTriangle className={cn("h-4 w-4", urgent ? "text-destructive" : "text-muted-foreground")} />
+              <AlertTriangle className={cn("h-4 w-4", urgent ? "text-destructive" : "text-ink-3")} />
               <div>
                 <p className="text-sm text-foreground">Mark as urgent</p>
                 <p className="text-xs text-muted-foreground">Highlighted in red in their notifications</p>

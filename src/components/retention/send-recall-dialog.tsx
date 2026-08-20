@@ -280,7 +280,7 @@ export function SendRecallDialog({
                 key={v.token}
                 type="button"
                 onClick={() => insertVariable(v.token)}
-                className="rounded-full border border-edge bg-glass-2 px-2.5 py-1 text-2xs text-muted-foreground transition hover:bg-glass-2"
+                className="rounded-full border border-edge bg-glass-2 px-2.5 py-1 text-2xs text-muted-foreground transition hover:border-accent-line hover:bg-accent-wash hover:text-foreground"
               >
                 {v.label}
               </button>

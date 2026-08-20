@@ -34,7 +34,7 @@ export function RouteErrorBoundary({
     <div className="flex min-h-[60vh] items-center justify-center px-4">
       <Card className="max-w-md p-8 text-center">
         <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-glass-2">
-          <AlertTriangle className="h-5 w-5 text-muted-foreground" aria-hidden />
+          <AlertTriangle className="h-5 w-5 text-ink-3" aria-hidden />
         </div>
         <h1 className="mt-4 text-lg font-semibold tracking-tight text-foreground">
           {moduleFailure ? "This page needs a quick reload" : "This page didn't load"}

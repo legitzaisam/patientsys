@@ -45,17 +45,17 @@ export function PeriodPicker({
   onChange: (v: PeriodKey) => void;
 }) {
   return (
-    <div className="flex rounded-full border border-edge-2 bg-glass-2 p-1 shadow-inset-hi">
+    <div className="flex h-[34px] items-center rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
       {OPTIONS.map((o) => (
         <button
           key={o.key}
           type="button"
           onClick={() => onChange(o.key)}
           className={cn(
-            "cursor-pointer rounded-full px-3.5 py-1.5 text-sm transition-colors",
+            "h-7 cursor-pointer rounded-full px-3.5 text-xs transition-colors",
             value === o.key
-              ? "bg-gradient-to-br from-accent-hi to-accent to-75% font-semibold text-accent-foreground shadow-bloom"
-              : "text-muted-foreground hover:text-foreground",
+              ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
+              : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]",
           )}
         >
           {o.label}

@@ -61,7 +61,7 @@ export function AppointmentTimeEditor({
       <HoverCardTrigger asChild>{children}</HoverCardTrigger>
       <HoverCardContent align="start" className="w-72 rounded-2xl p-4">
         <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-          <Clock className="h-3.5 w-3.5 text-accent-ink" /> Change appointment time
+          <Clock className="h-3.5 w-3.5 text-ink-3" /> Change appointment time
         </p>
         <div className="mt-3 space-y-2">
           <Label htmlFor={`date-${a.id}`} className="text-2xs uppercase tracking-wide text-muted-foreground">

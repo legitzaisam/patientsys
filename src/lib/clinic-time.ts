@@ -28,3 +28,17 @@ export function clinicDayRange(now: Date = new Date(), timeZone: string = CLINIC
   const adjustedEnd = new Date(end.getTime() + (offset - endOffset));
   return { dayKey: key, startISO: start.toISOString(), endISO: adjustedEnd.toISOString() };
 }
+
+/** Monday 00:00 to next Monday 00:00 in the clinic timezone (ISO bounds). */
+export function clinicWeekRange(now: Date = new Date(), timeZone: string = CLINIC_TZ) {
+  const key = clinicDayKey(now, timeZone);
+  const [year, month, day] = key.split("-").map(Number);
+  const utcNoon = Date.UTC(year, (month ?? 1) - 1, day ?? 1, 12);
+  const mondayShift = (new Date(utcNoon).getUTCDay() + 6) % 7;
+  const mondayNoon = new Date(utcNoon - mondayShift * 86400000);
+  const nextMondayNoon = new Date(mondayNoon.getTime() + 7 * 86400000);
+  const start = clinicDayRange(mondayNoon, timeZone);
+  const end = clinicDayRange(nextMondayNoon, timeZone);
+  const sundayKey = clinicDayKey(new Date(Date.parse(end.startISO) - 1), timeZone);
+  return { startISO: start.startISO, endISO: end.startISO, startKey: start.dayKey, endKey: sundayKey };
+}

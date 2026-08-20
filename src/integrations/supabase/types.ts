@@ -911,6 +911,7 @@ export type Database = {
           cooling_off_hours: number
           created_at: string
           description: string | null
+          duration_minutes: number
           id: string
           interval_days: number | null
           name: string
@@ -925,6 +926,7 @@ export type Database = {
           cooling_off_hours?: number
           created_at?: string
           description?: string | null
+          duration_minutes?: number
           id?: string
           interval_days?: number | null
           name: string
@@ -939,6 +941,7 @@ export type Database = {
           cooling_off_hours?: number
           created_at?: string
           description?: string | null
+          duration_minutes?: number
           id?: string
           interval_days?: number | null
           name?: string

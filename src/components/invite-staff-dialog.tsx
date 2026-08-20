@@ -146,11 +146,11 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                         className={`rounded-2xl border p-3 text-left transition-colors ${
                           form.role === r.value
                             ? "border-accent bg-glass-2"
-                            : "border-edge hover:bg-glass-2"
+                            : "border-edge hover:border-accent-line hover:bg-accent-wash"
                         }`}
                       >
                         <span className="flex items-center gap-2 text-sm text-foreground">
-                          <ShieldCheck className="h-3.5 w-3.5 text-accent-ink" />
+                          <ShieldCheck className="h-3.5 w-3.5 text-ink-3" />
                           {r.label}
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">{r.blurb}</span>

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
-import { TrendingDown, TrendingUp, PoundSterling } from "lucide-react";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { getRetention, logRetentionOutreach } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
@@ -38,34 +38,23 @@ function Stat({
   value,
   hint,
   change,
-  icon,
 }: {
   label: string;
   value: string;
   hint?: string;
   change?: number;
-  icon?: React.ReactNode;
 }) {
+  const trending = typeof change === "number" && change !== 0;
+  const TrendIcon = change && change < 0 ? TrendingDown : TrendingUp;
   return (
     <Card className="p-5">
-      <div className="flex items-start justify-between">
-        <p className="text-xs font-medium tracking-[0.02em] text-muted-foreground">{label}</p>
-        {icon && <span className="text-muted-foreground">{icon}</span>}
-      </div>
-      <p className="mt-3 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{value}</p>
-      <div className="mt-2 flex items-center gap-2">
-        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-        {!!change && (
-          <span
-            className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-2xs font-medium ${
-              change > 0 ? "bg-success-bg text-success" : "bg-destructive-bg text-destructive"
-            }`}
-          >
-            {change > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {Math.abs(change)}%
-          </span>
-        )}
-      </div>
+      <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
+      <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{value}</p>
+      <p className="mt-1 flex items-center gap-1 overflow-hidden text-xs text-muted-foreground">
+        {trending && <TrendIcon className="h-3 w-3 shrink-0" />}
+        <span className="min-w-0 truncate">{hint}</span>
+        {trending && <span className="shrink-0 tabular-nums">{Math.abs(change)}%</span>}
+      </p>
     </Card>
   );
 }
@@ -100,7 +89,7 @@ function RetentionPage() {
   return (
     <AppShell identity={identity}>
       <div className="mb-6">
-        <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">Retention</h1>
+        <h1 className="page-title">Retention</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {ownBookOnly
             ? "How well you keep your own patients, and who needs a nudge."
@@ -121,12 +110,7 @@ function RetentionPage() {
           hint={`${s?.repeatPatients ?? 0} repeat patients`}
         />
         <Stat label="Average visits" value={`${s?.averageVisits ?? 0}`} hint="Per patient, all time" />
-        <Stat
-          label="Revenue at risk"
-          value={money(s?.revenueAtRisk ?? 0)}
-          hint="From at-risk or lost patients"
-          icon={<PoundSterling className="h-4 w-4" />}
-        />
+        <Stat label="Revenue at risk" value={money(s?.revenueAtRisk ?? 0)} hint="From at-risk or lost patients" />
       </div>
 
       <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_380px]">

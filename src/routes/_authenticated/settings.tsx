@@ -30,7 +30,7 @@ function SettingsPage() {
   return (
     <AppShell identity={identity}>
       <div className="mb-6">
-        <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">Settings</h1>
+        <h1 className="page-title">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {identity.isManager
             ? "Clinic-wide preferences. Changes here apply to everyone on the team."
@@ -38,9 +38,9 @@ function SettingsPage() {
         </p>
       </div>
       <div className="space-y-6">
-        {identity.isManager && <AccessControlSettings canEdit />}
         <ClinicDetailsSettings canEdit={canEditClinic} />
         <TreatmentCatalogueSettings canEdit={canEditClinic} />
+        {identity.isManager && <AccessControlSettings canEdit />}
       </div>
     </AppShell>
   );

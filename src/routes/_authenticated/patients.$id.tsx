@@ -276,7 +276,7 @@ function PatientRecord() {
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">
+                <h1 className="page-title">
                   {p.last_name}, {p.title ? `${p.title} ` : ""}
                   {p.first_name}
                 </h1>
@@ -506,7 +506,7 @@ function PatientRecord() {
                     </div>
 
                     {timeline.length === 0 ? (
-                      <div className="mt-6 flex aspect-video items-center justify-center rounded-xl border border-dashed border-edge bg-glass-2 text-sm text-muted-foreground">
+                      <div className="mt-6 flex aspect-video items-center justify-center rounded-xl border border-dashed border-edge-2 bg-glass-2 text-sm text-muted-foreground">
                         Upload photos to start comparing.
                       </div>
                     ) : (
@@ -690,9 +690,9 @@ function PatientRecord() {
                       )}
                     </div>
 
-                    <div className="rounded-xl border-2 border-dashed border-edge p-4 text-center transition-colors hover:border-accent hover:bg-accent-wash">
+                    <div className="rounded-xl border-2 border-dashed border-edge-2 p-4 text-center transition-colors hover:border-accent hover:bg-accent-wash">
                       <label className="flex cursor-pointer flex-col items-center gap-1">
-                        <Upload className="h-4 w-4 text-muted-foreground" />
+                        <Upload className="h-4 w-4 text-ink-3" />
                         <span className="text-2xs font-medium text-muted-foreground">Drop photos to upload</span>
                         <input
                           type="file"

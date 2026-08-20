@@ -41,9 +41,9 @@ function EarningsPage() {
 
   return (
     <AppShell identity={identity}>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-[-0.016em] text-foreground">My earnings</h1>
+          <h1 className="page-title">My earnings</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Your share of the treatments you have delivered, with your own performance figures.
           </p>
@@ -105,7 +105,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint: stri
       <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{value}</p>
       <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-        <Wallet className="h-3 w-3" /> {hint}
+        <Wallet className="h-3 w-3 text-ink-3" /> {hint}
       </p>
     </Card>
   );

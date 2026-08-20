@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { clinicDayRange } from "@/lib/clinic-time";
+import { clinicDayKey, clinicDayRange } from "@/lib/clinic-time";
+import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
+import { clampDurationMinutes } from "@/lib/treatment-duration";
 
 const CLINIC_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -170,6 +172,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       prevMonthTreatments,
       prevMonthPatients,
       unreadMessages,
+      dueDatesRaw,
     ] = await Promise.all([
       supabase.from("patients").select("id, status, created_at"),
       supabase
@@ -210,6 +213,11 @@ export const getDashboard = createServerFn({ method: "GET" })
         .eq("author", "patient")
         .order("created_at", { ascending: false })
         .limit(10),
+      supabase
+        .from("treatments")
+        .select("next_due_at, practitioner_id")
+        .not("next_due_at", "is", null)
+        .lte("next_due_at", in30),
     ]);
 
     let all = patients.data ?? [];
@@ -217,9 +225,11 @@ export const getDashboard = createServerFn({ method: "GET" })
     let monthTreats = (monthTreatments.data ?? []) as any[];
     let prevMonthTreats = (prevMonthTreatments.data ?? []) as any[];
     let todayAppts = (todayAppointmentsRaw.data ?? []) as any[];
+    let dueDates = (dueDatesRaw.data ?? []) as { next_due_at: string; practitioner_id: string | null }[];
 
     if (isPractitioner && !isManager) {
       due = due.filter((t: any) => t.practitioner_id === identity.userId || !t.practitioner_id);
+      dueDates = dueDates.filter((t) => t.practitioner_id === identity.userId || !t.practitioner_id);
       monthTreats = monthTreats.filter((t: any) => t.practitioner_id === identity.userId);
       prevMonthTreats = prevMonthTreats.filter((t: any) => t.practitioner_id === identity.userId);
       todayAppts = todayAppts.filter((a: any) => a.practitioner_id === identity.userId);
@@ -246,6 +256,10 @@ export const getDashboard = createServerFn({ method: "GET" })
     const returningPrev = [...seenPrev.values()].filter((n) => n > 1).length;
     const retentionPrev = seenPrev.size ? Math.round((returningPrev / seenPrev.size) * 100) : 0;
     const oneVisitClients = seen.size - returning;
+
+    const todayISO = clinicDayKey(today);
+    const treatmentsOverdue = dueDates.filter((t) => t.next_due_at < todayISO).length;
+    const treatmentsDueSoon = dueDates.filter((t) => t.next_due_at >= todayISO).length;
 
     const revenue = monthTreats.reduce((sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0), 0);
     const prevRevenue = prevMonthTreats.reduce((sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0), 0);
@@ -329,7 +343,9 @@ export const getDashboard = createServerFn({ method: "GET" })
         retentionChange: retentionPrev ? retention - retentionPrev : 0,
         repeatClients: returning,
         oneVisitClients,
-        treatmentsDue: due.length,
+        treatmentsDue: treatmentsDueSoon + treatmentsOverdue,
+        treatmentsDueSoon,
+        treatmentsOverdue,
         pendingConsents,
         revenueMonth: revenue,
         treatmentsMonth: monthTreats.length,
@@ -2459,6 +2475,7 @@ export type CatalogueInput = {
   description?: string | null;
   price?: number | null;
   interval_days?: number | null;
+  duration_minutes?: number | null;
   cooling_off_hours?: number | null;
   requires_consent?: boolean;
   active?: boolean;
@@ -2482,6 +2499,7 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
       description: data.description?.trim() || null,
       price: data.price ?? null,
       interval_days: data.interval_days ?? null,
+      duration_minutes: clampDurationMinutes(data.duration_minutes),
       cooling_off_hours: data.cooling_off_hours ?? 0,
       requires_consent: data.requires_consent ?? true,
       active: data.active ?? true,
@@ -2625,7 +2643,9 @@ export const getMyNote = createServerFn({ method: "GET" })
 
 export const saveMyNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { body: string }) => ({ body: String(data?.body ?? "").slice(0, 20000) }))
+  .validator((data: { body: string }) => ({
+    body: sanitizeNoteHtml(String(data?.body ?? "")),
+  }))
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context as Ctx;
     const { data: row, error } = await supabase

@@ -6,7 +6,7 @@ import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ShieldCheck } from "lucide-react";
+import { BrandLockup } from "@/components/brand-mark";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -85,12 +85,7 @@ function AuthPage() {
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(700px_460px_at_18%_-8%,var(--sheen),transparent_62%)]"
         />
-        <div className="relative flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-glass shadow-inset-hi">
-            <ShieldCheck className="h-4 w-4" />
-          </span>
-          <span className="text-[17px] font-semibold tracking-[-0.016em]">Aetheria</span>
-        </div>
+        <BrandLockup variant="on-gold" light className="relative" />
         <div className="relative max-w-md space-y-4">
           <h1 className="text-[40px] font-semibold leading-[1.1] tracking-[-0.02em]">
             Patient records built for aesthetic practice.
