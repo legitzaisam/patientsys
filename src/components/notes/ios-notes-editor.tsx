@@ -69,29 +69,43 @@ const FONTS = {
 } as const;
 type NotesFont = keyof typeof FONTS;
 
+const DEFAULT_PREFS = { size: 14, theme: "paper" as NotesTheme, font: "sans" as NotesFont };
+
+function readNotesPrefs(storageKey: string) {
+  if (typeof window === "undefined") return DEFAULT_PREFS;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return DEFAULT_PREFS;
+    const p = JSON.parse(raw) as Partial<{ size: number; theme: NotesTheme; font: NotesFont }>;
+    return {
+      size: typeof p.size === "number" && p.size >= 11 && p.size <= 22 ? p.size : DEFAULT_PREFS.size,
+      theme: p.theme && p.theme in THEMES ? p.theme : DEFAULT_PREFS.theme,
+      font: p.font && p.font in FONTS ? p.font : DEFAULT_PREFS.font,
+    };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
 export function useNotesPrefs(storageKey: string) {
-  const [size, setSize] = useState(14);
-  const [theme, setTheme] = useState<NotesTheme>("paper");
-  const [font, setFont] = useState<NotesFont>("sans");
-  const loaded = useRef(false);
+  const [size, setSize] = useState(() => readNotesPrefs(storageKey).size);
+  const [theme, setTheme] = useState<NotesTheme>(() => readNotesPrefs(storageKey).theme);
+  const [font, setFont] = useState<NotesFont>(() => readNotesPrefs(storageKey).font);
+  const skipNextSave = useRef(true);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const p = JSON.parse(raw);
-        if (p.size) setSize(p.size);
-        if (p.theme) setTheme(p.theme);
-        if (p.font) setFont(p.font);
-      }
-    } catch {
-      /* ignore */
-    }
-    loaded.current = true;
+    const stored = readNotesPrefs(storageKey);
+    skipNextSave.current = true;
+    setSize(stored.size);
+    setTheme(stored.theme);
+    setFont(stored.font);
   }, [storageKey]);
 
   useEffect(() => {
-    if (!loaded.current) return;
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
     try {
       localStorage.setItem(storageKey, JSON.stringify({ size, theme, font }));
     } catch {
@@ -221,7 +235,7 @@ export function NotesTextarea({
       }}
       placeholder={placeholder}
       style={{ fontSize: prefs.size, lineHeight: 1.65 }}
-      className={`${autoGrow ? "h-auto overflow-hidden" : "flex-1"} resize-none rounded-2xl border ${theme.rule} ${theme.surface} ${theme.text} ${FONTS[prefs.font].cls} p-3.5 outline-none transition-colors placeholder:text-muted-foreground focus:border-accent-line ${className ?? ""}`}
+      className={`${autoGrow ? "h-auto overflow-hidden" : "flex-1"} w-full resize-none rounded-2xl border ${theme.rule} ${theme.surface} ${theme.text} ${FONTS[prefs.font].cls} p-3.5 outline-none transition-colors placeholder:text-muted-foreground focus:border-accent-line ${className ?? ""}`}
     />
   );
 }

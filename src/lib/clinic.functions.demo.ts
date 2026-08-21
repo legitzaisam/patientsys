@@ -24,6 +24,7 @@ import {
   findPractitionerOverlap,
   PRACTITIONER_OVERLAP_MESSAGE,
 } from "@/lib/appointment-overlap";
+import { bookingDetailsMessage, type PaymentLinkKind } from "@/lib/payment-link";
 
 export const PERMISSION_KEYS = [
   "reports.retention",
@@ -151,11 +152,19 @@ function patientJoin(id: string) {
 
 function appointmentView(a: any) {
   const doc = a.consent_document_id ? documents.find((d) => d.id === a.consent_document_id) : null;
+  const note = appointmentNotes.find((n) => n.appointment_id === a.id);
   return {
     ...a,
     patients: patientJoin(a.patient_id),
     profiles: a.practitioner_id ? { full_name: profileName(a.practitioner_id) } : null,
     documents: doc ? { status: doc.status, title: doc.title } : null,
+    appointment_notes: note
+      ? {
+          body: note.body ?? "",
+          updated_at: note.updated_at ?? null,
+          updated_by_label: note.updated_by_label ?? null,
+        }
+      : null,
   };
 }
 
@@ -568,6 +577,8 @@ export const saveAppointment = createServerFn({ method: "POST" })
       payment_status?: string;
       consent_document_id?: string;
       notes?: string;
+      app_origin?: string;
+      pay_kind?: PaymentLinkKind;
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -606,11 +617,48 @@ export const saveAppointment = createServerFn({ method: "POST" })
     if (data.id) {
       const row = appointments.find((a) => a.id === data.id);
       if (row) Object.assign(row, payload);
+      const noteBody = String(data.notes ?? "");
+      if (noteBody.trim()) {
+        const me = identity();
+        const now = new Date().toISOString();
+        let note = appointmentNotes.find((n) => n.appointment_id === data.id);
+        if (!note) {
+          note = {
+            id: newId("r1"),
+            appointment_id: data.id,
+            clinic_id: CLINIC_ID,
+            patient_id: data.patient_id,
+            created_at: now,
+          };
+          appointmentNotes.push(note);
+        }
+        note.body = noteBody;
+        note.updated_by = me.userId;
+        note.updated_by_label = me.profile?.full_name ?? null;
+        note.updated_at = now;
+      }
       return { id: data.id };
     }
 
     const created = { id: newId("a8"), created_at: new Date().toISOString(), ...payload };
     appointments.push(created);
+
+    const noteBody = String(data.notes ?? "");
+    if (noteBody.trim()) {
+      const me = identity();
+      const now = new Date().toISOString();
+      appointmentNotes.push({
+        id: newId("r1"),
+        appointment_id: created.id,
+        clinic_id: CLINIC_ID,
+        patient_id: data.patient_id,
+        body: noteBody,
+        created_at: now,
+        updated_by: me.userId,
+        updated_by_label: me.profile?.full_name ?? null,
+        updated_at: now,
+      });
+    }
 
     const patient = patientById(data.patient_id);
     const when = start.toLocaleString("en-GB", {
@@ -622,10 +670,24 @@ export const saveAppointment = createServerFn({ method: "POST" })
       timeZone: "Europe/London",
     });
     const practitioner = profileName(payload.practitioner_id);
-    const confirmation =
-      `Hi ${patient?.first_name ?? "there"}, your ${data.treatment_name} appointment is confirmed for ${when}` +
-      `${practitioner ? ` with ${practitioner}` : ""}. ` +
-      `Please arrive 5 minutes early and let us know if you need to reschedule.`;
+    const payKind: PaymentLinkKind =
+      payload.payment_status === "deposit_paid"
+        ? "balance"
+        : data.pay_kind === "deposit"
+          ? "deposit"
+          : "full";
+    const confirmation = bookingDetailsMessage({
+      name: `${patient?.first_name ?? ""}`.trim() || "there",
+      treatment: data.treatment_name,
+      treatmentNumber: data.treatment_number,
+      when,
+      practitioner,
+      appointmentId: created.id,
+      price: Number(data.price ?? 0),
+      paymentStatus: String(payload.payment_status ?? "unpaid"),
+      payKind,
+      origin: data.app_origin,
+    });
 
     messages.push({
       id: newId("h9"),
@@ -655,6 +717,7 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       payment_status?: "unpaid" | "deposit_paid" | "paid" | "refunded";
       stage?:
         "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
+      cancel_reason?: string;
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -666,6 +729,12 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       row.stage = data.stage;
       row.status =
         data.stage === "no_show" ? "no_show" : data.stage === "booked" ? "booked" : "attended";
+    }
+    const reason = String(data.cancel_reason ?? "").trim().slice(0, 2000);
+    if (data.status === "cancelled" && reason) {
+      const prior = String(row.notes ?? "").trim();
+      const stamp = `Cancelled: ${reason}`;
+      row.notes = prior ? `${stamp}\n\n${prior}` : stamp;
     }
     row.updated_at = new Date().toISOString();
     return { ok: true };
@@ -717,10 +786,21 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
   }))
   .handler(async ({ data }) => {
     const row = appointmentNotes.find((n) => n.appointment_id === data.appointment_id);
+    const visitBody = (row?.body ?? "").trim();
+    if (visitBody) {
+      return {
+        body: row!.body ?? "",
+        updatedAt: row?.updated_at ?? null,
+        updatedBy: row?.updated_by_label ?? null,
+      };
+    }
+    const appointment = appointments.find((a) => a.id === data.appointment_id);
+    const bookingNotes = String(appointment?.notes ?? "");
+    const withoutCancel = bookingNotes.replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim();
     return {
-      body: row?.body ?? "",
-      updatedAt: row?.updated_at ?? null,
-      updatedBy: row?.updated_by_label ?? null,
+      body: withoutCancel,
+      updatedAt: null,
+      updatedBy: null,
     };
   });
 
@@ -748,6 +828,18 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
     row.updated_by = me.userId;
     row.updated_by_label = me.profile?.full_name ?? null;
     row.updated_at = now;
+
+    if (appointment) {
+      const prior = String(appointment.notes ?? "");
+      const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
+      appointment.notes = cancelLine
+        ? data.body.trim()
+          ? `${cancelLine}\n\n${data.body}`
+          : cancelLine
+        : data.body || null;
+      appointment.updated_at = now;
+    }
+
     return { body: row.body, updatedAt: row.updated_at, updatedBy: row.updated_by_label };
   });
 

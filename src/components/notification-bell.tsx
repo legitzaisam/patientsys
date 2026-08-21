@@ -94,7 +94,7 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
         >
           <Bell className="h-4 w-4" />
           {total > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-2xs font-medium text-accent-foreground">
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-medium text-destructive-foreground">
               {total > 9 ? "9+" : total}
             </span>
           )}
@@ -124,7 +124,7 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
                   <span className={`text-sm ${alert.urgent ? "font-medium text-destructive" : "text-foreground"}`}>
                     {alert.title}
                   </span>
-                  <span className={`text-xs ${alert.urgent ? "text-destructive" : "text-accent-ink"}`}>
+                  <span className={`text-xs ${alert.urgent ? "text-destructive" : "text-destructive-ink"}`}>
                     {alert.urgent ? "Urgent" : "New"}
                   </span>
                 </div>
@@ -180,7 +180,7 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-foreground">{item.name}</span>
-                  <span className="text-xs text-accent-ink">{item.count}</span>
+                  <span className="text-xs text-destructive-ink">{item.count}</span>
                 </div>
                 <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.last}</p>
               </button>

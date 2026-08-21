@@ -11,6 +11,9 @@ import { CalendarCheck, FileSignature, MessageCircle } from "lucide-react";
 
 export const Route = createFileRoute("/portal")({
   ssr: false,
+  validateSearch: (search: Record<string, unknown>) => ({
+    next: typeof search.next === "string" ? search.next : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Patient portal sign in — Aetheria" },
@@ -37,18 +40,35 @@ const highlights = [
   { icon: MessageCircle, text: "Message your practitioner directly" },
 ];
 
+/** Only allow same-origin relative paths (blocks open redirects). */
+function safeNextPath(next: string | undefined) {
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return { to: "/dashboard" as const };
+  try {
+    const url = new URL(next, "http://local.invalid");
+    const search = Object.fromEntries(url.searchParams.entries());
+    return {
+      to: url.pathname as "/dashboard" | "/my-record",
+      search: Object.keys(search).length ? search : undefined,
+    };
+  } catch {
+    return { to: "/dashboard" as const };
+  }
+}
+
 function PortalLogin() {
   const navigate = useNavigate();
+  const { next } = Route.useSearch();
+  const dest = safeNextPath(next);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Signed-in users land in the view their role allows.
+  // Signed-in users land in the view their role allows (or the payment deep link).
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard", replace: true });
+      if (data.session) navigate({ ...dest, replace: true } as any);
     });
-  }, [navigate]);
+  }, [navigate, next]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -56,7 +76,7 @@ function PortalLogin() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      navigate({ to: "/dashboard", replace: true });
+      navigate({ ...dest, replace: true } as any);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not sign you in");
     } finally {
@@ -73,7 +93,7 @@ function PortalLogin() {
       return;
     }
     if (result.redirected) return;
-    navigate({ to: "/dashboard", replace: true });
+    navigate({ ...dest, replace: true } as any);
   }
 
   return (

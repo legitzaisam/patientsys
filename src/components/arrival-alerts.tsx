@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
 import {
-  AlarmClock,
   BellRing,
   CalendarClock,
   ChevronDown,
@@ -43,60 +42,48 @@ const phaseMeta: Record<
   {
     label: string;
     icon: ElementType;
-    bar: string;
     bg: string;
     ring: string;
-    shadow: string;
     badge: string;
-    badgeText: string;
+    hint: string;
   }
 > = {
   due: {
-    label: "Arriving soon",
+    label: "Soon",
     icon: Clock,
-    bar: "bg-arrived",
     bg: "bg-sky-bg",
-    ring: "ring-arrived/30",
-    shadow: "shadow-arrived/10",
+    ring: "ring-arrived/25",
     badge: "bg-sky-bg text-arrived-ink",
-    badgeText: "text-arrived-ink",
+    hint: "Due soon. Confirm arrival when the patient checks in.",
   },
   arrival: {
     label: "Due now",
     icon: CalendarClock,
-    bar: "bg-warning",
     bg: "bg-warning-bg",
-    ring: "ring-warning/40",
-    shadow: "shadow-warning/15",
+    ring: "ring-warning/30",
     badge: "bg-warning-bg text-warning-ink",
-    badgeText: "text-warning-ink",
+    hint: "Reception to confirm check-in now.",
   },
   late: {
     label: "Late",
     icon: TriangleAlert,
-    bar: "bg-warning",
     bg: "bg-warning-bg",
-    ring: "ring-warning/40",
-    shadow: "shadow-warning/15",
+    ring: "ring-warning/30",
     badge: "bg-warning-bg text-warning-ink",
-    badgeText: "text-warning-ink",
+    hint: "Not marked as arrived yet.",
   },
   overdue: {
     label: "Overdue",
     icon: TriangleAlert,
-    bar: "bg-destructive",
     bg: "bg-destructive-bg",
-    ring: "ring-destructive/40",
-    shadow: "shadow-destructive/15",
+    ring: "ring-destructive/30",
     badge: "bg-destructive-bg text-destructive",
-    badgeText: "text-destructive",
+    hint: "Over 15 minutes late — contact the patient to reschedule.",
   },
 };
 
 export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
-  // Same card design for every staff role (reception layout is the standard).
   void roles;
-  const isReception = true;
   const queryClient = useQueryClient();
   const fetchDashboard = useServerFn(getDashboard);
   const [now, setNow] = useState(() => Date.now());
@@ -119,8 +106,6 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
     return () => clearInterval(t);
   }, []);
 
-  // Keyboard support for the floating arrivals panel: Esc collapses it,
-  // arrow keys move between queued arrivals. Disabled while a modal is open.
   useEffect(() => {
     if (collapsed || noShowAppt) return;
     const onKey = (e: KeyboardEvent) => {
@@ -157,8 +142,6 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
         const stage = a.stage ?? "booked";
         if (stage !== "booked") return false;
         if (a.status === "cancelled") return false;
-        // Keep the appointment visible while the no-show dialog is open so the
-        // background doesn't flash/shift underneath the modal.
         if (a.status === "no_show" && a.id !== noShowAppt?.id) return false;
         return phaseOf(new Date(a.starts_at).getTime(), now) !== null;
       })
@@ -175,8 +158,7 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
       if (order.indexOf(a.phase) > order.indexOf(highest)) highest = a.phase;
     }
     return highest;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alerts, dismissed]);
+  }, [visible]);
 
   const noShowDialog = noShowAppt ? (
     <NoShowFollowUpDialog
@@ -192,226 +174,188 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
   if (visible.length === 0) return noShowDialog;
 
   const index = Math.min(cursor, visible.length - 1);
-  const current = alerts[index]!;
-  const next = alerts[index + 1];
+  const current = visible[index]!;
+  const { appt: a, phase } = current;
+  const start = new Date(a.starts_at).getTime();
+  const name = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
+  const firstName = name.split(" ")[0] ?? "Patient";
+  const time = new Date(a.starts_at).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const meta = phaseMeta[phase];
+  const PhaseIcon = meta.icon;
+  const statusDetail =
+    phase === "due"
+      ? `${minutes(start - now)} min`
+      : phase === "late"
+        ? `${minutes(start + OVERDUE_MS - now)} min left`
+        : time;
 
   if (collapsed) {
-    const urgentMeta = phaseMeta[mostUrgentPhase];
     const isUrgent = mostUrgentPhase === "late" || mostUrgentPhase === "overdue";
     const isDestructive = mostUrgentPhase === "overdue";
     return (
       <>
-      <button
-        type="button"
-        ref={collapsedBtnRef}
-        aria-expanded={false}
-        aria-label={`Show ${visible.length} arrival alert${visible.length > 1 ? "s" : ""}`}
-        onClick={() => setCollapsed(false)}
-        className={`fixed bottom-5 right-5 z-50 inline-flex cursor-pointer items-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold shadow-glass ring-1 backdrop-blur-glass transition-all hover:-translate-y-0.5 ${
-          isDestructive
-            ? "bg-destructive text-destructive-foreground ring-destructive/40 animate-pulse"
-            : `bg-glass text-foreground ${urgentMeta.ring}`
-        }`}
-      >
-        {isUrgent ? <TriangleAlert className="h-4 w-4 text-warning-ink" /> : <BellRing className="h-4 w-4 text-arrived-ink" />}
-        <span className="tabular-nums">{visible.length}</span> Arrival{visible.length > 1 ? "s" : ""}
-        {isReception && <span className="opacity-80">to confirm</span>}
-        <ChevronUp className="h-3.5 w-3.5 opacity-70" />
-      </button>
-      {noShowDialog}
+        <button
+          type="button"
+          ref={collapsedBtnRef}
+          aria-expanded={false}
+          aria-label={`Show ${visible.length} arrival alert${visible.length > 1 ? "s" : ""}`}
+          onClick={() => setCollapsed(false)}
+          className={`fixed bottom-5 right-5 z-50 inline-flex h-10 cursor-pointer items-center gap-2 rounded-full px-3.5 text-xs font-semibold shadow-glass ring-1 transition-all hover:-translate-y-0.5 ${
+            isDestructive
+              ? "bg-[#ebb0c8] text-destructive-ink ring-destructive/45"
+              : `bg-glass text-foreground backdrop-blur-glass ${phaseMeta[mostUrgentPhase].ring}`
+          }`}
+        >
+          {isUrgent ? (
+            <TriangleAlert
+              className={`h-3.5 w-3.5 ${isDestructive ? "text-destructive-ink" : "text-warning-ink"}`}
+            />
+          ) : (
+            <BellRing className="h-3.5 w-3.5 text-arrived-ink" />
+          )}
+          <span className="tabular-nums">{visible.length}</span> Alert
+          {visible.length > 1 ? "s" : ""}
+          <ChevronUp className="h-3.5 w-3.5 opacity-70" />
+        </button>
+        {noShowDialog}
       </>
     );
   }
 
   return (
     <>
-    <div
-      ref={panelRef}
-      role="region"
-      aria-label="Arrival alerts"
-      className={`fixed bottom-5 right-5 z-50 max-w-[calc(100vw-2.5rem)] space-y-3 ${
-        isReception ? "w-[24rem]" : "w-[19rem]"
-      }`}
-    >
-      <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-card to-secondary/60 px-4 py-2.5 text-2xs tracking-[0.02em] text-muted-foreground shadow-lg ring-1 ring-border backdrop-blur">
-        <span className="inline-flex items-center gap-2 font-semibold">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <AlarmClock className="h-3 w-3" />
-          </span>
-          {isReception ? "Arrivals — check in" : "Arrivals"}
-          <span className="rounded-full bg-glass-2 px-2 py-0.5 text-2xs font-semibold tabular-nums text-foreground">
-            {index + 1}/{visible.length}
-          </span>
-        </span>
-        <span className="inline-flex items-center gap-1">
-          {visible.length > 1 && (
-            <>
-              <button
-                type="button"
-                aria-label="Previous arrival"
-                disabled={index === 0}
-                onClick={() => setCursor(index - 1)}
-                className="rounded-full p-1 hover:bg-accent-wash hover:text-foreground disabled:opacity-30"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                aria-label="Next arrival"
-                disabled={index >= visible.length - 1}
-                onClick={() => setCursor(index + 1)}
-                className="rounded-full p-1 hover:bg-accent-wash hover:text-foreground disabled:opacity-30"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            aria-label="Snooze this alert"
-            onClick={() => {
-              const a = visible[index]?.appt;
-              if (a) {
-                setDismissed((d) => ({ ...d, [a.id]: visible[index]!.phase }));
-                setCursor(0);
-              }
-            }}
-            className="rounded-full p-1 hover:bg-accent-wash hover:text-foreground"
-          >
-            <Clock className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setCollapsed(true)}
-            className="ml-0.5 inline-flex items-center gap-1 rounded-full p-1 hover:bg-accent-wash hover:text-foreground"
-          >
-            <ChevronDown className="h-3.5 w-3.5" />
-          </button>
-        </span>
-      </div>
+      <div
+        ref={panelRef}
+        role="region"
+        aria-label="Arrival alerts"
+        className="fixed bottom-5 right-5 z-50 w-[min(18rem,calc(100vw-2.5rem))]"
+      >
+        <div
+          className={`glass-card relative overflow-hidden !rounded-2xl p-3 shadow-popover ring-1 ${meta.ring}`}
+        >
+          <div className={`pointer-events-none absolute inset-0 ${meta.bg}`} aria-hidden />
 
-      <div className="space-y-3">
-        {[current].map(({ appt: a, phase }) => {
-          const start = new Date(a.starts_at).getTime();
-          const name = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
-          const firstName = name.split(" ")[0];
-          const time = new Date(a.starts_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-          const meta = phaseMeta[phase];
-          const PhaseIcon = meta.icon;
-          const askFirst = isReception && (phase === "arrival" || phase === "late" || phase === "overdue");
-          return (
-            <div
-              key={a.id}
-              className={`relative overflow-hidden rounded-3xl ${meta.bg} shadow-xl ring-1 backdrop-blur ${
-                isReception ? "p-4" : "p-3"
-              } ${meta.ring} ${meta.shadow}`}
+          <div className="relative flex items-start gap-2">
+            <span
+              className={`mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold ${meta.badge}`}
             >
-              <div className="min-w-0 flex-1">
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold ${meta.badge}`}>
-                  <PhaseIcon className="h-3 w-3" />
-                  {meta.label}
-                  <span className="tabular-nums opacity-80">
-                    {phase === "due"
-                      ? `· ${minutes(start - now)} min`
-                      : `· ${time}`}
-                  </span>
-                </span>
-
-                {askFirst && (
-                  <p className="mt-2 text-sm font-semibold font-medium text-foreground">
-                    Has {firstName} arrived?
-                  </p>
-                )}
-
-                <div className="mt-1 flex items-center gap-2 truncate text-sm text-muted-foreground">
-                  <Link
-                    to="/patients/$id"
-                    params={{ id: a.patient_id }}
-                    className={`block shrink-0 truncate font-serif text-foreground hover:text-accent-ink ${
-                      isReception ? "text-lg" : "text-sm"
-                    }`}
+              <PhaseIcon className="h-3 w-3" />
+              {meta.label}
+              <span className="tabular-nums opacity-80">· {statusDetail}</span>
+            </span>
+            <div className="ml-auto flex shrink-0 items-center gap-0.5">
+              {visible.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Previous arrival"
+                    disabled={index === 0}
+                    onClick={() => setCursor(index - 1)}
+                    className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground disabled:opacity-30"
                   >
-                    {name}
-                  </Link>
-                  {a.patients?.phone && (
-                    <>
-                      <span className="shrink-0">·</span>
-                      <a
-                        href={`tel:${a.patients.phone}`}
-                        className="shrink-0 truncate font-sans text-xs hover:text-foreground hover:underline"
-                      >
-                        {a.patients.phone}
-                      </a>
-                    </>
-                  )}
-                </div>
-                <p className="truncate text-xs text-muted-foreground">
-                  {a.treatment_name}
-                  {a.profiles?.full_name ? ` · ${a.profiles.full_name}` : ""}
-                </p>
-              </div>
-
-              {(isReception || phase === "overdue" || phase === "late") && (
-                <p className={`mt-3 text-xs leading-relaxed ${meta.badgeText}/80`}>
-                  {phase === "due"
-                    ? `Due at ${time}. Confirm arrival when the patient checks in.`
-                    : phase === "arrival"
-                      ? "Reception to confirm check-in now."
-                      : phase === "late"
-                        ? `Not marked as arrived. ${minutes(start + OVERDUE_MS - now)} min before rescheduling is needed.`
-                        : "Over 15 minutes late — contact the patient to reschedule."}
-                </p>
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="min-w-[2rem] text-center text-2xs tabular-nums text-muted-foreground">
+                    {index + 1}/{visible.length}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Next arrival"
+                    disabled={index >= visible.length - 1}
+                    onClick={() => setCursor(index + 1)}
+                    className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground disabled:opacity-30"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </>
               )}
-
-              <div className={`flex gap-2 ${isReception ? "mt-4" : "mt-3"}`}>
-                <Button
-                  size={isReception ? "default" : "sm"}
-                  variant="default"
-                  className={`flex-1 text-xs transition-colors hover:bg-success-bg hover:bg-none hover:text-success-ink ${isReception ? "" : "h-8 px-3"}`}
-                  disabled={setState.isPending}
-                  onClick={() => {
-                    setState.mutate({ data: { id: a.id, stage: "arrived" } });
-                    setCursor(0);
-                  }}
-                >
-                  <UserCheck className="mr-1.5 h-3.5 w-3.5" /> Arrived
-                </Button>
-                <Button
-                  size={isReception ? "default" : "sm"}
-                  variant="outline"
-                  className={`flex-1 text-xs transition-colors hover:border-destructive hover:bg-destructive hover:text-destructive-foreground ${isReception ? "" : "h-8 px-3 text-muted-foreground"}`}
-                  onClick={() => {
-                    setNoShowAppt(a);
-                    setCursor(0);
-                  }}
-                >
-                  <UserX className="mr-1.5 h-3.5 w-3.5" /> No show
-                </Button>
-              </div>
+              <button
+                type="button"
+                aria-label="Dismiss this alert"
+                onClick={() => {
+                  setDismissed((d) => ({ ...d, [a.id]: phase }));
+                  setCursor(0);
+                }}
+                className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"
+              >
+                <Clock className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label="Collapse arrivals"
+                onClick={() => setCollapsed(true)}
+                className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
             </div>
-          );
-        })}
-        {next && (
-          <button
-            type="button"
-            onClick={() => setCursor(index + 1)}
-            className="flex w-full items-center justify-between rounded-2xl bg-glass px-4 py-2 text-2xs text-muted-foreground shadow-md ring-1 ring-border backdrop-blur transition-colors hover:bg-card hover:text-foreground"
-          >
-            <span className="inline-flex items-center gap-1.5 truncate">
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-glass-2">
-                <ChevronRight className="h-2.5 w-2.5" />
-              </span>
-              {`${next.appt.patients?.first_name ?? ""} ${next.appt.patients?.last_name ?? ""}`.trim() || "Patient"} ·{" "}
-              {new Date(next.appt.starts_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-            </span>
-            <span className="ml-2 shrink-0 tabular-nums">
-              {visible.length - index - 1} in queue
-            </span>
-          </button>
-        )}
+          </div>
+
+          <div className="relative mt-2.5 min-w-0">
+            <p className="text-xs font-semibold text-foreground">Has {firstName} arrived?</p>
+            <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5 truncate">
+              <Link
+                to="/patients/$id"
+                params={{ id: a.patient_id }}
+                className="truncate text-sm font-semibold text-foreground hover:text-accent-ink"
+              >
+                {name}
+              </Link>
+              {a.patients?.phone ? (
+                <>
+                  <span className="shrink-0 text-muted-foreground">·</span>
+                  <a
+                    href={`tel:${a.patients.phone}`}
+                    className="shrink-0 truncate text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    {a.patients.phone}
+                  </a>
+                </>
+              ) : null}
+            </div>
+            <p className="mt-0.5 truncate text-2xs text-muted-foreground">
+              {a.treatment_name}
+              {a.profiles?.full_name ? ` · ${a.profiles.full_name}` : ""}
+            </p>
+            <p className="mt-1.5 text-2xs text-muted-foreground">
+              {phase === "due"
+                ? `Due at ${time}. Confirm arrival when the patient checks in.`
+                : phase === "late"
+                  ? `Not marked as arrived. ${minutes(start + OVERDUE_MS - now)} min before rescheduling is needed.`
+                  : meta.hint}
+            </p>
+          </div>
+
+          <div className="relative mt-3 flex gap-1.5">
+            <Button
+              size="sm"
+              className="h-8 flex-1 text-xs"
+              disabled={setState.isPending}
+              onClick={() => {
+                setState.mutate({ data: { id: a.id, stage: "arrived" } });
+                setCursor(0);
+              }}
+            >
+              <UserCheck className="mr-1 h-3.5 w-3.5" /> Arrived
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 flex-1 text-xs"
+              onClick={() => {
+                setNoShowAppt(a);
+                setCursor(0);
+              }}
+            >
+              <UserX className="mr-1 h-3.5 w-3.5" /> No show
+            </Button>
+          </div>
+        </div>
       </div>
-    </div>
-    {noShowDialog}
+      {noShowDialog}
     </>
   );
 }

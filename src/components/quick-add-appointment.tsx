@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Calendar, Check, ChevronsUpDown, Clock, GripVertical, Plus, Search, UserPlus } from "lucide-react";
 import { saveAppointment, savePatient } from "@/lib/clinic.functions";
+import { bookingNotifyDescription } from "@/lib/payment-link";
 import { durationForCatalogueItem } from "@/lib/treatment-duration";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -230,9 +231,9 @@ export function QuickAddAppointment({
   });
   const book = useMutation({
     mutationFn: useServerFn(saveAppointment),
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success("Appointment booked", {
-        description: "Confirmation sent to the patient and the practitioner has been notified.",
+        description: bookingNotifyDescription(res?.email, res?.phone),
       });
       setOpen(false);
       setNewPatient(false);
@@ -246,6 +247,7 @@ export function QuickAddAppointment({
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-week"] });
       queryClient.invalidateQueries({ queryKey: ["sidebar-diary-count"] });
+      queryClient.invalidateQueries({ queryKey: ["messages"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -301,6 +303,8 @@ export function QuickAddAppointment({
         duration_minutes: Number(duration) || 30,
         price: Number(item?.price ?? 0),
         payment_status: "unpaid",
+        app_origin: typeof window !== "undefined" ? window.location.origin : "",
+        pay_kind: "full",
       },
     });
   };

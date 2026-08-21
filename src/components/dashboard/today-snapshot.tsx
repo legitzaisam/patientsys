@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
   DoorOpen,
   FileSignature,
   Heart,
@@ -18,8 +19,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { clinicDayKey } from "@/lib/clinic-time";
+import { seedAppointmentNoteQueries } from "@/lib/appointment-note-cache";
 import { updateAppointmentState, sendMessage } from "@/lib/clinic.functions";
+import { formatMoney, patientPaymentUrl, paymentRequestMessage } from "@/lib/payment-link";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Carousel,
   CarouselContent,
@@ -29,6 +34,15 @@ import {
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { AppointmentTimeEditor } from "@/components/appointment-time-editor";
 import { NoShowFollowUpDialog } from "@/components/no-show-followup-dialog";
+import { VisitNoteChip, VisitNoteEditor } from "@/components/visit-note-chip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Stage = "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
 
@@ -77,9 +91,17 @@ export function TodaySnapshot({
   isManager: boolean;
   span?: "day" | "week";
 }) {
-  const ordered = useMemo(() => sortByStart(appointments), [appointments]);
+  const queryClient = useQueryClient();
+  const ordered = useMemo(
+    () => sortByStart(appointments.filter((a) => a.status !== "cancelled")),
+    [appointments],
+  );
 
-  if (appointments.length === 0) {
+  useEffect(() => {
+    seedAppointmentNoteQueries(queryClient, ordered);
+  }, [ordered, queryClient]);
+
+  if (ordered.length === 0) {
     return (
       <Link
         to="/schedule"
@@ -165,7 +187,7 @@ function AppointmentCarousel({
           }}
           className="min-w-0 flex-1"
         >
-          <CarouselContent className="-ml-4" viewportClassName="px-3 pt-2 pb-4">
+          <CarouselContent className="-ml-4" viewportClassName="px-3 pt-2 pb-2">
             {appointments.map((a) => (
               <CarouselItem
                 key={a.id}
@@ -219,6 +241,7 @@ function TodayCard({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-week"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -228,9 +251,13 @@ function TodayCard({
   const StageIcon = stage === "no_show" ? UserX : stageMeta!.icon;
   const consentSigned = a.documents?.status === "signed";
   const paymentStatus = a.payment_status as "unpaid" | "deposit_paid" | "paid" | "refunded";
+  const isCancelled = a.status === "cancelled";
 
   const setStage = (s: Stage) => setState.mutate({ data: { id: a.id, stage: s } });
   const [noShowOpen, setNoShowOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [cancelStep, setCancelStep] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   const handleStage = (s: Stage) => {
     if (s === "no_show") {
       setNoShowOpen(true);
@@ -239,50 +266,244 @@ function TodayCard({
     setStage(s);
   };
 
+  const openDetail = () => {
+    setCancelStep(false);
+    setCancelReason("");
+    setDetailOpen(true);
+  };
+
+  const confirmCancel = () => {
+    const reason = cancelReason.trim();
+    if (!reason) {
+      toast.error("Please enter a reason for cancelling");
+      return;
+    }
+    setState.mutate(
+      { data: { id: a.id, status: "cancelled", cancel_reason: reason } },
+      {
+        onSuccess: () => {
+          toast.success("Appointment cancelled");
+          setDetailOpen(false);
+          setCancelStep(false);
+          setCancelReason("");
+        },
+      },
+    );
+  };
+
+  const patientName =
+    `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
+  const timeRange = `${new Date(a.starts_at).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })} – ${new Date(a.ends_at).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+  const stopCardOpen = (e: React.SyntheticEvent) => e.stopPropagation();
+
   return (
-    <div className="rounded-[22px] shadow-[var(--shadow-glass)] transition-[box-shadow] hover:shadow-[var(--shadow-lift)]">
-      <div className="glass-card flex h-full flex-col gap-3 p-4 !shadow-none">
-      {showDay && (
-        <p className="text-[11px] font-semibold tracking-[0.02em] text-ink-3">
-          {formatDayHeading(clinicDayKey(new Date(a.starts_at)))}
-        </p>
-      )}
-      <div className="space-y-1">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 space-y-1">
-            <AppointmentTimeEditor appointment={a}>
-              <button
-                type="button"
-                className="text-left text-xs font-medium tabular-nums text-accent-ink underline-offset-4 hover:underline"
-              >
-                {new Date(a.starts_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                {" – "}
-                {new Date(a.ends_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-              </button>
-            </AppointmentTimeEditor>
-            <Link
-              to="/patients/$id"
-              params={{ id: a.patient_id }}
-              className="block text-[15px] font-semibold leading-snug tracking-[-0.012em] text-foreground text-balance hover:text-accent-ink"
-            >
-              {a.patients?.first_name} {a.patients?.last_name}
-            </Link>
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`View appointment for ${patientName}`}
+        onClick={openDetail}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openDetail();
+          }
+        }}
+        className="cursor-pointer rounded-[22px] shadow-[var(--shadow-glass)] transition-[box-shadow] hover:shadow-[var(--shadow-lift)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <div className="glass-card flex h-full flex-col gap-3 p-4 !shadow-none">
+          {showDay && (
+            <p className="text-[11px] font-semibold tracking-[0.02em] text-ink-3">
+              {formatDayHeading(clinicDayKey(new Date(a.starts_at)))}
+            </p>
+          )}
+          <div className="space-y-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div onClick={stopCardOpen} onPointerDown={stopCardOpen}>
+                  <AppointmentTimeEditor appointment={a}>
+                    <button
+                      type="button"
+                      className="text-left text-xs font-medium tabular-nums text-accent-ink underline-offset-4 hover:underline"
+                    >
+                      {timeRange}
+                    </button>
+                  </AppointmentTimeEditor>
+                </div>
+                <Link
+                  to="/patients/$id"
+                  params={{ id: a.patient_id }}
+                  onClick={stopCardOpen}
+                  onPointerDown={stopCardOpen}
+                  className="block text-[15px] font-semibold leading-snug tracking-[-0.012em] text-foreground text-balance hover:text-accent-ink"
+                >
+                  {patientName}
+                </Link>
+              </div>
+              <div className="shrink-0" onClick={stopCardOpen} onPointerDown={stopCardOpen}>
+                <StageBadge stage={stage} StageIcon={StageIcon} onChange={handleStage} />
+              </div>
+            </div>
+            <p className="text-xs leading-snug text-muted-foreground">{a.treatment_name}</p>
+            <p className="text-xs leading-snug text-muted-foreground whitespace-nowrap">
+              #{a.treatment_number}
+              {isManager && a.profiles?.full_name ? ` · ${a.profiles.full_name}` : null}
+            </p>
           </div>
-          <div className="shrink-0">
-            <StageBadge stage={stage} StageIcon={StageIcon} onChange={handleStage} />
+
+          <div
+            className="mt-auto flex flex-wrap items-center gap-2 [&_button]:inline-flex [&_button]:items-center"
+            onClick={stopCardOpen}
+            onPointerDown={stopCardOpen}
+          >
+            <ConsentChip appointment={a} signed={consentSigned} />
+            <PaymentChip appointment={a} status={paymentStatus} />
+            <VisitNoteChip appointmentId={a.id} variant="chip" compact />
           </div>
         </div>
-        <p className="text-xs leading-snug text-muted-foreground">{a.treatment_name}</p>
-        <p className="text-xs leading-snug text-muted-foreground whitespace-nowrap">
-          #{a.treatment_number}
-          {isManager && a.profiles?.full_name ? ` · ${a.profiles.full_name}` : null}
-        </p>
       </div>
 
-      <div className="mt-auto flex flex-wrap items-center gap-2">
-        <ConsentChip appointment={a} signed={consentSigned} />
-        <PaymentChip appointment={a} status={paymentStatus} />
-      </div>
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open);
+          if (!open) {
+            setCancelStep(false);
+            setCancelReason("");
+          }
+        }}
+      >
+        <DialogContent
+          dismissOnOverlayClick
+          hideDismissHint
+          className="max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md gap-0 overflow-y-auto overscroll-contain rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
+        >
+          <DialogHeader className="pr-8 text-left">
+            <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+              {cancelStep ? "Cancel appointment" : patientName}
+            </DialogTitle>
+            <DialogDescription>
+              {cancelStep
+                ? `${patientName} · ${timeRange}`
+                : `${timeRange}${
+                    showDay ? ` · ${formatDayHeading(clinicDayKey(new Date(a.starts_at)))}` : ""
+                  }`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {cancelStep ? (
+            <div className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor={`cancel-reason-${a.id}`}>Reason for cancelling</Label>
+                <Textarea
+                  id={`cancel-reason-${a.id}`}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="e.g. Patient requested to reschedule, practitioner unavailable…"
+                  rows={4}
+                  className="rounded-2xl"
+                />
+                <p className="text-2xs text-muted-foreground">
+                  This is saved on the appointment record for the clinic team.
+                </p>
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={setState.isPending}
+                  onClick={() => {
+                    setCancelStep(false);
+                    setCancelReason("");
+                  }}
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  disabled={setState.isPending || !cancelReason.trim()}
+                  onClick={confirmCancel}
+                >
+                  Confirm cancel
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-4">
+              <div className="space-y-2 rounded-2xl bg-glass-2 p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{a.treatment_name}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Treatment #{a.treatment_number}
+                      {a.profiles?.full_name ? ` · ${a.profiles.full_name}` : null}
+                    </p>
+                  </div>
+                  <StageBadge stage={stage} StageIcon={StageIcon} onChange={handleStage} />
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <ConsentChip appointment={a} signed={consentSigned} />
+                  <PaymentChip appointment={a} status={paymentStatus} />
+                </div>
+                {(a.patients?.phone || a.patients?.email) && (
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-edge pt-2 text-xs text-muted-foreground">
+                    {a.patients?.phone ? (
+                      <a href={`tel:${a.patients.phone}`} className="hover:text-foreground hover:underline">
+                        {a.patients.phone}
+                      </a>
+                    ) : null}
+                    {a.patients?.email ? (
+                      <a
+                        href={`mailto:${a.patients.email}`}
+                        className="truncate hover:text-foreground hover:underline"
+                      >
+                        {a.patients.email}
+                      </a>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <Button asChild variant="outline" className="flex-1 text-xs">
+                  <Link to="/patients/$id" params={{ id: a.patient_id }}>
+                    Patient record
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="flex-1 text-xs">
+                  <Link to="/schedule">Open schedule</Link>
+                </Button>
+              </div>
+
+              <VisitNoteEditor
+                appointmentId={a.id}
+                minHeightClass="min-h-[180px]"
+                footerEnd={
+                  !isCancelled ? (
+                    <Button type="button" onClick={() => setCancelStep(true)}>
+                      Cancel appointment
+                    </Button>
+                  ) : undefined
+                }
+              />
+
+              {isCancelled ? (
+                <p className="rounded-xl bg-destructive-bg px-3 py-2 text-xs font-medium text-destructive-ink">
+                  This appointment is cancelled
+                  {a.notes ? `. ${String(a.notes).split("\n")[0]}` : "."}
+                </p>
+              ) : null}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <NoShowFollowUpDialog
         appointment={a}
         open={noShowOpen}
@@ -291,8 +512,7 @@ function TodayCard({
           await setState.mutateAsync({ data: { id: a.id, stage: "no_show" } });
         }}
       />
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -395,11 +615,11 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
 
   const chip = (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold shadow-inset-hi transition-[filter,box-shadow] ${
+      className={`inline-flex h-5 items-center gap-1 rounded-full px-2 text-2xs font-semibold leading-none shadow-inset-hi transition-[filter,box-shadow] ${
         signed ? "bg-success-bg text-success-ink" : "bg-warning-bg text-consent-ink"
       }`}
     >
-      <FileSignature className="h-3 w-3" />
+      <FileSignature className="h-3 w-3 shrink-0" />
       {signed ? "Consent ✓" : "Consent due"}
     </span>
   );
@@ -411,7 +631,7 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
       <HoverCardTrigger asChild>
         <button
           type="button"
-          className="cursor-pointer rounded-full transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9]"
+          className="inline-flex cursor-pointer items-center rounded-full transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9]"
         >
           {chip}
         </button>
@@ -447,13 +667,13 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
     mutationFn: useServerFn(sendMessage),
     onError: (e: Error) => toast.error(e.message),
   });
+  const [amountKind, setAmountKind] = useState<"deposit" | "full">("deposit");
   const name = `${a.patients?.first_name ?? ""}`.trim() || "there";
   const email = a.patients?.email as string | undefined;
   const phone = a.patients?.phone as string | undefined;
   const total = Number(a.price ?? 0);
   const depositAmount = Math.round(total * 0.3 * 100) / 100;
   const balance = Math.round((total - depositAmount) * 100) / 100;
-  const money = (n: number) => `£${n.toFixed(2)}`;
   const when = new Date(a.starts_at).toLocaleDateString("en-GB");
 
   const dispatch = (channel: "email" | "sms", body: string, label: string) => {
@@ -468,21 +688,33 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
     );
   };
 
-  const paymentLink = (amount: number, kind: string) =>
-    `Hi ${name}, here is your secure ${kind} payment link for ${a.treatment_name} on ${when}: ${money(
-      amount,
-    )}. You can pay from your patient portal. Thank you.`;
+  const sendPayment = (channel: "email" | "sms", kind: "deposit" | "full" | "balance", amount: number) => {
+    dispatch(
+      channel,
+      paymentRequestMessage({
+        name,
+        treatment: a.treatment_name,
+        treatmentNumber: a.treatment_number,
+        when,
+        amount,
+        kind,
+        appointmentId: a.id,
+      }),
+      kind === "deposit" ? "Deposit link" : "Payment link",
+    );
+  };
 
-  const receiptBody = `Hi ${name}, here is your receipt for ${a.treatment_name} on ${when}. Amount paid: ${money(
+  const receiptBody = `Hi ${name}, here is your receipt for ${a.treatment_name} on ${when}. Amount paid: ${formatMoney(
     total,
-  )}. A copy is also available in your patient portal.`;
+  )}. A copy is also available in your patient portal: ${patientPaymentUrl(a.id, "full")}`;
 
   const paid = status === "paid";
   const deposit = status === "deposit_paid";
+  const selectedAmount = amountKind === "deposit" ? depositAmount : total;
 
   const chip = (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold capitalize shadow-inset-hi ${
+      className={`inline-flex h-5 items-center gap-1 rounded-full px-2 text-2xs font-semibold capitalize leading-none shadow-inset-hi ${
         paid
           ? "bg-success-bg text-success-ink"
           : deposit
@@ -490,6 +722,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
             : "bg-destructive-bg text-destructive-ink"
       }`}
     >
+      <CreditCard className="h-3 w-3 shrink-0" />
       {status.replace("_", " ")}
     </span>
   );
@@ -501,7 +734,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
       <HoverCardTrigger asChild>
         <button
           type="button"
-          className="cursor-pointer rounded-full transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9]"
+          className="inline-flex cursor-pointer items-center rounded-full transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9]"
         >
           {chip}
         </button>
@@ -514,7 +747,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
               <div className="glass-item p-2.5 text-muted-foreground">
                 <p className="text-foreground">{a.treatment_name}</p>
                 <p>{when}</p>
-                <p className="mt-1 font-semibold text-foreground">Paid in full {money(total)}</p>
+                <p className="mt-1 font-semibold text-foreground">Paid in full {formatMoney(total)}</p>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -539,15 +772,18 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
             <>
               <p className="text-sm font-semibold text-foreground">Balance outstanding</p>
               <p className="text-muted-foreground">
-                Deposit {money(depositAmount)} received. Send a link for the remaining{" "}
-                <span className="font-semibold text-foreground">{money(balance)}</span>.
+                Deposit {formatMoney(depositAmount)} received. Send a link for the remaining{" "}
+                <span className="font-semibold text-foreground">{formatMoney(balance)}</span>.
+              </p>
+              <p className="text-2xs text-muted-foreground">
+                Texts and emails include a link to their patient account to pay.
               </p>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   className="flex-1 text-xs"
                   disabled={send.isPending}
-                  onClick={() => dispatch("email", paymentLink(balance, "balance"), "Payment link")}
+                  onClick={() => sendPayment("email", "balance", balance)}
                 >
                   <Mail className="mr-1 h-3 w-3" /> Email
                 </Button>
@@ -555,7 +791,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
                   variant="outline"
                   className="flex-1 text-xs"
                   disabled={send.isPending}
-                  onClick={() => dispatch("sms", paymentLink(balance, "balance"), "Payment link")}
+                  onClick={() => sendPayment("sms", "balance", balance)}
                 >
                   <Phone className="mr-1 h-3 w-3" /> Text
                 </Button>
@@ -564,48 +800,55 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
           ) : (
             <>
               <p className="text-sm font-semibold text-foreground">Payment outstanding</p>
-              <p className="text-muted-foreground">
-                Send a payment link for {money(total)} or a {money(depositAmount)} deposit.
+              <p className="text-muted-foreground">Choose deposit or full amount, then send by email or text.</p>
+              <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-glass-2 p-1">
+                <button
+                  type="button"
+                  onClick={() => setAmountKind("deposit")}
+                  className={`rounded-lg px-2 py-2 text-left transition-colors ${
+                    amountKind === "deposit"
+                      ? "bg-card text-foreground shadow-inset-hi"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <p className="text-2xs font-semibold tracking-[0.02em]">Deposit</p>
+                  <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatMoney(depositAmount)}</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmountKind("full")}
+                  className={`rounded-lg px-2 py-2 text-left transition-colors ${
+                    amountKind === "full"
+                      ? "bg-card text-foreground shadow-inset-hi"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <p className="text-2xs font-semibold tracking-[0.02em]">Full amount</p>
+                  <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatMoney(total)}</p>
+                </button>
+              </div>
+              <p className="text-2xs text-muted-foreground">
+                Sending a {amountKind === "deposit" ? "deposit" : "full payment"} request for{" "}
+                <span className="font-semibold text-foreground">{formatMoney(selectedAmount)}</span>
+                . The message includes a link to pay in their account.
               </p>
-              <div className="space-y-2">
-                <p className="text-2xs tracking-[0.02em] text-muted-foreground">Full {money(total)}</p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1 text-xs"
-                    disabled={send.isPending}
-                    onClick={() => dispatch("email", paymentLink(total, "full"), "Payment link")}
-                  >
-                    <Mail className="mr-1 h-3 w-3" /> Email
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 text-xs"
-                    disabled={send.isPending}
-                    onClick={() => dispatch("sms", paymentLink(total, "full"), "Payment link")}
-                  >
-                    <Phone className="mr-1 h-3 w-3" /> Text
-                  </Button>
-                </div>
-                <p className="text-2xs tracking-[0.02em] text-muted-foreground">Deposit {money(depositAmount)}</p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1 text-xs"
-                    disabled={send.isPending}
-                    onClick={() => dispatch("email", paymentLink(depositAmount, "deposit"), "Deposit link")}
-                  >
-                    <Mail className="mr-1 h-3 w-3" /> Email
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 text-xs"
-                    disabled={send.isPending}
-                    onClick={() => dispatch("sms", paymentLink(depositAmount, "deposit"), "Deposit link")}
-                  >
-                    <Phone className="mr-1 h-3 w-3" /> Text
-                  </Button>
-                </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 text-xs"
+                  disabled={send.isPending}
+                  onClick={() => sendPayment("email", amountKind, selectedAmount)}
+                >
+                  <Mail className="mr-1 h-3 w-3" /> Email
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 text-xs"
+                  disabled={send.isPending}
+                  onClick={() => sendPayment("sms", amountKind, selectedAmount)}
+                >
+                  <Phone className="mr-1 h-3 w-3" /> Text
+                </Button>
               </div>
             </>
           )}

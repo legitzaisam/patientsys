@@ -23,6 +23,14 @@ export function NotesPanel() {
   const prefs = useNotesPrefs("notes-prefs:my-notes");
   const [width, setWidth] = usePanelWidth("dashboard-notes-w", DEFAULT_W);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const valueRef = useRef(value);
+  const dirtyRef = useRef(dirty);
+  const saveFn = useServerFn(saveMyNote);
+
+  useEffect(() => {
+    valueRef.current = value;
+    dirtyRef.current = dirty;
+  }, [value, dirty]);
 
   useEffect(() => {
     if (data && value === null) {
@@ -31,7 +39,7 @@ export function NotesPanel() {
   }, [data, value]);
 
   const save = useMutation({
-    mutationFn: useServerFn(saveMyNote),
+    mutationFn: saveFn,
     onSuccess: (res) => {
       setDirty(false);
       queryClient.setQueryData(["my-note"], res);
@@ -44,6 +52,25 @@ export function NotesPanel() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, dirty]);
+
+  // Flush pending edits when leaving the page / unmounting.
+  useEffect(() => {
+    const flush = () => {
+      if (!dirtyRef.current || valueRef.current === null) return;
+      void saveFn({ data: { body: valueRef.current } });
+      dirtyRef.current = false;
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onHide);
+      flush();
+    };
+  }, [saveFn]);
 
   const update = (v: string) => {
     setValue(v);
@@ -77,12 +104,9 @@ export function NotesPanel() {
       className="flex w-full shrink-0 flex-col lg:sticky lg:top-14 lg:w-[var(--notes-w)] lg:self-start"
       style={{ ["--notes-w" as string]: `${clampWidth(width)}px` }}
     >
-      <div className="mb-4 flex shrink-0 items-start justify-between gap-2">
-        <div>
-          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My notes</h2>
-          <p className="text-xs text-muted-foreground">Private to you · saves automatically.</p>
-        </div>
-        <SaveState saving={save.isPending} dirty={dirty} />
+      <div className="mb-4 shrink-0">
+        <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My notes</h2>
+        <p className="text-xs text-muted-foreground">Private to you · saves automatically.</p>
       </div>
       <div className="glass-card relative flex min-h-[180px] flex-col p-4">
         {value !== null ? (
@@ -90,6 +114,9 @@ export function NotesPanel() {
         ) : (
           <div className="min-h-[140px] rounded-2xl bg-glass-2 p-3.5 text-sm text-muted-foreground">Loading…</div>
         )}
+        <div className="mt-2 flex justify-start pl-1.5">
+          <SaveState saving={save.isPending} dirty={dirty} />
+        </div>
 
         <div
           role="separator"

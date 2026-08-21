@@ -154,7 +154,7 @@ function DashboardPage() {
             />
       </section>
 
-      <section className="mb-8">
+      <section className="mb-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">{diaryHeading}</h2>
           <div className="flex flex-wrap items-center gap-2">

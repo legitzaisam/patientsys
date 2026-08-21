@@ -6,6 +6,7 @@ import { clampDurationMinutes } from "@/lib/treatment-duration";
 import {
   PRACTITIONER_OVERLAP_MESSAGE,
 } from "@/lib/appointment-overlap";
+import { bookingDetailsMessage, type PaymentLinkKind } from "@/lib/payment-link";
 
 const CLINIC_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -227,7 +228,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       supabase
         .from("appointments")
         .select(
-          "*, patients(first_name, last_name, reference, email, phone), profiles(full_name), documents(status, title)",
+          "*, patients(first_name, last_name, reference, email, phone), profiles(full_name), documents(status, title), appointment_notes(body, updated_at, updated_by_label)",
         )
         .gte("starts_at", todayStart)
         .lt("starts_at", tomorrowStart)
@@ -551,7 +552,7 @@ export const listAppointments = createServerFn({ method: "GET" })
     const { data: rows, error } = await (context as Ctx).supabase
       .from("appointments")
       .select(
-        "*, patients(first_name, last_name, reference, email, phone), profiles(full_name), documents(status, title)",
+        "*, patients(first_name, last_name, reference, email, phone), profiles(full_name), documents(status, title), appointment_notes(body, updated_at, updated_by_label)",
       )
       .gte("starts_at", data.from)
       .lt("starts_at", data.to)
@@ -575,6 +576,10 @@ export const saveAppointment = createServerFn({ method: "POST" })
       payment_status?: string;
       consent_document_id?: string;
       notes?: string;
+      /** Browser origin so payment links in email/SMS are absolute. */
+      app_origin?: string;
+      /** Pay-link amount when status is unpaid (defaults to full). */
+      pay_kind?: PaymentLinkKind;
     }) => data,
   )
   .middleware([requireSupabaseAuth])
@@ -607,6 +612,22 @@ export const saveAppointment = createServerFn({ method: "POST" })
       const { error } = await supabase.from("appointments").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
       await audit(context as Ctx, "update", "appointment", data.id, data.patient_id);
+      const noteBody = String(data.notes ?? "");
+      if (noteBody.trim()) {
+        const { data: me } = await supabase.from("profiles").select("full_name").eq("id", context.userId).maybeSingle();
+        await supabase.from("appointment_notes").upsert(
+          {
+            appointment_id: data.id,
+            clinic_id: CLINIC_ID,
+            patient_id: data.patient_id,
+            body: noteBody,
+            updated_by: context.userId,
+            updated_by_label: (me?.full_name as string) ?? null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "appointment_id" },
+        );
+      }
       return { id: data.id };
     }
     const { data: created, error } = await supabase
@@ -617,7 +638,24 @@ export const saveAppointment = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     await audit(context as Ctx, "create", "appointment", created.id, data.patient_id);
 
-    // Confirmation + notifications for a newly created booking.
+    const noteBody = String(data.notes ?? "");
+    if (noteBody.trim()) {
+      const { data: me } = await supabase.from("profiles").select("full_name").eq("id", context.userId).maybeSingle();
+      await supabase.from("appointment_notes").upsert(
+        {
+          appointment_id: created.id,
+          clinic_id: CLINIC_ID,
+          patient_id: data.patient_id,
+          body: noteBody,
+          updated_by: context.userId,
+          updated_by_label: (me?.full_name as string) ?? null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "appointment_id" },
+      );
+    }
+
+    // Confirmation + payment link for email/text (and portal thread).
     const [{ data: patient }, { data: practitioner }] = await Promise.all([
       supabase.from("patients").select("first_name, last_name, email, phone").eq("id", data.patient_id).maybeSingle(),
       supabase.from("profiles").select("full_name").eq("id", payload.practitioner_id).maybeSingle(),
@@ -631,12 +669,26 @@ export const saveAppointment = createServerFn({ method: "POST" })
       timeZone: "Europe/London",
     });
     const patientName = `${patient?.first_name ?? ""}`.trim() || "there";
-    const confirmation =
-      `Hi ${patientName}, your ${data.treatment_name} appointment is confirmed for ${when}` +
-      `${practitioner?.full_name ? ` with ${practitioner.full_name}` : ""}. ` +
-      `Please arrive 5 minutes early and let us know if you need to reschedule.`;
+    const payKind: PaymentLinkKind =
+      payload.payment_status === "deposit_paid"
+        ? "balance"
+        : data.pay_kind === "deposit"
+          ? "deposit"
+          : "full";
+    const confirmation = bookingDetailsMessage({
+      name: patientName,
+      treatment: data.treatment_name,
+      treatmentNumber: data.treatment_number,
+      when,
+      practitioner: (practitioner?.full_name as string) ?? null,
+      appointmentId: created.id,
+      price: Number(data.price ?? 0),
+      paymentStatus: payload.payment_status,
+      payKind,
+      origin: data.app_origin,
+    });
 
-    // Patient-facing confirmation in their portal thread.
+    // Patient-facing confirmation in their portal thread (email + text release).
     await supabase.from("messages").insert({
       clinic_id: CLINIC_ID,
       patient_id: data.patient_id,
@@ -660,9 +712,15 @@ export const saveAppointment = createServerFn({ method: "POST" })
 
     await audit(context as Ctx, "notify", "appointment", created.id, data.patient_id, {
       channels: { portal: true, email: patient?.email ?? null, sms: patient?.phone ?? null },
+      payment_link: payload.payment_status !== "paid",
     });
 
-    return { id: created.id as string, confirmation, email: patient?.email ?? null, phone: patient?.phone ?? null };
+    return {
+      id: created.id as string,
+      confirmation,
+      email: (patient?.email as string) ?? null,
+      phone: (patient?.phone as string) ?? null,
+    };
   });
 
 export const updateAppointmentState = createServerFn({ method: "POST" })
@@ -672,10 +730,12 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       status?: "booked" | "attended" | "cancelled" | "no_show";
       payment_status?: "unpaid" | "deposit_paid" | "paid" | "refunded";
       stage?: "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
+      cancel_reason?: string;
     }) => data,
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    const supabase = (context as Ctx).supabase;
     const patch: Record<string, unknown> = {};
     if (data.status) patch["status"] = data.status;
     if (data.payment_status) patch["payment_status"] = data.payment_status;
@@ -685,12 +745,23 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       else if (data.stage === "booked") patch["status"] = "booked";
       else patch["status"] = "attended";
     }
-    const { error } = await (context as Ctx).supabase
-      .from("appointments")
-      .update(patch)
-      .eq("id", data.id);
+    const reason = String(data.cancel_reason ?? "").trim().slice(0, 2000);
+    if (data.status === "cancelled" && reason) {
+      const { data: existing } = await supabase
+        .from("appointments")
+        .select("notes")
+        .eq("id", data.id)
+        .maybeSingle();
+      const prior = String((existing as { notes?: string | null } | null)?.notes ?? "").trim();
+      const stamp = `Cancelled: ${reason}`;
+      patch["notes"] = prior ? `${stamp}\n\n${prior}` : stamp;
+    }
+    const { error } = await supabase.from("appointments").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
-    await audit(context as Ctx, "update", "appointment", data.id, null, patch);
+    await audit(context as Ctx, "update", "appointment", data.id, null, {
+      ...patch,
+      ...(reason ? { cancel_reason: reason } : {}),
+    });
     return { ok: true };
   });
 
@@ -2706,16 +2777,30 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
   .validator((data: { appointment_id: string }) => ({ appointment_id: String(data.appointment_id) }))
   .handler(async ({ context, data }) => {
     const { supabase } = context as Ctx;
-    const { data: row, error } = await supabase
-      .from("appointment_notes")
-      .select("body, updated_at, updated_by_label")
-      .eq("appointment_id", data.appointment_id)
-      .maybeSingle();
+    const [{ data: row, error }, { data: appt }] = await Promise.all([
+      supabase
+        .from("appointment_notes")
+        .select("body, updated_at, updated_by_label")
+        .eq("appointment_id", data.appointment_id)
+        .maybeSingle(),
+      supabase.from("appointments").select("notes").eq("id", data.appointment_id).maybeSingle(),
+    ]);
     if (error) throw new Error(error.message);
+    const visitBody = ((row?.body as string) ?? "").trim();
+    if (visitBody) {
+      return {
+        body: row!.body as string,
+        updatedAt: (row?.updated_at as string) ?? null,
+        updatedBy: (row?.updated_by_label as string) ?? null,
+      };
+    }
+    // Fall back to booking notes so both surfaces stay in sync.
+    const bookingNotes = String((appt as { notes?: string | null } | null)?.notes ?? "");
+    const withoutCancel = bookingNotes.replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim();
     return {
-      body: (row?.body as string) ?? "",
-      updatedAt: (row?.updated_at as string) ?? null,
-      updatedBy: (row?.updated_by_label as string) ?? null,
+      body: withoutCancel,
+      updatedAt: null,
+      updatedBy: null,
     };
   });
 
@@ -2728,7 +2813,11 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context as Ctx;
     const [{ data: appt }, { data: me }] = await Promise.all([
-      supabase.from("appointments").select("clinic_id, patient_id").eq("id", data.appointment_id).maybeSingle(),
+      supabase
+        .from("appointments")
+        .select("clinic_id, patient_id, notes")
+        .eq("id", data.appointment_id)
+        .maybeSingle(),
       supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle(),
     ]);
     const { data: row, error } = await supabase
@@ -2748,6 +2837,17 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
       .select("body, updated_at, updated_by_label")
       .single();
     if (error) throw new Error(error.message);
+
+    // Keep appointments.notes mirrored (preserve a cancel stamp if present).
+    const prior = String((appt as { notes?: string | null } | null)?.notes ?? "");
+    const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
+    const mirrored = cancelLine
+      ? data.body.trim()
+        ? `${cancelLine}\n\n${data.body}`
+        : cancelLine
+      : data.body || null;
+    await supabase.from("appointments").update({ notes: mirrored }).eq("id", data.appointment_id);
+
     return {
       body: row.body as string,
       updatedAt: row.updated_at as string,

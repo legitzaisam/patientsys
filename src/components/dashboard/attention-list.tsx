@@ -1,16 +1,16 @@
 import { Link } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertCircle,
   Bell,
   CalendarClock,
+  ChevronDown,
   FileSignature,
   MessageCircle,
   PoundSterling,
   UserRoundCog,
   UserX,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 type AttentionRaw = {
   id: string;
@@ -23,19 +23,31 @@ type AttentionRaw = {
   href?: string;
 };
 
-type IssueChip = {
-  kind: string;
-  label: string;
-  className: string;
-};
-
-type PersonGroup = {
+type TaskPerson = {
   key: string;
   name: string;
   href: string;
-  chips: IssueChip[];
-  subtitle: string;
+  subtitle: string | null;
 };
+
+type TaskGroup = {
+  kind: string;
+  label: string;
+  chipClass: string;
+  people: TaskPerson[];
+};
+
+const KIND_ORDER = [
+  "no_show",
+  "consent_due",
+  "payment_due",
+  "balance_due",
+  "treatment_due",
+  "message",
+  "incomplete_profile",
+] as const;
+
+const PREVIEW_LIMIT = 4;
 
 const CHIP_META: Record<string, { label: string; className: string }> = {
   no_show: { label: "No show", className: "bg-destructive-bg text-destructive-ink" },
@@ -54,15 +66,8 @@ function nameFromTitle(title: string) {
 
 function treatmentFromSubtitle(subtitle?: string) {
   if (!subtitle) return null;
-  // Drop trailing " · HH:MM" time fragments from no-show subtitles
   const cleaned = subtitle.replace(/\s·\s\d{1,2}:\d{2}$/, "").trim();
   return cleaned || null;
-}
-
-function groupKey(item: AttentionRaw) {
-  if (item.patientId) return `patient:${item.patientId}`;
-  if (item.href) return `href:${item.href}`;
-  return `id:${item.id}`;
 }
 
 function hrefFor(item: AttentionRaw) {
@@ -72,38 +77,56 @@ function hrefFor(item: AttentionRaw) {
   return "/patients";
 }
 
-function groupPeople(items: AttentionRaw[]): PersonGroup[] {
-  const map = new Map<string, { name: string; href: string; kinds: Set<string>; treatments: string[] }>();
+function personKey(item: AttentionRaw) {
+  if (item.patientId) return `patient:${item.patientId}`;
+  if (item.href) return `href:${item.href}`;
+  return `id:${item.id}`;
+}
+
+function groupByTask(items: AttentionRaw[]): TaskGroup[] {
+  const byKind = new Map<string, Map<string, TaskPerson>>();
 
   for (const item of items) {
-    const key = groupKey(item);
-    let entry = map.get(key);
-    if (!entry) {
-      entry = {
-        name: nameFromTitle(item.title),
-        href: hrefFor(item),
-        kinds: new Set(),
-        treatments: [],
-      };
-      map.set(key, entry);
+    let people = byKind.get(item.kind);
+    if (!people) {
+      people = new Map();
+      byKind.set(item.kind, people);
     }
-    entry.kinds.add(item.kind);
+    const key = personKey(item);
+    const existing = people.get(key);
     const treatment = treatmentFromSubtitle(item.subtitle);
-    if (treatment && !entry.treatments.includes(treatment)) {
-      entry.treatments.push(treatment);
+    if (existing) {
+      if (treatment && !existing.subtitle?.includes(treatment)) {
+        existing.subtitle = existing.subtitle ? `${existing.subtitle} · ${treatment}` : treatment;
+      }
+      continue;
     }
+    people.set(key, {
+      key,
+      name: nameFromTitle(item.title),
+      href: hrefFor(item),
+      subtitle: treatment,
+    });
   }
 
-  return [...map.entries()].map(([key, entry]) => ({
-    key,
-    name: entry.name,
-    href: entry.href,
-    chips: [...entry.kinds].map((kind) => {
-      const meta = CHIP_META[kind] ?? { label: kind.replace(/_/g, " "), className: "bg-glass-2 text-muted-foreground" };
-      return { kind, label: meta.label, className: meta.className };
-    }),
-    subtitle: entry.treatments.join(" · "),
-  }));
+  const kinds = [...byKind.keys()].sort((a, b) => {
+    const ai = KIND_ORDER.indexOf(a as (typeof KIND_ORDER)[number]);
+    const bi = KIND_ORDER.indexOf(b as (typeof KIND_ORDER)[number]);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+  return kinds.map((kind) => {
+    const meta = CHIP_META[kind] ?? {
+      label: kind.replace(/_/g, " "),
+      className: "bg-glass-2 text-muted-foreground",
+    };
+    return {
+      kind,
+      label: meta.label,
+      chipClass: meta.className,
+      people: [...(byKind.get(kind)?.values() ?? [])],
+    };
+  });
 }
 
 export function AttentionList({ items }: { items: any[] }) {
@@ -133,11 +156,22 @@ function AttentionSection({
   items: AttentionRaw[];
   tone: "urgent" | "muted";
 }) {
-  const people = useMemo(() => groupPeople(items), [items]);
+  const tasks = useMemo(() => groupByTask(items), [items]);
+  const taskCount = tasks.reduce((sum, t) => sum + t.people.length, 0);
+  const [openKinds, setOpenKinds] = useState<Set<string>>(() => new Set());
+
+  const toggleKind = (kind: string) => {
+    setOpenKinds((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
+  };
 
   return (
     <div className="glass-card flex max-h-[28rem] flex-col overflow-hidden p-0">
-      <div className="sticky top-0 z-[1] flex shrink-0 items-center gap-2 border-b border-glass-line bg-card/95 px-5 py-3.5 backdrop-blur-sm">
+      <div className="sticky top-0 z-[1] flex shrink-0 items-center gap-2 border-b border-glass-line bg-card/95 px-4 py-3 backdrop-blur-sm">
         {tone === "urgent" ? (
           <AlertCircle className="h-4 w-4 text-destructive" />
         ) : (
@@ -147,53 +181,93 @@ function AttentionSection({
           {title}
         </h3>
         <span className="ml-auto rounded-full border border-edge bg-glass-2 px-2 py-0.5 text-2xs font-semibold text-muted-foreground shadow-inset-hi">
-          {people.length}
+          {taskCount}
         </span>
       </div>
-      <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
-        {people.map((person) => (
-          <AttentionPerson key={person.key} person={person} />
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-4 py-3">
+        {tasks.map((task) => (
+          <TaskCategory
+            key={task.kind}
+            task={task}
+            open={openKinds.has(task.kind)}
+            onToggle={() => toggleKind(task.kind)}
+          />
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
 
-function AttentionPerson({ person }: { person: PersonGroup }) {
-  const primaryKind = person.chips[0]?.kind ?? "default";
-  const icon = iconFor(primaryKind);
+function TaskCategory({
+  task,
+  open,
+  onToggle,
+}: {
+  task: TaskGroup;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const icon = iconFor(task.kind);
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? task.people : task.people.slice(0, PREVIEW_LIMIT);
+  const hiddenCount = task.people.length - PREVIEW_LIMIT;
 
   return (
-    <li>
-      <Link
-        to={person.href as any}
-        className="glass-item flex items-start gap-2.5 p-2.5 transition-colors hover:bg-glass"
+    <section className="rounded-xl">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-[rgba(47,63,102,0.06)] active:bg-[rgba(47,63,102,0.1)]"
       >
-        <i className={`w-[3px] shrink-0 self-stretch rounded-full ${icon.rail}`} aria-hidden />
-        <span className={`mt-0.5 shrink-0 ${icon.tone}`}>
-          <icon.Icon className="h-4 w-4" />
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
+        />
+        <span className={`shrink-0 ${icon.tone}`}>
+          <icon.Icon className="h-3.5 w-3.5" />
         </span>
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <p className="text-sm font-semibold leading-snug text-foreground">{person.name}</p>
-          {person.subtitle ? (
-            <p className="line-clamp-1 text-xs text-muted-foreground">{person.subtitle}</p>
-          ) : null}
-          <div className="flex flex-wrap gap-1.5">
-            {person.chips.map((chip) => (
-              <span
-                key={chip.kind}
-                className={cn(
-                  "inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold shadow-inset-hi",
-                  chip.className,
-                )}
+        <h4 className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.02em] text-foreground">
+          {task.label}
+        </h4>
+        <span
+          className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-semibold shadow-inset-hi ${task.chipClass}`}
+        >
+          {task.people.length}
+        </span>
+      </button>
+
+      {open && (
+        <ul className="mb-1 ml-1 space-y-0.5 border-l border-glass-line pl-3">
+          {visible.map((person) => (
+            <li key={person.key}>
+              <Link
+                to={person.href as any}
+                className="flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.06)] active:bg-[rgba(47,63,102,0.1)]"
               >
-                {chip.label}
-              </span>
-            ))}
-          </div>
-        </div>
-      </Link>
-    </li>
+                <i className={`h-3.5 w-[3px] shrink-0 rounded-full ${icon.rail}`} aria-hidden />
+                <p className="min-w-0 flex-1 truncate text-[13px] leading-snug text-foreground">
+                  <span className="font-semibold">{person.name}</span>
+                  {person.subtitle ? (
+                    <span className="font-normal text-muted-foreground"> · {person.subtitle}</span>
+                  ) : null}
+                </p>
+              </Link>
+            </li>
+          ))}
+          {hiddenCount > 0 && (
+            <li>
+              <button
+                type="button"
+                onClick={() => setShowAll((v) => !v)}
+                className="w-full cursor-pointer rounded-md px-1.5 py-1.5 text-left text-2xs font-semibold text-accent-ink transition-colors hover:bg-[rgba(47,63,102,0.06)] hover:underline"
+              >
+                {showAll ? "Show less" : `Show ${hiddenCount} more`}
+              </button>
+            </li>
+          )}
+        </ul>
+      )}
+    </section>
   );
 }
 

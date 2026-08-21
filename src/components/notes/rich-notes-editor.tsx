@@ -129,8 +129,11 @@ export function RichNotesEditor({
 
   useEffect(() => {
     if (!editor) return;
-    (editor.view.dom as HTMLElement).style.fontSize = `${prefs.size}px`;
-  }, [editor, prefs.size]);
+    const el = editor.view.dom as HTMLElement;
+    el.style.fontSize = `${prefs.size}px`;
+    el.classList.remove(FONTS.sans.cls, FONTS.serif.cls, FONTS.mono.cls);
+    el.classList.add(FONTS[prefs.font].cls);
+  }, [editor, prefs.size, prefs.font]);
 
   if (!editor) return null;
 
@@ -273,46 +276,46 @@ export function RichNotesEditor({
           <Redo2 className="h-3.5 w-3.5" />
         </ToolbarButton>
 
-        <div className="ml-auto flex items-center gap-0.5">
-          <ToolbarButton
-            className={btn}
-            title="Smaller text"
-            onClick={() => prefs.setSize(Math.max(12, prefs.size - 1))}
-          >
-            <span className="text-[10px] font-semibold">A</span>
-          </ToolbarButton>
-          <ToolbarButton
-            className={btn}
-            title="Larger text"
-            onClick={() => prefs.setSize(Math.min(22, prefs.size + 1))}
-          >
-            <Plus className="h-3 w-3" />
-          </ToolbarButton>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={btn} title="Paper & font">
-                <Palette className="h-3.5 w-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuLabel>Paper</DropdownMenuLabel>
-              {(Object.keys(THEMES) as NotesTheme[]).map((key) => (
-                <DropdownMenuItem key={key} onClick={() => prefs.setTheme(key)}>
-                  {THEMES[key].label}
-                  {prefs.theme === key ? " ·" : ""}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>Font</DropdownMenuLabel>
-              {(Object.keys(FONTS) as (keyof typeof FONTS)[]).map((key) => (
-                <DropdownMenuItem key={key} onClick={() => prefs.setFont(key)}>
-                  {FONTS[key].label}
-                  {prefs.font === key ? " ·" : ""}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <Sep />
+
+        <ToolbarButton
+          className={btn}
+          title="Smaller text"
+          onClick={() => prefs.setSize(Math.max(12, prefs.size - 1))}
+        >
+          <Minus className="h-3 w-3" />
+        </ToolbarButton>
+        <ToolbarButton
+          className={btn}
+          title="Larger text"
+          onClick={() => prefs.setSize(Math.min(22, prefs.size + 1))}
+        >
+          <Plus className="h-3 w-3" />
+        </ToolbarButton>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={btn} title="Paper & font">
+              <Palette className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuLabel>Paper</DropdownMenuLabel>
+            {(Object.keys(THEMES) as NotesTheme[]).map((key) => (
+              <DropdownMenuItem key={key} onClick={() => prefs.setTheme(key)}>
+                {THEMES[key].label}
+                {prefs.theme === key ? " ·" : ""}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Font</DropdownMenuLabel>
+            {(Object.keys(FONTS) as (keyof typeof FONTS)[]).map((key) => (
+              <DropdownMenuItem key={key} onClick={() => prefs.setFont(key)}>
+                {FONTS[key].label}
+                {prefs.font === key ? " ·" : ""}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className={cn("rounded-2xl border transition-colors", theme.rule, theme.surface)}>

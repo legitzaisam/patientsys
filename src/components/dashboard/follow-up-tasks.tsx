@@ -110,6 +110,13 @@ export function FollowUpTasks() {
 
   const visible = (tasks ?? []).filter((t: any) => !pending.includes(t.id));
 
+  const contactVia = (taskId: string, channel: Channel, status: string) => {
+    markChannel(taskId, channel);
+    if (status === "sent") {
+      update.mutate({ data: { task_id: taskId, status: "contacted" } });
+    }
+  };
+
   return (
     <section>
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -136,11 +143,11 @@ export function FollowUpTasks() {
           const used = channels[t.id];
           const channelClass = (c: Channel) =>
             cn(
-              "h-8 w-8 rounded-full",
+              "h-7 w-7 rounded-full",
               contacted && used === c && "bg-success-bg text-success hover:brightness-105",
             );
           return (
-            <div key={t.id} className="flex flex-wrap items-center gap-3 p-4">
+            <div key={t.id} className="flex flex-wrap items-center gap-2.5 p-4">
               <div className="min-w-0 flex-1">
                 <Link
                   to="/patients/$id"
@@ -153,18 +160,18 @@ export function FollowUpTasks() {
                   {t.note ?? "Follow-up required"}
                 </p>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-1">
                 {t.patients?.phone && (
                   <Button asChild size="icon" variant="ghost" className={channelClass("phone")} title="Call">
-                    <a href={`tel:${t.patients.phone}`} onClick={() => markChannel(t.id, "phone")}>
-                      <Phone className="h-3.5 w-3.5" />
+                    <a href={`tel:${t.patients.phone}`} onClick={() => contactVia(t.id, "phone", t.status)}>
+                      <Phone className="h-3 w-3" />
                     </a>
                   </Button>
                 )}
                 {t.patients?.email && (
                   <Button asChild size="icon" variant="ghost" className={channelClass("email")} title="Email">
-                    <a href={`mailto:${t.patients.email}`} onClick={() => markChannel(t.id, "email")}>
-                      <Mail className="h-3.5 w-3.5" />
+                    <a href={`mailto:${t.patients.email}`} onClick={() => contactVia(t.id, "email", t.status)}>
+                      <Mail className="h-3 w-3" />
                     </a>
                   </Button>
                 )}
@@ -172,16 +179,16 @@ export function FollowUpTasks() {
                   <Link
                     to="/patients/$id"
                     params={{ id: t.patient_id }}
-                    onClick={() => markChannel(t.id, "message")}
+                    onClick={() => contactVia(t.id, "message", t.status)}
                   >
-                    <MessageSquare className="h-3.5 w-3.5" />
+                    <MessageSquare className="h-3 w-3" />
                   </Link>
                 </Button>
                 {t.status === "sent" ? (
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-8 text-2xs"
+                    className="h-7 px-2 text-2xs"
                     disabled={update.isPending}
                     onClick={() => update.mutate({ data: { task_id: t.id, status: "contacted" } })}
                   >
@@ -191,7 +198,7 @@ export function FollowUpTasks() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="inline-flex h-8 items-center gap-1 bg-success-bg px-3 text-2xs font-semibold text-success hover:brightness-105 hover:text-success"
+                    className="inline-flex h-7 items-center gap-1 bg-success-bg px-2 text-2xs font-semibold text-success hover:brightness-105 hover:text-success"
                     disabled={update.isPending}
                     onClick={() => {
                       clearChannel(t.id);
@@ -201,13 +208,13 @@ export function FollowUpTasks() {
                     <Check className="h-3 w-3" /> Contacted
                   </Button>
                 ) : (
-                  <span className="inline-flex h-8 items-center gap-1 rounded-full bg-success-bg px-3 text-2xs font-semibold text-success shadow-inset-hi">
+                  <span className="inline-flex h-7 items-center gap-1 rounded-full bg-success-bg px-2 text-2xs font-semibold text-success shadow-inset-hi">
                     <Check className="h-3 w-3" /> Contacted
                   </span>
                 )}
                 <Button
                   size="sm"
-                  className="h-8 text-2xs"
+                  className="h-7 px-2 text-2xs"
                   disabled={update.isPending}
                   onClick={() => update.mutate({ data: { task_id: t.id, status: "completed" } })}
                 >
@@ -219,10 +226,10 @@ export function FollowUpTasks() {
                     variant="ghost"
                     title="Delete task"
                     aria-label="Delete task"
-                    className="h-8 w-8 text-muted-foreground hover:bg-destructive-bg hover:text-destructive"
+                    className="h-7 w-7 text-muted-foreground hover:bg-destructive-bg hover:text-destructive"
                     onClick={() => requestDelete(t.id, name)}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <X className="h-3 w-3" />
                   </Button>
                 )}
               </div>
