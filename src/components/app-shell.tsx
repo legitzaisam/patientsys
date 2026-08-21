@@ -570,7 +570,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
           className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-5 sm:px-[26px]"
           onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 8)}
         >
-          <div className="pointer-events-none sticky top-0 z-20 -mx-5 flex h-14 shrink-0 items-center gap-3 px-5 sm:-mx-[26px] sm:px-7">
+          <div className="pointer-events-none sticky top-0 z-20 -mx-5 flex h-[3.25rem] shrink-0 items-center gap-3 px-5 pt-1.5 sm:-mx-[26px] sm:px-7">
             {!sidebarOpen && (
               <Button
                 variant="outline"
@@ -594,7 +594,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
               />
             </div>
           </div>
-          <div className="mx-auto flex w-full max-w-[1400px] flex-1 shrink-0 flex-col">
+          <div className="mx-auto -mt-1 flex w-full max-w-[1400px] flex-1 shrink-0 flex-col">
             {children}
           </div>
         </main>

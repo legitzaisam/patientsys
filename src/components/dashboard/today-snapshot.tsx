@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -162,36 +162,30 @@ function AppointmentCarousel({
   }, [api, startAt, appointments.length]);
 
   return (
-    <div>
-      <div className="flex items-center gap-2">
-        {canPrev && (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-10 w-10 shrink-0 rounded-full border-edge-2 bg-card shadow-lift"
-            onClick={() => api?.scrollPrev()}
-            aria-label="Previous appointments"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        )}
-
+    <div className="relative">
+      {/*
+        Pull left by the shadow gutter so the card face still lines up with
+        KPI / Attention, while pl-* keeps the left shadow from clipping.
+      */}
+      <div className="relative -ml-5 min-w-0">
         <Carousel
           setApi={setApi}
           opts={{
             align: "start",
             containScroll: "trimSnaps",
-            slidesToScroll: 2,
+            // One snap per card; buttons advance by two with a soft ease.
+            slidesToScroll: 1,
+            skipSnaps: false,
+            duration: 45,
             startIndex: startAt,
           }}
-          className="min-w-0 flex-1"
+          className="w-full"
         >
-          <CarouselContent className="-ml-4" viewportClassName="px-3 pt-2 pb-2">
+          <CarouselContent className="-ml-4" viewportClassName="pl-5 pr-4 pt-3 pb-8">
             {appointments.map((a) => (
               <CarouselItem
                 key={a.id}
-                className="basis-[min(100%,280px)] pt-1 pb-3 pl-4 sm:basis-[280px] lg:basis-[300px]"
+                className="basis-[min(100%,280px)] pt-1 pb-1 pl-4 sm:basis-[280px] lg:basis-[300px]"
               >
                 <TodayCard appointment={a} isManager={isManager} showDay={showDay} />
               </CarouselItem>
@@ -199,17 +193,53 @@ function AppointmentCarousel({
           </CarouselContent>
         </Carousel>
 
+        {canPrev && (
+          <div className="diary-carousel-fade absolute left-5 z-[2] flex w-[3.25rem] items-center justify-start sm:w-16">
+            <div
+              aria-hidden
+              className="diary-carousel-fade-left pointer-events-none absolute inset-0"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="relative z-[1] ml-0.5 h-10 w-10 shrink-0 rounded-full border-edge-2 bg-card/95 shadow-lift backdrop-blur-sm"
+              onClick={() => {
+                if (!api) return;
+                const prev = Math.max(api.selectedScrollSnap() - 2, startAt);
+                api.scrollTo(prev);
+              }}
+              aria-label="Previous appointments"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
         {canNext && (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-10 w-10 shrink-0 rounded-full border-edge-2 bg-card shadow-lift"
-            onClick={() => api?.scrollNext()}
-            aria-label="Next appointments"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          <div className="diary-carousel-fade absolute right-0 z-[2] flex w-[3.25rem] items-center justify-end sm:w-16">
+            <div
+              aria-hidden
+              className="diary-carousel-fade-right pointer-events-none absolute inset-0"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="relative z-[1] mr-0.5 h-10 w-10 shrink-0 rounded-full border-edge-2 bg-card/95 shadow-lift backdrop-blur-sm"
+              onClick={() => {
+                if (!api) return;
+                const next = Math.min(
+                  api.selectedScrollSnap() + 2,
+                  api.scrollSnapList().length - 1,
+                );
+                api.scrollTo(next);
+              }}
+              aria-label="Next appointments"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         )}
       </div>
     </div>
@@ -347,7 +377,12 @@ function TodayCard({
                 </Link>
               </div>
               <div className="shrink-0" onClick={stopCardOpen} onPointerDown={stopCardOpen}>
-                <StageBadge stage={stage} StageIcon={StageIcon} onChange={handleStage} />
+                <StageBadge
+                  stage={stage}
+                  StageIcon={StageIcon}
+                  onChange={handleStage}
+                  locked={detailOpen}
+                />
               </div>
             </div>
             <p className="text-xs leading-snug text-muted-foreground">{a.treatment_name}</p>
@@ -399,7 +434,7 @@ function TodayCard({
 
           {cancelStep ? (
             <div className="mt-4 space-y-4">
-              <div className="space-y-2">
+              <div className="field-stack">
                 <Label htmlFor={`cancel-reason-${a.id}`}>Reason for cancelling</Label>
                 <Textarea
                   id={`cancel-reason-${a.id}`}
@@ -445,7 +480,12 @@ function TodayCard({
                       {a.profiles?.full_name ? ` · ${a.profiles.full_name}` : null}
                     </p>
                   </div>
-                  <StageBadge stage={stage} StageIcon={StageIcon} onChange={handleStage} />
+                  <StageBadge
+                    stage={stage}
+                    StageIcon={StageIcon}
+                    onChange={handleStage}
+                    reopenGraceMs={450}
+                  />
                 </div>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <ConsentChip appointment={a} signed={consentSigned} />
@@ -520,11 +560,39 @@ function StageBadge({
   stage,
   StageIcon,
   onChange,
+  locked = false,
+  reopenGraceMs = 0,
 }: {
   stage: Stage;
   StageIcon: React.ElementType;
   onChange?: (s: Stage) => void;
+  /** Keep closed (e.g. while the appointment detail dialog is open). */
+  locked?: boolean;
+  /**
+   * Ignore hover-open for this many ms after mount so a dialog that appears
+   * under the cursor does not auto-open the journey menu.
+   */
+  reopenGraceMs?: number;
 }) {
+  const [open, setOpen] = useState(false);
+  const ignoreOpenUntil = useRef(0);
+
+  useEffect(() => {
+    if (reopenGraceMs > 0) {
+      ignoreOpenUntil.current = Date.now() + reopenGraceMs;
+      setOpen(false);
+    }
+  }, [reopenGraceMs]);
+
+  useEffect(() => {
+    if (locked) {
+      setOpen(false);
+      return;
+    }
+    // Dialog just closed; pointer may still sit on the badge without a real hover.
+    ignoreOpenUntil.current = Date.now() + 300;
+  }, [locked]);
+
   const label = stage === "no_show" ? "No show" : STAGES.find((s) => s.key === stage)?.label ?? "Booked";
   const trigger = (
     <button
@@ -539,7 +607,20 @@ function StageBadge({
   if (!onChange) return trigger;
 
   return (
-    <HoverCard openDelay={80} closeDelay={140}>
+    <HoverCard
+      open={locked ? false : open}
+      onOpenChange={(next) => {
+        if (locked) {
+          setOpen(false);
+          return;
+        }
+        // Stationary pointer over a newly mounted trigger is not intentional hover.
+        if (next && Date.now() < ignoreOpenUntil.current) return;
+        setOpen(next);
+      }}
+      openDelay={280}
+      closeDelay={120}
+    >
       <HoverCardTrigger asChild>{trigger}</HoverCardTrigger>
       <HoverCardContent
         side="bottom"
@@ -801,31 +882,25 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
             <>
               <p className="text-sm font-semibold text-foreground">Payment outstanding</p>
               <p className="text-muted-foreground">Choose deposit or full amount, then send by email or text.</p>
-              <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-glass-2 p-1">
-                <button
+              <div className="flex gap-2">
+                <Button
                   type="button"
+                  variant={amountKind === "deposit" ? "selected" : "outline"}
                   onClick={() => setAmountKind("deposit")}
-                  className={`rounded-lg px-2 py-2 text-left transition-colors ${
-                    amountKind === "deposit"
-                      ? "bg-card text-foreground shadow-inset-hi"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
                 >
-                  <p className="text-2xs font-semibold tracking-[0.02em]">Deposit</p>
-                  <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatMoney(depositAmount)}</p>
-                </button>
-                <button
+                  <span className="text-2xs font-semibold tracking-[0.02em]">Deposit</span>
+                  <span className="font-semibold tabular-nums">{formatMoney(depositAmount)}</span>
+                </Button>
+                <Button
                   type="button"
+                  variant={amountKind === "full" ? "selected" : "outline"}
                   onClick={() => setAmountKind("full")}
-                  className={`rounded-lg px-2 py-2 text-left transition-colors ${
-                    amountKind === "full"
-                      ? "bg-card text-foreground shadow-inset-hi"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
                 >
-                  <p className="text-2xs font-semibold tracking-[0.02em]">Full amount</p>
-                  <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatMoney(total)}</p>
-                </button>
+                  <span className="text-2xs font-semibold tracking-[0.02em]">Full amount</span>
+                  <span className="font-semibold tabular-nums">{formatMoney(total)}</span>
+                </Button>
               </div>
               <p className="text-2xs text-muted-foreground">
                 Sending a {amountKind === "deposit" ? "deposit" : "full payment"} request for{" "}

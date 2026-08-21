@@ -1,16 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import {
-  AlertCircle,
-  Bell,
-  CalendarClock,
-  ChevronDown,
-  FileSignature,
-  MessageCircle,
-  PoundSterling,
-  UserRoundCog,
-  UserX,
-} from "lucide-react";
+import { AlertCircle, Bell, ChevronDown } from "lucide-react";
 
 type AttentionRaw = {
   id: string;
@@ -207,7 +197,7 @@ function TaskCategory({
   open: boolean;
   onToggle: () => void;
 }) {
-  const icon = iconFor(task.kind);
+  const rail = railFor(task.kind);
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? task.people : task.people.slice(0, PREVIEW_LIMIT);
   const hiddenCount = task.people.length - PREVIEW_LIMIT;
@@ -223,9 +213,6 @@ function TaskCategory({
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
         />
-        <span className={`shrink-0 ${icon.tone}`}>
-          <icon.Icon className="h-3.5 w-3.5" />
-        </span>
         <h4 className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.02em] text-foreground">
           {task.label}
         </h4>
@@ -244,7 +231,7 @@ function TaskCategory({
                 to={person.href as any}
                 className="flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.06)] active:bg-[rgba(47,63,102,0.1)]"
               >
-                <i className={`h-3.5 w-[3px] shrink-0 rounded-full ${icon.rail}`} aria-hidden />
+                <i className={`h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
                 <p className="min-w-0 flex-1 truncate text-[13px] leading-snug text-foreground">
                   <span className="font-semibold">{person.name}</span>
                   {person.subtitle ? (
@@ -271,22 +258,21 @@ function TaskCategory({
   );
 }
 
-function iconFor(kind: string) {
+function railFor(kind: string) {
   switch (kind) {
     case "no_show":
-      return { Icon: UserX, tone: "text-destructive", rail: "bg-destructive" };
-    case "consent_due":
-      return { Icon: FileSignature, tone: "text-warning-ink", rail: "bg-consent" };
     case "payment_due":
     case "balance_due":
-      return { Icon: PoundSterling, tone: "text-destructive", rail: "bg-destructive" };
+      return "bg-destructive";
+    case "consent_due":
+      return "bg-consent";
     case "treatment_due":
-      return { Icon: CalendarClock, tone: "text-accent-ink", rail: "bg-accent" };
+      return "bg-accent";
     case "message":
-      return { Icon: MessageCircle, tone: "text-sky-ink", rail: "bg-sky" };
+      return "bg-sky";
     case "incomplete_profile":
-      return { Icon: UserRoundCog, tone: "text-warning-ink", rail: "bg-warning" };
+      return "bg-warning";
     default:
-      return { Icon: Bell, tone: "text-muted-foreground", rail: "bg-bar" };
+      return "bg-bar";
   }
 }

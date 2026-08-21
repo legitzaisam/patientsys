@@ -111,7 +111,7 @@ function AuthPage() {
 
           <form onSubmit={submit} className="mt-8 space-y-4">
             {mode === "signup" && (
-              <div className="space-y-2">
+              <div className="field-stack">
                 <Label htmlFor="name">Full name</Label>
                 <Input
                   id="name"
@@ -121,7 +121,7 @@ function AuthPage() {
                 />
               </div>
             )}
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
@@ -132,7 +132,7 @@ function AuthPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"

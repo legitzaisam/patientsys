@@ -194,7 +194,7 @@ function PatientsPage() {
                   });
                 }}
               >
-                <div className="space-y-2">
+                <div className="field-stack">
                   <Label htmlFor="title">Title</Label>
                   <select
                     id="title"
@@ -215,11 +215,11 @@ function PatientsPage() {
                 <Field name="email" label="Email" type="email" />
                 <Field name="phone" label="Phone" />
                 <Field name="date_of_birth" label="Date of birth" type="date" />
-                <div className="sm:col-span-2 space-y-2">
+                <div className="sm:col-span-2 field-stack">
                   <Label htmlFor="allergies">Allergies</Label>
                   <Textarea id="allergies" name="allergies" rows={2} className="rounded-xl" />
                 </div>
-                <div className="sm:col-span-2 space-y-2">
+                <div className="sm:col-span-2 field-stack">
                   <Label htmlFor="medications">Current medication</Label>
                   <Textarea id="medications" name="medications" rows={2} className="rounded-xl" />
                 </div>
@@ -345,7 +345,7 @@ function Field({
   required?: boolean;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="field-stack">
       <Label htmlFor={name}>{label}</Label>
       {type === "date" ? (
         <div className="relative">

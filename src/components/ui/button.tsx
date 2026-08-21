@@ -15,6 +15,9 @@ const buttonVariants = cva(
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/80",
         outline:
           "border border-edge bg-glass-2 font-medium text-foreground shadow-inset-hi hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:shadow-lift active:bg-[rgba(47,63,102,0.14)]",
+        /** Selected choice in dialogs / popovers — navy brand fill. */
+        selected:
+          "border border-foreground bg-foreground font-medium text-white shadow-lift hover:border-foreground hover:bg-foreground/90 hover:text-white active:bg-foreground/80",
         secondary:
           "border border-edge bg-glass-2 font-medium text-secondary-foreground shadow-inset-hi hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:shadow-lift active:bg-[rgba(47,63,102,0.14)]",
         ghost:

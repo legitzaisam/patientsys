@@ -84,17 +84,23 @@ export function StaffAlertDialog({
   return (
     <Dialog open={isOpen} onOpenChange={setOpen}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle>{recipientName ? `Message ${recipientName}` : "Alert the team"}</DialogTitle>
+      <DialogContent
+        dismissOnOverlayClick
+        hideDismissHint
+        className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]"
+      >
+        <DialogHeader className="shrink-0 pr-8 text-left">
+          <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+            {recipientName ? `Message ${recipientName}` : "Alert the team"}
+          </DialogTitle>
           <DialogDescription>
             Delivered instantly to the notification bell of whoever you choose.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="mt-4 space-y-4">
           {!recipientId && (
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label>Send to</Label>
               <div className="flex flex-wrap gap-2">
                 {AUDIENCES.map((a) => (
@@ -102,7 +108,7 @@ export function StaffAlertDialog({
                     key={a.value}
                     type="button"
                     size="sm"
-                    variant={audience === a.value ? "default" : "outline"}
+                    variant={audience === a.value ? "selected" : "outline"}
                     onClick={() => setAudience(a.value)}
                   >
                     {a.label}
@@ -111,7 +117,7 @@ export function StaffAlertDialog({
               </div>
             </div>
           )}
-          <div className="space-y-2">
+          <div className="field-stack">
             <Label htmlFor="alert-title">Subject</Label>
             <Input
               id="alert-title"
@@ -120,7 +126,7 @@ export function StaffAlertDialog({
               placeholder="Running 15 minutes late"
             />
           </div>
-          <div className="space-y-2">
+          <div className="field-stack">
             <Label htmlFor="alert-body">Message</Label>
             <Textarea
               id="alert-body"
@@ -147,11 +153,11 @@ export function StaffAlertDialog({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setOpen(false)}>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" className="text-xs" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={saving}>
+          <Button className="text-xs" onClick={submit} disabled={saving}>
             <Send className="mr-1 h-4 w-4" />
             {saving ? "Sending…" : "Send"}
           </Button>

@@ -288,7 +288,7 @@ export function StaffDocuments({
 
       {!readOnly && (
         <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_260px_auto] sm:items-end">
-          <div className="space-y-2">
+          <div className="field-stack">
             <Label htmlFor="doc-title">Document name</Label>
             <Input
               id="doc-title"
@@ -297,7 +297,7 @@ export function StaffDocuments({
               placeholder="e.g. JCCP registration certificate"
             />
           </div>
-          <div className="space-y-2">
+          <div className="field-stack">
             <Label>Category</Label>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger>

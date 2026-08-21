@@ -108,19 +108,19 @@ function ProfilePage() {
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
+            <div className="field-stack sm:col-span-2">
               <Label htmlFor="p-name">Full name</Label>
               <Input id="p-name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
             </div>
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="p-job">Job title</Label>
               <Input id="p-job" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} />
             </div>
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="p-email">Work email</Label>
               <Input id="p-email" value={identity.email} disabled />
             </div>
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="p-body">Registration body</Label>
               <Input
                 id="p-body"
@@ -128,7 +128,7 @@ function ProfilePage() {
                 onChange={(e) => setForm({ ...form, registrationBody: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="p-no">Registration number</Label>
               <Input
                 id="p-no"
@@ -136,7 +136,7 @@ function ProfilePage() {
                 onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className="field-stack sm:col-span-2">
               <Label htmlFor="p-note">Note for your manager (optional)</Label>
               <Textarea
                 id="p-note"

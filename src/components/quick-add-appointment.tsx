@@ -378,7 +378,7 @@ export function QuickAddAppointment({
           <div className="grid grid-cols-2 gap-x-2 gap-y-3">
             {newPatient ? (
               <>
-                <div className="col-span-2 space-y-1.5">
+                <div className="col-span-2 field-stack">
                   <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Patient name</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <Input
@@ -397,7 +397,7 @@ export function QuickAddAppointment({
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5">
+                <div className="field-stack">
                   <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Date of birth</Label>
                   <div className="relative">
                     <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -410,7 +410,7 @@ export function QuickAddAppointment({
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5">
+                <div className="field-stack">
                   <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Email</Label>
                   <Input
                     type="email"
@@ -421,7 +421,7 @@ export function QuickAddAppointment({
                     aria-label="Email"
                   />
                 </div>
-                <div className="col-span-2 space-y-1.5">
+                <div className="col-span-2 field-stack">
                   <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Phone</Label>
                   <Input
                     type="tel"
@@ -434,7 +434,7 @@ export function QuickAddAppointment({
                 </div>
               </>
             ) : (
-              <div className="space-y-1.5">
+              <div className="field-stack">
                 <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Patient</Label>
                 <PatientCombobox
                   patients={patients}
@@ -445,7 +445,7 @@ export function QuickAddAppointment({
               </div>
             )}
 
-            <div className={`space-y-1.5 ${newPatient ? "col-span-2" : ""}`}>
+            <div className={`field-stack ${newPatient ? "col-span-2" : ""}`}>
               <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Treatment</Label>
               <select
                 value={catalogueId}
@@ -461,7 +461,7 @@ export function QuickAddAppointment({
             </div>
 
             <div className="col-span-2 grid grid-cols-[1fr_1fr_5.5rem] gap-2">
-              <div className="space-y-1.5">
+              <div className="field-stack">
                 <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Date</Label>
                 <div className="relative">
                   <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -473,7 +473,7 @@ export function QuickAddAppointment({
                   />
                 </div>
               </div>
-              <div className="space-y-1.5">
+              <div className="field-stack">
                 <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Time</Label>
                 <div className="relative">
                   <Clock className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -485,7 +485,7 @@ export function QuickAddAppointment({
                   />
                 </div>
               </div>
-              <div className="space-y-1.5">
+              <div className="field-stack">
                 <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Mins</Label>
                 <Input
                   type="number"
@@ -498,7 +498,7 @@ export function QuickAddAppointment({
               </div>
             </div>
 
-            <div className="col-span-2 space-y-1.5">
+            <div className="col-span-2 field-stack">
               <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Practitioner</Label>
               <select
                 value={practitionerId}

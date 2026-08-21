@@ -256,7 +256,7 @@ function PortalPage() {
 
 function PField({ name, label, defaultValue }: { name: string; label: string; defaultValue?: string | null }) {
   return (
-    <div className="space-y-2">
+    <div className="field-stack">
       <Label htmlFor={name}>{label}</Label>
       <Textarea id={name} name={name} rows={2} defaultValue={defaultValue ?? ""} className="rounded-xl" />
     </div>

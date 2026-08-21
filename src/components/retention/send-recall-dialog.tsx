@@ -235,7 +235,7 @@ export function SendRecallDialog({
           </TabsList>
         </Tabs>
 
-        <div className="grid gap-1.5">
+        <div className="field-stack">
           <Label className="text-xs text-muted-foreground">Template</Label>
           <Select value={templateId} onValueChange={(v) => applyChannel(channel, v)}>
             <SelectTrigger className="rounded-xl">
@@ -253,7 +253,7 @@ export function SendRecallDialog({
         </div>
 
         {channel === "email" && (
-          <div className="grid gap-1.5">
+          <div className="field-stack">
             <Label className="text-xs text-muted-foreground">Subject</Label>
             <Input
               value={subject}
@@ -264,7 +264,7 @@ export function SendRecallDialog({
           </div>
         )}
 
-        <div className="grid gap-1.5">
+        <div className="field-stack">
           <Label className="text-xs text-muted-foreground">Message</Label>
           <Textarea
             ref={bodyRef}

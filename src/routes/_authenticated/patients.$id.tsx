@@ -329,7 +329,7 @@ function PatientRecord() {
                         });
                       }}
                     >
-                      <div className="space-y-2 sm:col-span-2">
+                      <div className="field-stack sm:col-span-2">
                         <Label htmlFor="catalogue_id">Treatment</Label>
                         <select
                           id="catalogue_id"
@@ -349,7 +349,7 @@ function PatientRecord() {
                       <TField name="price" label="Price (£)" type="number" />
                       <TField name="performed_at" label="Date performed" type="date" required />
                       <TField name="next_due_at" label="Next due" type="date" />
-                      <div className="space-y-2 sm:col-span-2">
+                      <div className="field-stack sm:col-span-2">
                         <Label htmlFor="notes">Clinical notes</Label>
                         <Textarea id="notes" name="notes" rows={3} className="rounded-xl" />
                       </div>
@@ -388,7 +388,7 @@ function PatientRecord() {
                         });
                       }}
                     >
-                      <div className="space-y-2">
+                      <div className="field-stack">
                         <Label htmlFor="kind">Type</Label>
                         <select
                           id="kind"
@@ -402,11 +402,11 @@ function PatientRecord() {
                           <option value="other">Payment link / other</option>
                         </select>
                       </div>
-                      <div className="space-y-2">
+                      <div className="field-stack">
                         <Label htmlFor="title">Title</Label>
                         <Input id="title" name="title" required className="rounded-xl" />
                       </div>
-                      <div className="space-y-2">
+                      <div className="field-stack">
                         <Label htmlFor="body">Content</Label>
                         <Textarea id="body" name="body" rows={5} className="rounded-xl" />
                       </div>
@@ -516,7 +516,7 @@ function PatientRecord() {
                             { label: "Before", photo: left },
                             { label: "After", photo: right },
                           ].map(({ label, photo }) => (
-                            <div key={label} className="space-y-2">
+                            <div key={label} className="field-stack">
                               <div className="relative overflow-hidden rounded-xl border border-edge bg-glass-2">
                                 {photo?.url ? (
                                   <img
@@ -898,7 +898,7 @@ function TField({
   required?: boolean;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="field-stack">
       <Label htmlFor={name}>{label}</Label>
       <Input id={name} name={name} type={type} required={required} className="rounded-xl" />
     </div>

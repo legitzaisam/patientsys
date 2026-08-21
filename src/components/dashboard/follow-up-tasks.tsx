@@ -119,16 +119,9 @@ export function FollowUpTasks() {
 
   return (
     <section>
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My tasks</h2>
-          <p className="text-xs text-muted-foreground">Patients to contact and rebook by chat, phone or email.</p>
-        </div>
-        {visible.length > 0 && (
-          <span className="shrink-0 rounded-full border border-edge bg-glass-2 px-2 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground shadow-inset-hi">
-            {visible.length} open
-          </span>
-        )}
+      <div className="mb-4">
+        <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My tasks</h2>
+        <p className="text-xs text-muted-foreground">Patients to contact and rebook by chat, phone or email.</p>
       </div>
       {!visible.length ? (
         <div className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 p-8 text-center">

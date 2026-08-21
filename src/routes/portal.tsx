@@ -131,7 +131,7 @@ function PortalLogin() {
           </p>
 
           <form onSubmit={submit} className="mt-8 space-y-4">
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="portal-email">Email</Label>
               <Input
                 id="portal-email"
@@ -142,7 +142,7 @@ function PortalLogin() {
                 required
               />
             </div>
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="portal-password">Password</Label>
               <Input
                 id="portal-password"

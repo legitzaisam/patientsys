@@ -125,11 +125,11 @@ export function NoShowFollowUpDialog({
 
         {mode === "reschedule" && (
           <div className="space-y-3">
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label className="text-2xs uppercase tracking-wide text-muted-foreground">New date</Label>
               <DrilldownDatePicker value={date} onChange={setDate} />
             </div>
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="no-show-time" className="text-2xs uppercase tracking-wide text-muted-foreground">
                 New time
               </Label>
@@ -170,7 +170,7 @@ export function NoShowFollowUpDialog({
 
         {mode === "task" && (
           <div className="space-y-3">
-            <div className="space-y-2">
+            <div className="field-stack">
               <Label htmlFor="no-show-note" className="text-2xs uppercase tracking-wide text-muted-foreground">
                 Task note
               </Label>

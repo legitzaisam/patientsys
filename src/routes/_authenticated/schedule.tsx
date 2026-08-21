@@ -538,8 +538,8 @@ function SchedulePage() {
                   });
                 }}
               >
-                <div className="sm:col-span-2">
-                  <div className="mb-3 flex items-center justify-between">
+                <div className="field-stack sm:col-span-2">
+                  <div className="flex items-center justify-between">
                     <Label>Patient</Label>
                     <button
                       type="button"
@@ -606,29 +606,26 @@ function SchedulePage() {
                   value={bookingPrice}
                   onChange={setBookingPrice}
                 />
-                <div className="space-y-2 sm:col-span-2">
+                <div className="field-stack sm:col-span-2">
                   <Label>Payment</Label>
                   {(() => {
                     const total = Number(bookingPrice || 0);
                     const depositAmount = Math.round(total * 0.3 * 100) / 100;
                     const selectedAmount = bookingPayKind === "deposit" ? depositAmount : total;
                     const modeBtn = (key: typeof bookingPayAction, label: string) => (
-                      <button
+                      <Button
                         key={key}
                         type="button"
+                        variant={bookingPayAction === key ? "selected" : "outline"}
                         onClick={() => setBookingPayAction(key)}
-                        className={`rounded-lg border-2 px-2 py-2 text-center text-xs font-semibold transition-[color,background-color,border-color,box-shadow] ${
-                          bookingPayAction === key
-                            ? "border-accent-line bg-card text-foreground shadow-inset-hi"
-                            : "border-transparent text-muted-foreground hover:shadow-[inset_0_0_0_1px_var(--accent-line)] hover:text-foreground"
-                        }`}
+                        className="h-[34px] flex-1 px-[15px] text-xs"
                       >
                         {label}
-                      </button>
+                      </Button>
                     );
                     return (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-3 gap-1 rounded-xl bg-glass-2 p-1">
+                      <div className="field-stack">
+                        <div className="flex gap-2">
                           {modeBtn("unpaid", "Leave unpaid")}
                           {modeBtn("take", "Take payment")}
                           {modeBtn("link", "Send link")}
@@ -642,35 +639,29 @@ function SchedulePage() {
 
                         {bookingPayAction !== "unpaid" && (
                           <>
-                            <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-glass-2 p-1">
-                              <button
+                            <div className="flex gap-2">
+                              <Button
                                 type="button"
+                                variant={bookingPayKind === "deposit" ? "selected" : "outline"}
                                 onClick={() => setBookingPayKind("deposit")}
-                                className={`rounded-lg border-2 px-2 py-2 text-center transition-[color,background-color,border-color,box-shadow] ${
-                                  bookingPayKind === "deposit"
-                                    ? "border-accent-line bg-card text-foreground shadow-inset-hi"
-                                    : "border-transparent text-muted-foreground hover:shadow-[inset_0_0_0_1px_var(--accent-line)] hover:text-foreground"
-                                }`}
+                                className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
                               >
-                                <p className="text-2xs font-semibold tracking-[0.02em]">Deposit</p>
-                                <p className="mt-0.5 text-xs font-semibold tabular-nums">
+                                <span className="text-2xs font-semibold tracking-[0.02em]">Deposit</span>
+                                <span className="font-semibold tabular-nums">
                                   {formatMoney(depositAmount)}
-                                </p>
-                              </button>
-                              <button
+                                </span>
+                              </Button>
+                              <Button
                                 type="button"
+                                variant={bookingPayKind === "full" ? "selected" : "outline"}
                                 onClick={() => setBookingPayKind("full")}
-                                className={`rounded-lg border-2 px-2 py-2 text-center transition-[color,background-color,border-color,box-shadow] ${
-                                  bookingPayKind === "full"
-                                    ? "border-accent-line bg-card text-foreground shadow-inset-hi"
-                                    : "border-transparent text-muted-foreground hover:shadow-[inset_0_0_0_1px_var(--accent-line)] hover:text-foreground"
-                                }`}
+                                className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
                               >
-                                <p className="text-2xs font-semibold tracking-[0.02em]">Full amount</p>
-                                <p className="mt-0.5 text-xs font-semibold tabular-nums">
+                                <span className="text-2xs font-semibold tracking-[0.02em]">Full amount</span>
+                                <span className="font-semibold tabular-nums">
                                   {formatMoney(total)}
-                                </p>
-                              </button>
+                                </span>
+                              </Button>
                             </div>
 
                             {bookingPayAction === "take" ? (
@@ -698,7 +689,7 @@ function SchedulePage() {
                     );
                   })()}
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="field-stack sm:col-span-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-foreground">Visit note</p>
@@ -1001,31 +992,25 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
             <>
               <p className="text-sm font-semibold text-foreground">Payment outstanding</p>
               <p className="text-muted-foreground">Choose deposit or full amount, then send by email or text.</p>
-              <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-glass-2 p-1">
-                <button
+              <div className="flex gap-2">
+                <Button
                   type="button"
+                  variant={amountKind === "deposit" ? "selected" : "outline"}
                   onClick={() => setAmountKind("deposit")}
-                  className={`rounded-lg px-2 py-2 text-left transition-colors ${
-                    amountKind === "deposit"
-                      ? "bg-card text-foreground shadow-inset-hi"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
                 >
-                  <p className="text-2xs font-semibold tracking-[0.02em]">Deposit</p>
-                  <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatMoney(depositAmount)}</p>
-                </button>
-                <button
+                  <span className="text-2xs font-semibold tracking-[0.02em]">Deposit</span>
+                  <span className="font-semibold tabular-nums">{formatMoney(depositAmount)}</span>
+                </Button>
+                <Button
                   type="button"
+                  variant={amountKind === "full" ? "selected" : "outline"}
                   onClick={() => setAmountKind("full")}
-                  className={`rounded-lg px-2 py-2 text-left transition-colors ${
-                    amountKind === "full"
-                      ? "bg-card text-foreground shadow-inset-hi"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
                 >
-                  <p className="text-2xs font-semibold tracking-[0.02em]">Full amount</p>
-                  <p className="mt-0.5 text-xs font-semibold tabular-nums">{formatMoney(total)}</p>
-                </button>
+                  <span className="text-2xs font-semibold tracking-[0.02em]">Full amount</span>
+                  <span className="font-semibold tabular-nums">{formatMoney(total)}</span>
+                </Button>
               </div>
               <p className="text-2xs text-muted-foreground">
                 Sending a {amountKind === "deposit" ? "deposit" : "full payment"} request for{" "}
@@ -2156,7 +2141,7 @@ function TextField({
 }) {
   const isDateLike = type === "date" || type === "datetime-local";
   return (
-    <div className="space-y-2">
+    <div className="field-stack">
       <Label htmlFor={name}>{label}</Label>
       {isDateLike ? (
         <div className="relative">
@@ -2201,17 +2186,21 @@ function SelectField({
   className?: string;
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
 }) {
+  const select = (
+    <select
+      id={name}
+      name={name}
+      onChange={onChange}
+      className="h-10 w-full rounded-md border border-edge bg-glass-2 px-3 text-sm shadow-inset-hi"
+    >
+      {children}
+    </select>
+  );
+  if (!label) return <div className={className}>{select}</div>;
   return (
-    <div className={`space-y-2 ${className ?? ""}`}>
+    <div className={`field-stack ${className ?? ""}`}>
       <Label htmlFor={name}>{label}</Label>
-      <select
-        id={name}
-        name={name}
-        onChange={onChange}
-        className="h-10 w-full rounded-md border border-edge bg-glass-2 px-3 text-sm shadow-inset-hi"
-      >
-        {children}
-      </select>
+      {select}
     </div>
   );
 }

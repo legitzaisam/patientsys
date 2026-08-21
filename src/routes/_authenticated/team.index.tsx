@@ -231,31 +231,31 @@ function TeamPage() {
               <DialogTitle>New staff account</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
+              <div className="field-stack sm:col-span-2">
                 <Label htmlFor="fullName">Full name</Label>
                 <Input id="fullName" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
               </div>
-              <div className="space-y-2">
+              <div className="field-stack">
                 <Label htmlFor="email">Work email</Label>
                 <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
               </div>
-              <div className="space-y-2">
+              <div className="field-stack">
                 <Label htmlFor="password">Temporary password</Label>
                 <Input id="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={8} />
               </div>
-              <div className="space-y-2">
+              <div className="field-stack">
                 <Label htmlFor="jobTitle">Job title</Label>
                 <Input id="jobTitle" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} />
               </div>
-              <div className="space-y-2">
+              <div className="field-stack">
                 <Label>Access level</Label>
                 <RoleSelect value={form.role} onChange={(role) => setForm({ ...form, role })} />
               </div>
-              <div className="space-y-2">
+              <div className="field-stack">
                 <Label htmlFor="regBody">Registration body</Label>
                 <Input id="regBody" value={form.registrationBody} onChange={(e) => setForm({ ...form, registrationBody: e.target.value })} />
               </div>
-              <div className="space-y-2">
+              <div className="field-stack">
                 <Label htmlFor="regNo">Registration number</Label>
                 <Input id="regNo" value={form.registrationNumber} onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })} />
               </div>
@@ -435,7 +435,7 @@ function EditStaffDialog({
           <DialogTitle>Edit {member.fullName || member.email}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2 sm:col-span-2">
+          <div className="field-stack sm:col-span-2">
             <Label htmlFor={`e-name-${member.userId}`}>Full name</Label>
             <Input
               id={`e-name-${member.userId}`}
@@ -443,7 +443,7 @@ function EditStaffDialog({
               onChange={(e) => setForm({ ...form, fullName: e.target.value })}
             />
           </div>
-          <div className="space-y-2">
+          <div className="field-stack">
             <Label htmlFor={`e-job-${member.userId}`}>Job title</Label>
             <Input
               id={`e-job-${member.userId}`}
@@ -451,11 +451,11 @@ function EditStaffDialog({
               onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
             />
           </div>
-          <div className="space-y-2">
+          <div className="field-stack">
             <Label>Access level</Label>
             <RoleSelect value={form.role} onChange={(role) => setForm({ ...form, role })} />
           </div>
-          <div className="space-y-2">
+          <div className="field-stack">
             <Label htmlFor={`e-body-${member.userId}`}>Registration body</Label>
             <Input
               id={`e-body-${member.userId}`}
@@ -463,7 +463,7 @@ function EditStaffDialog({
               onChange={(e) => setForm({ ...form, registrationBody: e.target.value })}
             />
           </div>
-          <div className="space-y-2">
+          <div className="field-stack">
             <Label htmlFor={`e-no-${member.userId}`}>Registration number</Label>
             <Input
               id={`e-no-${member.userId}`}
@@ -588,7 +588,7 @@ function SetPasswordDialog({
           Give {member.fullName || member.email} a password so they can sign in at the normal sign-in
           page with their email. Share it with them privately and ask them to change it later.
         </p>
-        <div className="space-y-2">
+        <div className="field-stack">
           <Label htmlFor={`pw-${member.email}`}>New password</Label>
           <Input
             id={`pw-${member.email}`}

@@ -314,7 +314,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1.5">
+    <div className="field-stack">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
     </div>

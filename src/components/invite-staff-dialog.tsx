@@ -110,7 +110,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
           ) : (
             <>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2">
+                <div className="field-stack sm:col-span-2">
                   <Label htmlFor="inv-name">Full name</Label>
                   <Input
                     id="inv-name"
@@ -118,7 +118,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                     onChange={(e) => setForm({ ...form, fullName: e.target.value })}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="field-stack">
                   <Label htmlFor="inv-email">Work email</Label>
                   <Input
                     id="inv-email"
@@ -127,7 +127,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="field-stack">
                   <Label htmlFor="inv-job">Job title</Label>
                   <Input
                     id="inv-job"
@@ -135,7 +135,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                     onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
                   />
                 </div>
-                <div className="space-y-2 sm:col-span-2">
+                <div className="field-stack sm:col-span-2">
                   <Label>Access level</Label>
                   <div className="grid gap-2 sm:grid-cols-3">
                     {ROLES.map((r) => (
@@ -160,7 +160,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                 </div>
                 {form.role === "practitioner" && (
                   <>
-                    <div className="space-y-2">
+                    <div className="field-stack">
                       <Label htmlFor="inv-body">Registration body</Label>
                       <Input
                         id="inv-body"
@@ -168,7 +168,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                         onChange={(e) => setForm({ ...form, registrationBody: e.target.value })}
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="field-stack">
                       <Label htmlFor="inv-no">Registration number</Label>
                       <Input
                         id="inv-no"

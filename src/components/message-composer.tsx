@@ -238,16 +238,16 @@ export function MessageComposer({
                 <div className="mt-2 space-y-3 border-t border-edge pt-4">
                   <p className="text-sm text-foreground">New template</p>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
+                    <div className="field-stack">
                       <Label className="text-xs">Title</Label>
                       <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="rounded-xl" />
                     </div>
-                    <div>
+                    <div className="field-stack">
                       <Label className="text-xs">Category</Label>
                       <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="rounded-xl" />
                     </div>
                   </div>
-                  <div>
+                  <div className="field-stack">
                     <Label className="text-xs">Message — use {"{{first_name}}"} to personalise</Label>
                     <Textarea value={newBody} onChange={(e) => setNewBody(e.target.value)} rows={3} className="rounded-xl" />
                   </div>

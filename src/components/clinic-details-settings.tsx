@@ -34,7 +34,7 @@ export function ClinicDetailsSettings({ canEdit }: { canEdit: boolean }) {
   });
 
   const field = (key: keyof Clinic, label: string, placeholder: string, type = "text") => (
-    <div className="space-y-1.5">
+    <div className="field-stack">
       <Label htmlFor={`clinic-${key}`} className="text-xs text-muted-foreground">
         {label}
       </Label>
