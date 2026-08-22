@@ -1,16 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 
-import { toast } from "sonner";
 import { TrendingUp } from "lucide-react";
-import { getPractitionerPerformance, setCommissionRate } from "@/lib/clinic.functions";
+import { getPractitionerPerformance } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { can } from "@/lib/permissions";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { PeriodPicker, periodRange, money, type PeriodKey } from "@/components/period-picker";
 import { PerformanceTrends } from "@/components/performance-trends";
 import { PerformanceTable } from "@/components/performance/performance-table";
@@ -38,7 +36,6 @@ export const Route = createFileRoute("/_authenticated/performance")({
 function PerformancePage() {
   const { data: identity } = useIdentity();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [period, setPeriod] = useState<PeriodKey>("month");
   const range = useMemo(() => periodRange(period), [period]);
   const fetchPerformance = useServerFn(getPractitionerPerformance);
@@ -47,15 +44,6 @@ function PerformancePage() {
     queryKey: ["performance", period],
     queryFn: () => fetchPerformance({ data: range }),
     enabled: can(identity, "reports.performance"),
-  });
-
-  const saveRate = useMutation({
-    mutationFn: useServerFn(setCommissionRate),
-    onSuccess: () => {
-      toast.success("Commission updated");
-      queryClient.invalidateQueries({ queryKey: ["performance"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
   });
 
   useEffect(() => {
@@ -95,7 +83,7 @@ function PerformancePage() {
         <div>
           <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Practitioner KPIs</h2>
           <p className="text-sm text-muted-foreground">
-            Expand any row to see full figures, edit commission and view the earnings trend.
+            Expand a row for cash collected, outstanding balances, and activity. Edit commission under Team.
           </p>
         </div>
       </div>
@@ -104,12 +92,12 @@ function PerformancePage() {
         rows={data?.rows ?? []}
         {...(data?.clinic ? { clinic: data.clinic } : {})}
         trend={data?.trend}
-        onSaveRate={(userId, rate) => saveRate.mutate({ data: { userId, rate } })}
       />
 
-      <p className="mt-3 text-xs text-muted-foreground">
-        Earned is treatment value delivered in the period; collected is booking revenue marked paid.
-        Outstanding covers unpaid and deposit-only bookings. Retention is repeat patients over the last 12 months.
+      <p className="mt-3 rounded-2xl border border-edge bg-glass-2 px-4 py-3 text-xs leading-relaxed text-muted-foreground shadow-inset-hi">
+        <span className="font-medium text-foreground">How to read this.</span> Earned is treatment
+        value delivered; collected is booking revenue marked paid. Outstanding covers unpaid and
+        deposit-only bookings. Retention is repeat patients over the last 12 months.
       </p>
     </AppShell>
   );

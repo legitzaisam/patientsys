@@ -627,7 +627,7 @@ function StageBadge({
         align="end"
         sideOffset={8}
         collisionPadding={12}
-        className="w-56 rounded-2xl border-edge-2 bg-card p-3.5"
+        className="w-56 rounded-2xl border-edge-2 bg-[rgba(255,255,255,0.88)] p-3.5"
       >
         <p className="text-sm font-semibold text-foreground">Patient journey</p>
         <p className="text-xs text-ink-2">Set current stage.</p>
@@ -717,7 +717,7 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
           {chip}
         </button>
       </HoverCardTrigger>
-      <HoverCardContent side="bottom" align="start" sideOffset={8} className="w-64 rounded-2xl border-edge-2 bg-card p-3.5">
+      <HoverCardContent side="bottom" align="start" sideOffset={8} className="w-64 rounded-2xl border-edge-2 bg-[rgba(255,255,255,0.88)] p-3.5">
         <p className="text-sm font-semibold text-foreground">Consent outstanding</p>
         <p className="mt-1 text-xs text-muted-foreground">Send a reminder to complete the consent form.</p>
         <div className="mt-3 flex gap-2">
@@ -820,7 +820,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
           {chip}
         </button>
       </HoverCardTrigger>
-      <HoverCardContent side="bottom" align="end" sideOffset={8} className="w-72 rounded-2xl border-edge-2 bg-card p-3.5">
+      <HoverCardContent side="bottom" align="end" sideOffset={8} className="w-72 rounded-2xl border-edge-2 bg-[rgba(255,255,255,0.88)] p-3.5">
         <div className="space-y-3 text-xs">
           {paid ? (
             <>

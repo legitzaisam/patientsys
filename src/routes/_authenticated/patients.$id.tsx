@@ -429,8 +429,9 @@ function PatientRecord() {
           </Card>
 
           <Tabs defaultValue="treatments">
-            <TabsList className="rounded-xl">
+            <TabsList>
               <TabsTrigger value="treatments">Treatments</TabsTrigger>
+              <TabsTrigger value="visit-notes">Visit notes</TabsTrigger>
               <TabsTrigger value="photos">Before and after</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="history">History updates</TabsTrigger>
@@ -462,6 +463,30 @@ function PatientRecord() {
                 </ul>
               </Card>
               <RecallTasksPanel patientId={id} />
+            </TabsContent>
+
+            <TabsContent value="visit-notes">
+              <Card className="p-5">
+                <div className="mb-3">
+                  <h3 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">
+                    Visit notes
+                  </h3>
+                  <p className="text-xs text-muted-foreground">From diary appointments.</p>
+                </div>
+                {(data.visitNotes ?? []).length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 px-4 py-6 text-center text-sm text-muted-foreground">
+                    No visit notes yet. Add one from an appointment on the diary.
+                  </div>
+                ) : (
+                  <ul className="max-h-[32rem] space-y-2 overflow-y-auto overscroll-contain pr-1">
+                    {groupVisitNotesByDay(data.visitNotes ?? []).flatMap((group) =>
+                      group.notes.map((n) => (
+                        <VisitNoteItem key={n.appointmentId} note={n} />
+                      )),
+                    )}
+                  </ul>
+                )}
+              </Card>
             </TabsContent>
 
             <TabsContent value="photos">
@@ -884,6 +909,170 @@ function Detail({ label, value, alert }: { label: string; value?: string | null;
       </p>
     </div>
   );
+}
+
+type VisitNoteRow = {
+  appointmentId: string;
+  treatmentName: string;
+  treatmentNumber?: number | null;
+  startsAt: string;
+  status?: string;
+  practitionerName?: string | null;
+  body: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+};
+
+/** Statuses worth calling out; anything routine stays unlabelled. */
+function visitStatusChip(status?: string) {
+  if (!status || status === "booked" || status === "scheduled") return null;
+  const tone =
+    status === "no_show" || status === "cancelled"
+      ? "bg-destructive-bg text-destructive-ink"
+      : status === "attended" || status === "complete"
+        ? "bg-success-bg text-success-ink"
+        : "bg-glass-2 text-muted-foreground";
+  return { label: status.replace(/_/g, " "), tone };
+}
+
+function VisitNoteItem({ note }: { note: VisitNoteRow }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const bodyRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (expanded) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    setOverflows(el.scrollHeight > el.clientHeight + 1);
+  }, [note.body, expanded]);
+
+  const startsAt = new Date(note.startsAt);
+  const time = startsAt.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const shortDate = startsAt.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const title = [note.treatmentName, note.treatmentNumber != null ? `#${note.treatmentNumber}` : null]
+    .filter(Boolean)
+    .join(" · ");
+  const chip = visitStatusChip(note.status);
+
+  const editedAt = note.updatedAt ? new Date(note.updatedAt) : null;
+  const sameDayAsVisit =
+    editedAt != null &&
+    editedAt.getFullYear() === startsAt.getFullYear() &&
+    editedAt.getMonth() === startsAt.getMonth() &&
+    editedAt.getDate() === startsAt.getDate();
+  const editedWhen = editedAt
+    ? sameDayAsVisit
+      ? editedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+      : editedAt.toLocaleString("en-GB", {
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+    : null;
+  const hasFooter = overflows || Boolean(note.updatedBy) || Boolean(editedWhen);
+
+  return (
+    <li className="rounded-xl border border-edge bg-glass-2/60 px-3.5 py-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold tracking-tight text-foreground">{title}</p>
+          <p className="mt-0.5 truncate text-2xs text-muted-foreground">
+            <span className="tabular-nums">{shortDate}</span>
+            <span className="text-ink-3"> · </span>
+            <span className="font-semibold tabular-nums text-accent-ink">{time}</span>
+            {note.practitionerName ? (
+              <>
+                <span className="text-ink-3"> · </span>
+                {note.practitionerName}
+              </>
+            ) : null}
+          </p>
+        </div>
+        {chip ? (
+          <span
+            className={`mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold capitalize ${chip.tone}`}
+          >
+            {chip.label}
+          </span>
+        ) : null}
+      </div>
+
+      <p
+        ref={bodyRef}
+        className={`mt-2.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground ${
+          expanded ? "" : "line-clamp-4"
+        }`}
+      >
+        {note.body}
+      </p>
+
+      {hasFooter ? (
+        <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-edge/70 pt-2">
+          {note.updatedBy || editedWhen ? (
+            <p className="min-w-0 truncate text-2xs text-ink-3">
+              {note.updatedBy ? (
+                <>
+                  Added by <span className="text-muted-foreground">{note.updatedBy}</span>
+                </>
+              ) : (
+                "Updated"
+              )}
+              {editedWhen ? (
+                <>
+                  <span aria-hidden> · </span>
+                  <span className="tabular-nums">{editedWhen}</span>
+                </>
+              ) : null}
+            </p>
+          ) : (
+            <span />
+          )}
+          {overflows ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="shrink-0 cursor-pointer text-2xs font-semibold text-accent-ink hover:underline"
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function groupVisitNotesByDay(notes: VisitNoteRow[]) {
+  const byDay = new Map<string, VisitNoteRow[]>();
+  for (const note of notes) {
+    const d = new Date(note.startsAt);
+    const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const list = byDay.get(dayKey);
+    if (list) list.push(note);
+    else byDay.set(dayKey, [note]);
+  }
+
+  return [...byDay.entries()]
+    .sort(([a], [b]) => (a < b ? 1 : -1))
+    .map(([dayKey, dayNotes]) => {
+      const dayLabel = new Date(`${dayKey}T00:00:00`).toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      const sorted = [...dayNotes].sort((a, b) => (a.startsAt < b.startsAt ? 1 : -1));
+      return { dayKey, dayLabel, notes: sorted };
+    });
 }
 
 function TField({

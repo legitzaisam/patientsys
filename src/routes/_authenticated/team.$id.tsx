@@ -46,6 +46,7 @@ function StaffProfilePage() {
       toast.success("Profile updated");
       queryClient.invalidateQueries({ queryKey: ["staff-profile", id] });
       queryClient.invalidateQueries({ queryKey: ["team"] });
+      queryClient.invalidateQueries({ queryKey: ["performance"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -62,6 +63,7 @@ function StaffProfilePage() {
     registrationBody: "",
     registrationNumber: "",
     role: "practitioner" as "owner" | "practitioner" | "front_desk",
+    commissionRate: "0",
   });
 
   useEffect(() => {
@@ -72,6 +74,7 @@ function StaffProfilePage() {
       registrationBody: data.profile.registration_body ?? "",
       registrationNumber: data.profile.registration_number ?? "",
       role: (data.role as "owner" | "practitioner" | "front_desk") ?? "practitioner",
+      commissionRate: String(Number(data.profile.commission_rate ?? 0)),
     });
   }, [data?.profile, data?.role]);
 
@@ -150,6 +153,25 @@ function StaffProfilePage() {
                   ))}
                 </select>
               </div>
+              <div className="field-stack">
+                <Label htmlFor="sp-commission">Commission rate</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="sp-commission"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={form.commissionRate}
+                    onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
+                    className="rounded-xl"
+                  />
+                  <span className="shrink-0 text-sm text-muted-foreground">%</span>
+                </div>
+                <p className="text-2xs text-muted-foreground">
+                  Share of treatment revenue paid to this person.
+                </p>
+              </div>
             </div>
         </div>
         <div className="mt-5 flex items-center justify-end gap-4">
@@ -164,6 +186,7 @@ function StaffProfilePage() {
                   jobTitle: form.jobTitle,
                   registrationBody: form.registrationBody,
                   registrationNumber: form.registrationNumber,
+                  commissionRate: Number(form.commissionRate),
                 },
               })
             }

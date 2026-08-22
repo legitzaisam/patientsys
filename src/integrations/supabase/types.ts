@@ -675,6 +675,7 @@ export type Database = {
           id: string
           note: string | null
           patient_id: string
+          reassigned_at: string | null
           status: Database["public"]["Enums"]["recall_task_status"]
           status_by_label: string | null
           updated_at: string
@@ -693,6 +694,7 @@ export type Database = {
           id?: string
           note?: string | null
           patient_id: string
+          reassigned_at?: string | null
           status?: Database["public"]["Enums"]["recall_task_status"]
           status_by_label?: string | null
           updated_at?: string
@@ -711,6 +713,7 @@ export type Database = {
           id?: string
           note?: string | null
           patient_id?: string
+          reassigned_at?: string | null
           status?: Database["public"]["Enums"]["recall_task_status"]
           status_by_label?: string | null
           updated_at?: string

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Check, ClipboardList, Mail, MessageSquare, Phone, X } from "lucide-react";
 import { deleteRecallTask, listOpenRecallTasks, setRecallTaskStatus } from "@/lib/clinic.functions";
 import { can } from "@/lib/permissions";
+import { invalidateRecallTasks, useRecallTasksLiveSync } from "@/lib/use-recall-tasks-sync";
 import { useIdentity } from "@/lib/use-identity";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,12 @@ export function FollowUpTasks() {
   const queryClient = useQueryClient();
   const fetchTasks = useServerFn(listOpenRecallTasks);
   const { data: identity } = useIdentity();
-  const { data: tasks } = useQuery({ queryKey: ["recall-tasks", "open"], queryFn: () => fetchTasks() });
+  useRecallTasksLiveSync();
+  const { data: tasks } = useQuery({
+    queryKey: ["recall-tasks", "open"],
+    queryFn: () => fetchTasks(),
+    refetchInterval: 30_000,
+  });
   const [channels, setChannels] = useState<Record<string, Channel>>(() => readChannels());
 
   const markChannel = (taskId: string, channel: Channel) => {
@@ -60,7 +66,7 @@ export function FollowUpTasks() {
     mutationFn: useServerFn(setRecallTaskStatus),
     onSuccess: () => {
       toast.success("Task updated");
-      queryClient.invalidateQueries({ queryKey: ["recall-tasks"] });
+      void invalidateRecallTasks(queryClient);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -68,11 +74,11 @@ export function FollowUpTasks() {
   const remove = useMutation({
     mutationFn: useServerFn(deleteRecallTask),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["recall-tasks"] });
+      void invalidateRecallTasks(queryClient);
     },
     onError: (e: Error) => {
       toast.error(e.message);
-      queryClient.invalidateQueries({ queryKey: ["recall-tasks"] });
+      void invalidateRecallTasks(queryClient);
     },
   });
 

@@ -1,9 +1,8 @@
 import { Fragment, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, ChevronUp, TrendingUp, Users, Calendar, PoundSterling } from "lucide-react";
+import { ChevronDown, ChevronUp, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { money } from "@/components/period-picker";
 import { cn } from "@/lib/utils";
 import type { TrendPoint } from "@/components/performance-trends";
@@ -29,7 +28,7 @@ export type PerformanceRow = {
 };
 
 function Sparkline({ data, dataKey, color }: { data: TrendPoint[]; dataKey: keyof TrendPoint; color: string }) {
-  if (!data.length) return <span className="text-2xs text-muted-foreground">—</span>;
+  if (!data.length) return <span className="text-2xs text-muted-foreground">No trend yet</span>;
   const values = data.map((d) => Number(d[dataKey] ?? 0));
   const max = Math.max(...values, 1);
   const min = Math.min(...values);
@@ -41,102 +40,149 @@ function Sparkline({ data, dataKey, color }: { data: TrendPoint[]; dataKey: keyo
   });
   const last = points[points.length - 1];
   return (
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-8 w-24 overflow-visible">
+    <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="h-10 w-full overflow-visible">
       <polyline
         fill="none"
         stroke={color}
-        strokeWidth={2}
-        points={points.map((p) => `${p.x},${p.y}`).join(" ")}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points.map((p) => `${p.x},${(p.y / 100) * 36}`).join(" ")}
         vectorEffect="non-scaling-stroke"
       />
-      {last && <circle cx={last.x} cy={last.y} r={2} fill={color} />}
+      {last && <circle cx={last.x} cy={(last.y / 100) * 36} r={2.4} fill={color} />}
     </svg>
   );
 }
 
-function MiniStat({
-  icon: Icon,
+function MetricTile({
   label,
   value,
-  sub,
+  hint,
+  tone = "default",
 }: {
-  icon: React.ElementType;
   label: string;
   value: string;
-  sub?: string;
+  hint?: string;
+  tone?: "danger" | "accent" | "default";
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-glass-2 p-3">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-background">
-        <Icon className="h-4 w-4 text-ink-3" />
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">{value}</p>
-        {sub && <p className="text-2xs text-muted-foreground">{sub}</p>}
-      </div>
+    <div
+      className={cn(
+        "rounded-2xl border px-3.5 py-3 shadow-inset-hi",
+        tone === "danger" && "border-destructive/25 bg-destructive-bg",
+        tone === "accent" && "border-accent-line bg-accent-wash",
+        tone === "default" && "border-edge bg-glass-2",
+      )}
+    >
+      <p className="text-2xs font-medium tracking-[0.02em] text-ink-3">{label}</p>
+      <p
+        className={cn(
+          "mt-1 text-[17px] font-semibold tabular-nums tracking-[-0.02em]",
+          tone === "danger" && "text-destructive-ink",
+          tone === "accent" && "text-accent-ink",
+          tone === "default" && "text-foreground",
+        )}
+      >
+        {value}
+      </p>
+      {hint ? (
+        <p
+          className={cn(
+            "mt-0.5 text-2xs",
+            tone === "danger" ? "text-destructive-ink/70" : "text-muted-foreground",
+          )}
+        >
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+function shortStaffName(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "Staff";
+  if (parts.length === 1) return parts[0]!;
+
+  const PREFIXES = new Set([
+    "dr",
+    "dr.",
+    "mr",
+    "mr.",
+    "mrs",
+    "mrs.",
+    "ms",
+    "ms.",
+    "miss",
+    "mx",
+    "mx.",
+    "prof",
+    "prof.",
+    "professor",
+  ]);
+  const first = parts[0]!;
+  const last = parts[parts.length - 1]!;
+  if (PREFIXES.has(first.toLowerCase())) return `${first} ${last}`;
+  return first;
 }
 
 function ExpandRow({
   row,
   trend,
-  onSaveRate,
 }: {
   row: PerformanceRow;
   trend: TrendPoint[] | undefined;
-  onSaveRate: (rate: number) => void;
 }) {
-  const [rate, setRate] = useState(String(row.commissionRate));
-  const dirty = Number(rate) !== row.commissionRate;
+  const hasOutstanding = row.outstanding > 0;
+  const label = shortStaffName(row.fullName);
 
   return (
     <tr>
-      <td colSpan={7} className="bg-glass-2 px-4 py-4">
-        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MiniStat
-              icon={PoundSterling}
-              label="Earned"
-              value={money(row.earned)}
-              sub={`Their share ${money(row.earnedShare)}`}
-            />
-            <MiniStat
-              icon={PoundSterling}
-              label="Collected"
-              value={money(row.collected)}
-              sub={`Clinic share ${money(row.clinicEarnedShare)}`}
-            />
-            <MiniStat icon={Calendar} label="Appointments" value={String(row.appointments)} sub={`${row.attendance}% attended`} />
-            <MiniStat icon={Users} label="Patients" value={String(row.patients)} sub={`${row.newPatients} new`} />
-          </div>
-          <div className="flex items-center gap-4 rounded-xl bg-glass-2 p-3">
+      <td colSpan={7} className="border-b border-glass-line bg-[rgba(47,63,102,0.03)] px-4 py-4">
+        <div className="glass-panel relative overflow-hidden rounded-[22px] px-4 py-4 sm:px-5">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--sheen)] via-transparent to-transparent" />
+
+          <div className="relative z-[1] flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs text-muted-foreground">Earnings trend</p>
-              <div className="mt-1">
-                <Sparkline data={trend ?? []} dataKey="earned" color="var(--accent-deep)" />
-              </div>
+              <p className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">
+                {label}’s extras
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Cash, activity and trend beyond the row above.
+              </p>
             </div>
-            <div className="flex-1">
-              <p className="text-xs text-muted-foreground">Commission rate</p>
-              <div className="mt-2 flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={rate}
-                  onChange={(e) => setRate(e.target.value)}
-                  className="h-8 w-20 rounded-lg"
-                  aria-label={`Commission percentage for ${row.fullName}`}
-                />
-                <span className="text-sm text-muted-foreground">%</span>
-                {dirty && (
-                  <Button size="sm" variant="outline" className="" onClick={() => onSaveRate(Number(rate))}>
-                    Save
-                  </Button>
-                )}
-              </div>
+            <Link
+              to="/team/$id"
+              params={{ id: row.userId }}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 rounded-full border border-accent-line bg-accent-soft px-3 py-1.5 text-2xs font-semibold text-accent-ink shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
+            >
+              Commission {row.commissionRate}%
+              <span className="font-medium opacity-80">· Edit on Team</span>
+            </Link>
+          </div>
+
+          <div className="relative z-[1] mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <MetricTile label="Collected" value={money(row.collected)} hint="Marked paid" />
+            <MetricTile label="Clinic keeps" value={money(row.clinicEarnedShare)} hint="After their share" />
+            <MetricTile
+              label="Outstanding"
+              value={hasOutstanding ? money(row.outstanding) : "—"}
+              hint={hasOutstanding ? "Unpaid or deposit only" : "All settled"}
+              tone={hasOutstanding ? "danger" : "default"}
+            />
+            <MetricTile label="Appointments" value={String(row.appointments)} />
+            <MetricTile label="New patients" value={String(row.newPatients)} />
+          </div>
+
+          <div className="relative z-[1] mt-3 rounded-2xl border border-edge bg-glass-2/80 px-3.5 py-3 shadow-inset-hi">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-2xs font-medium tracking-[0.02em] text-ink-3">Earnings trend</p>
+              <span className="text-2xs text-muted-foreground">This period</span>
+            </div>
+            <div className="mt-2">
+              <Sparkline data={trend ?? []} dataKey="earned" color="var(--accent-deep)" />
             </div>
           </div>
         </div>
@@ -149,7 +195,6 @@ export function PerformanceTable({
   rows,
   clinic,
   trend,
-  onSaveRate,
 }: {
   rows: PerformanceRow[];
   clinic?: {
@@ -169,7 +214,6 @@ export function PerformanceTable({
     averageCommission: number;
   };
   trend: { monthly: boolean; clinic: TrendPoint[]; byPractitioner: Record<string, TrendPoint[]> } | undefined;
-  onSaveRate: (userId: string, rate: number) => void;
 }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
 
@@ -294,17 +338,11 @@ export function PerformanceTable({
                         </Button>
                       </td>
                     </tr>
-                    {expanded && (
-                      <ExpandRow
-                        row={r}
-                        trend={trend?.byPractitioner[r.userId]}
-                        onSaveRate={(rate) => onSaveRate(r.userId, rate)}
-                      />
-                    )}
+                    {expanded && <ExpandRow row={r} trend={trend?.byPractitioner[r.userId]} />}
                   </Fragment>
                 );
               })}
-            {rows.length === 0 && (
+              {rows.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     No practitioners yet — add them under Team.
@@ -314,22 +352,33 @@ export function PerformanceTable({
             </tbody>
             {rows.length > 0 && clinic && (
               <tfoot>
-                <tr className="border-t-2 border-edge bg-glass-2 font-medium text-foreground">
-                  <td className="px-4 py-3">
-                    <p>Clinic total</p>
+                <tr className="border-t border-edge bg-glass-2 font-medium text-foreground">
+                  <td className="px-4 py-3.5">
+                    <p className="tracking-tight">Clinic total</p>
                     <p className="text-xs font-normal text-muted-foreground">
-                      {rows.length} practitioner{rows.length === 1 ? "" : "s"} · {clinic.averageCommission}% avg commission
+                      {rows.length} practitioner{rows.length === 1 ? "" : "s"}
+                      <span className="text-ink-3"> · </span>
+                      <span className="tabular-nums">{clinic.averageCommission}% avg commission</span>
                     </p>
                   </td>
-                  <td className="px-4 py-3">
-                    <p>{money(clinic.earned)}</p>
-                    <p className="text-2xs font-normal text-muted-foreground">{money(clinic.toPractitioners)} paid out</p>
+                  <td className="px-4 py-3.5">
+                    <p className="tabular-nums">{money(clinic.earned)}</p>
+                    <p className="text-2xs font-normal text-muted-foreground">
+                      {money(clinic.toPractitioners)} paid out
+                    </p>
                   </td>
-                  <td className="px-4 py-3">{clinic.treatments}</td>
-                  <td className="px-4 py-3">{clinic.attendance}%</td>
-                  <td className="px-4 py-3">{clinic.retention}%</td>
-                  <td className="px-4 py-3">{clinic.outstanding > 0 ? money(clinic.outstanding) : "—"}</td>
-                  <td className="px-4 py-3" />
+                  <td className="px-4 py-3.5 tabular-nums">{clinic.treatments}</td>
+                  <td className="px-4 py-3.5 tabular-nums">{clinic.attendance}%</td>
+                  <td className="px-4 py-3.5 tabular-nums">{clinic.retention}%</td>
+                  <td
+                    className={cn(
+                      "px-4 py-3.5 tabular-nums",
+                      clinic.outstanding > 0 ? "text-destructive-ink" : undefined,
+                    )}
+                  >
+                    {clinic.outstanding > 0 ? money(clinic.outstanding) : "—"}
+                  </td>
+                  <td className="px-4 py-3.5" />
                 </tr>
               </tfoot>
             )}

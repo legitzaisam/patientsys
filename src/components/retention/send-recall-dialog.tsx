@@ -219,16 +219,16 @@ export function SendRecallDialog({
         </DialogHeader>
 
         <Tabs value={channel} onValueChange={(v) => applyChannel(v as Channel)}>
-          <TabsList className="rounded-xl">
-            <TabsTrigger value="message" className="rounded-lg text-xs">
+          <TabsList>
+            <TabsTrigger value="message">
               <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
               In-app
             </TabsTrigger>
-            <TabsTrigger value="email" className="rounded-lg text-xs">
+            <TabsTrigger value="email">
               <Mail className="mr-1.5 h-3.5 w-3.5" />
               Email
             </TabsTrigger>
-            <TabsTrigger value="sms" className="rounded-lg text-xs">
+            <TabsTrigger value="sms">
               <Smartphone className="mr-1.5 h-3.5 w-3.5" />
               SMS
             </TabsTrigger>

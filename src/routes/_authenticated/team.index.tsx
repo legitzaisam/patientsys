@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { ShieldCheck, UserCog, Trash2, Pencil, Clock, Plus, HelpCircle, Users, Bell, KeyRound } from "lucide-react";
+import { UserCog, Trash2, Pencil, Clock, Plus, Bell, KeyRound } from "lucide-react";
 import {
   listTeam,
   createStaffAccount,
@@ -32,25 +32,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 
 export const Route = createFileRoute("/_authenticated/team/")({
   component: TeamPage,
 });
 
 const ROLES = [
-  { value: "owner", label: "Manager", blurb: "Full control: delete records, price list, team accounts" },
-  { value: "practitioner", label: "Practitioner", blurb: "Full clinical work, cannot delete records or manage team" },
-  { value: "front_desk", label: "Receptionist", blurb: "Bookings, payments and paperwork, no deletions" },
+  { value: "owner", label: "Manager" },
+  { value: "practitioner", label: "Practitioner" },
+  { value: "front_desk", label: "Receptionist" },
 ] as const;
-
-function roleLabel(role: string) {
-  return ROLES.find((r) => r.value === role)?.label ?? role.replace("_", " ");
-}
 
 function RoleSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
@@ -193,35 +184,6 @@ function TeamPage() {
           )}
         </Button>
         )}
-
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="ghost">
-              <HelpCircle className="mr-2 h-4 w-4" />
-              Role help
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 rounded-xl" align="start">
-            <p className="mb-3 text-sm font-medium text-foreground">Access levels</p>
-            <div className="space-y-3">
-              {ROLES.map((r) => (
-                <div key={r.value} className="flex gap-3">
-                  <div className="mt-0.5 shrink-0">
-                    {r.value === "owner" ? (
-                      <ShieldCheck className="h-4 w-4 text-ink-3" />
-                    ) : (
-                      <Users className="h-4 w-4 text-ink-3" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm text-foreground">{r.label}</p>
-                    <p className="text-xs text-muted-foreground">{r.blurb}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
         </div>
       </div>
 
@@ -326,9 +288,6 @@ function TeamPage() {
                 />
               </div>
               )}
-              <div className="w-24 text-xs tracking-[0.02em] text-muted-foreground">
-                {roleLabel(m.role)}
-              </div>
               {canAdmin && (
                 <>
                   <EditStaffDialog member={m} onSave={(data) => update.mutate({ data })} saving={update.isPending} />

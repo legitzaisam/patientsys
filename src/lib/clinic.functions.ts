@@ -453,7 +453,7 @@ export const getPatient = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     if (!patient) throw new Error("Patient not found");
 
-    const [treatments, photos, documents, messages, history, upcoming] = await Promise.all([
+    const [treatments, photos, documents, messages, history, upcoming, visitAppts] = await Promise.all([
       supabase
         .from("treatments")
         .select("*, profiles(full_name)")
@@ -486,6 +486,13 @@ export const getPatient = createServerFn({ method: "GET" })
         .gte("starts_at", new Date().toISOString())
         .not("status", "in", "(cancelled,no_show)")
         .limit(1),
+      supabase
+        .from("appointments")
+        .select(
+          "id, starts_at, ends_at, status, treatment_name, treatment_number, notes, profiles(full_name), appointment_notes(body, updated_at, updated_by_label)",
+        )
+        .eq("patient_id", data.id)
+        .order("starts_at", { ascending: false }),
     ]);
 
     const signed: Record<string, string> = {};
@@ -504,6 +511,30 @@ export const getPatient = createServerFn({ method: "GET" })
       (upcoming.data ?? []).length > 0,
     );
 
+    const visitNotes = (visitAppts.data ?? [])
+      .map((a: any) => {
+        const embedded = a.appointment_notes;
+        const noteRow = Array.isArray(embedded) ? embedded[0] : embedded;
+        const fromTable = String(noteRow?.body ?? "").trim();
+        const booking = String(a.notes ?? "")
+          .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
+          .trim();
+        const body = fromTable || booking;
+        if (!body) return null;
+        return {
+          appointmentId: a.id as string,
+          treatmentName: (a.treatment_name as string) || "Treatment",
+          treatmentNumber: a.treatment_number ?? null,
+          startsAt: a.starts_at as string,
+          status: a.status as string,
+          practitionerName: (a.profiles?.full_name as string) ?? null,
+          body,
+          updatedAt: (noteRow?.updated_at as string) ?? null,
+          updatedBy: (noteRow?.updated_by_label as string) ?? null,
+        };
+      })
+      .filter(Boolean);
+
     return {
       patient,
       treatments: treatments.data ?? [],
@@ -511,6 +542,7 @@ export const getPatient = createServerFn({ method: "GET" })
       documents: documents.data ?? [],
       messages: messages.data ?? [],
       history: history.data ?? [],
+      visitNotes,
       retention,
       nextAppointmentAt: (upcoming.data ?? [])[0]?.starts_at ?? null,
     };
@@ -1494,6 +1526,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      commissionRate?: number;
     }) => data,
   )
   .middleware([requireSupabaseAuth])
@@ -1501,21 +1534,25 @@ export const updateStaffMember = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await requireOwner(ctx);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin
-      .from("profiles")
-      .update({
-        full_name: data.fullName,
-        job_title: data.jobTitle ?? null,
-        registration_body: data.registrationBody ?? null,
-        registration_number: data.registrationNumber ?? null,
-      })
-      .eq("id", data.userId);
+    const patch: Record<string, unknown> = {
+      full_name: data.fullName,
+      job_title: data.jobTitle ?? null,
+      registration_body: data.registrationBody ?? null,
+      registration_number: data.registrationNumber ?? null,
+    };
+    if (data.commissionRate !== undefined) {
+      patch.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
+    }
+    await supabaseAdmin.from("profiles").update(patch).eq("id", data.userId);
     if (data.userId === ctx.userId && data.role !== "owner") {
       throw new Error("You cannot remove your own manager access");
     }
     await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: data.userId, role: data.role });
-    await audit(ctx, "staff.update", "user_roles", data.userId, null, { role: data.role });
+    await audit(ctx, "staff.update", "user_roles", data.userId, null, {
+      role: data.role,
+      ...(data.commissionRate !== undefined ? { commission_rate: patch.commission_rate } : {}),
+    });
     return { ok: true };
   });
 
@@ -1867,6 +1904,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
     return {
       earnedShare: stats.earnedShare,
       collectedShare: stats.collectedShare,
+      outstanding: stats.outstanding,
       treatments: stats.treatments,
       patients: stats.patients,
       newPatients: stats.newPatients,
@@ -2265,6 +2303,119 @@ export const createRecallTask = createServerFn({ method: "POST" })
   });
 
 /**
+ * Manager edit: change who the chase-up is assigned to and/or the note.
+ * Keeps shared status across the group and stamps reassigned_at when the
+ * assignee set changes so the patient timeline shows the new hand-off time.
+ */
+export const updateRecallTask = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      task_id: string;
+      recipients: { id: string; label: string }[];
+      note?: string;
+    }) => data,
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await loadIdentity(ctx);
+    if (!identity.isManager) throw new Error("Manager access only");
+    if (!data.recipients.length) throw new Error("Pick at least one team member");
+
+    const { data: target, error: targetErr } = await ctx.supabase
+      .from("recall_tasks")
+      .select("*")
+      .eq("id", data.task_id)
+      .maybeSingle();
+    if (targetErr) throw new Error(targetErr.message);
+    if (!target) throw new Error("Recall task not found");
+
+    const groupId = (target.group_id as string) || (target.id as string);
+    const { data: peers, error: peersErr } = await ctx.supabase
+      .from("recall_tasks")
+      .select("*")
+      .eq("group_id", groupId);
+    // Older rows may lack group_id; fall back to the single task.
+    const group = peersErr || !peers?.length ? [target] : peers;
+
+    // Ensure every row shares a group id so status stays linked.
+    if (!target.group_id) {
+      await ctx.supabase.from("recall_tasks").update({ group_id: groupId }).eq("id", target.id);
+    }
+
+    const now = new Date().toISOString();
+    const note = data.note !== undefined ? data.note : ((target.note as string | null) ?? null);
+    const prevIds = new Set(group.map((g: any) => g.assigned_to as string));
+    const nextIds = new Set(data.recipients.map((r) => r.id));
+    const assigneesChanged =
+      prevIds.size !== nextIds.size || [...prevIds].some((id) => !nextIds.has(id));
+
+    const template = group[0] as any;
+    const shared = {
+      clinic_id: template.clinic_id ?? CLINIC_ID,
+      patient_id: template.patient_id,
+      group_id: groupId,
+      created_by: template.created_by ?? ctx.userId,
+      note,
+      status: template.status,
+      contacted_at: template.contacted_at,
+      contacted_by: template.contacted_by,
+      completed_at: template.completed_at,
+      completed_by: template.completed_by,
+      status_by_label: template.status_by_label,
+      reassigned_at: assigneesChanged ? now : (template.reassigned_at ?? null),
+      updated_at: now,
+    };
+
+    const toRemove = group.filter((g: any) => !nextIds.has(g.assigned_to));
+    if (toRemove.length) {
+      const { error } = await ctx.supabase
+        .from("recall_tasks")
+        .delete()
+        .in(
+          "id",
+          toRemove.map((g: any) => g.id),
+        );
+      if (error) throw new Error(error.message);
+    }
+
+    const existingByAssignee = new Map(
+      group.filter((g: any) => nextIds.has(g.assigned_to)).map((g: any) => [g.assigned_to as string, g]),
+    );
+
+    for (const r of data.recipients) {
+      const existing = existingByAssignee.get(r.id);
+      if (existing) {
+        const { error } = await ctx.supabase
+          .from("recall_tasks")
+          .update({
+            assigned_label: r.label,
+            note,
+            reassigned_at: shared.reassigned_at,
+            updated_at: now,
+            group_id: groupId,
+          })
+          .eq("id", existing.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await ctx.supabase.from("recall_tasks").insert({
+          ...shared,
+          assigned_to: r.id,
+          assigned_label: r.label,
+          created_at: template.created_at ?? now,
+        });
+        if (error) throw new Error(error.message);
+      }
+    }
+
+    await audit(ctx, "recall_task.updated", "patients", template.patient_id, template.patient_id, {
+      assigned_to: data.recipients.map((r) => r.label).join(", "),
+      reassigned: assigneesChanged,
+    });
+    return { ok: true, group_id: groupId, reassigned: assigneesChanged };
+  });
+
+/**
  * Move a recall along its lifecycle: sent -> contacted -> completed.
  * The whole assignment group moves together, so a practitioner marking it
  * off is instantly visible to the front desk (and the other way round) and
@@ -2281,9 +2432,29 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
     const actor = identity.profile?.full_name || identity.email || "A team member";
     const { data: target } = await ctx.supabase
       .from("recall_tasks")
-      .select("id, group_id, patient_id")
+      .select("id, group_id, patient_id, assigned_to")
       .eq("id", data.task_id)
       .maybeSingle();
+    if (!target) throw new Error("Recall task not found");
+
+    // Assignees in the group can progress it; managers/front desk can too so
+    // chase-ups stay visible and actionable from either side of the clinic.
+    if (!identity.isManager) {
+      const isFrontDesk = identity.roles.includes("front_desk");
+      let assigneeIds = [target.assigned_to as string | null];
+      if (target.group_id) {
+        const { data: peers } = await ctx.supabase
+          .from("recall_tasks")
+          .select("assigned_to")
+          .eq("group_id", target.group_id);
+        assigneeIds = (peers ?? []).map((p: { assigned_to: string | null }) => p.assigned_to);
+      }
+      const isAssignee = assigneeIds.includes(ctx.userId);
+      if (!isAssignee && !isFrontDesk) {
+        throw new Error("Only the assigned team member can update this recall task");
+      }
+    }
+
     const patch: Record<string, unknown> = {
       status: data.status,
       contacted_at: data.status === "sent" ? null : now,
@@ -2293,11 +2464,11 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
       status_by_label: data.status === "sent" ? null : actor,
     };
     const query = ctx.supabase.from("recall_tasks").update(patch);
-    const { error } = target?.group_id
+    const { error } = target.group_id
       ? await query.eq("group_id", target.group_id)
       : await query.eq("id", data.task_id);
     if (error) throw new Error(error.message);
-    if (target?.patient_id) {
+    if (target.patient_id) {
       await audit(ctx, "recall_task.status", "patients", target.patient_id, target.patient_id, {
         status: data.status,
         by: actor,
@@ -2306,9 +2477,12 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Recall tasks for one patient, newest first, for the patient timeline. */
+/**
+ * Retract a recall chase-up. Pass assignee_ids to remove only those people from
+ * the group; omit it (or pass every assignee) to retract the whole assignment.
+ */
 export const deleteRecallTask = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string }) => data)
+  .validator((data: { task_id: string; assignee_ids?: string[] }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2317,18 +2491,36 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
       throw new Error("You do not have access to delete tasks");
     const { data: target } = await ctx.supabase
       .from("recall_tasks")
-      .select("id, group_id, patient_id")
+      .select("id, group_id, patient_id, assigned_to, assigned_label")
       .eq("id", data.task_id)
       .maybeSingle();
-    const query = ctx.supabase.from("recall_tasks").delete();
-    const { error } = target?.group_id
-      ? await query.eq("group_id", target.group_id)
-      : await query.eq("id", data.task_id);
+    if (!target) return { ok: true, removed: [] as string[] };
+
+    const groupId = (target.group_id as string | null) ?? null;
+    const { data: peers } = groupId
+      ? await ctx.supabase.from("recall_tasks").select("id, assigned_to, assigned_label").eq("group_id", groupId)
+      : { data: [target] };
+    const group = peers?.length ? peers : [target];
+
+    const pick = data.assignee_ids?.length
+      ? new Set(data.assignee_ids)
+      : new Set(group.map((g: any) => g.assigned_to as string));
+    const toRemove = group.filter((g: any) => pick.has(g.assigned_to));
+    if (!toRemove.length) return { ok: true, removed: [] as string[] };
+
+    const ids = toRemove.map((g: any) => g.id as string);
+    const { error } = await ctx.supabase.from("recall_tasks").delete().in("id", ids);
     if (error) throw new Error(error.message);
-    if (target?.patient_id) {
-      await audit(ctx, "recall_task.delete", "patients", target.patient_id, target.patient_id, {});
+
+    const removed = toRemove
+      .map((g: any) => (g.assigned_label as string) || "Assignee")
+      .filter(Boolean);
+    if (target.patient_id) {
+      await audit(ctx, "recall_task.delete", "patients", target.patient_id, target.patient_id, {
+        assignees: removed,
+      });
     }
-    return { ok: true };
+    return { ok: true, removed };
   });
 
 export const listRecallTasks = createServerFn({ method: "GET" })

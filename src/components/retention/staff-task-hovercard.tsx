@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Textarea } from "@/components/ui/textarea";
 import { createRecallTask, listTeam, logRetentionOutreach } from "@/lib/clinic.functions";
+import { invalidateRecallTasks } from "@/lib/use-recall-tasks-sync";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Manager",
@@ -93,7 +94,7 @@ export function StaffTaskHoverCard({
     },
     onSuccess: () => {
       toast.success("Recall task sent to the team");
-      queryClient.invalidateQueries({ queryKey: ["recall-tasks", patientId] });
+      void invalidateRecallTasks(queryClient);
       setOpen(false);
       setNote("");
       setTouched(false);

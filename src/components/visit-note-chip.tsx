@@ -82,6 +82,7 @@ export function VisitNoteEditor({
       void queryClient.invalidateQueries({ queryKey: ["appointments"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-week"] });
+      void queryClient.invalidateQueries({ queryKey: ["patient"] });
     },
   });
 
@@ -109,6 +110,7 @@ export function VisitNoteEditor({
         void queryClient.invalidateQueries({ queryKey: ["appointments"] });
         void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         void queryClient.invalidateQueries({ queryKey: ["dashboard-week"] });
+        void queryClient.invalidateQueries({ queryKey: ["patient"] });
       });
     };
     const onHide = () => {

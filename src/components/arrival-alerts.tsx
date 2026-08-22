@@ -77,7 +77,7 @@ const phaseMeta: Record<
     icon: TriangleAlert,
     bg: "bg-destructive-bg",
     ring: "ring-destructive/30",
-    badge: "bg-destructive-bg text-destructive",
+    badge: "bg-[#f3d0e0] text-destructive-ink",
     hint: "Over 15 minutes late — contact the patient to reschedule.",
   },
 };
@@ -205,7 +205,7 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
           onClick={() => setCollapsed(false)}
           className={`fixed bottom-5 right-5 z-50 inline-flex h-10 cursor-pointer items-center gap-2 rounded-full px-3.5 text-xs font-semibold shadow-glass ring-1 transition-all hover:-translate-y-0.5 ${
             isDestructive
-              ? "bg-[#ebb0c8] text-destructive-ink ring-destructive/45"
+              ? "bg-[#e094b6] text-destructive-ink ring-destructive/45"
               : `bg-glass text-foreground backdrop-blur-glass ${phaseMeta[mostUrgentPhase].ring}`
           }`}
         >
@@ -244,7 +244,7 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
             >
               <PhaseIcon className="h-3 w-3" />
               {meta.label}
-              <span className="tabular-nums opacity-80">· {statusDetail}</span>
+              <span className="tabular-nums">· {statusDetail}</span>
             </span>
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               {visible.length > 1 && (

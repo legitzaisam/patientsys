@@ -54,11 +54,17 @@ function EarningsPage() {
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Earned" value={money(data?.earnedShare ?? 0)} hint="Treatments performed" />
         <Stat label="Collected" value={money(data?.collectedShare ?? 0)} hint="Payments received" />
-        <Stat label="Treatments" value={String(data?.treatments ?? 0)} hint="In this period" />
+        <Stat
+          label="Outstanding"
+          value={data?.outstanding ? money(data.outstanding) : "—"}
+          hint="Unpaid or deposit only"
+          tone={data?.outstanding ? "danger" : undefined}
+        />
         <Stat label="Average value" value={money(data?.averageValue ?? 0)} hint="Per treatment" />
       </div>
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-3">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Treatments" value={String(data?.treatments ?? 0)} hint="In this period" />
         <Stat label="Patients seen" value={String(data?.patients ?? 0)} hint="Unique patients" />
         <Stat label="New patients" value={String(data?.newPatients ?? 0)} hint="First visit in period" />
         <Stat label="Retention" value={`${data?.retention ?? 0}%`} hint="Returned within 12 months" />
@@ -99,11 +105,27 @@ function EarningsPage() {
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
+function Stat({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone?: "danger";
+}) {
   return (
     <Card className="p-5">
       <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{value}</p>
+      <p
+        className={`mt-2 text-[22px] font-semibold tracking-[-0.016em] ${
+          tone === "danger" ? "text-destructive" : "text-foreground"
+        }`}
+      >
+        {value}
+      </p>
       <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
         <Wallet className="h-3 w-3 text-ink-3" /> {hint}
       </p>

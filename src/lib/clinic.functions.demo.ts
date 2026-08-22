@@ -456,6 +456,31 @@ export const getPatient = createServerFn({ method: "GET" })
         a.status !== "cancelled" &&
         a.status !== "no_show",
     );
+    const visitNotes = sortDesc(
+      appointments.filter((a) => a.patient_id === data.id),
+      "starts_at",
+    )
+      .map((a) => {
+        const view = appointmentView(a);
+        const fromTable = String(view.appointment_notes?.body ?? "").trim();
+        const booking = String(a.notes ?? "")
+          .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
+          .trim();
+        const body = fromTable || booking;
+        if (!body) return null;
+        return {
+          appointmentId: a.id as string,
+          treatmentName: (a.treatment_name as string) || "Treatment",
+          treatmentNumber: a.treatment_number ?? null,
+          startsAt: a.starts_at as string,
+          status: a.status as string,
+          practitionerName: view.profiles?.full_name ?? null,
+          body,
+          updatedAt: view.appointment_notes?.updated_at ?? null,
+          updatedBy: view.appointment_notes?.updated_by_label ?? null,
+        };
+      })
+      .filter(Boolean);
     const { patientRetention } = await import("./retention.server");
     return {
       patient,
@@ -479,6 +504,7 @@ export const getPatient = createServerFn({ method: "GET" })
         medicalHistory.filter((h) => h.patient_id === data.id),
         "created_at",
       ),
+      visitNotes,
       retention: patientRetention(
         mine.map((t) => ({ performed_at: t.performed_at, next_due_at: t.next_due_at })),
         upcoming.length > 0,
@@ -1422,6 +1448,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      commissionRate?: number;
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -1435,6 +1462,9 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       profile.job_title = data.jobTitle ?? null;
       profile.registration_body = data.registrationBody ?? null;
       profile.registration_number = data.registrationNumber ?? null;
+      if (data.commissionRate !== undefined) {
+        profile.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
+      }
     }
     const role = userRoles.find((r) => r.user_id === data.userId && r.role !== "patient");
     if (role) role.role = data.role;
@@ -1703,6 +1733,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
     return {
       earnedShare: stats.earnedShare,
       collectedShare: stats.collectedShare,
+      outstanding: stats.outstanding,
       treatments: stats.treatments,
       patients: stats.patients,
       newPatients: stats.newPatients,
@@ -2007,9 +2038,83 @@ export const createRecallTask = createServerFn({ method: "POST" })
         status_by_label: null,
         created_at: now,
         updated_at: now,
+        reassigned_at: null,
       });
     }
     return { ok: true, group_id: groupId };
+  });
+
+export const updateRecallTask = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      task_id: string;
+      recipients: { id: string; label: string }[];
+      note?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!me.isManager) throw new Error("Manager access only");
+    if (!data.recipients.length) throw new Error("Pick at least one team member");
+
+    const target = recallTasks.find((t) => t.id === data.task_id);
+    if (!target) throw new Error("Recall task not found");
+    const groupId = target.group_id || target.id;
+    const group = target.group_id
+      ? recallTasks.filter((t) => t.group_id === target.group_id)
+      : recallTasks.filter((t) => t.id === target.id || t.group_id === target.id);
+
+    const now = new Date().toISOString();
+    const note = data.note !== undefined ? data.note : (target.note ?? null);
+    const prevIds = new Set(group.map((g) => g.assigned_to));
+    const nextIds = new Set(data.recipients.map((r) => r.id));
+    const assigneesChanged =
+      prevIds.size !== nextIds.size || [...prevIds].some((id) => !nextIds.has(id));
+    const reassignedAt = assigneesChanged ? now : ((target as any).reassigned_at ?? null);
+
+    const template = group[0]!;
+    for (let i = recallTasks.length - 1; i >= 0; i--) {
+      const task = recallTasks[i]!;
+      const inGroup = group.some((g) => g.id === task.id);
+      if (!inGroup) continue;
+      if (!nextIds.has(task.assigned_to)) {
+        recallTasks.splice(i, 1);
+      }
+    }
+
+    for (const r of data.recipients) {
+      const existing = recallTasks.find(
+        (t) => (t.group_id === groupId || t.id === groupId) && t.assigned_to === r.id,
+      );
+      if (existing) {
+        existing.assigned_label = r.label;
+        existing.note = note;
+        existing.group_id = groupId;
+        existing.updated_at = now;
+        (existing as any).reassigned_at = reassignedAt;
+      } else {
+        recallTasks.unshift({
+          id: newId("k9"),
+          clinic_id: CLINIC_ID,
+          patient_id: template.patient_id,
+          group_id: groupId,
+          assigned_to: r.id,
+          assigned_label: r.label,
+          created_by: template.created_by ?? me.userId,
+          note,
+          status: template.status,
+          contacted_at: template.contacted_at,
+          contacted_by: template.contacted_by,
+          completed_at: template.completed_at,
+          completed_by: template.completed_by,
+          status_by_label: template.status_by_label,
+          reassigned_at: reassignedAt,
+          created_at: template.created_at,
+          updated_at: now,
+        } as any);
+      }
+    }
+    return { ok: true, group_id: groupId, reassigned: assigneesChanged };
   });
 
 export const setRecallTaskStatus = createServerFn({ method: "POST" })
@@ -2019,10 +2124,19 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
     const now = new Date().toISOString();
     const actor = me.profile?.full_name || me.email || "A team member";
     const target = recallTasks.find((t) => t.id === data.task_id);
-    if (!target) return { ok: true };
+    if (!target) throw new Error("Recall task not found");
     const group = target.group_id
       ? recallTasks.filter((t) => t.group_id === target.group_id)
       : [target];
+
+    if (!me.isManager) {
+      const isFrontDesk = me.roles.includes("front_desk");
+      const isAssignee = group.some((t) => t.assigned_to === me.userId);
+      if (!isAssignee && !isFrontDesk) {
+        throw new Error("Only the assigned team member can update this recall task");
+      }
+    }
+
     for (const task of group) {
       task.status = data.status;
       task.contacted_at = data.status === "sent" ? null : now;
@@ -2036,20 +2150,29 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
   });
 
 export const deleteRecallTask = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string }) => data)
+  .validator((data: { task_id: string; assignee_ids?: string[] }) => data)
   .handler(async ({ data }) => {
     const me = identity();
     if (!me.isManager && !me.permissions.includes("tasks.delete")) {
       throw new Error("You do not have access to delete tasks");
     }
     const target = recallTasks.find((t) => t.id === data.task_id);
-    if (!target) return { ok: true };
+    if (!target) return { ok: true, removed: [] as string[] };
+    const group = target.group_id
+      ? recallTasks.filter((t) => t.group_id === target.group_id)
+      : [target];
+    const pick = data.assignee_ids?.length
+      ? new Set(data.assignee_ids)
+      : new Set(group.map((t) => t.assigned_to as string));
+    const removed: string[] = [];
     for (let i = recallTasks.length - 1; i >= 0; i--) {
-      const task = recallTasks[i];
-      const match = target.group_id ? task.group_id === target.group_id : task.id === target.id;
-      if (match) recallTasks.splice(i, 1);
+      const task = recallTasks[i]!;
+      const inGroup = target.group_id ? task.group_id === target.group_id : task.id === target.id;
+      if (!inGroup || !pick.has(task.assigned_to)) continue;
+      removed.push((task.assigned_label as string) || "Assignee");
+      recallTasks.splice(i, 1);
     }
-    return { ok: true };
+    return { ok: true, removed };
   });
 
 export const listRecallTasks = createServerFn({ method: "GET" })
