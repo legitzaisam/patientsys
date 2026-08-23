@@ -204,6 +204,12 @@ async function purgeExpiredExTeamMembers() {
 }
 
 
+/**
+ * Every call site runs after its mutation has already committed, so a failure
+ * here must not throw: that would report a successful clinical write as an error
+ * and invite a retry that duplicates it. Log loudly instead. Making the trail
+ * durable and tamper-evident is a separate problem (audit §10.3).
+ */
 async function audit(
   context: Ctx,
   action: string,
@@ -212,7 +218,7 @@ async function audit(
   patientId: string | null,
   meta?: Record<string, unknown>,
 ) {
-  await context.supabase.from("audit_log").insert({
+  const { error } = await context.supabase.from("audit_log").insert({
     clinic_id: CLINIC_ID,
     actor_id: context.userId,
     actor_label: (context.claims["email"] as string) ?? null,
@@ -222,6 +228,11 @@ async function audit(
     patient_id: patientId,
     meta: meta ?? null,
   });
+  if (error) {
+    console.error(
+      `[audit] failed to record "${action}" on ${entity}${entityId ? ` ${entityId}` : ""} for actor ${context.userId}: ${error.message}`,
+    );
+  }
 }
 
 /** Signed-in identity. Bootstraps the very first user as clinic owner. */
@@ -2593,7 +2604,9 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
     }
 
-    await supabaseAdmin
+    // Not atomic with the profile write above: if this fails after an approval,
+    // the change is applied but the request stays pending and re-approvable.
+    const { error: reviewError } = await supabaseAdmin
       .from("profile_change_requests")
       .update({
         status: data.approve ? "approved" : "declined",
@@ -2602,6 +2615,7 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
         reviewer_note: data.reviewerNote?.trim() || null,
       })
       .eq("id", data.id);
+    if (reviewError) throw new Error(reviewError.message);
 
     await audit(
       ctx,
