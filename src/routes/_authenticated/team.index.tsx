@@ -233,8 +233,9 @@ function TeamPage() {
               <div className="flex flex-wrap items-center gap-4">
                 <div className="min-w-56 flex-1 space-y-0.5">
                   <Link
-                    to="/team/$id"
-                    params={{ id: m.userId }}
+                    {...(m.isSelf
+                      ? { to: "/profile" as const }
+                      : { to: "/team/$id" as const, params: { id: m.userId } })}
                     className="block text-sm font-medium text-foreground underline-offset-2 hover:underline"
                   >
                     {m.fullName || m.email}

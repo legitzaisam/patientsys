@@ -78,8 +78,7 @@ export function StaffDocCompliance({
           <StaffAlertDialog
             recipientId={userId}
             recipientName={fullName}
-            defaultTitle={copy.title}
-            defaultBody={copy.body}
+            defaultBody={[copy.title, copy.body].filter(Boolean).join("\n\n")}
           >
             <Button type="button" size="sm">
               <BellRing className="mr-1.5 h-3.5 w-3.5" />

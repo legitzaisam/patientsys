@@ -77,8 +77,8 @@ export function StaffAvatar({
   avatarPath?: string | null;
   readOnly?: boolean;
   queryKey?: string[];
-  /** lg = own profile; sm = compact staff card */
-  size?: "sm" | "lg";
+  /** lg = own profile; md = staff profile editor; sm = compact staff card */
+  size?: "sm" | "md" | "lg";
 }) {
   const queryClient = useQueryClient();
   const { data: identity } = useIdentity();
@@ -154,20 +154,15 @@ export function StaffAvatar({
     .toUpperCase();
 
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center text-center",
-        size === "sm" ? "w-full gap-3" : "gap-3",
-      )}
-    >
+    <div className="flex w-full flex-col items-center gap-2.5 text-center">
       <Avatar
         className={cn(
           "ring-1 ring-border/60",
-          size === "sm" ? "h-20 w-20" : "h-40 w-40",
+          size === "sm" ? "h-20 w-20" : size === "md" ? "h-28 w-28" : "h-40 w-40",
         )}
       >
         {avatarUrl && <AvatarImage src={avatarUrl} alt={`${fullName} profile picture`} />}
-        <AvatarFallback className={size === "sm" ? "text-lg" : "text-3xl"}>
+        <AvatarFallback className={size === "sm" ? "text-lg" : size === "md" ? "text-2xl" : "text-3xl"}>
           {initials || "?"}
         </AvatarFallback>
       </Avatar>
@@ -183,7 +178,7 @@ export function StaffAvatar({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 w-full max-w-[10.5rem]"
+            className={cn("h-8 w-full", size === "lg" && "max-w-[10.5rem]", size === "md" && "max-w-none")}
             disabled={busy}
             onClick={() => avatarRef.current?.click()}
           >
@@ -205,7 +200,10 @@ export function StaffAvatar({
               Remove
             </Button>
           )}
-          <p className="max-w-[10.5rem] text-pretty text-2xs leading-snug text-muted-foreground">
+          <p className={cn(
+            "text-pretty text-2xs leading-snug text-muted-foreground",
+            size === "lg" ? "max-w-[10.5rem]" : "max-w-full",
+          )}>
             JPG or PNG, up to 10 MB
           </p>
         </div>
@@ -297,7 +295,7 @@ export function StaffDocuments({
 
   return (
     <Card className="p-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="section-title">Documents</h2>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -312,7 +310,7 @@ export function StaffDocuments({
       </div>
 
       {!readOnly && (
-        <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_260px_auto] sm:items-end">
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_260px_auto] sm:items-end">
           <div className="field-stack">
             <Label htmlFor="doc-title">Document name</Label>
             <Input
@@ -344,76 +342,84 @@ export function StaffDocuments({
         </div>
       )}
 
-      <div className="mt-6 space-y-5">
+      <ul className="mt-4 divide-y divide-edge overflow-hidden rounded-2xl border border-edge">
         {CATEGORIES.map((c) => {
           const items = list.filter((d) => d.category === c.value);
           return (
-            <div key={c.value}>
-              <div className="flex items-baseline justify-between gap-3">
-                <h3 className="text-sm font-medium text-foreground">{c.label}</h3>
-                <span className="text-2xs text-muted-foreground">{c.hint}</span>
-              </div>
-              <div className="mt-2 space-y-2">
-                {items.length === 0 && (
-                  <p className="rounded-2xl border border-dashed border-glass-line px-3 py-2 text-xs text-muted-foreground">
-                    Nothing uploaded
-                  </p>
+            <li key={c.value} className="px-3.5 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-medium text-foreground">{c.label}</h3>
+                  <p className="mt-0.5 text-2xs leading-snug text-muted-foreground">{c.hint}</p>
+                </div>
+                {items.length === 0 ? (
+                  <span className="shrink-0 pt-0.5 text-2xs text-muted-foreground">Not uploaded</span>
+                ) : (
+                  <span className="shrink-0 pt-0.5 text-2xs font-medium text-success-ink">
+                    {items.length} on file
+                  </span>
                 )}
-                {items.map((d) => (
-                  <div
-                    key={d.id}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-glass-line p-3"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => void openSigned(d.path)}
-                      className="flex min-w-0 items-center gap-3 text-left"
-                    >
-                      <FileText className="h-4 w-4 shrink-0 text-ink-3" />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm text-foreground underline-offset-2 hover:underline">
-                          {d.title}
-                        </span>
-                        <span className="block truncate text-2xs text-muted-foreground">
-                          {d.file_name} {formatSize(d.file_size)} ·{" "}
-                          {new Date(d.created_at).toLocaleDateString("en-GB")}
-                        </span>
-                      </span>
-                    </button>
-                    {!readOnly && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => removeDoc.mutate({ data: { id: d.id } })}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
               </div>
-            </div>
+              {items.length > 0 ? (
+                <div className="mt-2.5 space-y-2">
+                  {items.map((d) => (
+                    <div
+                      key={d.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-glass-line bg-glass-2/50 px-3 py-2"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void openSigned(d.path)}
+                        className="flex min-w-0 items-center gap-2.5 text-left"
+                      >
+                        <FileText className="h-4 w-4 shrink-0 text-ink-3" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm text-foreground underline-offset-2 hover:underline">
+                            {d.title}
+                          </span>
+                          <span className="block truncate text-2xs text-muted-foreground">
+                            {d.file_name} {formatSize(d.file_size)} ·{" "}
+                            {new Date(d.created_at).toLocaleDateString("en-GB")}
+                          </span>
+                        </span>
+                      </button>
+                      {!readOnly && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => removeDoc.mutate({ data: { id: d.id } })}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </li>
           );
         })}
-        {list.some((d) => !CATEGORIES.find((c) => c.value === d.category)) && (
-          <div className="space-y-2">
-            {list
+        {list.some((d) => !CATEGORIES.find((c) => c.value === d.category))
+          ? list
               .filter((d) => !CATEGORIES.find((c) => c.value === d.category))
               .map((d) => (
-                <div key={d.id} className="flex items-center justify-between gap-3 rounded-2xl border border-glass-line p-3">
-                  <button type="button" onClick={() => void openSigned(d.path)} className="flex min-w-0 items-center gap-3 text-left">
+                <li key={d.id} className="flex items-center justify-between gap-3 px-3.5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => void openSigned(d.path)}
+                    className="flex min-w-0 items-center gap-2.5 text-left"
+                  >
                     <FileText className="h-4 w-4 shrink-0 text-ink-3" />
                     <span className="min-w-0 truncate text-sm text-foreground">{d.title}</span>
                   </button>
                   <Badge variant="outline" className="rounded-xl text-2xs uppercase">
                     {categoryLabel(d.category)}
                   </Badge>
-                </div>
-              ))}
-          </div>
-        )}
-      </div>
+                </li>
+              ))
+          : null}
+      </ul>
     </Card>
   );
 }

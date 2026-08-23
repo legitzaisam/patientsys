@@ -1331,13 +1331,14 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
     (data: {
       audience: "managers" | "practitioners" | "front_desk" | "all" | "user";
       recipientId?: string;
-      title: string;
       body: string;
       urgent?: boolean;
     }) => data,
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
+    const body = data.body.trim();
+    if (!body) throw new Error("Write a message");
     let recipients: string[];
     if (data.audience === "user") {
       recipients = data.recipientId ? [data.recipientId] : [];
@@ -1366,8 +1367,8 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
         sender_id: me.userId,
         urgent: !!data.urgent,
         kind: data.urgent ? "urgent" : "staff_message",
-        title: `${data.urgent ? "Urgent" : "Message"} from ${from}: ${data.title}`,
-        body: data.body,
+        title: `${data.urgent ? "Urgent" : "Message"} from ${from}`,
+        body,
         patient_id: null,
         appointment_id: null,
         read_at: null,
@@ -1579,6 +1580,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = identity();
+    if (!me.isManager) throw new Error("Manager access required");
     if (data.userId === me.userId && data.role !== "owner") {
       throw new Error("You cannot remove your own manager access");
     }
@@ -2023,6 +2025,27 @@ export const submitProfileChange = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const saveMyProfile = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      fullName: string;
+      jobTitle?: string;
+      registrationBody?: string;
+      registrationNumber?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!data.fullName?.trim()) throw new Error("Full name is required");
+    const profile = profiles.find((p) => p.id === me.userId);
+    if (!profile) throw new Error("Profile not found");
+    profile.full_name = data.fullName.trim();
+    profile.job_title = data.jobTitle?.trim() || null;
+    profile.registration_body = data.registrationBody?.trim() || null;
+    profile.registration_number = data.registrationNumber?.trim() || null;
+    return { ok: true };
+  });
+
 export const getMyProfile = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireStaff();
   return {
@@ -2135,7 +2158,7 @@ export const getStaffProfile = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const me = requireStaff();
     const isSelf = data.userId === me.userId;
-    const canViewPrivateDetails = me.isManager || isSelf;
+    const canViewPrivateDetails = true;
     const canViewDocuments = me.isManager || isSelf;
     const docs = sortDesc(
       staffDocuments.filter((d) => d.user_id === data.userId),
@@ -2144,20 +2167,16 @@ export const getStaffProfile = createServerFn({ method: "GET" })
     const presentCategories = [...new Set(docs.map((d) => d.category).filter(Boolean))];
     const profile = profiles.find((p) => p.id === data.userId) ?? null;
     const safeProfile = profile
-      ? canViewPrivateDetails
-        ? profile
-        : {
-            ...profile,
-            registration_body: null,
-            registration_number: null,
-            commission_rate: null,
-          }
+      ? {
+          ...profile,
+          commission_rate: me.isManager ? profile.commission_rate : null,
+        }
       : null;
 
     return {
       profile: safeProfile,
       role: roleFor(data.userId),
-      email: canViewPrivateDetails ? (db.staffEmails[data.userId] ?? "") : "",
+      email: db.staffEmails[data.userId] ?? "",
       documents: canViewDocuments ? docs : [],
       presentCategories,
       canViewDocuments,
@@ -2773,13 +2792,36 @@ export const getStaffChat = createServerFn({ method: "GET" })
     const myReadAt =
       staffConversationReads.find((r) => r.conversation_id === conversation.id && r.user_id === me.userId)
         ?.last_read_at ?? null;
+    const peer = data.peerUserId;
+    const alerts = staffNotifications
+      .filter(
+        (n) =>
+          (n.kind === "urgent" || n.kind === "staff_message") &&
+          n.sender_id &&
+          ((n.sender_id === me.userId && n.recipient_id === peer) ||
+            (n.sender_id === peer && n.recipient_id === me.userId)),
+      )
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+      .slice(0, 200)
+      .map((n) => ({
+        id: n.id as string,
+        sender_id: n.sender_id as string,
+        recipient_id: n.recipient_id as string,
+        title: n.title as string,
+        body: (n.body as string | null) ?? null,
+        urgent: !!n.urgent || n.kind === "urgent",
+        kind: n.kind as string,
+        read_at: (n.read_at as string | null) ?? null,
+        created_at: n.created_at as string,
+        mine: n.sender_id === me.userId,
+      }));
     return {
       conversationId: conversation.id as string,
       peer: {
-        id: data.peerUserId,
-        full_name: profileName(data.peerUserId) ?? "Teammate",
-        job_title: profiles.find((p) => p.id === data.peerUserId)?.job_title ?? null,
-        avatar_url: profiles.find((p) => p.id === data.peerUserId)?.avatar_url ?? null,
+        id: peer,
+        full_name: profileName(peer) ?? "Teammate",
+        job_title: profiles.find((p) => p.id === peer)?.job_title ?? null,
+        avatar_url: profiles.find((p) => p.id === peer)?.avatar_url ?? null,
       },
       peerReadAt,
       myReadAt,
@@ -2792,6 +2834,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
         readByPeer:
           m.sender_id === me.userId && peerReadAt != null && String(peerReadAt) >= String(m.created_at),
       })),
+      alerts,
     };
   });
 

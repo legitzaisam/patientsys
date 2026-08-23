@@ -13,7 +13,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -63,7 +62,6 @@ export function StaffAlertDialog({
   recipientName,
   open,
   onOpenChange,
-  defaultTitle = "",
   defaultBody = "",
 }: {
   children?: ReactNode;
@@ -71,7 +69,6 @@ export function StaffAlertDialog({
   recipientName?: string;
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
-  defaultTitle?: string;
   defaultBody?: string;
 }) {
   const send = useServerFn(sendStaffAlert);
@@ -84,16 +81,14 @@ export function StaffAlertDialog({
   const [target, setTarget] = useState(
     recipientId ? encodeTarget("user", recipientId) : encodeTarget("managers"),
   );
-  const [title, setTitle] = useState(defaultTitle);
   const [body, setBody] = useState(defaultBody);
   const [urgent, setUrgent] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
-    setTitle(defaultTitle);
     setBody(defaultBody);
-  }, [isOpen, defaultTitle, defaultBody]);
+  }, [isOpen, defaultBody]);
 
   const { data: team } = useQuery({
     queryKey: ["team"],
@@ -112,15 +107,14 @@ export function StaffAlertDialog({
   );
 
   function resetCompose() {
-    setTitle(defaultTitle);
     setBody(defaultBody);
     setUrgent(false);
     if (!lockedToPerson) setTarget(encodeTarget("managers"));
   }
 
   async function submit() {
-    if (!title.trim() || !body.trim()) {
-      toast.error("Add a subject and a message");
+    if (!body.trim()) {
+      toast.error("Write a message");
       return;
     }
     const decoded = lockedToPerson
@@ -136,7 +130,6 @@ export function StaffAlertDialog({
         data: {
           audience: decoded.audience,
           ...(decoded.audience === "user" ? { recipientId: decoded.userId } : {}),
-          title: title.trim(),
           body: body.trim(),
           urgent,
         },
@@ -144,6 +137,7 @@ export function StaffAlertDialog({
       toast.success(`Sent to ${res.sent} ${res.sent === 1 ? "person" : "people"}`);
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
       resetCompose();
       setOpen(false);
     } catch (e) {
@@ -216,23 +210,13 @@ export function StaffAlertDialog({
           )}
 
           <div className="field-stack">
-            <Label htmlFor="alert-title">Subject</Label>
-            <Input
-              id="alert-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Running 15 minutes late"
-            />
-          </div>
-
-          <div className="field-stack">
             <Label htmlFor="alert-body">Message</Label>
             <Textarea
               id="alert-body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={4}
-              placeholder="Please let my 14:30 patient know…"
+              placeholder="Running 15 minutes late — please let my 14:30 patient know…"
             />
           </div>
 

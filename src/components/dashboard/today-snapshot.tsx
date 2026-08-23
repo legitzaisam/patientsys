@@ -25,12 +25,6 @@ import { formatMoney, patientPaymentUrl, paymentRequestMessage } from "@/lib/pay
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  type CarouselApi,
-} from "@/components/ui/carousel";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { AppointmentTimeEditor } from "@/components/appointment-time-editor";
 import { NoShowFollowUpDialog } from "@/components/no-show-followup-dialog";
@@ -129,121 +123,250 @@ function AppointmentCarousel({
   isManager: boolean;
   showDay: boolean;
 }) {
-  const [api, setApi] = useState<CarouselApi>();
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
   const startAt = useMemo(() => upcomingIndex(appointments), [appointments]);
+  const jumpedKeyRef = useRef<string | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startScroll: number;
+    moved: boolean;
+  } | null>(null);
+
+  const slides = () =>
+    Array.from(scrollerRef.current?.querySelectorAll<HTMLElement>("[data-diary-slide]") ?? []);
+
+  const padX = (el: HTMLElement) => {
+    const styles = getComputedStyle(el);
+    return {
+      left: Number.parseFloat(styles.paddingLeft) || 0,
+      right: Number.parseFloat(styles.paddingRight) || 0,
+    };
+  };
+
+  /** Edge arrows from whether first/last cards are clipped — reliable with gutter padding. */
+  const syncEdges = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const list = slides();
+    if (list.length === 0) {
+      setCanPrev(false);
+      setCanNext(false);
+      return;
+    }
+    const { left: padL, right: padR } = padX(el);
+    const bounds = el.getBoundingClientRect();
+    const viewLeft = bounds.left + padL;
+    const viewRight = bounds.right - padR;
+    const first = list[0].getBoundingClientRect();
+    const last = list[list.length - 1].getBoundingClientRect();
+    setCanPrev(el.scrollLeft > 2 || first.left < viewLeft - 2);
+    setCanNext(
+      el.scrollLeft < el.scrollWidth - el.clientWidth - 2 || last.right > viewRight + 2,
+    );
+  };
+
+  const nearestIndex = () => {
+    const el = scrollerRef.current;
+    if (!el) return 0;
+    const list = slides();
+    if (list.length === 0) return 0;
+    const target = el.getBoundingClientRect().left + padX(el).left;
+    let best = 0;
+    let bestDist = Infinity;
+    list.forEach((slide, i) => {
+      const dist = Math.abs(slide.getBoundingClientRect().left - target);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    });
+    return best;
+  };
+
+  const scrollToIndex = (index: number, behavior: ScrollBehavior = "smooth") => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const list = slides();
+    const slide = list[Math.max(0, Math.min(list.length - 1, index))];
+    if (!slide) return;
+    const delta =
+      slide.getBoundingClientRect().left - (el.getBoundingClientRect().left + padX(el).left);
+    el.scrollBy({ left: delta, behavior });
+    requestAnimationFrame(syncEdges);
+    if (behavior === "smooth") {
+      const onEnd = () => {
+        syncEdges();
+        el.removeEventListener("scrollend", onEnd);
+      };
+      el.addEventListener("scrollend", onEnd);
+    }
+  };
 
   useEffect(() => {
-    if (!api) return;
-    const sync = () => {
-      const snap = api.selectedScrollSnap();
-      // Hide left control at the upcoming start (and anything before it).
-      setCanPrev(snap > startAt);
-      setCanNext(api.canScrollNext());
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    const onScroll = () => syncEdges();
+    const onWheel = (event: WheelEvent) => {
+      const max = el.scrollWidth - el.clientWidth;
+      if (max <= 0) return;
+      const dx =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (dx === 0) return;
+      event.preventDefault();
+      el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + dx));
+      syncEdges();
     };
-    sync();
-    api.on("select", sync);
-    api.on("reInit", sync);
-    api.on("settle", sync);
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("scrollend", onScroll);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    const ro = new ResizeObserver(() => syncEdges());
+    ro.observe(el);
+    const raf = requestAnimationFrame(syncEdges);
     return () => {
-      api.off("select", sync);
-      api.off("reInit", sync);
-      api.off("settle", sync);
+      cancelAnimationFrame(raf);
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("scrollend", onScroll);
+      el.removeEventListener("wheel", onWheel);
+      ro.disconnect();
     };
-  }, [api, startAt]);
+  }, [appointments.length]);
 
+  // Jump once per list identity to the soonest upcoming card.
   useEffect(() => {
-    if (!api) return;
-    api.scrollTo(startAt, true);
+    const key = `${appointments.length}:${startAt}:${appointments[0]?.id ?? ""}:${appointments[appointments.length - 1]?.id ?? ""}`;
+    if (jumpedKeyRef.current === key) return;
+    const el = scrollerRef.current;
+    if (!el) return;
     const id = requestAnimationFrame(() => {
-      const snap = api.selectedScrollSnap();
-      setCanPrev(snap > startAt);
-      setCanNext(api.canScrollNext());
+      jumpedKeyRef.current = key;
+      scrollToIndex(startAt, "auto");
+      syncEdges();
     });
     return () => cancelAnimationFrame(id);
-  }, [api, startAt, appointments.length]);
+  }, [startAt, appointments]);
+
+  const scrollByCards = (dir: -1 | 1) => {
+    scrollToIndex(nearestIndex() + dir);
+  };
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("a, button, input, textarea, select, label")) return;
+    const el = scrollerRef.current;
+    if (!el) return;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScroll: el.scrollLeft,
+      moved: false,
+    };
+    el.setPointerCapture(event.pointerId);
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    const el = scrollerRef.current;
+    if (!drag || !el || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    if (!drag.moved && Math.abs(dx) > 5) {
+      drag.moved = true;
+      el.dataset.diaryDragging = "1";
+    }
+    if (!drag.moved) return;
+    event.preventDefault();
+    el.scrollLeft = drag.startScroll - dx;
+    syncEdges();
+  };
+
+  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    const el = scrollerRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (el?.hasPointerCapture(event.pointerId)) {
+      el.releasePointerCapture(event.pointerId);
+    }
+    if (drag.moved) {
+      scrollToIndex(nearestIndex(), "smooth");
+      window.setTimeout(() => {
+        if (el) delete el.dataset.diaryDragging;
+      }, 40);
+    }
+    dragRef.current = null;
+    syncEdges();
+  };
 
   return (
-    <div className="relative">
+    <div className="relative isolate">
       {/*
-        Pull left by the shadow gutter so the card face still lines up with
-        KPI / Attention, while pl-* keeps the left shadow from clipping.
+        Pull left by the shadow gutter so card faces still line up with
+        KPI / Attention, while pl-* keeps left shadows from clipping.
       */}
       <div className="relative -ml-5 min-w-0">
-        <Carousel
-          setApi={setApi}
-          opts={{
-            align: "start",
-            containScroll: "trimSnaps",
-            // One snap per card; buttons advance by two with a soft ease.
-            slidesToScroll: 1,
-            skipSnaps: false,
-            duration: 45,
-            startIndex: startAt,
+        <div
+          ref={scrollerRef}
+          className="diary-carousel-scroller relative flex cursor-grab gap-4 overflow-x-auto overscroll-x-contain pl-5 pr-4 pt-3 pb-8 active:cursor-grabbing"
+          style={{
+            scrollSnapType: "x mandatory",
+            scrollPaddingInline: "1.25rem 1rem",
+            touchAction: "pan-x",
           }}
-          className="w-full"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
         >
-          <CarouselContent className="-ml-4" viewportClassName="pl-5 pr-4 pt-3 pb-8">
-            {appointments.map((a) => (
-              <CarouselItem
-                key={a.id}
-                className="basis-[min(100%,280px)] pt-1 pb-1 pl-4 sm:basis-[280px] lg:basis-[300px]"
-              >
-                <TodayCard appointment={a} isManager={isManager} showDay={showDay} />
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-        </Carousel>
-
-        {canPrev && (
-          <div className="diary-carousel-fade absolute left-5 z-[2] flex w-[3.25rem] items-center justify-start sm:w-16">
+          {appointments.map((a) => (
             <div
-              aria-hidden
-              className="diary-carousel-fade-left pointer-events-none absolute inset-0"
-            />
+              key={a.id}
+              data-diary-slide
+              className="w-[min(100%,280px)] shrink-0 snap-start py-1 sm:w-[280px] lg:w-[300px]"
+            >
+              <TodayCard appointment={a} isManager={isManager} showDay={showDay} />
+            </div>
+          ))}
+        </div>
+
+        {/*
+          Left fade starts at left-0 so the -ml-5 gutter hard-clip is covered;
+          arrow sits at the content edge (pl-5).
+        */}
+        {canPrev ? (
+          <div className="pointer-events-none absolute top-3 bottom-8 left-0 z-20 flex w-[4.75rem] items-center justify-start pl-5 sm:w-[5.25rem]">
+            <div aria-hidden className="diary-carousel-fade-left absolute inset-0" />
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="relative z-[1] ml-0.5 h-10 w-10 shrink-0 rounded-full border-edge-2 bg-card/95 shadow-lift backdrop-blur-sm"
-              onClick={() => {
-                if (!api) return;
-                const prev = Math.max(api.selectedScrollSnap() - 2, startAt);
-                api.scrollTo(prev);
-              }}
+              className="pointer-events-auto relative z-[1] h-9 w-9 shrink-0 rounded-full border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]"
+              onClick={() => scrollByCards(-1)}
               aria-label="Previous appointments"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
           </div>
-        )}
+        ) : null}
 
-        {canNext && (
-          <div className="diary-carousel-fade absolute right-0 z-[2] flex w-[3.25rem] items-center justify-end sm:w-16">
-            <div
-              aria-hidden
-              className="diary-carousel-fade-right pointer-events-none absolute inset-0"
-            />
+        {canNext ? (
+          <div className="pointer-events-none absolute top-3 bottom-8 right-0 z-20 flex w-16 items-center justify-end sm:w-[4.5rem]">
+            <div aria-hidden className="diary-carousel-fade-right absolute inset-0" />
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="relative z-[1] mr-0.5 h-10 w-10 shrink-0 rounded-full border-edge-2 bg-card/95 shadow-lift backdrop-blur-sm"
-              onClick={() => {
-                if (!api) return;
-                const next = Math.min(
-                  api.selectedScrollSnap() + 2,
-                  api.scrollSnapList().length - 1,
-                );
-                api.scrollTo(next);
-              }}
+              className="pointer-events-auto relative z-[1] mr-1 h-9 w-9 shrink-0 rounded-full border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]"
+              onClick={() => scrollByCards(1)}
               aria-label="Next appointments"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -300,6 +423,8 @@ function TodayCard({
   };
 
   const openDetail = () => {
+    // Ignore the click that fires at the end of a drag on the strip.
+    if (document.querySelector(".diary-carousel-scroller[data-diary-dragging]")) return;
     setCancelStep(false);
     setCancelReason("");
     setDetailOpen(true);
@@ -362,7 +487,7 @@ function TodayCard({
           <div className="space-y-1">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1 space-y-1">
-                <div onClick={stopCardOpen} onPointerDown={stopCardOpen} onKeyDown={stopCardOpen}>
+                <div onClick={stopCardOpen} onKeyDown={stopCardOpen}>
                   <AppointmentTimeEditor appointment={a}>
                     <button
                       type="button"
@@ -376,13 +501,12 @@ function TodayCard({
                   to="/patients/$id"
                   params={{ id: a.patient_id }}
                   onClick={stopCardOpen}
-                  onPointerDown={stopCardOpen}
                   className="block text-sm font-semibold leading-snug tracking-[-0.012em] text-foreground text-balance hover:text-accent-ink"
                 >
                   {patientName}
                 </Link>
               </div>
-              <div className="shrink-0" onClick={stopCardOpen} onPointerDown={stopCardOpen}>
+              <div className="shrink-0" onClick={stopCardOpen}>
                 <StageBadge
                   stage={stage}
                   StageIcon={StageIcon}
@@ -401,7 +525,6 @@ function TodayCard({
           <div
             className="mt-auto flex flex-wrap items-center gap-2 [&_button]:inline-flex [&_button]:items-center"
             onClick={stopCardOpen}
-            onPointerDown={stopCardOpen}
           >
             <ConsentChip appointment={a} signed={consentSigned} />
             <PaymentChip appointment={a} status={paymentStatus} />

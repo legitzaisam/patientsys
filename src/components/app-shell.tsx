@@ -160,7 +160,7 @@ function AccountMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex max-w-[220px] cursor-pointer items-center gap-2 rounded-full py-1 pl-1 pr-2.5 text-left hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
+          className="flex h-10 max-w-[220px] cursor-pointer items-center gap-2 rounded-full py-0 pl-1 pr-2.5 text-left hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
           aria-label="Account menu"
         >
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground shadow-bloom">
@@ -297,7 +297,10 @@ function SidebarChrome({
             {teamMembers.map((member) => {
               const name = member.fullName || "Team member";
               const tone = laneFor(member.id);
-              const active = pathname === `/team/${member.id}`;
+              const isSelf = member.id === identity.userId;
+              const active = isSelf
+                ? pathname.startsWith("/profile")
+                : pathname === `/team/${member.id}`;
               const online = onlineIds.has(member.id);
               const className = cn(
                 "flex items-center gap-2.5 rounded-[11px] px-2.5 py-2.5 text-[13px] font-medium transition-colors",
@@ -308,9 +311,9 @@ function SidebarChrome({
               return (
                 <Link
                   key={member.id}
-                  to="/team/$id"
-                  search={{}}
-                  params={{ id: member.id }}
+                  {...(isSelf
+                    ? { to: "/profile" as const }
+                    : { to: "/team/$id" as const, search: {}, params: { id: member.id } })}
                   onClick={onNavigate}
                   className={className}
                 >
@@ -592,22 +595,22 @@ export function AppShell({ identity, children }: { identity: Identity; children:
         <main
           id="app-main-scroll"
           ref={mainScrollRef}
-          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-5 sm:px-[26px]"
+          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-5 sm:px-[26px] sm:pb-[26px]"
           onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 8)}
         >
-          <div className="pointer-events-none sticky top-0 z-20 -mx-5 flex h-[3.25rem] shrink-0 items-center gap-3 px-5 pt-1.5 sm:-mx-[26px] sm:px-7">
+          <div className="pointer-events-none sticky top-0 z-20 -mx-5 flex h-[3.5rem] shrink-0 items-center gap-3 px-5 sm:-mx-[26px] sm:px-[26px]">
             {!sidebarOpen && (
               <Button
                 variant="outline"
                 size="icon"
-                className="pointer-events-auto h-9 w-9"
+                className="pointer-events-auto h-10 w-10"
                 onClick={() => setOpen(true)}
                 aria-label="Open sidebar"
               >
                 <PanelLeft className="h-4 w-4" />
               </Button>
             )}
-            <div className="pointer-events-auto ml-auto flex items-center gap-2">
+            <div className="pointer-events-auto ml-auto flex h-10 items-center gap-2">
               <ToolbarAlerts identity={identity} scrolled={scrolled} />
               <AccountMenu
                 identity={identity}
@@ -619,7 +622,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
               />
             </div>
           </div>
-          <div className="mx-auto -mt-1 flex w-full max-w-[1400px] flex-1 shrink-0 flex-col">
+          <div className="mx-auto mt-2 flex w-full max-w-[1400px] flex-1 shrink-0 flex-col">
             {children}
           </div>
         </main>

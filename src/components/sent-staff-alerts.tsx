@@ -93,13 +93,13 @@ export function SentStaffAlerts({
             </li>
           )}
           {(rows ?? []).map((row) => {
-            const { headline, topic } = parseStaffAlertTitle(row.title);
+            const { headline } = parseStaffAlertTitle(row.title);
             return (
             <li key={row.id}>
               <button
                 type="button"
                 onClick={() => openChatWith(row.recipient_id)}
-                className="w-full cursor-pointer rounded-2xl border border-edge bg-glass-2 px-3.5 py-3 text-left transition-colors hover:border-accent-line hover:bg-accent-wash focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full cursor-pointer rounded-2xl border border-edge bg-glass-2 px-3.5 py-3 text-left transition-colors hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] focus-visible:outline-none focus-visible:border-edge-2 focus-visible:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
                 aria-label={`Open chat with ${row.recipient_name}`}
               >
               <div className="flex items-start justify-between gap-2">
@@ -107,10 +107,8 @@ export function SentStaffAlerts({
                   <p className="text-sm font-medium leading-5 text-foreground line-clamp-2">
                     {headline}
                   </p>
-                  {topic ? (
-                    <p className="mt-1 text-xs italic text-muted-foreground line-clamp-2">
-                      {topic}
-                    </p>
+                  {row.body ? (
+                    <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{row.body}</p>
                   ) : null}
                 </div>
                 {row.read_at ? (

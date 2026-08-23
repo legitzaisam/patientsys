@@ -87,6 +87,8 @@ export function UrgentStaffAlerts() {
     mutationFn: (id: string) => markRead({ data: { id } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
+      void queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
       toast.success("Alert acknowledged");
       setCursor(0);
       setReplying(false);
@@ -96,12 +98,11 @@ export function UrgentStaffAlerts() {
   });
 
   const replyMutation = useMutation({
-    mutationFn: async (args: { recipientId: string; title: string; body: string; alertId: string }) => {
+    mutationFn: async (args: { recipientId: string; body: string; alertId: string }) => {
       await sendAlert({
         data: {
           audience: "user",
           recipientId: args.recipientId,
-          title: args.title,
           body: args.body,
           urgent: false,
         },
@@ -111,6 +112,7 @@ export function UrgentStaffAlerts() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
+      void queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
       toast.success("Reply sent");
       setReplying(false);
       setReply("");
@@ -211,9 +213,10 @@ export function UrgentStaffAlerts() {
 
         <div className="relative mt-2.5 min-w-0">
           <p className="text-xs font-semibold text-foreground">From {fromName}</p>
-          <p className="mt-0.5 truncate text-sm font-semibold text-foreground">{displayTitle}</p>
-          {current.body ? (
-            <p className="mt-1.5 text-2xs text-muted-foreground line-clamp-3">{current.body}</p>
+          {(current.body || displayTitle) ? (
+            <p className="mt-1.5 text-sm font-medium leading-snug text-foreground">
+              {current.body || displayTitle}
+            </p>
           ) : null}
         </div>
 
@@ -251,7 +254,6 @@ export function UrgentStaffAlerts() {
                   }
                   replyMutation.mutate({
                     recipientId: current.sender_id,
-                    title: `Re: ${displayTitle.slice(0, 80)}`,
                     body: reply.trim(),
                     alertId: current.id,
                   });

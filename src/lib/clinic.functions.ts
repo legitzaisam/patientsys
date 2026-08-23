@@ -1360,7 +1360,6 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
     (data: {
       audience: "managers" | "practitioners" | "front_desk" | "all" | "user";
       recipientId?: string;
-      title: string;
       body: string;
       urgent?: boolean;
     }) => data,
@@ -1370,6 +1369,9 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
     if (!identity.isStaff) throw new Error("Staff only");
+
+    const body = data.body.trim();
+    if (!body) throw new Error("Write a message");
 
     let recipients: string[] = [];
     if (data.audience === "user") {
@@ -1397,8 +1399,8 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
         sender_id: ctx.userId,
         urgent: !!data.urgent,
         kind: data.urgent ? "urgent" : "staff_message",
-        title: `${data.urgent ? "Urgent" : "Message"} from ${from}: ${data.title}`,
-        body: data.body,
+        title: `${data.urgent ? "Urgent" : "Message"} from ${from}`,
+        body,
       })),
     );
     if (error) throw new Error(error.message);
@@ -1709,6 +1711,12 @@ async function requireOwner(context: Ctx) {
   if (!data) throw new Error("Clinic owner access required");
 }
 
+async function requireManager(context: Ctx) {
+  const identity = await loadIdentity(context);
+  if (!identity.isManager) throw new Error("Manager access required");
+  return identity;
+}
+
 export const listTeam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -1801,7 +1809,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    await requireManager(ctx);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const patch: Record<string, unknown> = {
       full_name: data.fullName,
@@ -2435,6 +2443,37 @@ export const submitProfileChange = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Staff update their own profile details immediately (no approval queue). */
+export const saveMyProfile = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      fullName: string;
+      jobTitle?: string;
+      registrationBody?: string;
+      registrationNumber?: string;
+    }) => data,
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await loadIdentity(ctx);
+    if (!identity.isStaff) throw new Error("Staff access only");
+    if (!data.fullName?.trim()) throw new Error("Full name is required");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        full_name: data.fullName.trim(),
+        job_title: data.jobTitle?.trim() || null,
+        registration_body: data.registrationBody?.trim() || null,
+        registration_number: data.registrationNumber?.trim() || null,
+      })
+      .eq("id", ctx.userId);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "profile.updated", "profiles", ctx.userId, null);
+    return { ok: true };
+  });
+
 /** The signed-in staff member's own profile plus their request history. */
 export const getMyProfile = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -2613,7 +2652,7 @@ export const deleteMyDocument = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Staff profiles: managers see full HR detail; other staff see a public card for chat/contact. */
+/** Staff profiles: all staff can view details; documents stay manager/self; edit is manager-only in UI. */
 export const getStaffProfile = createServerFn({ method: "GET" })
   .validator((data: { userId: string }) => data)
   .middleware([requireSupabaseAuth])
@@ -2622,8 +2661,9 @@ export const getStaffProfile = createServerFn({ method: "GET" })
     const identity = await loadIdentity(ctx);
     if (!identity.isStaff) throw new Error("Staff only");
     const isSelf = data.userId === ctx.userId;
-    const canViewPrivateDetails = identity.isManager || isSelf;
+    const canViewPrivateDetails = true;
     const canViewDocuments = identity.isManager || isSelf;
+    const canViewCommission = identity.isManager;
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: profile }, { data: roles }, { data: docs }, users, { data: requests }] = await Promise.all([
@@ -2634,9 +2674,7 @@ export const getStaffProfile = createServerFn({ method: "GET" })
         .select(canViewDocuments ? "*" : "category")
         .eq("user_id", data.userId)
         .order("created_at", { ascending: false }),
-      canViewPrivateDetails
-        ? supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 })
-        : Promise.resolve({ data: { users: [] as { id: string; email?: string }[] } }),
+      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
       identity.isOwner
         ? supabaseAdmin
             .from("profile_change_requests")
@@ -2646,26 +2684,16 @@ export const getStaffProfile = createServerFn({ method: "GET" })
             .limit(20)
         : Promise.resolve({ data: [] as never[] }),
     ]);
-    const email = canViewPrivateDetails
-      ? (users.data?.users?.find((u) => u.id === data.userId)?.email ?? "")
-      : "";
+    const email = users.data?.users?.find((u) => u.id === data.userId)?.email ?? "";
     const role = (roles ?? []).find((r) => r.role !== "patient")?.role ?? "";
     const presentCategories = [
       ...new Set((docs ?? []).map((d: { category: string }) => d.category).filter(Boolean)),
     ];
     const safeProfile = profile
-      ? canViewPrivateDetails
-        ? profile
-        : {
-            id: profile.id,
-            clinic_id: profile.clinic_id,
-            full_name: profile.full_name,
-            job_title: profile.job_title,
-            avatar_url: profile.avatar_url ?? null,
-            registration_body: null,
-            registration_number: null,
-            commission_rate: null,
-          }
+      ? {
+          ...profile,
+          commission_rate: canViewCommission ? profile.commission_rate : null,
+        }
       : null;
 
     return {
@@ -3664,7 +3692,7 @@ async function getOrCreateConversationId(ctx: Ctx, peerUserId: string) {
   return created.id as string;
 }
 
-/** Open (or create) a 1:1 staff chat and return messages + read receipts. */
+/** Open (or create) a 1:1 staff chat and return messages, peer alerts, and read receipts. */
 export const getStaffChat = createServerFn({ method: "GET" })
   .validator((data: { peerUserId: string }) => data)
   .middleware([requireSupabaseAuth])
@@ -3672,23 +3700,39 @@ export const getStaffChat = createServerFn({ method: "GET" })
     const ctx = context as Ctx;
     await assertStaffPeer(ctx, data.peerUserId);
     const conversationId = await getOrCreateConversationId(ctx, data.peerUserId);
+    const peer = data.peerUserId;
 
-    const [{ data: messages }, { data: reads }, { data: peerProfile }] = await Promise.all([
-      ctx.supabase
-        .from("staff_chat_messages")
-        .select("id, sender_id, body, created_at")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
-        .limit(200),
-      ctx.supabase
-        .from("staff_conversation_reads")
-        .select("user_id, last_read_at")
-        .eq("conversation_id", conversationId),
-      ctx.supabase.from("profiles").select("id, full_name, job_title, avatar_url").eq("id", data.peerUserId).maybeSingle(),
-    ]);
+    const [{ data: messages }, { data: reads }, { data: peerProfile }, { data: alerts }] =
+      await Promise.all([
+        ctx.supabase
+          .from("staff_chat_messages")
+          .select("id, sender_id, body, created_at")
+          .eq("conversation_id", conversationId)
+          .order("created_at", { ascending: true })
+          .limit(200),
+        ctx.supabase
+          .from("staff_conversation_reads")
+          .select("user_id, last_read_at")
+          .eq("conversation_id", conversationId),
+        ctx.supabase
+          .from("profiles")
+          .select("id, full_name, job_title, avatar_url")
+          .eq("id", peer)
+          .maybeSingle(),
+        // Direct alerts + alert-replies between these two people (not chat pings).
+        ctx.supabase
+          .from("staff_notifications")
+          .select("id, sender_id, recipient_id, title, body, urgent, kind, read_at, created_at")
+          .in("kind", ["urgent", "staff_message"])
+          .or(
+            `and(sender_id.eq.${ctx.userId},recipient_id.eq.${peer}),and(sender_id.eq.${peer},recipient_id.eq.${ctx.userId})`,
+          )
+          .order("created_at", { ascending: true })
+          .limit(200),
+      ]);
 
     const peerReadAt =
-      ((reads ?? []) as { user_id: string; last_read_at: string }[]).find((r) => r.user_id === data.peerUserId)
+      ((reads ?? []) as { user_id: string; last_read_at: string }[]).find((r) => r.user_id === peer)
         ?.last_read_at ?? null;
     const myReadAt =
       ((reads ?? []) as { user_id: string; last_read_at: string }[]).find((r) => r.user_id === ctx.userId)
@@ -3697,7 +3741,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
     return {
       conversationId,
       peer: {
-        id: data.peerUserId,
+        id: peer,
         full_name: (peerProfile as { full_name?: string } | null)?.full_name ?? "Teammate",
         job_title: (peerProfile as { job_title?: string | null } | null)?.job_title ?? null,
         avatar_url: (peerProfile as { avatar_url?: string | null } | null)?.avatar_url ?? null,
@@ -3712,6 +3756,32 @@ export const getStaffChat = createServerFn({ method: "GET" })
             m.sender_id === ctx.userId && peerReadAt != null && peerReadAt >= m.created_at,
         }),
       ),
+      alerts: (
+        (alerts ?? []) as {
+          id: string;
+          sender_id: string | null;
+          recipient_id: string;
+          title: string;
+          body: string | null;
+          urgent: boolean | null;
+          kind: string;
+          read_at: string | null;
+          created_at: string;
+        }[]
+      )
+        .filter((a) => a.sender_id === ctx.userId || a.sender_id === peer)
+        .map((a) => ({
+          id: a.id,
+          sender_id: a.sender_id as string,
+          recipient_id: a.recipient_id,
+          title: a.title,
+          body: a.body,
+          urgent: !!a.urgent || a.kind === "urgent",
+          kind: a.kind,
+          read_at: a.read_at,
+          created_at: a.created_at,
+          mine: a.sender_id === ctx.userId,
+        })),
     };
   });
 
@@ -3754,14 +3824,15 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
 
     // Lightweight bell notice for the peer (one pending chat ping per sender).
     const from = identity.profile?.full_name || identity.email || "A colleague";
-    await ctx.supabase
+    const { error: clearErr } = await ctx.supabase
       .from("staff_notifications")
       .delete()
       .eq("recipient_id", data.peerUserId)
       .eq("sender_id", ctx.userId)
       .eq("kind", "staff_chat")
       .is("read_at", null);
-    await ctx.supabase.from("staff_notifications").insert({
+    if (clearErr) throw new Error(clearErr.message);
+    const { error: notifyErr } = await ctx.supabase.from("staff_notifications").insert({
       clinic_id: CLINIC_ID,
       recipient_id: data.peerUserId,
       sender_id: ctx.userId,
@@ -3770,6 +3841,7 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
       title: `Message from ${from}`,
       body: body.slice(0, 180),
     });
+    if (notifyErr) throw new Error(notifyErr.message);
 
     return {
       conversationId,
