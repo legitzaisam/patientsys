@@ -8,10 +8,19 @@ import {
 } from "@/lib/appointment-overlap";
 import { bookingDetailsMessage, type PaymentLinkKind } from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
+import { PERMISSION_KEYS, type PermissionKey } from "@/lib/permissions";
+import {
+  type Ctx,
+  loadIdentity,
+  reloadIdentity,
+  requireManager,
+  requireOwner,
+  requirePermission,
+} from "@/lib/auth/guards.server";
+
+export { PERMISSION_KEYS, type PermissionKey };
 
 const CLINIC_ID = "11111111-1111-4111-8111-111111111111";
-
-type Ctx = { supabase: any; userId: string; claims: Record<string, unknown> };
 
 /** Readable temporary password for new staff invites (manager shares it out-of-band). */
 function generateTemporaryPassword(): string {
@@ -48,111 +57,6 @@ async function assertNoPractitionerOverlap(
   const { data, error } = await q.limit(1);
   if (error) throw new Error(error.message);
   if (data?.length) throw new Error(PRACTITIONER_OVERLAP_MESSAGE);
-}
-
-/** Capabilities a manager can grant to receptionists and practitioners. */
-export const PERMISSION_KEYS = [
-  "reports.retention",
-  "reports.performance",
-  "team.view",
-  "team.approve_changes",
-  "settings.treatments",
-  "notifications.delete",
-  "tasks.delete",
-] as const;
-export type PermissionKey = (typeof PERMISSION_KEYS)[number];
-
-async function loadIdentity(context: Ctx) {
-  const [rolesRes, profileRes, patientRes, permsRes] = await Promise.all([
-    context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
-    context.supabase
-      .from("profiles")
-      .select("id, clinic_id, full_name, job_title, registration_body, registration_number, avatar_url")
-      .eq("id", context.userId)
-      .maybeSingle(),
-    context.supabase.from("patients").select("id, first_name, last_name").eq("user_id", context.userId).maybeSingle(),
-    context.supabase.from("role_permissions").select("role, permission, enabled"),
-  ]);
-
-  // A failed read here is indistinguishable from "no rows", which would silently
-  // strip a manager of every role and reclassify them as a patient. Fail loudly
-  // instead, so the caller sees a broken connection rather than wrong access.
-  const failed = (
-    [
-      ["roles", rolesRes],
-      ["profile", profileRes],
-      ["patient record", patientRes],
-      ["permissions", permsRes],
-    ] as const
-  ).find(([, res]) => res.error);
-  if (failed) {
-    const [what, res] = failed;
-    throw new Error(`Could not load your ${what}: ${res.error.message}`);
-  }
-
-  const { data: roles } = rolesRes;
-  const { data: profile } = profileRes;
-  const { data: patient } = patientRes;
-  const { data: perms } = permsRes;
-  const roleList: string[] = (roles ?? []).map((r: { role: string }) => r.role);
-  const isOwner = roleList.includes("owner");
-  const isStaff = roleList.some(
-    (r) => r === "owner" || r === "manager" || r === "practitioner" || r === "front_desk",
-  );
-  /** Management tier (clinic owner or manager) — used for overview UI, not full access. */
-  const isManager = isOwner || roleList.includes("manager");
-  // Only clinic owners get every capability automatically; managers use role_permissions.
-  const permissions: string[] = isOwner
-    ? [...PERMISSION_KEYS]
-    : Array.from(
-        new Set(
-          ((perms ?? []) as { role: string; permission: string; enabled: boolean }[])
-            .filter((p) => p.enabled && roleList.includes(p.role))
-            .map((p) => p.permission),
-        ),
-      );
-  return {
-    userId: context.userId,
-    email: (context.claims["email"] as string) ?? "",
-    roles: roleList,
-    isStaff,
-    /** Clinic owner — full access; customises manager / staff permissions. */
-    isOwner,
-    /** Owner or manager role (management portal tier). */
-    isManager,
-    /** Hard deletes stay with the clinic owner. */
-    canDelete: isOwner,
-    isPatient: !isStaff,
-    /** Capability keys from role_permissions (owners hold every key). */
-    permissions,
-    profile: profile ?? null,
-    patient: patient ?? null,
-    /** True when staff must set a new password before using the app (invite / reset). */
-    mustChangePassword: await resolveAppMetaFlag(context, "must_change_password"),
-    /** True for newly invited staff until they dismiss the welcome dialog. */
-    welcomePending: await resolveAppMetaFlag(context, "welcome_pending"),
-  };
-}
-
-type AppMetaFlag = "must_change_password" | "welcome_pending";
-
-/**
- * Prefer Auth’s live app_metadata over the access-token claim. After admin
- * updates (password change, welcome ack) the JWT can stay stale until refresh.
- */
-async function resolveAppMetaFlag(context: Ctx, flag: AppMetaFlag): Promise<boolean> {
-  const fromJwt = Boolean(
-    (context.claims["app_metadata"] as Record<string, unknown> | undefined)?.[flag],
-  );
-  if (!fromJwt) return false;
-  try {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin.auth.admin.getUserById(context.userId);
-    if (error || !data.user) return fromJwt;
-    return Boolean((data.user.app_metadata as Record<string, unknown> | undefined)?.[flag]);
-  } catch {
-    return fromJwt;
-  }
 }
 
 /** Metadata stamped on invited staff — password gate, then one-time team welcome. */
@@ -300,16 +204,6 @@ async function purgeExpiredExTeamMembers() {
 }
 
 
-/** Throws unless the caller is a manager or has been granted the capability. */
-async function requirePermission(context: Ctx, key: PermissionKey) {
-  const identity = await loadIdentity(context);
-  if (!identity.isStaff) throw new Error("Staff access only");
-  if (!identity.isOwner && !identity.permissions.includes(key)) {
-    throw new Error("You do not have access to this area");
-  }
-  return identity;
-}
-
 async function audit(
   context: Ctx,
   action: string,
@@ -354,13 +248,14 @@ export const getMe = createServerFn({ method: "GET" })
           .from("profiles")
           .update({ clinic_id: CLINIC_ID, job_title: "Clinic Owner" })
           .eq("id", context.userId);
-        identity = await loadIdentity(context as Ctx);
+        // Roles just changed for this caller — the cached copy predates the insert.
+        identity = await reloadIdentity(context as Ctx);
       }
     }
     // Anyone linked to a patient record with no staff role is explicitly a patient.
     if (identity.roles.length === 0 && identity.patient) {
       await supabaseAdmin.from("user_roles").insert({ user_id: context.userId, role: "patient" });
-      identity = await loadIdentity(context as Ctx);
+      identity = await reloadIdentity(context as Ctx);
     }
     // Former staff keep a profiles row after revoke. Without a linked patient
     // record they must not fall into the patient portal — force sign-out.
@@ -1869,22 +1764,6 @@ export const signDocument = createServerFn({ method: "POST" })
 /* ------------------------------------------------------------------ */
 /* Team administration — manager (owner) only                          */
 /* ------------------------------------------------------------------ */
-
-async function requireOwner(context: Ctx) {
-  const { data } = await context.supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", context.userId)
-    .eq("role", "owner")
-    .maybeSingle();
-  if (!data) throw new Error("Clinic owner access required");
-}
-
-async function requireManager(context: Ctx) {
-  const identity = await loadIdentity(context);
-  if (!identity.isManager) throw new Error("Manager access required");
-  return identity;
-}
 
 export const listTeam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
