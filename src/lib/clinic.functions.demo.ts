@@ -18,7 +18,7 @@ import {
   type DemoRole,
 } from "@/lib/demo/data";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
-import { clinicDayKey } from "@/lib/clinic-time";
+import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
 import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import {
   findPractitionerOverlap,
@@ -384,18 +384,55 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
         appointmentId: a.id,
       });
     }
-    if (a.payment_status === "unpaid" || a.payment_status === "deposit_paid") {
+    if (a.payment_status === "deposit_paid") {
       attentionItems.push({
         id: `payment-${a.id}`,
-        kind: a.payment_status === "deposit_paid" ? "balance_due" : "payment_due",
+        kind: "balance_due",
         urgency: "urgent",
-        title: `${who} — ${a.payment_status === "deposit_paid" ? "balance due" : "unpaid"}`,
+        title: `${who} — balance due`,
         subtitle: `${a.treatment_name}`,
         patientId: a.patient_id,
         appointmentId: a.id,
       });
     }
   }
+
+  const DEPOSIT_LEAD_DAYS = 3;
+  let unpaidDeposits = sortAsc(
+    appointments.filter(
+      (a) =>
+        a.payment_status === "unpaid" &&
+        a.status !== "cancelled" &&
+        a.starts_at >= range.startISO &&
+        a.starts_at < new Date(today.getTime() + 30 * 86400000).toISOString(),
+    ),
+    "starts_at",
+  ).map(appointmentView);
+  if (isPractitioner && !isManager) {
+    unpaidDeposits = unpaidDeposits.filter((a) => a.practitioner_id === me.userId);
+  }
+  for (const a of unpaidDeposits) {
+    const who = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
+    const apptDay = clinicDayKey(new Date(a.starts_at));
+    const daysUntil = clinicDayDiff(todayISO, apptDay);
+    if (daysUntil < 0) continue;
+    const when = new Date(a.starts_at).toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+    const urgent = daysUntil <= DEPOSIT_LEAD_DAYS;
+    attentionItems.push({
+      id: `deposit-${a.id}`,
+      kind: "deposit_due",
+      urgency: urgent ? "urgent" : "this_week",
+      title: `${who} — deposit unpaid`,
+      subtitle: `${a.treatment_name} · ${when}`,
+      patientId: a.patient_id,
+      appointmentId: a.id,
+    });
+  }
+
   for (const t of due.filter((x) => x.next_due_at && x.next_due_at <= weekAhead)) {
     attentionItems.push({
       id: `due-${t.id}`,
@@ -551,6 +588,25 @@ export const getPatient = createServerFn({ method: "GET" })
         };
       })
       .filter(Boolean);
+    const bookingChase = sortAsc(upcoming, "starts_at")
+      .map((a) => {
+        const view = appointmentView(a);
+        const docStatus = view.documents?.status;
+        const issues: string[] = [];
+        if (a.payment_status === "unpaid") issues.push("Deposit unpaid");
+        if (a.payment_status === "deposit_paid") issues.push("Balance due");
+        if (docStatus !== "signed") issues.push("Consent due");
+        return {
+          id: a.id as string,
+          startsAt: a.starts_at as string,
+          treatmentName: (a.treatment_name as string) || "Treatment",
+          practitionerName: view.profiles?.full_name ?? null,
+          paymentStatus: (a.payment_status as string) ?? "unpaid",
+          consentSigned: docStatus === "signed",
+          issues,
+        };
+      })
+      .filter((b) => b.issues.length > 0);
     const { patientRetention } = await import("./retention.server");
     return {
       patient,
@@ -575,6 +631,7 @@ export const getPatient = createServerFn({ method: "GET" })
         "created_at",
       ),
       visitNotes,
+      bookingChase,
       retention: patientRetention(
         mine.map((t) => ({ performed_at: t.performed_at, next_due_at: t.next_due_at })),
         upcoming.length > 0,
@@ -2424,7 +2481,13 @@ export const updateRecallTask = createServerFn({ method: "POST" })
     const nextIds = new Set(data.recipients.map((r) => r.id));
     const assigneesChanged =
       prevIds.size !== nextIds.size || [...prevIds].some((id) => !nextIds.has(id));
-    const reassignedAt = assigneesChanged ? now : ((target as any).reassigned_at ?? null);
+    const assigneesAdded = data.recipients.some((r) => !prevIds.has(r.id));
+    const assigneesRemoved = group.some((g) => !nextIds.has(g.assigned_to));
+    const reassignedAt = assigneesAdded
+      ? now
+      : assigneesRemoved
+        ? null
+        : ((target as any).reassigned_at ?? null);
 
     const template = group[0]!;
     for (let i = recallTasks.length - 1; i >= 0; i--) {
@@ -2525,6 +2588,14 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
       if (!inGroup || !pick.has(task.assigned_to)) continue;
       removed.push((task.assigned_label as string) || "Assignee");
       recallTasks.splice(i, 1);
+    }
+    const now = new Date().toISOString();
+    for (const task of recallTasks) {
+      const inGroup = target.group_id ? task.group_id === target.group_id : task.id === target.id;
+      if (inGroup) {
+        (task as any).reassigned_at = null;
+        task.updated_at = now;
+      }
     }
     return { ok: true, removed };
   });
@@ -2907,6 +2978,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
         id: m.id as string,
         sender_id: m.sender_id as string,
         body: m.body as string,
+        attachments: Array.isArray(m.attachments) ? m.attachments : [],
         created_at: m.created_at as string,
         mine: m.sender_id === me.userId,
         readByPeer:
@@ -2917,11 +2989,20 @@ export const getStaffChat = createServerFn({ method: "GET" })
   });
 
 export const sendStaffChatMessage = createServerFn({ method: "POST" })
-  .validator((data: { peerUserId: string; body: string }) => data)
+  .validator(
+    (data: {
+      peerUserId: string;
+      body: string;
+      attachments?: { path: string; name: string; type: string; size: number }[];
+    }) => data,
+  )
   .handler(async ({ data }) => {
     const me = requireStaff();
-    const body = data.body.trim();
-    if (!body) throw new Error("Write a message first");
+    const attachments = (data.attachments ?? []).slice(0, 5);
+    const body =
+      data.body.trim() ||
+      (attachments.length === 1 ? "Sent an attachment" : attachments.length > 1 ? "Sent attachments" : "");
+    if (!body && attachments.length === 0) throw new Error("Write a message first");
     if (data.peerUserId === me.userId) throw new Error("Choose a teammate to message");
     const conversation = getOrCreateDemoConversation(me.userId, data.peerUserId);
     const now = new Date().toISOString();
@@ -2931,6 +3012,7 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
       clinic_id: CLINIC_ID,
       sender_id: me.userId,
       body,
+      attachments,
       created_at: now,
     };
     staffChatMessages.push(message);

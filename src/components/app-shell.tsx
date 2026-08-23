@@ -269,7 +269,7 @@ function SidebarChrome({
         </form>
       )}
 
-      <nav className="mt-1 min-h-0 flex-1 space-y-6 overflow-y-auto pb-5">
+      <nav className="scrollbar-none mt-1 min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain pb-5">
         <NavGroup label={identity.isStaff ? "Clinic" : "Care"}>
           {clinicLinks.map((item) => (
             <NavItem key={item.to} item={item} active={pathname.startsWith(item.to)} onNavigate={onNavigate} />

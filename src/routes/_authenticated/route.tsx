@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import {
   ForcePasswordChangeGate,
   StaffWelcomeDialog,
+} from "@/components/force-password-change-gate";
+import {
   hasClearedPasswordGate,
   shouldShowWelcomeAfterGate,
-} from "@/components/force-password-change-gate";
+} from "@/lib/password-gate-session";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { useIdentity } from "@/lib/use-identity";
 

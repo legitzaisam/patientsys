@@ -54,7 +54,7 @@ export function PractitionerHoverCard({
           sticky="always"
           hideWhenDetached={false}
           style={lane.style}
-          className="w-[18.5rem] overflow-hidden rounded-[22px] border-edge bg-card/95 p-0 shadow-popover backdrop-blur-glass backdrop-saturate-150"
+          className="w-[18.5rem] overflow-hidden rounded-[22px] border-edge p-0 shadow-popover"
         >
           {/* Soft lane wash + sheen — glass first, diary colour as a hint. */}
           <div className={cn("pointer-events-none absolute inset-0 opacity-55", lane.softBg)} aria-hidden />

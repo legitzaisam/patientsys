@@ -164,7 +164,7 @@
 
   --card: rgba(255, 255, 255, 0.82);
   --card-foreground: #2f3f66;
-  --popover: rgba(255, 255, 255, 0.88);
+  --popover: rgba(255, 255, 255, 0.78);
   --popover-foreground: #2f3f66;
   --secondary: rgba(255, 255, 255, 0.34);
   --secondary-foreground: #2f3f66;
@@ -579,7 +579,20 @@
     display: none;
   }
 
-  /* Diary: solid under gutter hard-clip, then soft dissolve under the arrow. */
+  /* Scrollable region with no visible scrollbar (trackpad / wheel / touch still work). */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* Diary: solid under gutter hard-clip, then soft dissolve under the arrow.
+   * Vertical mask softens top/bottom so the band doesn’t hard-cut card shadows. */
   .diary-carousel-fade-right {
     background: linear-gradient(
       to right,
@@ -588,6 +601,20 @@
       color-mix(in srgb, var(--background) 72%, transparent) 55%,
       color-mix(in srgb, var(--background) 94%, transparent) 82%,
       var(--background) 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 0.75rem,
+      #000 calc(100% - 1.25rem),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 0.75rem,
+      #000 calc(100% - 1.25rem),
+      transparent 100%
     );
   }
 
@@ -598,6 +625,20 @@
       var(--background) 1.15rem,
       color-mix(in srgb, var(--background) 85%, transparent) 42%,
       color-mix(in srgb, var(--background) 45%, transparent) 70%,
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 0.75rem,
+      #000 calc(100% - 1.25rem),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 0.75rem,
+      #000 calc(100% - 1.25rem),
       transparent 100%
     );
   }
@@ -719,6 +760,48 @@
   [data-sonner-toast].aetheria-toast {
     position: relative;
     overflow: hidden;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    width: 20rem !important;
+    min-height: 0;
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+    padding-left: 0.875rem !important;
+    padding-right: 2.75rem !important;
+    background: rgba(255, 255, 255, 0.78) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* Action / cancel: icon+copy on row 1, button on row 2. */
+  [data-sonner-toast].aetheria-toast:has([data-button]) {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "icon content"
+      ". action";
+    align-items: center !important;
+    column-gap: 0.75rem !important;
+    row-gap: 0.5rem !important;
+  }
+
+  /* With a description (and no action), keep icon aligned to the title. */
+  [data-sonner-toast].aetheria-toast:has([data-description]):not(:has([data-button])) {
+    align-items: flex-start !important;
+  }
+
+  [data-sonner-toast].aetheria-toast:has([data-description]) [data-title] {
+    display: flex;
+    min-height: 2rem;
+    align-items: center;
+  }
+
+  [data-sonner-toast].aetheria-toast:not(:has([data-icon])) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "content"
+      "action";
   }
 
   [data-sonner-toast].aetheria-toast::before {
@@ -733,6 +816,110 @@
   [data-sonner-toast].aetheria-toast > * {
     position: relative;
     z-index: 1;
+  }
+
+  [data-sonner-toast].aetheria-toast:has([data-button]) [data-icon] {
+    grid-area: icon;
+  }
+
+  [data-sonner-toast].aetheria-toast:has([data-button]) [data-content] {
+    grid-area: content;
+    min-width: 0;
+  }
+
+  [data-sonner-toast].aetheria-toast [data-icon] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin: 0;
+  }
+
+  [data-sonner-toast].aetheria-toast [data-content] {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  [data-sonner-toast].aetheria-toast [data-title] {
+    display: flex;
+    align-items: center;
+    min-height: 2rem;
+    line-height: 1.25;
+  }
+
+  [data-sonner-toast].aetheria-toast [data-button][data-action],
+  [data-sonner-toast].aetheria-toast [data-button][data-cancel] {
+    grid-area: action;
+    justify-self: start;
+    width: auto !important;
+    margin-left: 0 !important;
+    margin-top: 0 !important;
+  }
+
+  [data-sonner-toast].aetheria-toast [data-close-button].aetheria-toast-close {
+    position: absolute !important;
+    z-index: 2;
+    grid-area: unset !important;
+  }
+
+  [data-sonner-toast].aetheria-toast [data-description] {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* Custom expandable quick-reply toast — own layout, ignore action grid. */
+  [data-sonner-toast].aetheria-quick-reply-toast {
+    display: block !important;
+    grid-template-columns: none !important;
+    grid-template-areas: none !important;
+    width: 20rem !important;
+    padding: 0.875rem !important;
+    overflow: hidden;
+    cursor: default !important;
+    will-change: transform;
+  }
+
+  [data-sonner-toast].aetheria-quick-reply-toast[data-aetheria-docked="true"] {
+    box-shadow:
+      var(--shadow-lift),
+      0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent);
+  }
+
+  [data-sonner-toast].aetheria-quick-reply-toast:has([data-expanded="true"]) {
+    width: 23rem !important;
+    padding-bottom: 0.625rem !important;
+    /* Expanded mini-chat stays more solid for readability. */
+    background: color-mix(in srgb, var(--card) 95%, transparent) !important;
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  }
+
+  [data-sonner-toast].aetheria-quick-reply-toast [data-content] {
+    display: contents;
+  }
+
+  /* Sonner doesn’t render × for custom toasts; we use our own. Hide any stray one. */
+  [data-sonner-toast].aetheria-quick-reply-toast [data-close-button] {
+    display: none !important;
+  }
+
+  [data-sonner-toast].aetheria-quick-reply-toast.aetheria-toast-pinned {
+    cursor: default !important;
+    box-shadow:
+      var(--shadow-popover),
+      0 0 0 1px color-mix(in srgb, var(--accent-line) 55%, transparent);
+  }
+
+  .quick-reply-thread {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--ink-3) 35%, transparent) transparent;
   }
 
   [data-sonner-toast][data-type="success"].aetheria-toast {
@@ -754,7 +941,8 @@
   }
 
   [data-sonner-toast] [data-close-button].aetheria-toast-close {
-    transform: none !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
     background: var(--glass-2) !important;
     border: 1px solid var(--edge) !important;
     color: var(--ink-3) !important;
@@ -764,10 +952,6 @@
     background: rgba(47, 63, 102, 0.08) !important;
     border-color: var(--edge-2) !important;
     color: var(--foreground) !important;
-  }
-
-  [data-sonner-toast] [data-button][data-action] {
-    margin-left: auto;
   }
 
   [data-sonner-toast].aetheria-toast-pinned {

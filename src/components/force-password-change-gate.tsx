@@ -5,6 +5,11 @@ import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { acknowledgeWelcome, changeOwnPassword } from "@/lib/clinic.functions";
 import { handleOverlayKeyDown } from "@/lib/overlay-keys";
+import {
+  clearWelcomeAfterGate,
+  markPasswordGateCleared,
+  markWelcomeAfterGate,
+} from "@/lib/password-gate-session";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { Button } from "@/components/ui/button";
@@ -23,49 +28,6 @@ type MeLike = {
   welcomePending?: boolean;
   userId?: string;
 } | null | undefined;
-
-const pwClearedKey = (userId: string) => `aetheria:password-cleared:${userId}`;
-const welcomeAfterGateKey = (userId: string) => `aetheria:welcome-after-gate:${userId}`;
-
-export function hasClearedPasswordGate(userId: string) {
-  try {
-    return sessionStorage.getItem(pwClearedKey(userId)) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function shouldShowWelcomeAfterGate(userId: string) {
-  try {
-    return sessionStorage.getItem(welcomeAfterGateKey(userId)) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function markPasswordGateCleared(userId: string) {
-  try {
-    sessionStorage.setItem(pwClearedKey(userId), "1");
-  } catch {
-    /* private mode / blocked storage */
-  }
-}
-
-function markWelcomeAfterGate(userId: string) {
-  try {
-    sessionStorage.setItem(welcomeAfterGateKey(userId), "1");
-  } catch {
-    /* private mode / blocked storage */
-  }
-}
-
-export function clearWelcomeAfterGate(userId: string) {
-  try {
-    sessionStorage.removeItem(welcomeAfterGateKey(userId));
-  } catch {
-    /* private mode / blocked storage */
-  }
-}
 
 /**
  * Blocking gate after invite / manager password reset. Staff cannot dismiss this

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Bell, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type AttentionRaw = {
   id: string;
@@ -17,8 +18,19 @@ type TaskPerson = {
   key: string;
   name: string;
   href: string;
-  subtitle: string | null;
+  patientId?: string;
+  subtitleParts: { treatment: string; suffix?: string }[];
 };
+
+const APPOINTMENT_ATTENTION_KINDS = new Set([
+  "deposit_due",
+  "balance_due",
+  "consent_due",
+  "no_show",
+  "payment_due",
+]);
+
+const APPOINTMENT_SUMMARY_LIMIT = 2;
 
 type TaskGroup = {
   kind: string;
@@ -29,6 +41,7 @@ type TaskGroup = {
 
 const KIND_ORDER = [
   "no_show",
+  "deposit_due",
   "consent_due",
   "payment_due",
   "balance_due",
@@ -41,6 +54,7 @@ const PREVIEW_LIMIT = 4;
 
 const CHIP_META: Record<string, { label: string; className: string }> = {
   no_show: { label: "No show", className: "bg-destructive-bg text-destructive-ink" },
+  deposit_due: { label: "Deposit due", className: "bg-destructive-bg text-destructive-ink" },
   consent_due: { label: "Consent due", className: "bg-warning-bg text-consent-ink" },
   payment_due: { label: "Unpaid", className: "bg-destructive-bg text-destructive-ink" },
   balance_due: { label: "Balance due", className: "bg-warning-bg text-warning-ink" },
@@ -54,10 +68,64 @@ function nameFromTitle(title: string) {
   return (idx >= 0 ? title.slice(0, idx) : title).trim() || "Unknown";
 }
 
+function parseAttentionSubtitle(subtitle?: string): { treatment: string; suffix?: string } | null {
+  if (!subtitle?.trim()) return null;
+  const s = subtitle.trim();
+  if (s.startsWith("Due ")) return { treatment: s };
+
+  const noClock = s.replace(/\s·\s\d{1,2}:\d{2}$/, "").trim();
+  const splitAt = noClock.lastIndexOf(" · ");
+  if (splitAt === -1) return { treatment: noClock };
+
+  const treatment = noClock.slice(0, splitAt).trim();
+  const suffix = noClock.slice(splitAt + 3).trim();
+  return treatment ? { treatment, suffix: suffix || undefined } : null;
+}
+
+function isClockTime(suffix: string) {
+  return /^\d{1,2}:\d{2}$/.test(suffix);
+}
+
+function formatSubtitlePart(part: { treatment: string; suffix?: string }) {
+  if (!part.suffix) return part.treatment;
+  if (isClockTime(part.suffix)) return `${part.treatment} · ${part.suffix}`;
+  return `${part.suffix} · ${part.treatment}`;
+}
+
+function formatMergedSubtitle(parts: { treatment: string; suffix?: string }[]): string | null {
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return formatSubtitlePart(parts[0]!);
+
+  const bySuffix = new Map<string, string[]>();
+  const bare: string[] = [];
+
+  for (const part of parts) {
+    if (!part.suffix) {
+      if (!bare.includes(part.treatment)) bare.push(part.treatment);
+      continue;
+    }
+    const list = bySuffix.get(part.suffix) ?? [];
+    if (!list.includes(part.treatment)) list.push(part.treatment);
+    bySuffix.set(part.suffix, list);
+  }
+
+  const segments = [
+    ...bare,
+    ...[...bySuffix.entries()].map(([suffix, treatments]) =>
+      isClockTime(suffix)
+        ? treatments.map((treatment) => `${treatment} · ${suffix}`).join(" · ")
+        : `${suffix} · ${treatments.join(", ")}`,
+    ),
+  ];
+  return segments.join(" · ") || null;
+}
+
+function subtitleKey(part: { treatment: string; suffix?: string }) {
+  return `${part.treatment}|${part.suffix ?? ""}`;
+}
+
 function treatmentFromSubtitle(subtitle?: string) {
-  if (!subtitle) return null;
-  const cleaned = subtitle.replace(/\s·\s\d{1,2}:\d{2}$/, "").trim();
-  return cleaned || null;
+  return parseAttentionSubtitle(subtitle);
 }
 
 function hrefFor(item: AttentionRaw) {
@@ -65,6 +133,28 @@ function hrefFor(item: AttentionRaw) {
   if (item.patientId) return `/patients/${item.patientId}`;
   if (item.appointmentId) return `/schedule?day=${new Date().toISOString().slice(0, 10)}`;
   return "/patients";
+}
+
+function patientBookingsChaseHref(patientId: string) {
+  return `/patients/${patientId}?tab=treatments&chase=1`;
+}
+
+function displaySubtitle(person: TaskPerson, kind: string) {
+  if (APPOINTMENT_ATTENTION_KINDS.has(kind) && person.subtitleParts.length > APPOINTMENT_SUMMARY_LIMIT) {
+    return "Several appointments";
+  }
+  return formatMergedSubtitle(person.subtitleParts);
+}
+
+function displayHref(person: TaskPerson, kind: string) {
+  if (
+    APPOINTMENT_ATTENTION_KINDS.has(kind) &&
+    person.subtitleParts.length > APPOINTMENT_SUMMARY_LIMIT &&
+    person.patientId
+  ) {
+    return patientBookingsChaseHref(person.patientId);
+  }
+  return person.href;
 }
 
 function personKey(item: AttentionRaw) {
@@ -84,10 +174,10 @@ function groupByTask(items: AttentionRaw[]): TaskGroup[] {
     }
     const key = personKey(item);
     const existing = people.get(key);
-    const treatment = treatmentFromSubtitle(item.subtitle);
+    const parsed = treatmentFromSubtitle(item.subtitle);
     if (existing) {
-      if (treatment && !existing.subtitle?.includes(treatment)) {
-        existing.subtitle = existing.subtitle ? `${existing.subtitle} · ${treatment}` : treatment;
+      if (parsed && !existing.subtitleParts.some((part) => subtitleKey(part) === subtitleKey(parsed))) {
+        existing.subtitleParts.push(parsed);
       }
       continue;
     }
@@ -95,7 +185,8 @@ function groupByTask(items: AttentionRaw[]): TaskGroup[] {
       key,
       name: nameFromTitle(item.title),
       href: hrefFor(item),
-      subtitle: treatment,
+      patientId: item.patientId,
+      subtitleParts: parsed ? [parsed] : [],
     });
   }
 
@@ -125,7 +216,7 @@ export function AttentionList({ items }: { items: any[] }) {
 
   return (
     <div className="space-y-6">
-      {urgent.length > 0 && <AttentionSection title="Urgent today" items={urgent} tone="urgent" />}
+      {urgent.length > 0 && <AttentionSection title="Urgent" items={urgent} tone="urgent" />}
       {thisWeek.length > 0 && <AttentionSection title="This week" items={thisWeek} tone="muted" />}
       {items.length === 0 && (
         <div className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 p-8 text-center">
@@ -226,20 +317,13 @@ function TaskCategory({
       {open && (
         <ul className="mb-1 ml-1 space-y-0.5 border-l border-glass-line pl-3">
           {visible.map((person) => (
-            <li key={person.key}>
-              <Link
-                to={person.href as any}
-                className="flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.06)] active:bg-[rgba(47,63,102,0.1)]"
-              >
-                <i className={`h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
-                <p className="min-w-0 flex-1 truncate text-[13px] leading-snug text-foreground">
-                  <span className="font-semibold">{person.name}</span>
-                  {person.subtitle ? (
-                    <span className="font-normal text-muted-foreground"> · {person.subtitle}</span>
-                  ) : null}
-                </p>
-              </Link>
-            </li>
+            <AttentionPersonRow
+              key={person.key}
+              person={person}
+              subtitle={displaySubtitle(person, task.kind)}
+              href={displayHref(person, task.kind)}
+              rail={rail}
+            />
           ))}
           {hiddenCount > 0 && (
             <li>
@@ -258,9 +342,95 @@ function TaskCategory({
   );
 }
 
+function AttentionPersonRow({
+  person,
+  subtitle,
+  href,
+  rail,
+}: {
+  person: TaskPerson;
+  subtitle: string | null;
+  href: string;
+  rail: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const [truncated, setTruncated] = useState(false);
+  const summarized = subtitle === "Several appointments";
+
+  useLayoutEffect(() => {
+    if (expanded || summarized) return;
+    const el = textRef.current;
+    if (!el) return;
+    const measure = () => setTruncated(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded, person.name, subtitle, summarized]);
+
+  const line = (
+    <>
+      <span className="font-semibold text-foreground">{person.name}</span>
+      {subtitle ? <span className="font-normal text-muted-foreground"> · {subtitle}</span> : null}
+    </>
+  );
+
+  const expandable = Boolean(subtitle) && !summarized && (truncated || expanded);
+
+  if (!expandable) {
+    return (
+      <li>
+        <Link
+          to={href as any}
+          className="flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.06)] active:bg-[rgba(47,63,102,0.1)]"
+        >
+          <i className={`h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
+          <p ref={textRef} className="min-w-0 flex-1 truncate text-[13px] leading-snug text-foreground">
+            {line}
+          </p>
+        </Link>
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <div className="flex items-start gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.06)]">
+        <i className={`mt-1.5 h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => setExpanded((open) => !open)}
+            aria-expanded={expanded}
+            title={expanded ? undefined : subtitle ?? undefined}
+            className="w-full cursor-pointer text-left"
+          >
+            <p
+              ref={textRef}
+              className={cn("text-[13px] leading-snug text-foreground", !expanded && "truncate")}
+            >
+              {line}
+            </p>
+          </button>
+          {expanded ? (
+            <Link
+              to={href as any}
+              className="mt-1 inline-flex text-2xs font-semibold text-accent-ink hover:underline"
+            >
+              Open record
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </li>
+  );
+}
+
 function railFor(kind: string) {
   switch (kind) {
     case "no_show":
+    case "deposit_due":
     case "payment_due":
     case "balance_due":
       return "bg-destructive";

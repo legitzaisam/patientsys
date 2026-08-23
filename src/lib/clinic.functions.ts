@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { clinicDayKey, clinicDayRange } from "@/lib/clinic-time";
+import { clinicDayDiff, clinicDayKey, clinicDayRange } from "@/lib/clinic-time";
 import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import {
@@ -398,6 +398,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       pendingDocs,
       historyFlags,
       todayAppointmentsRaw,
+      unpaidDepositRaw,
       prevMonthTreatments,
       prevMonthPatients,
       unreadMessages,
@@ -433,6 +434,17 @@ export const getDashboard = createServerFn({ method: "GET" })
         .gte("starts_at", todayStart)
         .lt("starts_at", tomorrowStart)
         .order("starts_at", { ascending: true }),
+      supabase
+        .from("appointments")
+        .select(
+          "id, starts_at, treatment_name, patient_id, practitioner_id, status, payment_status, patients(first_name, last_name)",
+        )
+        .eq("payment_status", "unpaid")
+        .neq("status", "cancelled")
+        .gte("starts_at", todayStart)
+        .lt("starts_at", new Date(today.getTime() + 30 * 86400000).toISOString())
+        .order("starts_at", { ascending: true })
+        .limit(80),
       supabase.from("treatments").select("id, price, patient_id, practitioner_id, performed_at").gte("performed_at", prevMonthStart).lt("performed_at", prevMonthEnd),
       supabase.from("patients").select("id, created_at").gte("created_at", prevMonthStart).lt("created_at", prevMonthEnd),
       supabase
@@ -454,6 +466,7 @@ export const getDashboard = createServerFn({ method: "GET" })
     let monthTreats = (monthTreatments.data ?? []) as any[];
     let prevMonthTreats = (prevMonthTreatments.data ?? []) as any[];
     let todayAppts = (todayAppointmentsRaw.data ?? []) as any[];
+    let unpaidDeposits = (unpaidDepositRaw.data ?? []) as any[];
     let dueDates = (dueDatesRaw.data ?? []) as { next_due_at: string; practitioner_id: string | null }[];
 
     if (isPractitioner && !isManager) {
@@ -462,6 +475,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       monthTreats = monthTreats.filter((t: any) => t.practitioner_id === identity.userId);
       prevMonthTreats = prevMonthTreats.filter((t: any) => t.practitioner_id === identity.userId);
       todayAppts = todayAppts.filter((a: any) => a.practitioner_id === identity.userId);
+      unpaidDeposits = unpaidDeposits.filter((a: any) => a.practitioner_id === identity.userId);
     }
 
     const active = all.filter((p: { status: string }) => p.status === "active").length;
@@ -528,17 +542,43 @@ export const getDashboard = createServerFn({ method: "GET" })
           appointmentId: a.id,
         });
       }
-      if (a.payment_status === "unpaid" || a.payment_status === "deposit_paid") {
+      // Balance after deposit — still chase on the day.
+      if (a.payment_status === "deposit_paid") {
         attentionItems.push({
           id: `payment-${a.id}`,
-          kind: a.payment_status === "deposit_paid" ? "balance_due" : "payment_due",
+          kind: "balance_due",
           urgency: "urgent",
-          title: `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""} — ${a.payment_status === "deposit_paid" ? "balance due" : "unpaid"}`,
+          title: `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""} — balance due`,
           subtitle: `${a.treatment_name}`,
           patientId: a.patient_id,
           appointmentId: a.id,
         });
       }
+    }
+
+    // Deposits must be paid at least 3 clinic days before the appointment.
+    // Inside that window (≤3 days) → urgent chase; further out → this week.
+    const DEPOSIT_LEAD_DAYS = 3;
+    for (const a of unpaidDeposits) {
+      const apptDay = clinicDayKey(new Date(a.starts_at));
+      const daysUntil = clinicDayDiff(todayISO, apptDay);
+      if (daysUntil < 0) continue;
+      const who = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
+      const when = new Date(a.starts_at).toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      const urgent = daysUntil <= DEPOSIT_LEAD_DAYS;
+      attentionItems.push({
+        id: `deposit-${a.id}`,
+        kind: "deposit_due",
+        urgency: urgent ? "urgent" : "this_week",
+        title: `${who} — deposit unpaid`,
+        subtitle: `${a.treatment_name} · ${when}`,
+        patientId: a.patient_id,
+        appointmentId: a.id,
+      });
     }
 
     for (const t of due.filter((x: any) => x.next_due_at && x.next_due_at <= weekAhead)) {
@@ -653,7 +693,7 @@ export const getPatient = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     if (!patient) throw new Error("Patient not found");
 
-    const [treatments, photos, documents, messages, history, upcoming, visitAppts] = await Promise.all([
+    const [treatments, photos, documents, messages, history, upcoming, visitAppts, bookingAppts] = await Promise.all([
       supabase
         .from("treatments")
         .select("*, profiles(full_name)")
@@ -693,6 +733,15 @@ export const getPatient = createServerFn({ method: "GET" })
         )
         .eq("patient_id", data.id)
         .order("starts_at", { ascending: false }),
+      supabase
+        .from("appointments")
+        .select(
+          "id, starts_at, treatment_name, status, payment_status, profiles(full_name), documents(status, title)",
+        )
+        .eq("patient_id", data.id)
+        .gte("starts_at", new Date().toISOString())
+        .not("status", "in", "(cancelled,no_show)")
+        .order("starts_at", { ascending: true }),
     ]);
 
     const signed: Record<string, string> = {};
@@ -735,6 +784,25 @@ export const getPatient = createServerFn({ method: "GET" })
       })
       .filter(Boolean);
 
+    const bookingChase = (bookingAppts.data ?? [])
+      .map((a: any) => {
+        const docStatus = a.documents?.status;
+        const issues: string[] = [];
+        if (a.payment_status === "unpaid") issues.push("Deposit unpaid");
+        if (a.payment_status === "deposit_paid") issues.push("Balance due");
+        if (docStatus !== "signed") issues.push("Consent due");
+        return {
+          id: a.id as string,
+          startsAt: a.starts_at as string,
+          treatmentName: (a.treatment_name as string) || "Treatment",
+          practitionerName: (a.profiles?.full_name as string) ?? null,
+          paymentStatus: (a.payment_status as string) ?? "unpaid",
+          consentSigned: docStatus === "signed",
+          issues,
+        };
+      })
+      .filter((b) => b.issues.length > 0);
+
     return {
       patient,
       treatments: treatments.data ?? [],
@@ -743,6 +811,7 @@ export const getPatient = createServerFn({ method: "GET" })
       messages: messages.data ?? [],
       history: history.data ?? [],
       visitNotes,
+      bookingChase,
       retention,
       nextAppointmentAt: (upcoming.data ?? [])[0]?.starts_at ?? null,
     };
@@ -2989,12 +3058,19 @@ export const updateRecallTask = createServerFn({ method: "POST" })
 
     const now = new Date().toISOString();
     const note = data.note !== undefined ? data.note : ((target.note as string | null) ?? null);
+    const template = group[0] as any;
     const prevIds = new Set(group.map((g: any) => g.assigned_to as string));
     const nextIds = new Set(data.recipients.map((r) => r.id));
     const assigneesChanged =
       prevIds.size !== nextIds.size || [...prevIds].some((id) => !nextIds.has(id));
+    const assigneesAdded = data.recipients.some((r) => !prevIds.has(r.id));
+    const assigneesRemoved = group.some((g: any) => !nextIds.has(g.assigned_to as string));
+    const reassignedAt = assigneesAdded
+      ? now
+      : assigneesRemoved
+        ? null
+        : ((template.reassigned_at as string | null) ?? null);
 
-    const template = group[0] as any;
     const shared = {
       clinic_id: template.clinic_id ?? CLINIC_ID,
       patient_id: template.patient_id,
@@ -3007,13 +3083,14 @@ export const updateRecallTask = createServerFn({ method: "POST" })
       completed_at: template.completed_at,
       completed_by: template.completed_by,
       status_by_label: template.status_by_label,
-      reassigned_at: assigneesChanged ? now : (template.reassigned_at ?? null),
+      reassigned_at: reassignedAt,
       updated_at: now,
     };
 
     const toRemove = group.filter((g: any) => !nextIds.has(g.assigned_to));
     if (toRemove.length) {
-      const { error } = await ctx.supabase
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error } = await supabaseAdmin
         .from("recall_tasks")
         .delete()
         .in(
@@ -3153,8 +3230,24 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
     if (!toRemove.length) return { ok: true, removed: [] as string[] };
 
     const ids = toRemove.map((g: any) => g.id as string);
-    const { error } = await ctx.supabase.from("recall_tasks").delete().in("id", ids);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: deleted, error } = await supabaseAdmin
+      .from("recall_tasks")
+      .delete()
+      .in("id", ids)
+      .select("id");
     if (error) throw new Error(error.message);
+    if (!deleted?.length) throw new Error("Could not retract assignment");
+
+    const remaining = group.filter((g: any) => !pick.has(g.assigned_to));
+    if (remaining.length > 0) {
+      const remainingIds = remaining.map((g: any) => g.id as string);
+      const { error: clearErr } = await supabaseAdmin
+        .from("recall_tasks")
+        .update({ reassigned_at: null, updated_at: new Date().toISOString() })
+        .in("id", remainingIds);
+      if (clearErr) throw new Error(clearErr.message);
+    }
 
     const removed = toRemove
       .map((g: any) => (g.assigned_label as string) || "Assignee")
@@ -3802,34 +3895,55 @@ export const getStaffChat = createServerFn({ method: "GET" })
     const conversationId = await getOrCreateConversationId(ctx, data.peerUserId);
     const peer = data.peerUserId;
 
-    const [{ data: messages }, { data: reads }, { data: peerProfile }, { data: alerts }] =
-      await Promise.all([
-        ctx.supabase
-          .from("staff_chat_messages")
-          .select("id, sender_id, body, created_at")
-          .eq("conversation_id", conversationId)
-          .order("created_at", { ascending: true })
-          .limit(200),
-        ctx.supabase
-          .from("staff_conversation_reads")
-          .select("user_id, last_read_at")
-          .eq("conversation_id", conversationId),
-        ctx.supabase
-          .from("profiles")
-          .select("id, full_name, job_title, avatar_url")
-          .eq("id", peer)
-          .maybeSingle(),
-        // Direct alerts + alert-replies between these two people (not chat pings).
-        ctx.supabase
-          .from("staff_notifications")
-          .select("id, sender_id, recipient_id, title, body, urgent, kind, read_at, created_at")
-          .in("kind", ["urgent", "staff_message"])
-          .or(
-            `and(sender_id.eq.${ctx.userId},recipient_id.eq.${peer}),and(sender_id.eq.${peer},recipient_id.eq.${ctx.userId})`,
-          )
-          .order("created_at", { ascending: true })
-          .limit(200),
-      ]);
+    const [messagesRes, readsRes, peerProfileRes, alertsRes] = await Promise.all([
+      ctx.supabase
+        .from("staff_chat_messages")
+        .select("id, sender_id, body, attachments, created_at")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(200),
+      ctx.supabase
+        .from("staff_conversation_reads")
+        .select("user_id, last_read_at")
+        .eq("conversation_id", conversationId),
+      ctx.supabase
+        .from("profiles")
+        .select("id, full_name, job_title, avatar_url")
+        .eq("id", peer)
+        .maybeSingle(),
+      // Direct alerts + alert-replies between these two people (not chat pings).
+      ctx.supabase
+        .from("staff_notifications")
+        .select("id, sender_id, recipient_id, title, body, urgent, kind, read_at, created_at")
+        .in("kind", ["urgent", "staff_message"])
+        .or(
+          `and(sender_id.eq.${ctx.userId},recipient_id.eq.${peer}),and(sender_id.eq.${peer},recipient_id.eq.${ctx.userId})`,
+        )
+        .order("created_at", { ascending: true })
+        .limit(200),
+    ]);
+
+    // If attachments column isn't migrated yet, fall back so history still loads.
+    let messages = messagesRes.data;
+    if (messagesRes.error) {
+      const missingAttachments =
+        /attachments/i.test(messagesRes.error.message) ||
+        messagesRes.error.code === "42703" ||
+        messagesRes.error.code === "PGRST204";
+      if (!missingAttachments) throw new Error(messagesRes.error.message);
+      const fallback = await ctx.supabase
+        .from("staff_chat_messages")
+        .select("id, sender_id, body, created_at")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(200);
+      if (fallback.error) throw new Error(fallback.error.message);
+      messages = fallback.data;
+    }
+
+    const reads = readsRes.data;
+    const peerProfile = peerProfileRes.data;
+    const alerts = alertsRes.data;
 
     const peerReadAt =
       ((reads ?? []) as { user_id: string; last_read_at: string }[]).find((r) => r.user_id === peer)
@@ -3848,14 +3962,19 @@ export const getStaffChat = createServerFn({ method: "GET" })
       },
       peerReadAt,
       myReadAt,
-      messages: ((messages ?? []) as { id: string; sender_id: string; body: string; created_at: string }[]).map(
-        (m) => ({
-          ...m,
-          mine: m.sender_id === ctx.userId,
-          readByPeer:
-            m.sender_id === ctx.userId && peerReadAt != null && peerReadAt >= m.created_at,
-        }),
-      ),
+      messages: ((messages ?? []) as {
+        id: string;
+        sender_id: string;
+        body: string;
+        attachments?: unknown;
+        created_at: string;
+      }[]).map((m) => ({
+        ...m,
+        attachments: Array.isArray(m.attachments) ? m.attachments : [],
+        mine: m.sender_id === ctx.userId,
+        readByPeer:
+          m.sender_id === ctx.userId && peerReadAt != null && peerReadAt >= m.created_at,
+      })),
       alerts: (
         (alerts ?? []) as {
           id: string;
@@ -3887,13 +4006,22 @@ export const getStaffChat = createServerFn({ method: "GET" })
 
 /** Send a live chat message to a clinic teammate. */
 export const sendStaffChatMessage = createServerFn({ method: "POST" })
-  .validator((data: { peerUserId: string; body: string }) => data)
+  .validator(
+    (data: {
+      peerUserId: string;
+      body: string;
+      attachments?: { path: string; name: string; type: string; size: number }[];
+    }) => data,
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await assertStaffPeer(ctx, data.peerUserId);
-    const body = data.body.trim();
-    if (!body) throw new Error("Write a message first");
+    const attachments = (data.attachments ?? []).slice(0, 5);
+    const body =
+      data.body.trim() ||
+      (attachments.length === 1 ? "Sent an attachment" : attachments.length > 1 ? "Sent attachments" : "");
+    if (!body && attachments.length === 0) throw new Error("Write a message first");
     if (body.length > 4000) throw new Error("Message is too long");
 
     const conversationId = await getOrCreateConversationId(ctx, data.peerUserId);
@@ -3905,9 +4033,10 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
         clinic_id: CLINIC_ID,
         sender_id: ctx.userId,
         body,
+        attachments,
         created_at: now,
       })
-      .select("id, sender_id, body, created_at")
+      .select("id, sender_id, body, attachments, created_at")
       .single();
     if (error) throw new Error(error.message);
 

@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, type MouseEvent, type TouchEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, CheckCheck, Send } from "lucide-react";
-import { toast } from "sonner";
+import { Check, CheckCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
-import { getStaffChat, markStaffChatRead, sendStaffChatMessage } from "@/lib/clinic.functions";
+import { getStaffChat, markStaffChatRead } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { useStaffPresence } from "@/lib/use-staff-presence";
 import { usePanelWidth } from "@/hooks/use-panel-width";
+import { MessageAttachments, type Attachment } from "@/components/message-attachments";
+import { MessageComposer } from "@/components/message-composer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type ChatMessage = {
@@ -21,6 +21,7 @@ type ChatMessage = {
   created_at: string;
   mine: boolean;
   readByPeer: boolean;
+  attachments?: Attachment[] | null;
 };
 
 type ChatAlert = {
@@ -97,12 +98,9 @@ export function StaffChatPanel({
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
   const fetchChat = useServerFn(getStaffChat);
-  const sendMessage = useServerFn(sendStaffChatMessage);
   const markRead = useServerFn(markStaffChatRead);
-  const [draft, setDraft] = useState("");
   const [fontSize, setFontSize] = usePanelWidth("staff-chat-font", 13);
   const threadRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const selfId = identity?.userId;
   const onlineIds = useStaffPresence(Boolean(selfId), selfId);
   const peerOnline = onlineIds.has(peerUserId);
@@ -114,17 +112,6 @@ export function StaffChatPanel({
     queryFn: () => fetchChat({ data: { peerUserId } }),
     enabled,
     refetchInterval: DEMO_MODE ? 4_000 : false,
-  });
-
-  const send = useMutation({
-    mutationFn: (body: string) => sendMessage({ data: { peerUserId, body } }),
-    onSuccess: () => {
-      setDraft("");
-      void queryClient.invalidateQueries({ queryKey: ["staff-chat", peerUserId] });
-      void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
-      void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
   });
 
   useEffect(() => {
@@ -238,20 +225,16 @@ export function StaffChatPanel({
     thread.scrollTo({ top: thread.scrollHeight, behavior: "smooth" });
   }, [renderItems.length]);
 
-  useEffect(() => {
-    if (autoFocus) inputRef.current?.focus();
-  }, [autoFocus, peerUserId]);
-
   if (!enabled) return null;
 
   const title = peerName || data?.peer?.full_name || "Teammate";
   const firstName = title.trim().split(/\s+/)[0] || title;
   const avatar = initials(title) || "?";
 
-  function submit() {
-    const body = draft.trim();
-    if (!body || send.isPending) return;
-    send.mutate(body);
+  function invalidateChat() {
+    void queryClient.invalidateQueries({ queryKey: ["staff-chat", peerUserId] });
+    void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+    void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
   }
 
   return (
@@ -346,7 +329,8 @@ export function StaffChatPanel({
                   className={cn("staff-chat-item", item.stacked ? "staff-chat-item--stack" : "staff-chat-item--break")}
                 >
                   <div className={cn("staff-chat-bubble", m.mine ? "staff-chat-bubble--out" : "staff-chat-bubble--in")}>
-                    <p className="whitespace-pre-wrap break-words pr-[0.15em]">{m.body}</p>
+                    {m.body ? <p className="whitespace-pre-wrap break-words pr-[0.15em]">{m.body}</p> : null}
+                    <MessageAttachments attachments={(m.attachments ?? []) as Attachment[]} />
                     <div className="staff-chat-meta">
                       <span>{timeLabel(m.created_at)}</span>
                       {m.mine ? (
@@ -399,39 +383,16 @@ export function StaffChatPanel({
         </div>
       </div>
 
-      <form
-        className="shrink-0 border-t border-edge bg-[color-mix(in_srgb,var(--glass)_80%,transparent)] p-2.5 backdrop-blur-md"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <div className="flex items-end gap-2 rounded-[22px] border border-edge bg-glass-2 p-1.5 shadow-inset-hi">
-          <Textarea
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={`Message ${firstName}…`}
-            rows={1}
-            className="min-h-9 max-h-28 flex-1 resize-none border-0 bg-transparent px-2.5 py-2 text-sm leading-5 shadow-none focus-visible:ring-0"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-          />
-          <Button
-            type="submit"
-            size="icon"
-            className="h-9 w-9 shrink-0 rounded-full"
-            disabled={send.isPending || !draft.trim()}
-            aria-label="Send message"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </form>
+      <MessageComposer
+        peerUserId={peerUserId}
+        templates
+        canDeleteTemplates={Boolean(identity?.isManager)}
+        patientFirstName={firstName}
+        placeholder={`Message ${firstName}…`}
+        variant="chat"
+        autoFocus={autoFocus}
+        onSent={invalidateChat}
+      />
     </Card>
   );
 }

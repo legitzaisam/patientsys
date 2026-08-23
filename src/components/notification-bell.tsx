@@ -12,9 +12,51 @@ import { useIdentity } from "@/lib/use-identity";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
+import { parseStaffAlertTitle, formatTeamAlertToast } from "@/lib/staff-alert-title";
+import { showChatQuickReplyToast } from "@/components/chat-quick-reply-toast";
 
 const TEAM_KINDS = new Set(["urgent", "staff_message", "staff_chat"]);
+
+function openTeamChat(
+  navigate: ReturnType<typeof useNavigate>,
+  senderId: string,
+) {
+  navigate({
+    to: "/team/$id",
+    params: { id: senderId },
+    search: { chat: true },
+  });
+}
+
+function showTeamAlertToast(opts: {
+  id: string;
+  senderId?: string | null;
+  title: string;
+  body?: string | null;
+  kind?: string | null;
+  urgent?: boolean | null;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  if (opts.senderId) {
+    showChatQuickReplyToast({
+      notificationId: opts.id,
+      senderId: opts.senderId,
+      title: opts.title,
+      body: opts.body,
+      kind: opts.kind,
+      urgent: opts.urgent,
+      onOpen: () => openTeamChat(opts.navigate, opts.senderId!),
+    });
+    return;
+  }
+  const copy = formatTeamAlertToast({
+    title: opts.title,
+    body: opts.body,
+    kind: opts.kind,
+    urgent: opts.urgent,
+  });
+  toast.message(copy.title, { description: copy.description });
+}
 
 /** Unread-message alerts: live badge, dropdown and toast for new incoming messages. */
 export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boolean; scrolled?: boolean }) {
@@ -94,20 +136,14 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
           if (row.recipient_id && identity?.userId && row.recipient_id !== identity.userId) return;
           seenStaffAlerts.current.add(row.id);
           if (row.kind === "staff_chat" || row.kind === "staff_message" || row.kind === "urgent") {
-            const { headline } = parseStaffAlertTitle(row.title ?? "New team message");
-            toast.message(row.urgent || row.kind === "urgent" ? "Urgent team alert" : headline, {
-              description: (row.body ?? "").slice(0, 120) || undefined,
-              action: row.sender_id
-                ? {
-                    label: "Open",
-                    onClick: () =>
-                      navigate({
-                        to: "/team/$id",
-                        params: { id: row.sender_id! },
-                        search: { chat: true },
-                      }),
-                  }
-                : undefined,
+            showTeamAlertToast({
+              id: row.id,
+              senderId: row.sender_id,
+              title: row.title ?? "New team message",
+              body: row.body,
+              kind: row.kind,
+              urgent: row.urgent,
+              navigate,
             });
           }
         },
@@ -137,20 +173,14 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
       if (alert.kind !== "staff_chat" && alert.kind !== "staff_message" && alert.kind !== "urgent") {
         continue;
       }
-      const { headline } = parseStaffAlertTitle(alert.title);
-      toast.message(alert.urgent || alert.kind === "urgent" ? "Urgent team alert" : headline, {
-        description: (alert.body ?? "").slice(0, 120) || undefined,
-        action: alert.sender_id
-          ? {
-              label: "Open",
-              onClick: () =>
-                navigate({
-                  to: "/team/$id",
-                  params: { id: alert.sender_id! },
-                  search: { chat: true },
-                }),
-            }
-          : undefined,
+      showTeamAlertToast({
+        id: alert.id,
+        senderId: alert.sender_id,
+        title: alert.title,
+        body: alert.body,
+        kind: alert.kind,
+        urgent: alert.urgent,
+        navigate,
       });
     }
   }, [alerts, identity?.userId, isStaff, navigate]);

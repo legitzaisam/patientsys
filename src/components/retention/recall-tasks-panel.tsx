@@ -53,6 +53,10 @@ const ROLE_LABEL: Record<string, string> = {
 
 const RETRACT_UNDO_MS = 6000;
 
+function recallGroupKey(task: { group_id?: string | null; id: string }) {
+  return (task.group_id as string) ?? task.id;
+}
+
 function formatDay(value: string) {
   return new Date(value).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -340,6 +344,7 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
     assignees: AssigneeOption[];
   } | null>(null);
   const [pendingIds, setPendingIds] = useState<string[]>([]);
+  const [suppressedReassignedGroups, setSuppressedReassignedGroups] = useState<string[]>([]);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
@@ -364,13 +369,22 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const commitRetract = (taskId: string, assigneeIds: string[]) => {
+  const commitRetract = (
+    taskId: string,
+    assigneeIds: string[],
+    taskIds: string[],
+    groupKeys: string[],
+  ) => {
     void removeTask({ data: { task_id: taskId, assignee_ids: assigneeIds } })
       .then(() => {
+        setPendingIds((prev) => prev.filter((id) => !taskIds.includes(id)));
+        setSuppressedReassignedGroups((prev) => prev.filter((key) => !groupKeys.includes(key)));
         void invalidateRecallTasks(queryClient);
       })
       .catch((e: Error) => {
-        setPendingIds((prev) => prev.filter((id) => !assigneeIds.includes(id)));
+        setPendingIds((prev) => prev.filter((id) => !taskIds.includes(id)));
+        setSuppressedReassignedGroups((prev) => prev.filter((key) => !groupKeys.includes(key)));
+        void invalidateRecallTasks(queryClient);
         toast.error(e.message);
       });
   };
@@ -378,16 +392,36 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
   const requestRetract = (taskId: string, picked: AssigneeOption[]) => {
     const assigneeIds = picked.map((p) => p.id);
     const taskIds = picked.map((p) => p.taskId);
+    const all = ((tasks as any[]) ?? []) as any[];
+    const groupKeys = [
+      ...new Set(
+        picked
+          .map((p) => {
+            const row = all.find((t) => t.id === p.taskId);
+            return row ? recallGroupKey(row) : null;
+          })
+          .filter(Boolean) as string[],
+      ),
+    ];
     const batchKey = taskIds.slice().sort().join(",");
     const existing = timers.current[batchKey];
     if (existing) clearTimeout(existing);
 
+    const removedIds = new Set(taskIds);
+    const suppressed = new Set(groupKeys);
+    queryClient.setQueryData(["recall-tasks", patientId], (old: any[] | undefined) => {
+      if (!old) return old;
+      return old
+        .filter((t) => !removedIds.has(t.id))
+        .map((t) => (suppressed.has(recallGroupKey(t)) ? { ...t, reassigned_at: null } : t));
+    });
+
+    setSuppressedReassignedGroups((prev) => [...new Set([...prev, ...groupKeys])]);
     setPendingIds((prev) => [...new Set([...prev, ...taskIds])]);
 
     timers.current[batchKey] = setTimeout(() => {
       delete timers.current[batchKey];
-      setPendingIds((prev) => prev.filter((id) => !taskIds.includes(id)));
-      commitRetract(taskId, assigneeIds);
+      commitRetract(taskId, assigneeIds, taskIds, groupKeys);
     }, RETRACT_UNDO_MS);
 
     const names = picked.map((p) => p.label);
@@ -406,6 +440,8 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
           if (timer) clearTimeout(timer);
           delete timers.current[batchKey];
           setPendingIds((prev) => prev.filter((id) => !taskIds.includes(id)));
+          setSuppressedReassignedGroups((prev) => prev.filter((key) => !groupKeys.includes(key)));
+          void invalidateRecallTasks(queryClient);
           toast.success("Assignment restored");
         },
       },
@@ -413,7 +449,8 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
     });
   };
 
-  const rows = ((tasks as any[]) ?? []).filter((t) => !pendingIds.includes(t.id));
+  const allTasks = ((tasks as any[]) ?? []) as any[];
+  const rows = allTasks.filter((t) => !pendingIds.includes(t.id));
   // Tasks sent to several people share a group: show them as one chase-up.
   const groups = Object.values(
     rows.reduce<Record<string, any[]>>((acc, t) => {
@@ -468,8 +505,14 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
             .filter(Boolean)
             .join(" · ");
           const title = assignees ? `Assigned to ${assignees}` : "Assigned to the team";
+          const groupKey = recallGroupKey(t);
+          const groupHasPendingRetract = allTasks.some(
+            (r) => recallGroupKey(r) === groupKey && pendingIds.includes(r.id),
+          );
           const reassignedAt =
-            group.map((g: any) => g.reassigned_at as string | null).find(Boolean) ?? null;
+            groupHasPendingRetract || suppressedReassignedGroups.includes(groupKey)
+              ? null
+              : group.map((g: any) => g.reassigned_at as string | null).find(Boolean) ?? null;
           const hasMeta = Boolean(
             t.created_at ||
               reassignedAt ||

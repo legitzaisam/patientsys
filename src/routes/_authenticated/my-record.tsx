@@ -1,15 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getMyRecord, markMessagesRead, signDocument, submitHistoryUpdate } from "@/lib/clinic.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
-import { MessageAttachments } from "@/components/message-attachments";
-import { MessageComposer } from "@/components/message-composer";
+import { PatientChatPanel } from "@/components/patient-chat-panel";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,7 +57,6 @@ function PortalPage() {
     onSuccess: () => invalidate(),
   });
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const patientId = data?.patient?.id as string | undefined;
 
   // Live message thread for this patient.
@@ -84,11 +82,6 @@ function PortalPage() {
     if (hasUnreadStaff) markRead.mutate({ data: { patient_id: patientId } });
   }, [patientId, data?.messages.length]);
 
-  // Scroll to the latest message when the thread changes.
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [data?.messages.length]);
-
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
   if (!data)
     return (
@@ -113,7 +106,7 @@ function PortalPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="relative grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-[26px]">
         <div className="space-y-6">
           <Card className="p-5">
             <h2 className="section-title">Forms to complete</h2>
@@ -218,37 +211,15 @@ function PortalPage() {
           </Card>
         </div>
 
-        <Card className="flex h-[calc(100vh-8rem)] flex-col rounded-2xl p-0 lg:sticky lg:top-24">
-          <div className="border-b border-edge px-5 py-4">
-            <h2 className="section-title">Message the clinic</h2>
-          </div>
-          <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
-            {data.messages.map((m: any) => (
-              <div
-                key={m.id}
-                className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                  m.author === "patient"
-                    ? "ml-auto bg-primary text-primary-foreground"
-                    : "bg-glass-2 text-foreground"
-                }`}
-              >
-                <p>{m.body}</p>
-                <MessageAttachments attachments={(m.attachments ?? []) as any} />
-                <div className="mt-1 flex items-center gap-1 text-2xs opacity-70">
-                  <span>{new Date(m.created_at).toLocaleString("en-GB")}</span>
-                </div>
-              </div>
-            ))}
-            {data.messages.length === 0 && <p className="text-sm text-muted-foreground">No messages yet.</p>}
-            <div ref={messagesEndRef} />
-          </div>
-          <MessageComposer
-            patientId={p.id}
-            as="patient"
-            patientFirstName={p.first_name}
-            onSent={invalidate}
-          />
-        </Card>
+        <PatientChatPanel
+          patientId={p.id}
+          patientName={`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "Patient"}
+          messages={data.messages}
+          as="patient"
+          title="Your clinic"
+          subtitle="Secure messages with your clinic"
+          onSent={invalidate}
+        />
       </div>
     </AppShell>
   );

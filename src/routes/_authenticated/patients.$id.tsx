@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCheck, Upload } from "lucide-react";
+import { ArrowLeft, Upload } from "lucide-react";
 import {
   addPhoto,
   addTreatment,
@@ -17,8 +17,7 @@ import {
 } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
-import { MessageAttachments } from "@/components/message-attachments";
-import { MessageComposer } from "@/components/message-composer";
+import { PatientChatPanel } from "@/components/patient-chat-panel";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { Card } from "@/components/ui/card";
@@ -40,6 +39,12 @@ import {
 } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/patients/$id")({
+  validateSearch: (search: Record<string, unknown>): { tab?: string; chase?: boolean } => {
+    const tab = typeof search["tab"] === "string" ? search["tab"] : undefined;
+    const rawChase = search["chase"];
+    const chase = rawChase === true || rawChase === "1" || rawChase === 1;
+    return chase ? { ...(tab ? { tab } : {}), chase: true } : tab ? { tab } : {};
+  },
   head: () => ({
     meta: [
       { title: "Patient record — Aetheria" },
@@ -54,10 +59,13 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
 
 function PatientRecord() {
   const { id } = Route.useParams();
+  const { tab: tabSearch, chase: chaseFocus } = Route.useSearch();
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
   const fetchPatient = useServerFn(getPatient);
   const fetchCatalogue = useServerFn(getCatalogue);
+  const bookingsRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState(() => tabSearch ?? "treatments");
 
   const { data } = useQuery({
     queryKey: ["patient", id],
@@ -79,10 +87,9 @@ function PatientRecord() {
   const [photoTreatmentId, setPhotoTreatmentId] = useState<string>("");
   const [treatmentPhotoId, setTreatmentPhotoId] = useState<string>("");
 
-  const [chatWidth, setChatWidth] = usePanelWidth("patient-messages", 280);
-  const [chatFontSize, setChatFontSize] = usePanelWidth("patient-messages-font", 12);
+  const [chatWidth, setChatWidth] = usePanelWidth("patient-messages", 340);
   const [resizing, setResizing] = useState(false);
-  const resizeStart = useRef({ x: 0, width: 280 });
+  const resizeStart = useRef({ x: 0, width: 340 });
 
   function startResize(e: React.MouseEvent | React.TouchEvent) {
     const clientX = "touches" in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
@@ -95,7 +102,7 @@ function PatientRecord() {
     function onMove(e: MouseEvent | TouchEvent) {
       const clientX = "touches" in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
       const delta = resizeStart.current.x - clientX;
-      const next = Math.max(220, Math.min(480, resizeStart.current.width + delta));
+      const next = Math.max(280, Math.min(520, resizeStart.current.width + delta));
       setChatWidth(next);
     }
     function onUp() {
@@ -111,7 +118,17 @@ function PatientRecord() {
       window.removeEventListener("touchmove", onMove);
       window.removeEventListener("touchend", onUp);
     };
-  }, [resizing]);
+  }, [resizing, setChatWidth]);
+
+  useEffect(() => {
+    if (tabSearch === "bookings" || chaseFocus) setActiveTab("treatments");
+    else if (tabSearch) setActiveTab(tabSearch);
+  }, [tabSearch, chaseFocus]);
+
+  useEffect(() => {
+    if (activeTab !== "treatments" || !chaseFocus) return;
+    bookingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [activeTab, chaseFocus, data]);
 
   const createTreatment = useMutation({
     mutationFn: useServerFn(addTreatment),
@@ -158,8 +175,6 @@ function PatientRecord() {
     onSuccess: () => invalidate(),
   });
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-
   // Live message thread: subscribe to inserts/updates for this patient.
   useEffect(() => {
     if (!id || DEMO_MODE) return;
@@ -182,11 +197,6 @@ function PatientRecord() {
     const hasUnreadPatient = data.messages.some((m: any) => m.author === "patient" && !m.read_at);
     if (hasUnreadPatient) markRead.mutate({ data: { patient_id: id } });
   }, [id, data?.messages.length]);
-
-  // Scroll to the latest message when the thread changes.
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [data?.messages.length]);
 
   /** Chronological photo timeline, labelled by which treatment in the course it belongs to. */
   const timeline = useMemo(() => {
@@ -261,6 +271,15 @@ function PatientRecord() {
   if (!data) return <div className="p-12 text-sm text-muted-foreground">Loading record…</div>;
 
   const p = data.patient as any;
+  const bookingChase = (data.bookingChase ?? []) as Array<{
+    id: string;
+    startsAt: string;
+    treatmentName: string;
+    practitionerName: string | null;
+    paymentStatus: string;
+    consentSigned: boolean;
+    issues: string[];
+  }>;
 
   return (
     <AppShell identity={identity}>
@@ -269,7 +288,7 @@ function PatientRecord() {
       </Link>
 
       <div
-        className="relative grid gap-6 md:grid-cols-[1fr_var(--chat-width)]"
+        className="relative grid items-start gap-5 md:grid-cols-[minmax(0,1fr)_var(--chat-width)] md:gap-[26px]"
         style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties}
       >
         <div className="space-y-6">
@@ -428,17 +447,89 @@ function PatientRecord() {
             </div>
           </Card>
 
-          <Tabs defaultValue="treatments">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
-              <TabsTrigger value="treatments">Treatments</TabsTrigger>
+              <TabsTrigger value="treatments" className="items-center pr-2.5">
+                Treatments
+                {bookingChase.length > 0 ? (
+                  <span className="ml-1.5 inline-flex h-[15px] min-w-[15px] shrink-0 items-center justify-center rounded-full bg-destructive-bg px-0.5 text-[10px] font-semibold leading-none text-destructive-ink tabular-nums">
+                    {bookingChase.length}
+                  </span>
+                ) : null}
+              </TabsTrigger>
               <TabsTrigger value="visit-notes">Visit notes</TabsTrigger>
               <TabsTrigger value="photos">Before and after</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="history">History updates</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="treatments">
+            <TabsContent value="treatments" className="space-y-4">
+              <Card ref={bookingsRef} className="p-5">
+                <div className="mb-4">
+                  <h3 className="section-title">Upcoming appointments</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {chaseFocus
+                      ? "These visits still need chasing — deposits, balances or consent."
+                      : "Future diary visits and what still needs chasing."}
+                  </p>
+                </div>
+                {bookingChase.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 px-4 py-6 text-center text-sm text-muted-foreground">
+                    No upcoming appointments need chasing right now.
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {bookingChase.map((booking) => (
+                      <li
+                        key={booking.id}
+                        className="rounded-xl border border-edge bg-glass-2/70 px-4 py-3 shadow-inset-hi"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">{booking.treatmentName}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {new Date(booking.startsAt).toLocaleDateString("en-GB", {
+                                weekday: "short",
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                              {booking.practitionerName ? ` · ${booking.practitionerName}` : ""}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {booking.issues.map((issue) => (
+                              <Badge
+                                key={issue}
+                                variant="secondary"
+                                className={
+                                  issue === "Consent due"
+                                    ? "rounded-xl bg-warning-bg text-consent-ink"
+                                    : "rounded-xl bg-destructive-bg text-destructive-ink"
+                                }
+                              >
+                                {issue}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="mt-4">
+                  <Link to="/schedule" className="text-2xs font-semibold text-accent-ink hover:underline">
+                    Open diary
+                  </Link>
+                </div>
+              </Card>
+
               <Card className="p-5">
+                <div className="mb-3">
+                  <h3 className="section-title">Treatment history</h3>
+                  <p className="text-xs text-muted-foreground">Recorded treatments and follow-up dates.</p>
+                </div>
                 <ul className="divide-y divide-glass-line">
                   {data.treatments.map((t: any) => (
                     <li key={t.id} className="py-3">
@@ -817,84 +908,16 @@ function PatientRecord() {
           </Tabs>
         </div>
 
-        <Card className="relative flex h-[calc(100vh-8rem)] flex-col rounded-2xl p-0 md:sticky md:top-24">
-          <div
-            className="group hidden md:flex absolute -left-3 top-0 bottom-0 z-10 w-6 cursor-col-resize items-center justify-center"
-            onMouseDown={startResize}
-            onTouchStart={startResize}
-            aria-label="Resize messages panel"
-            role="separator"
-          >
-            <div className="h-10 w-1 rounded-full bg-foreground/20 transition-colors group-hover:bg-foreground/40" />
-          </div>
-          <div className="flex items-start justify-between gap-2 border-b border-edge px-5 py-4">
-            <div>
-              <h2 className="section-title">Messages</h2>
-              <p className="text-xs text-muted-foreground">Secure clinic ↔ patient thread</p>
-            </div>
-            <div className="flex shrink-0 items-center rounded-lg border border-edge bg-glass-2 p-0.5">
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
-                aria-label="Decrease message text size"
-                disabled={chatFontSize <= 10}
-                onClick={() => setChatFontSize(Math.max(10, chatFontSize - 1))}
-              >
-                <span className="text-2xs font-medium leading-none">A−</span>
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
-                aria-label="Increase message text size"
-                disabled={chatFontSize >= 18}
-                onClick={() => setChatFontSize(Math.min(18, chatFontSize + 1))}
-              >
-                <span className="text-2xs font-medium leading-none">A+</span>
-              </Button>
-            </div>
-          </div>
-          <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
-            {data.messages.map((m: any) => (
-              <div
-                key={m.id}
-                style={{ fontSize: `${chatFontSize}px`, lineHeight: 1.45 }}
-                className={`max-w-[85%] rounded-xl px-3 py-2 ${
-                  m.author === "staff"
-                    ? "ml-auto bg-primary text-primary-foreground"
-                    : "bg-glass-2 text-foreground"
-                }`}
-              >
-                <p>{m.body}</p>
-                <MessageAttachments attachments={(m.attachments ?? []) as any} />
-                <div className="mt-1 flex items-center gap-1 opacity-70" style={{ fontSize: `${Math.max(9, chatFontSize - 3)}px` }}>
-                  <span>{new Date(m.created_at).toLocaleString("en-GB")}</span>
-                  {m.author === "staff" && m.read_at && (
-                    <span className="inline-flex items-center gap-0.5" title="Read by patient">
-                      <CheckCheck className="h-3 w-3" /> Read
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-            {data.messages.length === 0 && (
-              <p className="text-sm text-muted-foreground">No messages yet.</p>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-          <MessageComposer
-            patientId={id}
-            as="staff"
-            templates
-            canDeleteTemplates={!!identity?.isManager}
-            patientFirstName={p.first_name}
-            placeholder="Message patient…"
-            onSent={invalidate}
-          />
-        </Card>
+        <PatientChatPanel
+          patientId={id}
+          patientName={`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "Patient"}
+          messages={data.messages}
+          as="staff"
+          templates
+          canDeleteTemplates={!!identity?.isManager}
+          onResizeStart={startResize}
+          onSent={invalidate}
+        />
       </div>
     </AppShell>
   );

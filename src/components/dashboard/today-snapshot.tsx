@@ -147,25 +147,28 @@ function AppointmentCarousel({
   };
 
   /** Edge arrows from whether first/last cards are clipped — reliable with gutter padding. */
-  const syncEdges = () => {
+  const getEdges = () => {
     const el = scrollerRef.current;
-    if (!el) return;
+    if (!el) return { canPrev: false, canNext: false };
     const list = slides();
-    if (list.length === 0) {
-      setCanPrev(false);
-      setCanNext(false);
-      return;
-    }
+    if (list.length === 0) return { canPrev: false, canNext: false };
     const { left: padL, right: padR } = padX(el);
     const bounds = el.getBoundingClientRect();
     const viewLeft = bounds.left + padL;
     const viewRight = bounds.right - padR;
     const first = list[0].getBoundingClientRect();
     const last = list[list.length - 1].getBoundingClientRect();
-    setCanPrev(el.scrollLeft > 2 || first.left < viewLeft - 2);
-    setCanNext(
-      el.scrollLeft < el.scrollWidth - el.clientWidth - 2 || last.right > viewRight + 2,
-    );
+    return {
+      canPrev: el.scrollLeft > 2 || first.left < viewLeft - 2,
+      canNext:
+        el.scrollLeft < el.scrollWidth - el.clientWidth - 2 || last.right > viewRight + 2,
+    };
+  };
+
+  const syncEdges = () => {
+    const { canPrev: prev, canNext: next } = getEdges();
+    setCanPrev(prev);
+    setCanNext(next);
   };
 
   const nearestIndex = () => {
@@ -254,6 +257,45 @@ function AppointmentCarousel({
     scrollToIndex(nearestIndex() + dir);
   };
 
+  const HOVER_AUTO_SLIDE_DELAY_MS = 500;
+  const AUTO_SLIDE_STEP_MS = 750;
+  const hoverAutoRef = useRef<{
+    dir: -1 | 1;
+    delayTimer: ReturnType<typeof setTimeout> | null;
+    intervalTimer: ReturnType<typeof setInterval> | null;
+  } | null>(null);
+
+  const clearHoverAutoSlide = () => {
+    const hover = hoverAutoRef.current;
+    if (!hover) return;
+    if (hover.delayTimer !== null) clearTimeout(hover.delayTimer);
+    if (hover.intervalTimer !== null) clearInterval(hover.intervalTimer);
+    hoverAutoRef.current = null;
+  };
+
+  const startHoverAutoSlide = (dir: -1 | 1) => {
+    clearHoverAutoSlide();
+    const delayTimer = setTimeout(() => {
+      const tick = () => {
+        const edges = getEdges();
+        if (dir === -1 ? !edges.canPrev : !edges.canNext) {
+          clearHoverAutoSlide();
+          return;
+        }
+        scrollByCards(dir);
+      };
+      tick();
+      const intervalTimer = setInterval(tick, AUTO_SLIDE_STEP_MS);
+      if (hoverAutoRef.current) {
+        hoverAutoRef.current.intervalTimer = intervalTimer;
+        hoverAutoRef.current.delayTimer = null;
+      }
+    }, HOVER_AUTO_SLIDE_DELAY_MS);
+    hoverAutoRef.current = { dir, delayTimer, intervalTimer: null };
+  };
+
+  useEffect(() => () => clearHoverAutoSlide(), []);
+
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
@@ -333,38 +375,46 @@ function AppointmentCarousel({
         </div>
 
         {/*
-          Left fade starts at left-0 so the -ml-5 gutter hard-clip is covered;
-          arrow sits at the content edge (pl-5).
+          Fades cover the full strip (incl. shadow gutters) so they don’t hard-cut
+          across card bottoms; arrows stay centered on the card band (top-3 / bottom-8).
         */}
         {canPrev ? (
-          <div className="pointer-events-none absolute top-3 bottom-8 left-0 z-20 flex w-[4.75rem] items-center justify-start pl-5 sm:w-[5.25rem]">
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-[4.75rem] sm:w-[5.25rem]">
             <div aria-hidden className="diary-carousel-fade-left absolute inset-0" />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="pointer-events-auto relative z-[1] h-9 w-9 shrink-0 rounded-full border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]"
-              onClick={() => scrollByCards(-1)}
-              aria-label="Previous appointments"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+            <div className="absolute top-3 bottom-8 left-0 right-0 flex items-center justify-start pl-5">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="pointer-events-auto relative z-[1] h-9 w-9 shrink-0 rounded-full border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]"
+                onClick={() => scrollByCards(-1)}
+                onMouseEnter={() => startHoverAutoSlide(-1)}
+                onMouseLeave={clearHoverAutoSlide}
+                aria-label="Previous appointments"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         ) : null}
 
         {canNext ? (
-          <div className="pointer-events-none absolute top-3 bottom-8 right-0 z-20 flex w-16 items-center justify-end sm:w-[4.5rem]">
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 sm:w-[4.5rem]">
             <div aria-hidden className="diary-carousel-fade-right absolute inset-0" />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="pointer-events-auto relative z-[1] mr-1 h-9 w-9 shrink-0 rounded-full border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]"
-              onClick={() => scrollByCards(1)}
-              aria-label="Next appointments"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <div className="absolute top-3 bottom-8 left-0 right-0 flex items-center justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="pointer-events-auto relative z-[1] mr-1 h-9 w-9 shrink-0 rounded-full border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]"
+                onClick={() => scrollByCards(1)}
+                onMouseEnter={() => startHoverAutoSlide(1)}
+                onMouseLeave={clearHoverAutoSlide}
+                aria-label="Next appointments"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -755,7 +805,7 @@ function StageBadge({
         align="end"
         sideOffset={8}
         collisionPadding={12}
-        className="w-56 rounded-2xl border-edge-2 bg-[rgba(255,255,255,0.88)] p-3.5"
+        className="w-56 rounded-2xl border-edge-2 p-3.5"
       >
         <p className="text-sm font-semibold text-foreground">Patient journey</p>
         <p className="text-xs text-ink-2">Set current stage.</p>
@@ -845,7 +895,7 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
           {chip}
         </button>
       </HoverCardTrigger>
-      <HoverCardContent side="bottom" align="start" sideOffset={8} className="w-64 rounded-2xl border-edge-2 bg-[rgba(255,255,255,0.88)] p-3.5">
+      <HoverCardContent side="bottom" align="start" sideOffset={8} className="w-64 rounded-2xl border-edge-2 p-3.5">
         <p className="text-sm font-semibold text-foreground">Consent outstanding</p>
         <p className="mt-1 text-xs text-muted-foreground">Send a reminder to complete the consent form.</p>
         <div className="mt-3 flex gap-2">
@@ -948,7 +998,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
           {chip}
         </button>
       </HoverCardTrigger>
-      <HoverCardContent side="bottom" align="end" sideOffset={8} className="w-72 rounded-2xl border-edge-2 bg-[rgba(255,255,255,0.88)] p-3.5">
+      <HoverCardContent side="bottom" align="end" sideOffset={8} className="w-72 rounded-2xl border-edge-2 p-3.5">
         <div className="space-y-3 text-xs">
           {paid ? (
             <>

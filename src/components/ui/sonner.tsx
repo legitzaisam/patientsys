@@ -13,6 +13,20 @@ type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const pinnedToastIds = new Set<string | number>();
 
+/** Pin a toast so it stays on screen until explicitly closed. */
+export function pinAetheriaToast(id: string | number) {
+  pinnedToastIds.add(id);
+  for (const el of document.querySelectorAll("[data-sonner-toast]")) {
+    if (toastIdFromElement(el) === id) {
+      el.classList.add("aetheria-toast-pinned");
+    }
+  }
+}
+
+export function unpinAetheriaToast(id: string | number) {
+  pinnedToastIds.delete(id);
+}
+
 function ToastIcon({
   children,
   className,
@@ -48,9 +62,19 @@ function toastIdFromElement(el: Element): string | number | null {
   return match?.id ?? null;
 }
 
+function isQuickReplyToast(toastEl: Element, id: string | number | null) {
+  if (toastEl.classList.contains("aetheria-quick-reply-toast")) return true;
+  if (toastEl.querySelector("[data-aetheria-quick-reply]")) return true;
+  if (id != null && String(id).startsWith("team-alert-")) return true;
+  return false;
+}
+
 function pinToast(id: string | number) {
   const current = toast.getToasts().find((t) => t.id === id);
   if (!current) return;
+  // Never recreate custom/jsx toasts — that replaces them with an empty message toast.
+  if ("jsx" in current && current.jsx) return;
+  if (String(id).startsWith("team-alert-")) return;
 
   const title =
     typeof current.title === "function" ? current.title() : (current.title ?? "");
@@ -105,25 +129,36 @@ function useToastPinning() {
     function onClick(event: MouseEvent) {
       const target = event.target as HTMLElement | null;
       if (!target) return;
-      if (target.closest("[data-button], [data-close-button], a, button")) return;
+
+      // Our in-toast close control handles dismiss itself.
+      if (target.closest("[data-aetheria-quick-reply-close], [data-aetheria-quick-reply-minimize], [data-aetheria-quick-reply-slide]")) return;
 
       const toastEl = target.closest("[data-sonner-toast]") as HTMLElement | null;
       if (!toastEl || toastEl.getAttribute("data-removed") === "true") return;
       if (toastEl.getAttribute("data-swiped") === "true") return;
 
-      syncPinnedSet();
       const id = toastIdFromElement(toastEl);
-      if (id == null) return;
 
-      event.preventDefault();
-      event.stopPropagation();
-
-      if (pinnedToastIds.has(id) || toastEl.classList.contains("aetheria-toast-pinned")) {
-        pinnedToastIds.delete(id);
-        toast.dismiss(id);
+      // Quick-reply chat toasts: never dismiss on body/button clicks — × only.
+      if (isQuickReplyToast(toastEl, id)) {
+        if (id != null) pinAetheriaToast(id);
         return;
       }
 
+      if (target.closest("[data-button], [data-close-button], a, button, textarea, input, label")) {
+        return;
+      }
+
+      syncPinnedSet();
+      if (id == null) return;
+
+      // Already pinned: leave it alone (do not dismiss on second click).
+      if (pinnedToastIds.has(id) || toastEl.classList.contains("aetheria-toast-pinned")) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
       pinToast(id);
     }
 
@@ -133,6 +168,24 @@ function useToastPinning() {
       if (document.querySelector('[role="dialog"][data-state="open"]')) return;
       if (document.querySelector('[role="menu"][data-state="open"]')) return;
       if (document.querySelector('[role="listbox"][data-state="open"]')) return;
+
+      // Quick-reply toasts only close via × — not Escape.
+      const hasQuickReply = document.querySelector(
+        "[data-sonner-toast].aetheria-quick-reply-toast, [data-aetheria-quick-reply]",
+      );
+      if (hasQuickReply) {
+        // Still allow Escape to clear *other* pinned toasts, but never quick-reply ones.
+        syncPinnedSet();
+        event.preventDefault();
+        for (const id of [...pinnedToastIds]) {
+          if (String(id).startsWith("team-alert-")) continue;
+          const row = toast.getToasts().find((t) => t.id === id);
+          if (row && "jsx" in row && row.jsx) continue;
+          toast.dismiss(id);
+          pinnedToastIds.delete(id);
+        }
+        return;
+      }
 
       syncPinnedSet();
       if (pinnedToastIds.size === 0) return;
@@ -159,7 +212,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       className="toaster group"
-      position="bottom-right"
+      position="bottom-left"
       offset={24}
       gap={12}
       expand
@@ -167,7 +220,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       closeButton
       style={{
         zIndex: 100,
-        ["--width" as string]: "22rem",
+        ["--width" as string]: "20rem",
         ["--border-radius" as string]: "22px",
         fontFamily: "var(--font-sans)",
       }}
@@ -202,18 +255,19 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast: cn(
-            "group toast aetheria-toast !w-[22rem] cursor-pointer",
-            "border border-edge bg-card/95 text-foreground shadow-popover",
-            "backdrop-blur-glass backdrop-saturate-150 rounded-[22px]",
-            "!items-start !gap-3 !p-3.5 !font-sans",
+            "group toast aetheria-toast !w-[20rem] cursor-pointer",
+            "border border-edge bg-[rgba(255,255,255,0.78)] text-foreground shadow-popover",
+            "backdrop-blur-sm rounded-[22px]",
+            "!font-sans",
           ),
-          title: "!text-sm !font-semibold !tracking-[-0.012em] !text-foreground !leading-snug",
-          description: "!text-xs !leading-snug !text-muted-foreground !mt-0.5",
-          content: "!gap-0.5",
+          title:
+            "!m-0 !text-sm !font-semibold !tracking-[-0.012em] !text-foreground !leading-snug",
+          description: "!text-[13px] !leading-snug !text-foreground/85 !mt-1",
+          content: "!m-0 !min-w-0",
           icon: "!m-0 !h-auto !w-auto",
           closeButton: cn(
             "aetheria-toast-close",
-            "!left-auto !right-2.5 !top-2.5 !h-7 !w-7 !rounded-full",
+            "!left-auto !right-2.5 !top-1/2 !h-7 !w-7 !rounded-full",
             "!border-edge !bg-glass-2 !text-ink-3 !shadow-inset-hi",
             "hover:!border-edge-2 hover:!bg-[rgba(47,63,102,0.08)] hover:!text-foreground",
             "transition-colors",

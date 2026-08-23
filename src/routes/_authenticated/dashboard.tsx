@@ -196,7 +196,9 @@ function DashboardPage() {
           <div>
             <div className="mb-4">
               <h2 className="section-title">Attention needed</h2>
-              <p className="text-xs text-muted-foreground">Outstanding items that need action today or this week.</p>
+              <p className="text-xs text-muted-foreground">
+                Outstanding items that need action — deposits must be paid at least 3 days before the appointment.
+              </p>
             </div>
             <AttentionList items={[...(data?.attentionItems ?? []), ...incompleteItems]} />
           </div>

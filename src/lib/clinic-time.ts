@@ -17,6 +17,16 @@ export function clinicDayKey(now: Date = new Date(), timeZone: string = CLINIC_T
   }).format(now);
 }
 
+/** Whole clinic-local days from `fromKey` to `toKey` (yyyy-mm-dd). */
+export function clinicDayDiff(fromKey: string, toKey: string) {
+  const [y1, m1, d1] = fromKey.split("-").map(Number);
+  const [y2, m2, d2] = toKey.split("-").map(Number);
+  return Math.round(
+    (Date.UTC(y2 ?? 0, (m2 ?? 1) - 1, d2 ?? 1) - Date.UTC(y1 ?? 0, (m1 ?? 1) - 1, d1 ?? 1)) /
+      86400000,
+  );
+}
+
 /** [start, end) of the clinic-local day containing `now`, as UTC ISO strings. */
 export function clinicDayRange(now: Date = new Date(), timeZone: string = CLINIC_TZ) {
   const key = clinicDayKey(now, timeZone);
