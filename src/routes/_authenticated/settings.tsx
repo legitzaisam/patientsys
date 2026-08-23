@@ -4,7 +4,6 @@ import { can } from "@/lib/permissions";
 import { AppShell } from "@/components/app-shell";
 import { TreatmentCatalogueSettings } from "@/components/treatment-catalogue-settings";
 import { ClinicDetailsSettings } from "@/components/clinic-details-settings";
-import { AccessControlSettings } from "@/components/access-control-settings";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -25,6 +24,9 @@ export const Route = createFileRoute("/_authenticated/settings")({
 function SettingsPage() {
   const { data: identity } = useIdentity();
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
+  if (!identity.isStaff) {
+    return <div className="p-12 text-sm text-muted-foreground">Staff access only.</div>;
+  }
   const canEditClinic = can(identity, "settings.treatments");
 
   return (
@@ -40,7 +42,6 @@ function SettingsPage() {
       <div className="space-y-6">
         <ClinicDetailsSettings canEdit={canEditClinic} />
         <TreatmentCatalogueSettings canEdit={canEditClinic} />
-        {identity.isManager && <AccessControlSettings canEdit />}
       </div>
     </AppShell>
   );

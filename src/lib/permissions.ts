@@ -41,11 +41,14 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
   },
 };
 
-type IdentityLike = { isManager?: boolean; permissions?: string[] } | null | undefined;
+type IdentityLike =
+  | { isOwner?: boolean; isManager?: boolean; permissions?: string[] }
+  | null
+  | undefined;
 
-/** Managers always hold every capability; other staff need an explicit grant. */
+/** Clinic owners always hold every capability; other staff need an explicit grant. */
 export function can(identity: IdentityLike, key: PermissionKey) {
   if (!identity) return false;
-  if (identity.isManager) return true;
+  if (identity.isOwner) return true;
   return (identity.permissions ?? []).includes(key);
 }

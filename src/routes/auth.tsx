@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
+import { checkEmail } from "@/lib/email";
+import { toastEmailError } from "@/lib/email-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,15 +42,23 @@ function AuthPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const emailCheck = checkEmail(email);
+    if (!emailCheck.ok) {
+      toastEmailError(emailCheck, (suggestion) => setEmail(suggestion));
+      return;
+    }
     setBusy(true);
     try {
       if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email: emailCheck.email,
+          password,
+        });
         if (error) throw error;
         navigate({ to: "/dashboard", replace: true });
       } else {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: emailCheck.email,
           password,
           options: {
             emailRedirectTo: window.location.origin,

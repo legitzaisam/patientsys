@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Calendar, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { listPatients, savePatient } from "@/lib/clinic.functions";
+import { checkEmail } from "@/lib/email";
+import { toastEmailError } from "@/lib/email-toast";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -136,7 +138,7 @@ function PatientsPage() {
           <h1 className="page-title">Patients</h1>
           <p className="mt-1 text-sm text-muted-foreground">{rows.length} records</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Input
             id="name-search"
             placeholder="Name or reference"
@@ -180,12 +182,29 @@ function PatientsPage() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const f = new FormData(e.currentTarget as HTMLFormElement);
+                  const rawEmail = String(f.get("email") ?? "");
+                  let email = rawEmail.trim();
+                  if (email) {
+                    const check = checkEmail(email);
+                    if (!check.ok) {
+                      const formEl = e.currentTarget as HTMLFormElement;
+                      toastEmailError(check, (suggestion) => {
+                        const input = formEl.elements.namedItem("email") as HTMLInputElement | null;
+                        if (input) {
+                          input.value = suggestion;
+                          input.dispatchEvent(new Event("input", { bubbles: true }));
+                        }
+                      });
+                      return;
+                    }
+                    email = check.email;
+                  }
                   create.mutate({
                     data: {
                       first_name: String(f.get("first_name")),
                       last_name: String(f.get("last_name")),
                       title: String(f.get("title") ?? ""),
-                      email: String(f.get("email") ?? ""),
+                      email,
                       phone: String(f.get("phone") ?? ""),
                       date_of_birth: String(f.get("date_of_birth") ?? ""),
                       allergies: String(f.get("allergies") ?? ""),

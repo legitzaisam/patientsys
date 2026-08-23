@@ -8,10 +8,12 @@ import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 
 const ROLES = [
+  { key: "manager" as const, label: "Manager" },
   { key: "front_desk" as const, label: "Receptionist" },
   { key: "practitioner" as const, label: "Practitioner" },
 ];
 
+/** Clinic owner customises what managers and other staff can reach. */
 export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
   const queryClient = useQueryClient();
   const fetchGrants = useServerFn(listRolePermissions);
@@ -38,17 +40,20 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
           <h2 className="text-sm font-semibold text-foreground">Staff access</h2>
           <p className="text-xs text-muted-foreground">
             {canEdit
-              ? "Choose what receptionists and practitioners can reach. Managers always keep full access."
-              : "Access levels set by your manager."}
+              ? "Choose what managers, receptionists and practitioners can reach. You always keep full access as clinic owner."
+              : "Access levels set by the clinic owner."}
           </p>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-edge">
-        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b border-edge bg-glass-2 px-4 py-2.5">
+      <div className="overflow-x-auto overflow-hidden rounded-2xl border border-edge">
+        <div
+          className="grid min-w-[32rem] items-center gap-4 border-b border-edge bg-glass-2 px-4 py-2.5"
+          style={{ gridTemplateColumns: `minmax(12rem,1fr) repeat(${ROLES.length}, 5.5rem)` }}
+        >
           <span className="text-xs tracking-[0.02em] text-muted-foreground">Capability</span>
           {ROLES.map((r) => (
-            <span key={r.key} className="w-24 text-center text-xs tracking-[0.02em] text-muted-foreground">
+            <span key={r.key} className="text-center text-xs tracking-[0.02em] text-muted-foreground">
               {r.label}
             </span>
           ))}
@@ -56,14 +61,15 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
         {PERMISSION_KEYS.map((key: PermissionKey) => (
           <div
             key={key}
-            className="grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b border-glass-line px-4 py-3 last:border-0"
+            className="grid min-w-[32rem] items-center gap-4 border-b border-glass-line px-4 py-3 last:border-0"
+            style={{ gridTemplateColumns: `minmax(12rem,1fr) repeat(${ROLES.length}, 5.5rem)` }}
           >
             <div>
               <p className="text-sm text-foreground">{PERMISSION_META[key].label}</p>
               <p className="text-xs text-muted-foreground">{PERMISSION_META[key].description}</p>
             </div>
             {ROLES.map((role) => (
-              <div key={role.key} className="flex w-24 justify-center">
+              <div key={role.key} className="flex justify-center">
                 <Switch
                   aria-label={`${PERMISSION_META[key].label} for ${role.label}`}
                   checked={grants?.[role.key]?.[key] ?? false}

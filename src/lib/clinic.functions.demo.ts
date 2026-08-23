@@ -25,6 +25,7 @@ import {
   PRACTITIONER_OVERLAP_MESSAGE,
 } from "@/lib/appointment-overlap";
 import { bookingDetailsMessage, type PaymentLinkKind } from "@/lib/payment-link";
+import { assertEmail } from "@/lib/email";
 
 export const PERMISSION_KEYS = [
   "reports.retention",
@@ -52,6 +53,9 @@ const photos = db.photos as any[];
 const recallTasks = db.recallTasks as any[];
 const retentionOutreach = db.retentionOutreach as any[];
 const staffNotifications = db.staffNotifications as any[];
+const staffConversations = db.staffConversations as any[];
+const staffChatMessages = db.staffChatMessages as any[];
+const staffConversationReads = db.staffConversationReads as any[];
 const messageTemplates = db.messageTemplates as any[];
 const treatmentColours = db.treatmentColours as any[];
 const colourThemes = db.colourThemes as any[];
@@ -82,6 +86,67 @@ function currentRole(): DemoRole {
   return "owner";
 }
 
+/** userIds that must change password after invite/reset */
+const mustChangePasswordByUser = new Set<string>();
+/** Newly invited demo staff until they dismiss the welcome dialog. */
+const welcomePendingByUser = new Set<string>();
+
+type ExTeamMember = {
+  id: string;
+  userId: string;
+  email: string;
+  fullName: string;
+  jobTitle: string;
+  registrationBody: string;
+  registrationNumber: string;
+  role: string;
+  commissionRate: number | null;
+  revokedAt: string;
+  retainUntil: string;
+  purgedAt: string | null;
+};
+
+const EX_TEAM_RETAIN_DAYS = 90;
+const exTeamMembers: ExTeamMember[] = [];
+
+function retainUntilFrom(revokedAt = new Date()) {
+  return new Date(revokedAt.getTime() + EX_TEAM_RETAIN_DAYS * 86400000).toISOString();
+}
+
+function purgeExpiredExTeamMembersDemo() {
+  const now = Date.now();
+  for (const row of exTeamMembers) {
+    if (row.purgedAt) continue;
+    if (new Date(row.retainUntil).getTime() > now) continue;
+    const formerLabel = `Former - ${row.fullName.trim() || "team member"}`;
+    row.purgedAt = new Date().toISOString();
+    row.email = "";
+    row.fullName = formerLabel;
+    row.jobTitle = "";
+    row.registrationBody = "";
+    row.registrationNumber = "";
+    row.commissionRate = null;
+    const profile = profiles.find((p) => p.id === row.userId);
+    if (profile) {
+      profile.full_name = formerLabel;
+      profile.job_title = null;
+      profile.registration_body = null;
+      profile.registration_number = null;
+      profile.avatar_url = null;
+      profile.commission_rate = 0;
+    }
+    // Clinical data (patients, appointments, treatments) is intentionally untouched.
+  }
+}
+
+function clearExTeamArchiveDemo(userId: string) {
+  for (let i = exTeamMembers.length - 1; i >= 0; i--) {
+    const row = exTeamMembers[i]!;
+    if (row.userId === userId && !row.purgedAt) exTeamMembers.splice(i, 1);
+  }
+}
+
+
 type Identity = {
   userId: string;
   email: string;
@@ -94,14 +159,17 @@ type Identity = {
   permissions: string[];
   profile: any;
   patient: any;
+  mustChangePassword: boolean;
+  welcomePending: boolean;
 };
 
 function identity(): Identity {
   const role = currentRole();
   const account = DEMO_ACCOUNTS[role];
   const isStaff = role !== "patient";
-  const isManager = role === "owner";
-  const permissions = isManager
+  const isOwner = role === "owner";
+  const isManager = isOwner || role === "manager";
+  const permissions = isOwner
     ? [...PERMISSION_KEYS]
     : rolePermissions
         .filter((p) => p.enabled && p.role === role)
@@ -113,12 +181,14 @@ function identity(): Identity {
     email: account.email,
     roles: [role],
     isStaff,
-    isOwner: isManager,
+    isOwner,
     isManager,
-    canDelete: isManager,
+    canDelete: isOwner,
     isPatient: !isStaff,
     permissions,
     profile,
+    mustChangePassword: mustChangePasswordByUser.has(account.userId),
+    welcomePending: isStaff && welcomePendingByUser.has(account.userId),
     patient: linked
       ? { id: linked.id, first_name: linked.first_name, last_name: linked.last_name }
       : null,
@@ -531,9 +601,10 @@ export const savePatient = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
+    const email = assertEmail(data.email ?? "", "email address", true);
     if (data.id) {
       const row = patientById(data.id);
-      if (row) Object.assign(row, { ...data, updated_at: new Date().toISOString() });
+      if (row) Object.assign(row, { ...data, email, updated_at: new Date().toISOString() });
       return { id: data.id };
     }
     const created = {
@@ -545,7 +616,7 @@ export const savePatient = createServerFn({ method: "POST" })
       first_name: data.first_name.trim(),
       last_name: data.last_name.trim(),
       date_of_birth: data.date_of_birth ?? null,
-      email: data.email ?? null,
+      email,
       phone: data.phone ?? null,
       status: data.status ?? "active",
       allergies: data.allergies ?? null,
@@ -726,6 +797,34 @@ export const saveAppointment = createServerFn({ method: "POST" })
       read_at: null,
       created_at: new Date().toISOString(),
     });
+
+    // Notify the booked practitioner and clinic managers only.
+    const bookingRecipients = [
+      ...new Set(
+        [
+          payload.practitioner_id,
+          ...userRoles.filter((r) => r.role === "owner" || r.role === "manager").map((r) => r.user_id),
+        ].filter(Boolean) as string[],
+      ),
+    ];
+    const bookingBody = `${`${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient"} — ${data.treatment_name} on ${when}`;
+    const bookingAt = new Date().toISOString();
+    for (const recipient_id of bookingRecipients) {
+      staffNotifications.unshift({
+        id: newId("l9"),
+        clinic_id: CLINIC_ID,
+        recipient_id,
+        sender_id: null,
+        urgent: false,
+        kind: "appointment",
+        title: "New booking",
+        body: bookingBody,
+        patient_id: data.patient_id,
+        appointment_id: created.id,
+        read_at: null,
+        created_at: bookingAt,
+      });
+    }
 
     return {
       id: created.id,
@@ -1186,6 +1285,33 @@ export const markStaffNotificationRead = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Alerts the signed-in staff member sent recently (seen / waiting per recipient). */
+export const listSentStaffAlerts = createServerFn({ method: "GET" }).handler(async () => {
+  const me = identity();
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return sortDesc(
+    staffNotifications.filter(
+      (n) =>
+        n.sender_id === me.userId &&
+        (n.kind === "urgent" || n.kind === "staff_message") &&
+        new Date(n.created_at).getTime() >= since,
+    ),
+    "created_at",
+  )
+    .slice(0, 50)
+    .map((n) => ({
+      id: n.id,
+      title: n.title,
+      body: n.body ?? null,
+      urgent: !!n.urgent,
+      kind: n.kind,
+      recipient_id: n.recipient_id,
+      read_at: n.read_at ?? null,
+      created_at: n.created_at,
+      recipient_name: profileName(n.recipient_id) || "Teammate",
+    }));
+});
+
 export const listStaffDirectory = createServerFn({ method: "GET" }).handler(async () => {
   const staff = userRoles.filter((r) => r.role !== "patient");
   const ids = [...new Set(staff.map((r) => r.user_id))];
@@ -1218,10 +1344,10 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
     } else {
       const wanted =
         data.audience === "managers"
-          ? ["owner"]
+          ? ["owner", "manager"]
           : data.audience === "front_desk"
             ? ["front_desk"]
-            : ["owner", "front_desk", "practitioner"];
+            : ["owner", "manager", "front_desk", "practitioner"];
       recipients = [
         ...new Set(userRoles.filter((r) => wanted.includes(r.role)).map((r) => r.user_id)),
       ];
@@ -1381,7 +1507,7 @@ function roleFor(userId: string) {
 export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
   if (!me.isStaff) throw new Error("Staff access only");
-  if (!me.isManager && !me.permissions.includes("team.view")) {
+  if (!me.isOwner && !me.permissions.includes("team.view")) {
     throw new Error("You do not have access to this area");
   }
   return userRoles
@@ -1410,12 +1536,13 @@ export const createStaffAccount = createServerFn({ method: "POST" })
       password: string;
       fullName: string;
       jobTitle?: string;
-      role: "owner" | "practitioner" | "front_desk";
+      role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
     }) => data,
   )
   .handler(async ({ data }) => {
+    const email = assertEmail(data.email, "work email")!;
     const userId = newId("s9");
     profiles.push({
       id: userId,
@@ -1435,7 +1562,7 @@ export const createStaffAccount = createServerFn({ method: "POST" })
       role: data.role,
       created_at: new Date().toISOString(),
     });
-    db.staffEmails[userId] = data.email;
+    db.staffEmails[userId] = email;
     return { userId };
   });
 
@@ -1443,7 +1570,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   .validator(
     (data: {
       userId: string;
-      role: "owner" | "practitioner" | "front_desk";
+      role: "owner" | "manager" | "practitioner" | "front_desk";
       fullName: string;
       jobTitle?: string;
       registrationBody?: string;
@@ -1468,6 +1595,14 @@ export const updateStaffMember = createServerFn({ method: "POST" })
     }
     const role = userRoles.find((r) => r.user_id === data.userId && r.role !== "patient");
     if (role) role.role = data.role;
+    else
+      userRoles.push({
+        id: newId("a1"),
+        user_id: data.userId,
+        role: data.role,
+        created_at: new Date().toISOString(),
+      });
+    clearExTeamArchiveDemo(data.userId);
     return { ok: true };
   });
 
@@ -1477,16 +1612,20 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       email: string;
       fullName: string;
       jobTitle?: string;
-      role: "owner" | "practitioner" | "front_desk";
+      role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
-      redirectTo: string;
     }) => data,
   )
   .handler(async ({ data }) => {
-    const email = data.email.trim().toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Enter a valid work email");
+    const email = assertEmail(data.email, "work email")!;
     const userId = newId("s8");
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    const bytes = new Uint8Array(12);
+    crypto.getRandomValues(bytes);
+    let raw = "";
+    for (const b of bytes) raw += alphabet[b % alphabet.length]!;
+    const temporaryPassword = `${raw.slice(0, 3)}-${raw.slice(3, 6)}-${raw.slice(6, 9)}-${raw.slice(9, 12)}`;
     profiles.push({
       id: userId,
       clinic_id: CLINIC_ID,
@@ -1506,11 +1645,14 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       created_at: new Date().toISOString(),
     });
     db.staffEmails[userId] = email;
+    mustChangePasswordByUser.add(userId);
+    welcomePendingByUser.add(userId);
+    clearExTeamArchiveDemo(userId);
     return {
       userId,
       email,
       role: data.role,
-      setupLink: `${data.redirectTo}#demo-invite-token`,
+      temporaryPassword,
     };
   });
 
@@ -1519,6 +1661,25 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = identity();
     if (data.userId === me.userId) throw new Error("You cannot revoke your own access");
+    const roleRow = userRoles.find((r) => r.user_id === data.userId && r.role !== "patient");
+    if (!roleRow) throw new Error("That person is not on the team");
+    const profile = profiles.find((p) => p.id === data.userId);
+    clearExTeamArchiveDemo(data.userId);
+    const revokedAt = new Date();
+    exTeamMembers.push({
+      id: newId("ex"),
+      userId: data.userId,
+      email: db.staffEmails[data.userId] ?? "",
+      fullName: profile?.full_name ?? "",
+      jobTitle: profile?.job_title ?? "",
+      registrationBody: profile?.registration_body ?? "",
+      registrationNumber: profile?.registration_number ?? "",
+      role: roleRow.role,
+      commissionRate: profile?.commission_rate ?? null,
+      revokedAt: revokedAt.toISOString(),
+      retainUntil: retainUntilFrom(revokedAt),
+      purgedAt: null,
+    });
     for (let i = userRoles.length - 1; i >= 0; i--) {
       const row = userRoles[i];
       if (row.user_id === data.userId && row.role !== "patient") userRoles.splice(i, 1);
@@ -1526,12 +1687,80 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const listExTeamMembers = createServerFn({ method: "GET" }).handler(async () => {
+  purgeExpiredExTeamMembersDemo();
+  const now = Date.now();
+  return exTeamMembers
+    .filter((r) => !r.purgedAt && new Date(r.retainUntil).getTime() > now)
+    .map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      email: r.email,
+      fullName: r.fullName,
+      jobTitle: r.jobTitle,
+      registrationBody: r.registrationBody,
+      registrationNumber: r.registrationNumber,
+      role: r.role,
+      revokedAt: r.revokedAt,
+      retainUntil: r.retainUntil,
+      daysRemaining: Math.max(0, Math.ceil((new Date(r.retainUntil).getTime() - now) / 86400000)),
+    }))
+    .sort((a, b) => b.revokedAt.localeCompare(a.revokedAt));
+});
+
+export const restoreExTeamMember = createServerFn({ method: "POST" })
+  .validator((data: { userId: string }) => data)
+  .handler(async ({ data }) => {
+    purgeExpiredExTeamMembersDemo();
+    const archived = exTeamMembers.find(
+      (r) => r.userId === data.userId && !r.purgedAt && new Date(r.retainUntil).getTime() > Date.now(),
+    );
+    if (!archived) throw new Error("No former team record found (it may have expired)");
+    const profile = profiles.find((p) => p.id === data.userId);
+    if (profile) {
+      profile.full_name = archived.fullName;
+      profile.job_title = archived.jobTitle || null;
+      profile.registration_body = archived.registrationBody || null;
+      profile.registration_number = archived.registrationNumber || null;
+      if (archived.commissionRate != null) profile.commission_rate = archived.commissionRate;
+    }
+    const existing = userRoles.find((r) => r.user_id === data.userId && r.role !== "patient");
+    if (existing) existing.role = archived.role as typeof existing.role;
+    else
+      userRoles.push({
+        id: newId("a1"),
+        user_id: data.userId,
+        role: archived.role as "owner" | "manager" | "practitioner" | "front_desk",
+        created_at: new Date().toISOString(),
+      });
+    clearExTeamArchiveDemo(data.userId);
+    return { ok: true, role: archived.role };
+  });
+
 export const setStaffPassword = createServerFn({ method: "POST" })
   .validator((data: { userId: string; password: string }) => data)
   .handler(async ({ data }) => {
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
+    mustChangePasswordByUser.add(data.userId);
+    welcomePendingByUser.delete(data.userId);
     return { ok: true };
   });
+
+/** Signed-in staff: replace temporary/reset password and clear the must-change flag. */
+export const changeOwnPassword = createServerFn({ method: "POST" })
+  .validator((data: { password: string }) => data)
+  .handler(async ({ data }) => {
+    if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
+    const me = identity();
+    mustChangePasswordByUser.delete(me.userId);
+    return { ok: true, mustChangePassword: false as const };
+  });
+
+export const acknowledgeWelcome = createServerFn({ method: "POST" }).handler(async () => {
+  const me = identity();
+  welcomePendingByUser.delete(me.userId);
+  return { ok: true, welcomePending: false as const };
+});
 
 export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handler(async () => ({
   patients: patients
@@ -1563,8 +1792,7 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handle
 export const setPatientEmail = createServerFn({ method: "POST" })
   .validator((data: { patientId: string; email: string }) => data)
   .handler(async ({ data }) => {
-    const email = data.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address");
+    const email = assertEmail(data.email)!;
     const patient = patientById(data.patientId);
     if (patient) patient.email = email;
     return { ok: true };
@@ -1573,8 +1801,7 @@ export const setPatientEmail = createServerFn({ method: "POST" })
 export const setStaffEmail = createServerFn({ method: "POST" })
   .validator((data: { userId: string; email: string }) => data)
   .handler(async ({ data }) => {
-    const email = data.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address");
+    const email = assertEmail(data.email)!;
     db.staffEmails[data.userId] = email;
     return { ok: true };
   });
@@ -1619,7 +1846,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = identity();
     if (!me.isStaff) throw new Error("Staff access only");
-    if (!me.isManager && !me.permissions.includes("reports.performance")) {
+    if (!me.isOwner && !me.permissions.includes("reports.performance")) {
       throw new Error("You do not have access to this area");
     }
     const { buildStats, buildTrend } = await import("./earnings.server");
@@ -1811,7 +2038,7 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
 
 export const listProfileChangeRequests = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireStaff();
-  if (!me.isManager && !me.permissions.includes("team.approve_changes")) {
+  if (!me.isOwner && !me.permissions.includes("team.approve_changes")) {
     throw new Error("You do not have access to this area");
   }
   return sortDesc(profileChangeRequests, "created_at")
@@ -1905,9 +2132,6 @@ export const getStaffProfile = createServerFn({ method: "GET" })
   .validator((data: { userId: string }) => data)
   .handler(async ({ data }) => {
     const me = requireStaff();
-    if (!me.isManager && !me.permissions.includes("team.view")) {
-      throw new Error("You do not have access to this area");
-    }
     return {
       profile: profiles.find((p) => p.id === data.userId) ?? null,
       role: roleFor(data.userId),
@@ -1929,7 +2153,7 @@ export const getStaffProfile = createServerFn({ method: "GET" })
 
 export const getRetention = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireStaff();
-  if (!me.isManager && !me.permissions.includes("reports.retention")) {
+  if (!me.isOwner && !me.permissions.includes("reports.retention")) {
     throw new Error("You do not have access to retention reports");
   }
   const { buildRetention } = await import("./retention.server");
@@ -2013,12 +2237,21 @@ export const createRecallTask = createServerFn({ method: "POST" })
     const openTasks = recallTasks.filter(
       (t) => t.patient_id === data.patient_id && t.status !== "completed",
     );
-    const alreadyAssigned = new Set(openTasks.map((t) => t.assigned_to));
+    const note = (data.note ?? "").trim();
+    const sameNote = openTasks.filter((t) => (t.note ?? "").trim() === note);
+    const alreadyAssigned = new Set(
+      (sameNote.length ? sameNote : openTasks).map((t) => t.assigned_to),
+    );
     const recipients = requested.filter((r) => !alreadyAssigned.has(r.id));
     if (!recipients.length) {
-      return { ok: true, duplicate: true, group_id: openTasks[0]?.group_id ?? null };
+      return {
+        ok: true,
+        duplicate: true,
+        group_id: (sameNote[0] ?? openTasks[0])?.group_id ?? null,
+      };
     }
-    const groupId = newId("k8");
+    const groupId =
+      sameNote[0]?.group_id || sameNote[0]?.id || newId("k8");
     const now = new Date().toISOString();
     for (const r of recipients) {
       recallTasks.unshift({
@@ -2153,7 +2386,7 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
   .validator((data: { task_id: string; assignee_ids?: string[] }) => data)
   .handler(async ({ data }) => {
     const me = identity();
-    if (!me.isManager && !me.permissions.includes("tasks.delete")) {
+    if (!me.isOwner && !me.permissions.includes("tasks.delete")) {
       throw new Error("You do not have access to delete tasks");
     }
     const target = recallTasks.find((t) => t.id === data.task_id);
@@ -2187,28 +2420,44 @@ export const listRecallTasks = createServerFn({ method: "GET" })
 
 export const listOpenRecallTasks = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireStaff();
-  return sortDesc(
+  const rows = sortDesc(
     recallTasks.filter(
       (t) => t.status !== "completed" && (me.isManager || t.assigned_to === me.userId),
     ),
     "created_at",
-  )
-    .slice(0, 25)
-    .map((t) => {
-      const p = patientById(t.patient_id);
-      return {
-        ...t,
-        patients: p
-          ? {
-              id: p.id,
-              first_name: p.first_name,
-              last_name: p.last_name,
-              phone: p.phone,
-              email: p.email,
-            }
-          : null,
-      };
-    });
+  ).map((t) => {
+    const p = patientById(t.patient_id);
+    return {
+      ...t,
+      patients: p
+        ? {
+            id: p.id,
+            first_name: p.first_name,
+            last_name: p.last_name,
+            phone: p.phone,
+            email: p.email,
+          }
+        : null,
+    };
+  });
+  // One card per chase-up (group), and collapse identical patient+note duplicates.
+  const byGroup = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    const key = row.group_id || row.id;
+    const prev = byGroup.get(key);
+    if (!prev || (row.assigned_to === me.userId && prev.assigned_to !== me.userId)) {
+      byGroup.set(key, row);
+    }
+  }
+  const byChase = new Map<string, (typeof rows)[number]>();
+  for (const row of byGroup.values()) {
+    const key = `${row.patient_id}::${(row.note ?? "").trim()}`;
+    const prev = byChase.get(key);
+    if (!prev || (row.assigned_to === me.userId && prev.assigned_to !== me.userId)) {
+      byChase.set(key, row);
+    }
+  }
+  return sortDesc([...byChase.values()], "created_at").slice(0, 25);
 });
 
 /* ---------------------------------------------------------------- */
@@ -2217,7 +2466,7 @@ export const listOpenRecallTasks = createServerFn({ method: "GET" }).handler(asy
 
 function requireSettings() {
   const me = requireStaff();
-  if (!me.isManager && !me.permissions.includes("settings.treatments")) {
+  if (!me.isOwner && !me.permissions.includes("settings.treatments")) {
     throw new Error("You do not have access to change clinic settings");
   }
   return me;
@@ -2398,29 +2647,29 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
     db.clinic["name"] = name;
     db.clinic["address"] = data.address?.trim() || null;
     db.clinic["phone"] = data.phone?.trim() || null;
-    db.clinic["email"] = data.email?.trim() || null;
+    db.clinic["email"] = assertEmail(data.email ?? "", "clinic email", true);
     return { ok: true };
   });
 
 export const listRolePermissions = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireStaff();
-  const grants: Record<string, Record<string, boolean>> = { front_desk: {}, practitioner: {} };
-  for (const role of ["front_desk", "practitioner"]) {
+  const grants: Record<string, Record<string, boolean>> = { manager: {}, front_desk: {}, practitioner: {} };
+  for (const role of ["manager", "front_desk", "practitioner"]) {
     for (const key of PERMISSION_KEYS) {
       grants[role]![key] =
         rolePermissions.find((r) => r.role === role && r.permission === key)?.enabled ?? false;
     }
   }
-  return { grants, canEdit: me.isManager };
+  return { grants, canEdit: me.isOwner };
 });
 
 export const setRolePermission = createServerFn({ method: "POST" })
   .validator(
-    (data: { role: "front_desk" | "practitioner"; permission: string; enabled: boolean }) => data,
+    (data: { role: "manager" | "front_desk" | "practitioner"; permission: string; enabled: boolean }) => data,
   )
   .handler(async ({ data }) => {
     const me = identity();
-    if (!me.isManager) throw new Error("Manager access only");
+    if (!me.isOwner) throw new Error("Clinic owner access only");
     if (!(PERMISSION_KEYS as readonly string[]).includes(data.permission))
       throw new Error("Unknown permission");
     const row = rolePermissions.find(
@@ -2460,4 +2709,147 @@ export const saveMyNote = createServerFn({ method: "POST" })
     row.body = data.body;
     row.updated_at = now;
     return { body: row.body, updatedAt: row.updated_at };
+  });
+
+function chatPair(a: string, b: string) {
+  return a < b ? ([a, b] as const) : ([b, a] as const);
+}
+
+function getOrCreateDemoConversation(meId: string, peerUserId: string) {
+  const [userLow, userHigh] = chatPair(meId, peerUserId);
+  let row = staffConversations.find(
+    (c) => c.clinic_id === CLINIC_ID && c.user_low === userLow && c.user_high === userHigh,
+  );
+  if (!row) {
+    row = {
+      id: newId("sc"),
+      clinic_id: CLINIC_ID,
+      user_low: userLow,
+      user_high: userHigh,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    staffConversations.push(row);
+  }
+  return row;
+}
+
+export const getStaffChat = createServerFn({ method: "GET" })
+  .validator((data: { peerUserId: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (data.peerUserId === me.userId) throw new Error("Choose a teammate to message");
+    const conversation = getOrCreateDemoConversation(me.userId, data.peerUserId);
+    const messages = staffChatMessages
+      .filter((m) => m.conversation_id === conversation.id)
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+    const peerReadAt =
+      staffConversationReads.find((r) => r.conversation_id === conversation.id && r.user_id === data.peerUserId)
+        ?.last_read_at ?? null;
+    const myReadAt =
+      staffConversationReads.find((r) => r.conversation_id === conversation.id && r.user_id === me.userId)
+        ?.last_read_at ?? null;
+    return {
+      conversationId: conversation.id as string,
+      peer: {
+        id: data.peerUserId,
+        full_name: profileName(data.peerUserId) ?? "Teammate",
+        job_title: profiles.find((p) => p.id === data.peerUserId)?.job_title ?? null,
+        avatar_url: profiles.find((p) => p.id === data.peerUserId)?.avatar_url ?? null,
+      },
+      peerReadAt,
+      myReadAt,
+      messages: messages.map((m) => ({
+        id: m.id as string,
+        sender_id: m.sender_id as string,
+        body: m.body as string,
+        created_at: m.created_at as string,
+        mine: m.sender_id === me.userId,
+        readByPeer:
+          m.sender_id === me.userId && peerReadAt != null && String(peerReadAt) >= String(m.created_at),
+      })),
+    };
+  });
+
+export const sendStaffChatMessage = createServerFn({ method: "POST" })
+  .validator((data: { peerUserId: string; body: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const body = data.body.trim();
+    if (!body) throw new Error("Write a message first");
+    if (data.peerUserId === me.userId) throw new Error("Choose a teammate to message");
+    const conversation = getOrCreateDemoConversation(me.userId, data.peerUserId);
+    const now = new Date().toISOString();
+    const message = {
+      id: newId("sm"),
+      conversation_id: conversation.id,
+      clinic_id: CLINIC_ID,
+      sender_id: me.userId,
+      body,
+      created_at: now,
+    };
+    staffChatMessages.push(message);
+    conversation.updated_at = now;
+    const existingRead = staffConversationReads.find(
+      (r) => r.conversation_id === conversation.id && r.user_id === me.userId,
+    );
+    if (existingRead) existingRead.last_read_at = now;
+    else staffConversationReads.push({ conversation_id: conversation.id, user_id: me.userId, last_read_at: now });
+
+    const from = me.profile?.full_name || "A colleague";
+    for (let i = staffNotifications.length - 1; i >= 0; i--) {
+      const n = staffNotifications[i];
+      if (
+        n.recipient_id === data.peerUserId &&
+        n.sender_id === me.userId &&
+        n.kind === "staff_chat" &&
+        !n.read_at
+      ) {
+        staffNotifications.splice(i, 1);
+      }
+    }
+    staffNotifications.unshift({
+      id: newId("l1"),
+      clinic_id: CLINIC_ID,
+      recipient_id: data.peerUserId,
+      sender_id: me.userId,
+      kind: "staff_chat",
+      title: `Message from ${from}`,
+      body: body.slice(0, 180),
+      urgent: false,
+      patient_id: null,
+      appointment_id: null,
+      read_at: null,
+      created_at: now,
+    });
+
+    return {
+      conversationId: conversation.id as string,
+      message: { ...message, mine: true, readByPeer: false },
+    };
+  });
+
+export const markStaffChatRead = createServerFn({ method: "POST" })
+  .validator((data: { peerUserId: string }) => data)
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const conversation = getOrCreateDemoConversation(me.userId, data.peerUserId);
+    const now = new Date().toISOString();
+    const existing = staffConversationReads.find(
+      (r) => r.conversation_id === conversation.id && r.user_id === me.userId,
+    );
+    if (existing) existing.last_read_at = now;
+    else staffConversationReads.push({ conversation_id: conversation.id, user_id: me.userId, last_read_at: now });
+
+    for (const n of staffNotifications) {
+      if (
+        n.recipient_id === me.userId &&
+        n.sender_id === data.peerUserId &&
+        n.kind === "staff_chat" &&
+        !n.read_at
+      ) {
+        n.read_at = now;
+      }
+    }
+    return { ok: true, lastReadAt: now, conversationId: conversation.id as string };
   });

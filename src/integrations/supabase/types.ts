@@ -14,6 +14,61 @@ export type Database = {
   }
   public: {
     Tables: {
+
+      ex_team_members: {
+        Row: {
+          id: string
+          clinic_id: string
+          user_id: string
+          email: string | null
+          full_name: string
+          job_title: string | null
+          registration_body: string | null
+          registration_number: string | null
+          role: string
+          commission_rate: number | null
+          revoked_at: string
+          revoked_by: string | null
+          retain_until: string
+          purged_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          user_id: string
+          email?: string | null
+          full_name?: string
+          job_title?: string | null
+          registration_body?: string | null
+          registration_number?: string | null
+          role: string
+          commission_rate?: number | null
+          revoked_at?: string
+          revoked_by?: string | null
+          retain_until: string
+          purged_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          user_id?: string
+          email?: string | null
+          full_name?: string
+          job_title?: string | null
+          registration_body?: string | null
+          registration_number?: string | null
+          role?: string
+          commission_rate?: number | null
+          revoked_at?: string
+          revoked_by?: string | null
+          retain_until?: string
+          purged_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       appointment_notes: {
         Row: {
           appointment_id: string
@@ -1231,7 +1286,7 @@ export type Database = {
       is_staff: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      app_role: "owner" | "practitioner" | "front_desk" | "patient"
+      app_role: "owner" | "manager" | "practitioner" | "front_desk" | "patient"
       appointment_status: "booked" | "attended" | "cancelled" | "no_show"
       change_request_status: "pending" | "approved" | "declined"
       document_kind:
@@ -1381,7 +1436,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["owner", "practitioner", "front_desk", "patient"],
+      app_role: ["owner", "manager", "practitioner", "front_desk", "patient"],
       appointment_status: ["booked", "attended", "cancelled", "no_show"],
       change_request_status: ["pending", "approved", "declined"],
       document_kind: [

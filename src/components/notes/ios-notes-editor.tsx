@@ -235,7 +235,9 @@ export function NotesTextarea({
       }}
       placeholder={placeholder}
       style={{ fontSize: prefs.size, lineHeight: 1.65 }}
-      className={`${autoGrow ? "h-auto overflow-hidden" : "flex-1"} w-full resize-none rounded-2xl border ${theme.rule} ${theme.surface} ${theme.text} ${FONTS[prefs.font].cls} p-3.5 outline-none transition-colors placeholder:text-muted-foreground focus:border-accent-line ${className ?? ""}`}
+      className={`${
+        autoGrow ? "h-auto resize-none overflow-hidden" : "min-h-[120px] resize-y"
+      } w-full rounded-2xl border ${theme.rule} ${theme.surface} ${theme.text} ${FONTS[prefs.font].cls} p-3.5 outline-none transition-colors placeholder:text-muted-foreground focus:border-accent-line ${className ?? ""}`}
     />
   );
 }

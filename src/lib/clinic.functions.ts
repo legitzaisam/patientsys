@@ -7,10 +7,23 @@ import {
   PRACTITIONER_OVERLAP_MESSAGE,
 } from "@/lib/appointment-overlap";
 import { bookingDetailsMessage, type PaymentLinkKind } from "@/lib/payment-link";
+import { assertEmail } from "@/lib/email";
 
 const CLINIC_ID = "11111111-1111-4111-8111-111111111111";
 
 type Ctx = { supabase: any; userId: string; claims: Record<string, unknown> };
+
+/** Readable temporary password for new staff invites (manager shares it out-of-band). */
+function generateTemporaryPassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  let raw = "";
+  for (const b of bytes) raw += alphabet[b % alphabet.length]!;
+  return `${raw.slice(0, 3)}-${raw.slice(3, 6)}-${raw.slice(6, 9)}-${raw.slice(9, 12)}`;
+}
+
+
 
 /** Reject if the practitioner already has a non-cancelled booking overlapping this window. */
 async function assertNoPractitionerOverlap(
@@ -82,9 +95,14 @@ async function loadIdentity(context: Ctx) {
   const { data: patient } = patientRes;
   const { data: perms } = permsRes;
   const roleList: string[] = (roles ?? []).map((r: { role: string }) => r.role);
-  const isStaff = roleList.some((r) => r === "owner" || r === "practitioner" || r === "front_desk");
-  const isManager = roleList.includes("owner");
-  const permissions: string[] = isManager
+  const isOwner = roleList.includes("owner");
+  const isStaff = roleList.some(
+    (r) => r === "owner" || r === "manager" || r === "practitioner" || r === "front_desk",
+  );
+  /** Management tier (clinic owner or manager) — used for overview UI, not full access. */
+  const isManager = isOwner || roleList.includes("manager");
+  // Only clinic owners get every capability automatically; managers use role_permissions.
+  const permissions: string[] = isOwner
     ? [...PERMISSION_KEYS]
     : Array.from(
         new Set(
@@ -98,24 +116,195 @@ async function loadIdentity(context: Ctx) {
     email: (context.claims["email"] as string) ?? "",
     roles: roleList,
     isStaff,
-    isOwner: roleList.includes("owner"),
-    /** Manager tier: full control, including deletions and team administration. */
+    /** Clinic owner — full access; customises manager / staff permissions. */
+    isOwner,
+    /** Owner or manager role (management portal tier). */
     isManager,
-    /** Practitioners and front desk can create and edit, but never delete. */
-    canDelete: roleList.includes("owner"),
+    /** Hard deletes stay with the clinic owner. */
+    canDelete: isOwner,
     isPatient: !isStaff,
-    /** Granted capability keys; managers always hold every capability. */
+    /** Capability keys from role_permissions (owners hold every key). */
     permissions,
     profile: profile ?? null,
     patient: patient ?? null,
+    /** True when staff must set a new password before using the app (invite / reset). */
+    mustChangePassword: await resolveAppMetaFlag(context, "must_change_password"),
+    /** True for newly invited staff until they dismiss the welcome dialog. */
+    welcomePending: await resolveAppMetaFlag(context, "welcome_pending"),
   };
 }
+
+type AppMetaFlag = "must_change_password" | "welcome_pending";
+
+/**
+ * Prefer Auth’s live app_metadata over the access-token claim. After admin
+ * updates (password change, welcome ack) the JWT can stay stale until refresh.
+ */
+async function resolveAppMetaFlag(context: Ctx, flag: AppMetaFlag): Promise<boolean> {
+  const fromJwt = Boolean(
+    (context.claims["app_metadata"] as Record<string, unknown> | undefined)?.[flag],
+  );
+  if (!fromJwt) return false;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(context.userId);
+    if (error || !data.user) return fromJwt;
+    return Boolean((data.user.app_metadata as Record<string, unknown> | undefined)?.[flag]);
+  } catch {
+    return fromJwt;
+  }
+}
+
+/** Metadata stamped on invited staff — password gate, then one-time team welcome. */
+const NEW_STAFF_APP_META = {
+  must_change_password: true,
+  welcome_pending: true,
+} as const;
+
+/** ~100 years — revoked staff cannot keep an Auth session or sign back in. */
+const STAFF_REVOKE_BAN = "876000h";
+
+async function unbanAuthUser(userId: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const res = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    ban_duration: "none",
+  });
+  if (res.error) throw new Error(res.error.message);
+}
+
+async function banAuthUser(userId: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const existing = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (existing.error) throw new Error(existing.error.message);
+  const res = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    ban_duration: STAFF_REVOKE_BAN,
+    app_metadata: {
+      ...(existing.data.user?.app_metadata ?? {}),
+      must_change_password: false,
+      welcome_pending: false,
+    },
+  });
+  if (res.error) throw new Error(res.error.message);
+}
+
+
+const EX_TEAM_RETAIN_DAYS = 90;
+
+function retainUntilFrom(revokedAt: Date = new Date()) {
+  return new Date(revokedAt.getTime() + EX_TEAM_RETAIN_DAYS * 86400000).toISOString();
+}
+
+/**
+ * Snapshot staff identity into the 90-day ex-team archive.
+ * Clinical rows (patients, appointments, treatments, …) are never copied here.
+ */
+async function archiveExTeamMember(opts: {
+  userId: string;
+  role: string;
+  email: string;
+  fullName: string;
+  jobTitle: string | null;
+  registrationBody: string | null;
+  registrationNumber: string | null;
+  commissionRate: number | null;
+  revokedBy: string;
+}) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const revokedAt = new Date();
+  // Replace any prior active archive row for this user.
+  await supabaseAdmin
+    .from("ex_team_members")
+    .delete()
+    .eq("user_id", opts.userId)
+    .is("purged_at", null);
+  const { error } = await supabaseAdmin.from("ex_team_members").insert({
+    clinic_id: CLINIC_ID,
+    user_id: opts.userId,
+    email: opts.email || null,
+    full_name: opts.fullName || "",
+    job_title: opts.jobTitle,
+    registration_body: opts.registrationBody,
+    registration_number: opts.registrationNumber,
+    role: opts.role,
+    commission_rate: opts.commissionRate,
+    revoked_at: revokedAt.toISOString(),
+    revoked_by: opts.revokedBy,
+    retain_until: retainUntilFrom(revokedAt),
+  });
+  if (error) throw new Error(error.message);
+}
+
+async function clearExTeamArchive(userId: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  await supabaseAdmin.from("ex_team_members").delete().eq("user_id", userId).is("purged_at", null);
+}
+
+/**
+ * After 90 days: remove staff-only identity from the archive + HR files.
+ * Never deletes patients, appointments, treatments, messages, or audit history.
+ * Profiles stay as anonymised stubs so practitioner FKs remain valid.
+ */
+async function purgeExpiredExTeamMembers() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const now = new Date().toISOString();
+  const { data: expired, error } = await supabaseAdmin
+    .from("ex_team_members")
+    .select("id, user_id, full_name")
+    .is("purged_at", null)
+    .lte("retain_until", now);
+  if (error) throw new Error(error.message);
+  for (const row of expired ?? []) {
+    const userId = row.user_id as string;
+    const formerLabel = `Former - ${String(row.full_name ?? "").trim() || "team member"}`;
+    // Staff HR files only — not patient documents.
+    const { data: docs } = await supabaseAdmin
+      .from("staff_documents")
+      .select("id, path")
+      .eq("user_id", userId);
+    for (const doc of docs ?? []) {
+      if (doc.path) {
+        try {
+          await supabaseAdmin.storage.from("staff-files").remove([doc.path]);
+        } catch {
+          /* best-effort — still purge the DB row */
+        }
+      }
+    }
+    await supabaseAdmin.from("staff_documents").delete().eq("user_id", userId);
+    await supabaseAdmin.from("user_notes").delete().eq("user_id", userId);
+    // Keep a named stub so appointments.practitioner_id still resolves usefully.
+    await supabaseAdmin
+      .from("profiles")
+      .update({
+        full_name: formerLabel,
+        job_title: null,
+        registration_body: null,
+        registration_number: null,
+        avatar_url: null,
+        commission_rate: 0,
+      })
+      .eq("id", userId);
+    await supabaseAdmin
+      .from("ex_team_members")
+      .update({
+        purged_at: now,
+        email: null,
+        full_name: formerLabel,
+        job_title: null,
+        registration_body: null,
+        registration_number: null,
+        commission_rate: null,
+      })
+      .eq("id", row.id);
+  }
+}
+
 
 /** Throws unless the caller is a manager or has been granted the capability. */
 async function requirePermission(context: Ctx, key: PermissionKey) {
   const identity = await loadIdentity(context);
   if (!identity.isStaff) throw new Error("Staff access only");
-  if (!identity.isManager && !identity.permissions.includes(key)) {
+  if (!identity.isOwner && !identity.permissions.includes(key)) {
     throw new Error("You do not have access to this area");
   }
   return identity;
@@ -145,13 +334,20 @@ async function audit(
 export const getMe = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const authUser = await supabaseAdmin.auth.admin.getUserById(context.userId);
+    if (authUser.error) throw new Error(authUser.error.message);
+    const bannedUntil = authUser.data.user?.banned_until;
+    if (bannedUntil && new Date(bannedUntil) > new Date()) {
+      throw new Error("Your clinic access has been removed. Please contact your manager.");
+    }
+
     let identity = await loadIdentity(context as Ctx);
     if (identity.roles.length === 0 && !identity.patient) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { count } = await supabaseAdmin
         .from("user_roles")
         .select("id", { count: "exact", head: true })
-        .in("role", ["owner", "practitioner", "front_desk"]);
+        .in("role", ["owner", "manager", "practitioner", "front_desk"]);
       if (!count) {
         await supabaseAdmin.from("user_roles").insert({ user_id: context.userId, role: "owner" });
         await supabaseAdmin
@@ -163,9 +359,13 @@ export const getMe = createServerFn({ method: "GET" })
     }
     // Anyone linked to a patient record with no staff role is explicitly a patient.
     if (identity.roles.length === 0 && identity.patient) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       await supabaseAdmin.from("user_roles").insert({ user_id: context.userId, role: "patient" });
       identity = await loadIdentity(context as Ctx);
+    }
+    // Former staff keep a profiles row after revoke. Without a linked patient
+    // record they must not fall into the patient portal — force sign-out.
+    if (!identity.isStaff && !identity.patient && identity.profile) {
+      throw new Error("Your clinic access has been removed. Please contact your manager.");
     }
     return identity;
   });
@@ -729,17 +929,34 @@ export const saveAppointment = createServerFn({ method: "POST" })
       body: confirmation,
     });
 
-    // Practitioner notification.
-    if (payload.practitioner_id) {
-      await supabase.from("staff_notifications").insert({
-        clinic_id: CLINIC_ID,
-        recipient_id: payload.practitioner_id,
-        kind: "appointment",
-        title: "New booking",
-        body: `${`${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient"} — ${data.treatment_name} on ${when}`,
-        patient_id: data.patient_id,
-        appointment_id: created.id,
-      });
+    // Notify the booked practitioner and clinic managers only.
+    {
+      const { data: managers } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["owner", "manager"]);
+      const recipients = [
+        ...new Set(
+          [
+            payload.practitioner_id,
+            ...((managers ?? []) as { user_id: string }[]).map((r) => r.user_id),
+          ].filter(Boolean) as string[],
+        ),
+      ];
+      if (recipients.length > 0) {
+        const body = `${`${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient"} — ${data.treatment_name} on ${when}`;
+        await supabase.from("staff_notifications").insert(
+          recipients.map((recipient_id) => ({
+            clinic_id: CLINIC_ID,
+            recipient_id,
+            kind: "appointment",
+            title: "New booking",
+            body,
+            patient_id: data.patient_id,
+            appointment_id: created.id,
+          })),
+        );
+      }
     }
 
     await audit(context as Ctx, "notify", "appointment", created.id, data.patient_id, {
@@ -822,7 +1039,7 @@ export const savePatient = createServerFn({ method: "POST" })
       first_name: data.first_name.trim(),
       last_name: data.last_name.trim(),
       title: data.title?.trim() || null,
-      email: data.email?.trim() || null,
+      email: assertEmail(data.email ?? "", "email address", true),
       phone: data.phone?.trim() || null,
       date_of_birth: data.date_of_birth || null,
       status: (data.status as "active" | "inactive" | "archived") ?? "active",
@@ -1071,14 +1288,16 @@ export const getUnreadMessages = createServerFn({ method: "GET" })
     return { total: items.reduce((sum, i) => sum + i.count, 0), items };
   });
 
-/** Reusable staff message templates. */
+/** Unread alerts addressed to the signed-in staff member. */
 export const listStaffNotifications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
+    // Service-role client bypasses RLS — only show alerts addressed to this user.
     const { data: rows } = await ctx.supabase
       .from("staff_notifications")
       .select("id, title, body, patient_id, appointment_id, read_at, created_at, urgent, sender_id, kind")
+      .eq("recipient_id", ctx.userId)
       .is("read_at", null)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -1158,10 +1377,10 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
     } else {
       const wanted =
         data.audience === "managers"
-          ? ["owner"]
+          ? ["owner", "manager"]
           : data.audience === "front_desk"
             ? ["front_desk"]
-            : ["owner", "front_desk", "practitioner"];
+            : ["owner", "manager", "front_desk", "practitioner"];
       const { data: roles } = await ctx.supabase.from("user_roles").select("user_id").in("role", wanted);
       recipients = [...new Set((roles ?? []).map((r: { user_id: string }) => r.user_id))] as string[];
     }
@@ -1248,14 +1467,59 @@ export const markStaffNotificationRead = createServerFn({ method: "POST" })
   .validator((data: { id?: string; all?: boolean }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    let q = (context as Ctx).supabase
+    const ctx = context as Ctx;
+    // Service-role client bypasses RLS — only update the caller's own alerts.
+    let q = ctx.supabase
       .from("staff_notifications")
       .update({ read_at: new Date().toISOString() })
+      .eq("recipient_id", ctx.userId)
       .is("read_at", null);
     if (data.id) q = q.eq("id", data.id);
     const { error } = await q;
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+/** Alerts the signed-in staff member sent recently (seen / waiting per recipient). */
+export const listSentStaffAlerts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: rows, error } = await ctx.supabase
+      .from("staff_notifications")
+      .select("id, title, body, urgent, kind, recipient_id, read_at, created_at")
+      .eq("sender_id", ctx.userId)
+      .in("kind", ["urgent", "staff_message"])
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) throw new Error(error.message);
+    const list = (rows ?? []) as {
+      id: string;
+      title: string;
+      body: string | null;
+      urgent: boolean | null;
+      kind: string;
+      recipient_id: string;
+      read_at: string | null;
+      created_at: string;
+    }[];
+    const recipientIds = [...new Set(list.map((r) => r.recipient_id))];
+    let names = new Map<string, string>();
+    if (recipientIds.length > 0) {
+      const { data: profiles } = await ctx.supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", recipientIds);
+      names = new Map(
+        ((profiles ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]),
+      );
+    }
+    return list.map((r) => ({
+      ...r,
+      recipient_name: names.get(r.recipient_id) ?? "Teammate",
+    }));
   });
 
 export const listMessageTemplates = createServerFn({ method: "GET" })
@@ -1440,14 +1704,15 @@ async function requireOwner(context: Ctx) {
     .eq("user_id", context.userId)
     .eq("role", "owner")
     .maybeSingle();
-  if (!data) throw new Error("Manager access required");
+  if (!data) throw new Error("Clinic owner access required");
 }
 
 export const listTeam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    await requirePermission(ctx, "team.view");
+    const identity = await loadIdentity(ctx);
+    if (!identity.isStaff) throw new Error("Staff only");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: profiles }, { data: roles }, users] = await Promise.all([
       supabaseAdmin.from("profiles").select("*"),
@@ -1486,7 +1751,7 @@ export const createStaffAccount = createServerFn({ method: "POST" })
       password: string;
       fullName: string;
       jobTitle?: string;
-      role: "owner" | "practitioner" | "front_desk";
+      role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
     }) => data,
@@ -1495,9 +1760,10 @@ export const createStaffAccount = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await requireOwner(ctx);
+    const email = assertEmail(data.email, "work email")!;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const created = await supabaseAdmin.auth.admin.createUser({
-      email: data.email,
+      email,
       password: data.password,
       email_confirm: true,
       user_metadata: { full_name: data.fullName },
@@ -1513,7 +1779,8 @@ export const createStaffAccount = createServerFn({ method: "POST" })
       registration_number: data.registrationNumber ?? null,
     });
     await supabaseAdmin.from("user_roles").insert({ user_id: uid, role: data.role });
-    await audit(ctx, "staff.create", "user_roles", uid, null, { email: data.email, role: data.role });
+    await unbanAuthUser(uid);
+    await audit(ctx, "staff.create", "user_roles", uid, null, { email, role: data.role });
     return { userId: uid };
   });
 
@@ -1521,7 +1788,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   .validator(
     (data: {
       userId: string;
-      role: "owner" | "practitioner" | "front_desk";
+      role: "owner" | "manager" | "practitioner" | "front_desk";
       fullName: string;
       jobTitle?: string;
       registrationBody?: string;
@@ -1549,6 +1816,9 @@ export const updateStaffMember = createServerFn({ method: "POST" })
     }
     await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: data.userId, role: data.role });
+    // Undo revoke / role restore must lift the Auth ban so they can sign in again.
+    await clearExTeamArchive(data.userId);
+    await unbanAuthUser(data.userId);
     await audit(ctx, "staff.update", "user_roles", data.userId, null, {
       role: data.role,
       ...(data.commissionRate !== undefined ? { commission_rate: patch.commission_rate } : {}),
@@ -1557,9 +1827,10 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   });
 
 /**
- * Manager-only: invite a receptionist or practitioner. Creates the account in a
- * pending state, assigns the chosen access level and returns a single-use secure
- * setup link the manager can pass to the invitee (also emailed where email is on).
+ * Manager-only: invite a receptionist or practitioner. Creates the account with an
+ * auto-generated temporary password (returned once for the manager to share) and
+ * requires the invitee to change it on first sign-in.
+ * If the email already has an auth user, their password is reset instead.
  */
 export const inviteStaffMember = createServerFn({ method: "POST" })
   .validator(
@@ -1567,32 +1838,68 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       email: string;
       fullName: string;
       jobTitle?: string;
-      role: "owner" | "practitioner" | "front_desk";
+      role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
-      redirectTo: string;
     }) => data,
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await requireOwner(ctx);
-    const email = data.email.trim().toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Enter a valid work email");
+    const email = assertEmail(data.email, "work email")!;
+    const temporaryPassword = generateTemporaryPassword();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const link = await supabaseAdmin.auth.admin.generateLink({
-      type: "invite",
+    let uid: string | undefined;
+
+    const created = await supabaseAdmin.auth.admin.createUser({
       email,
-      options: {
-        redirectTo: data.redirectTo,
-        data: { full_name: data.fullName },
-      },
+      password: temporaryPassword,
+      email_confirm: true,
+      user_metadata: { full_name: data.fullName },
+      app_metadata: { ...NEW_STAFF_APP_META },
     });
-    if (link.error || !link.data.user) {
-      throw new Error(link.error?.message ?? "Could not create the invitation");
+
+    if (created.error) {
+      const msg = (created.error.message || "").toLowerCase();
+      const already =
+        msg.includes("already been registered") ||
+        msg.includes("already registered") ||
+        msg.includes("user already exists") ||
+        created.error.status === 422;
+      if (!already) throw new Error(created.error.message);
+
+      // Email already has an auth user — reset password so invite still works.
+      const listed = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
+      if (listed.error) throw new Error(listed.error.message);
+      const existing = (listed.data.users ?? []).find((u) => (u.email ?? "").toLowerCase() === email);
+      if (!existing) throw new Error("That email is already registered, but the account could not be found to reset.");
+      uid = existing.id;
+      const updated = await supabaseAdmin.auth.admin.updateUserById(uid, {
+        password: temporaryPassword,
+        email_confirm: true,
+        ban_duration: "none",
+        user_metadata: { full_name: data.fullName },
+        app_metadata: {
+          ...(existing.app_metadata ?? {}),
+          ...NEW_STAFF_APP_META,
+        },
+      });
+      if (updated.error) throw new Error(updated.error.message);
+    } else {
+      if (!created.data.user) throw new Error("Could not create the invitation");
+      uid = created.data.user.id;
+      // Belt-and-braces: some Auth setups accept createUser but leave password unusable
+      // until an explicit updateUserById. Force-set the same temporary password.
+      const confirmPw = await supabaseAdmin.auth.admin.updateUserById(uid, {
+        password: temporaryPassword,
+        email_confirm: true,
+        ban_duration: "none",
+        app_metadata: { ...NEW_STAFF_APP_META },
+      });
+      if (confirmPw.error) throw new Error(confirmPw.error.message);
     }
-    const uid = link.data.user.id;
 
     await supabaseAdmin.from("profiles").upsert({
       id: uid,
@@ -1604,15 +1911,18 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
     });
     await supabaseAdmin.from("user_roles").delete().eq("user_id", uid).neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: uid, role: data.role });
+    await clearExTeamArchive(uid);
+    await unbanAuthUser(uid);
     await audit(ctx, "staff.invite", "user_roles", uid, null, { email, role: data.role });
 
     return {
       userId: uid,
       email,
       role: data.role,
-      setupLink: (link.data.properties as { action_link?: string } | null)?.action_link ?? "",
+      temporaryPassword,
     };
   });
+
 
 export const revokeStaffAccess = createServerFn({ method: "POST" })
   .validator((data: { userId: string }) => data)
@@ -1622,9 +1932,110 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
     await requireOwner(ctx);
     if (data.userId === ctx.userId) throw new Error("You cannot revoke your own access");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const [{ data: roleRow }, { data: profile }, authUser] = await Promise.all([
+      supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.userId)
+        .neq("role", "patient")
+        .maybeSingle(),
+      supabaseAdmin.from("profiles").select("*").eq("id", data.userId).maybeSingle(),
+      supabaseAdmin.auth.admin.getUserById(data.userId),
+    ]);
+    if (!roleRow) throw new Error("That person is not on the team");
+
+    await archiveExTeamMember({
+      userId: data.userId,
+      role: roleRow.role as string,
+      email: authUser.data.user?.email ?? "",
+      fullName: profile?.full_name ?? "",
+      jobTitle: profile?.job_title ?? null,
+      registrationBody: profile?.registration_body ?? null,
+      registrationNumber: profile?.registration_number ?? null,
+      commissionRate: profile?.commission_rate ?? null,
+      revokedBy: ctx.userId,
+    });
+
     await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
+    // End their Auth session and block sign-in until access is restored.
+    await banAuthUser(data.userId);
     await audit(ctx, "staff.revoke", "user_roles", data.userId, null);
     return { ok: true };
+  });
+
+/** Former team members retained for 90 days (staff identity only — not patient data). */
+export const listExTeamMembers = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await requirePermission(ctx, "team.view");
+    await purgeExpiredExTeamMembers();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const now = new Date().toISOString();
+    const { data, error } = await supabaseAdmin
+      .from("ex_team_members")
+      .select(
+        "id, user_id, email, full_name, job_title, registration_body, registration_number, role, revoked_at, retain_until",
+      )
+      .eq("clinic_id", CLINIC_ID)
+      .is("purged_at", null)
+      .gt("retain_until", now)
+      .order("revoked_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((row) => ({
+      id: row.id as string,
+      userId: row.user_id as string,
+      email: (row.email as string | null) ?? "",
+      fullName: (row.full_name as string) ?? "",
+      jobTitle: (row.job_title as string | null) ?? "",
+      registrationBody: (row.registration_body as string | null) ?? "",
+      registrationNumber: (row.registration_number as string | null) ?? "",
+      role: row.role as string,
+      revokedAt: row.revoked_at as string,
+      retainUntil: row.retain_until as string,
+      daysRemaining: Math.max(
+        0,
+        Math.ceil((new Date(row.retain_until as string).getTime() - Date.now()) / 86400000),
+      ),
+    }));
+  });
+
+/** Restore a former team member within the 90-day window. */
+export const restoreExTeamMember = createServerFn({ method: "POST" })
+  .validator((data: { userId: string }) => data)
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await requireOwner(ctx);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: archived, error } = await supabaseAdmin
+      .from("ex_team_members")
+      .select("*")
+      .eq("user_id", data.userId)
+      .is("purged_at", null)
+      .gt("retain_until", new Date().toISOString())
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!archived) throw new Error("No former team record found (it may have expired)");
+
+    const role = archived.role as "owner" | "manager" | "practitioner" | "front_desk";
+    await supabaseAdmin
+      .from("profiles")
+      .update({
+        full_name: archived.full_name || "",
+        job_title: archived.job_title,
+        registration_body: archived.registration_body,
+        registration_number: archived.registration_number,
+        ...(archived.commission_rate != null ? { commission_rate: archived.commission_rate } : {}),
+      })
+      .eq("id", data.userId);
+    await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
+    await supabaseAdmin.from("user_roles").insert({ user_id: data.userId, role });
+    await clearExTeamArchive(data.userId);
+    await unbanAuthUser(data.userId);
+    await audit(ctx, "staff.restore", "user_roles", data.userId, null, { role });
+    return { ok: true, role };
   });
 
 /**
@@ -1640,14 +2051,64 @@ export const setStaffPassword = createServerFn({ method: "POST" })
     await requireOwner(ctx);
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const existing = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    if (existing.error) throw new Error(existing.error.message);
     const res = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
       password: data.password,
       email_confirm: true,
+      app_metadata: {
+        ...(existing.data.user?.app_metadata ?? {}),
+        must_change_password: true,
+        // Password resets must not trigger the new-hire welcome.
+        welcome_pending: false,
+      },
     });
     if (res.error) throw new Error(res.error.message);
     await audit(ctx, "staff.set_password", "user_roles", data.userId, null);
     return { ok: true };
   });
+
+/** Signed-in staff: replace temporary/reset password and clear the must-change flag. */
+export const changeOwnPassword = createServerFn({ method: "POST" })
+  .validator((data: { password: string }) => data)
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Merge app_metadata so we clear the flag without wiping other Auth keys.
+    const existing = await supabaseAdmin.auth.admin.getUserById(ctx.userId);
+    if (existing.error) throw new Error(existing.error.message);
+    const res = await supabaseAdmin.auth.admin.updateUserById(ctx.userId, {
+      password: data.password,
+      app_metadata: {
+        ...(existing.data.user?.app_metadata ?? {}),
+        must_change_password: false,
+      },
+    });
+    if (res.error) throw new Error(res.error.message);
+    await audit(ctx, "staff.change_own_password", "user_roles", ctx.userId, null);
+    return { ok: true, mustChangePassword: false as const };
+  });
+
+/** Clear the first-login welcome flag after the staff member dismisses it. */
+export const acknowledgeWelcome = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const existing = await supabaseAdmin.auth.admin.getUserById(ctx.userId);
+    if (existing.error) throw new Error(existing.error.message);
+    const res = await supabaseAdmin.auth.admin.updateUserById(ctx.userId, {
+      app_metadata: {
+        ...(existing.data.user?.app_metadata ?? {}),
+        welcome_pending: false,
+      },
+    });
+    if (res.error) throw new Error(res.error.message);
+    return { ok: true, welcomePending: false as const };
+  });
+
 
 /** Manager-only: accounts (patients and staff) with no email address on file. */
 export const listAccountsMissingEmail = createServerFn({ method: "GET" })
@@ -1705,8 +2166,7 @@ export const setPatientEmail = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await requireOwner(ctx);
-    const email = data.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address");
+    const email = assertEmail(data.email)!;
     const { error } = await ctx.supabase.from("patients").update({ email }).eq("id", data.patientId);
     if (error) throw new Error(error.message);
     await audit(ctx, "update", "patient", data.patientId, data.patientId);
@@ -1720,8 +2180,7 @@ export const setStaffEmail = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await requireOwner(ctx);
-    const email = data.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address");
+    const email = assertEmail(data.email)!;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const res = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
       email,
@@ -2156,7 +2615,8 @@ export const getStaffProfile = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requirePermission(ctx, "team.view");
+    const identity = await loadIdentity(ctx);
+    if (!identity.isStaff) throw new Error("Staff only");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: profile }, { data: roles }, { data: docs }, users, { data: requests }] = await Promise.all([
       supabaseAdmin.from("profiles").select("*").eq("id", data.userId).maybeSingle(),
@@ -2182,7 +2642,7 @@ export const getRetention = createServerFn({ method: "GET" })
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
     if (!identity.isStaff) throw new Error("Staff access only");
-    if (!identity.isManager && !identity.permissions.includes("reports.retention"))
+    if (!identity.isOwner && !identity.permissions.includes("reports.retention"))
       throw new Error("You do not have access to retention reports");
     const { buildRetention } = await import("./retention.server");
     const supabase = ctx.supabase;
@@ -2269,20 +2729,31 @@ export const createRecallTask = createServerFn({ method: "POST" })
     // so the same follow-up never lands twice in "My tasks".
     const { data: openTasks } = await ctx.supabase
       .from("recall_tasks")
-      .select("assigned_to, group_id")
+      .select("id, assigned_to, group_id, note")
       .eq("patient_id", data.patient_id)
       .neq("status", "completed");
-    const alreadyAssigned = new Set((openTasks ?? []).map((t: any) => t.assigned_to));
+    const note = (data.note ?? "").trim();
+    // Same note already open → reuse that group (don't spawn a second chase card).
+    const sameNote = (openTasks ?? []).filter(
+      (t: { note?: string | null }) => (t.note ?? "").trim() === note,
+    );
+    const pool = sameNote.length ? sameNote : [];
+    const alreadyAssigned = new Set(
+      (sameNote.length ? sameNote : openTasks ?? []).map((t: { assigned_to: string }) => t.assigned_to),
+    );
     const recipients = requested.filter((r) => !alreadyAssigned.has(r.id));
     if (!recipients.length) {
       return {
         ok: true,
         duplicate: true,
-        group_id: (openTasks ?? [])[0]?.group_id ?? null,
+        group_id: (sameNote[0] ?? openTasks?.[0])?.group_id ?? null,
       };
     }
-    // One shared group so every assignee sees the same live status.
-    const groupId = crypto.randomUUID();
+    // Join an existing same-note group when present; otherwise start a new shared group.
+    const groupId =
+      (pool[0]?.group_id as string | undefined) ||
+      (pool[0]?.id as string | undefined) ||
+      crypto.randomUUID();
     const { error } = await ctx.supabase.from("recall_tasks").insert(
       recipients.map((r) => ({
         clinic_id: CLINIC_ID,
@@ -2487,7 +2958,7 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
-    if (!identity.isManager && !identity.permissions.includes("tasks.delete"))
+    if (!identity.isOwner && !identity.permissions.includes("tasks.delete"))
       throw new Error("You do not have access to delete tasks");
     const { data: target } = await ctx.supabase
       .from("recall_tasks")
@@ -2539,6 +3010,43 @@ export const listRecallTasks = createServerFn({ method: "GET" })
     return rows ?? [];
   });
 
+/**
+ * One dashboard card per chase-up. A recall can have several assignee rows that
+ * share a group_id; managers used to see every copy. Prefer the signed-in
+ * user's row when present.
+ */
+function collapseOpenRecallRows<
+  T extends {
+    id: string;
+    group_id?: string | null;
+    assigned_to?: string | null;
+    patient_id?: string;
+    note?: string | null;
+    created_at?: string;
+  },
+>(rows: T[], userId: string): T[] {
+  const byGroup = new Map<string, T>();
+  for (const row of rows) {
+    const key = row.group_id || row.id;
+    const prev = byGroup.get(key);
+    if (!prev || (row.assigned_to === userId && prev.assigned_to !== userId)) {
+      byGroup.set(key, row);
+    }
+  }
+  // True duplicates (same patient + note, different groups) also collapse.
+  const byChase = new Map<string, T>();
+  for (const row of byGroup.values()) {
+    const key = `${row.patient_id}::${(row.note ?? "").trim()}`;
+    const prev = byChase.get(key);
+    if (!prev || (row.assigned_to === userId && prev.assigned_to !== userId)) {
+      byChase.set(key, row);
+    }
+  }
+  return [...byChase.values()].sort((a, b) =>
+    String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
+  );
+}
+
 /** Open recall/follow-up tasks for the dashboard: mine, or all for managers. */
 export const listOpenRecallTasks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -2551,11 +3059,11 @@ export const listOpenRecallTasks = createServerFn({ method: "GET" })
       .select("*, patients(id, first_name, last_name, phone, email)")
       .neq("status", "completed")
       .order("created_at", { ascending: false })
-      .limit(25);
+      .limit(50);
     if (!identity.isManager) query = query.eq("assigned_to", ctx.userId);
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
-    return rows ?? [];
+    return collapseOpenRecallRows(rows ?? [], ctx.userId).slice(0, 25);
   });
 
 /** Move an appointment to a new start time (keeps or updates its duration). */
@@ -2628,7 +3136,7 @@ export const saveTreatmentColour = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
-    if (!identity.isManager && !identity.permissions.includes("settings.treatments"))
+    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
       throw new Error("You do not have access to change clinic settings");
     const key = data.treatment_name.trim().toLowerCase();
     if (!key) throw new Error("Treatment name is required");
@@ -2677,7 +3185,7 @@ export const saveColourTheme = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
-    if (!identity.isManager && !identity.permissions.includes("settings.treatments"))
+    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
       throw new Error("You do not have access to change clinic settings");
     const name = data.name.trim();
     if (!name) throw new Error("Theme name is required");
@@ -2717,7 +3225,7 @@ export const applyColourTheme = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
-    if (!identity.isManager && !identity.permissions.includes("settings.treatments"))
+    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
       throw new Error("You do not have access to change clinic settings");
     const { data: theme, error: themeError } = await ctx.supabase
       .from("treatment_colour_themes")
@@ -2755,7 +3263,7 @@ export const deleteColourTheme = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
-    if (!identity.isManager && !identity.permissions.includes("settings.treatments"))
+    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
       throw new Error("You do not have access to change clinic settings");
     const { error } = await ctx.supabase.from("treatment_colour_themes").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -2795,7 +3303,7 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
-    if (!identity.isManager && !identity.permissions.includes("settings.treatments"))
+    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
       throw new Error("You do not have access to change clinic settings");
     const name = (data.name ?? "").trim();
     if (!name) throw new Error("Treatment name is required");
@@ -2834,7 +3342,7 @@ export const setCatalogueItemActive = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
-    if (!identity.isManager && !identity.permissions.includes("settings.treatments"))
+    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
       throw new Error("You do not have access to change clinic settings");
     const { error } = await ctx.supabase
       .from("treatment_catalogue")
@@ -2864,7 +3372,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
-    if (!identity.isManager && !identity.permissions.includes("settings.treatments"))
+    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
       throw new Error("You do not have access to change clinic settings");
     const name = (data.name ?? "").trim();
     if (!name) throw new Error("Clinic name is required");
@@ -2874,7 +3382,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
         name,
         address: data.address?.trim() || null,
         phone: data.phone?.trim() || null,
-        email: data.email?.trim() || null,
+        email: assertEmail(data.email ?? "", "clinic email", true),
       })
       .eq("id", CLINIC_ID);
     if (error) throw new Error(error.message);
@@ -2882,7 +3390,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Manager-only: current capability grants for receptionists and practitioners. */
+/** Capability grants for manager / receptionist / practitioner (owner edits). */
 export const listRolePermissions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -2894,24 +3402,35 @@ export const listRolePermissions = createServerFn({ method: "GET" })
       .select("role, permission, enabled");
     if (error) throw new Error(error.message);
     const rows = (data ?? []) as { role: string; permission: string; enabled: boolean }[];
-    const grants: Record<string, Record<string, boolean>> = { front_desk: {}, practitioner: {} };
-    for (const role of ["front_desk", "practitioner"]) {
+    const editableRoles = ["manager", "front_desk", "practitioner"] as const;
+    const grants: Record<string, Record<string, boolean>> = {
+      manager: {},
+      front_desk: {},
+      practitioner: {},
+    };
+    for (const role of editableRoles) {
       for (const key of PERMISSION_KEYS) {
         grants[role]![key] =
           rows.find((r) => r.role === role && r.permission === key)?.enabled ?? false;
       }
     }
-    return { grants, canEdit: identity.isManager };
+    return { grants, canEdit: identity.isOwner };
   });
 
-/** Manager-only: turn a single capability on or off for a staff role. */
+/** Clinic owner: turn a single capability on or off for a staff role. */
 export const setRolePermission = createServerFn({ method: "POST" })
-  .validator((data: { role: "front_desk" | "practitioner"; permission: string; enabled: boolean }) => data)
+  .validator(
+    (data: {
+      role: "manager" | "front_desk" | "practitioner";
+      permission: string;
+      enabled: boolean;
+    }) => data,
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
-    if (!identity.isManager) throw new Error("Manager access only");
+    if (!identity.isOwner) throw new Error("Clinic owner access only");
     if (!(PERMISSION_KEYS as readonly string[]).includes(data.permission))
       throw new Error("Unknown permission");
     const { error } = await ctx.supabase
@@ -3045,4 +3564,197 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
       updatedAt: row.updated_at as string,
       updatedBy: (row.updated_by_label as string) ?? null,
     };
+  });
+
+
+/* ---------------------------------------------------------------- */
+/* Staff direct chat                                                 */
+/* ---------------------------------------------------------------- */
+
+function chatPair(a: string, b: string) {
+  return a < b ? ([a, b] as const) : ([b, a] as const);
+}
+
+async function assertStaffPeer(ctx: Ctx, peerUserId: string) {
+  const identity = await loadIdentity(ctx);
+  if (!identity.isStaff) throw new Error("Staff only");
+  if (!peerUserId || peerUserId === ctx.userId) throw new Error("Choose a teammate to message");
+  const { data: roles } = await ctx.supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", peerUserId)
+    .in("role", ["owner", "manager", "practitioner", "front_desk"]);
+  if (!roles?.length) throw new Error("That person is not on the clinic team");
+  return identity;
+}
+
+async function getOrCreateConversationId(ctx: Ctx, peerUserId: string) {
+  const [userLow, userHigh] = chatPair(ctx.userId, peerUserId);
+  const { data: existing } = await ctx.supabase
+    .from("staff_conversations")
+    .select("id")
+    .eq("clinic_id", CLINIC_ID)
+    .eq("user_low", userLow)
+    .eq("user_high", userHigh)
+    .maybeSingle();
+  if (existing?.id) return existing.id as string;
+
+  const { data: created, error } = await ctx.supabase
+    .from("staff_conversations")
+    .insert({ clinic_id: CLINIC_ID, user_low: userLow, user_high: userHigh })
+    .select("id")
+    .single();
+  if (error) {
+    // Concurrent create — fetch the row the other request inserted.
+    const { data: again } = await ctx.supabase
+      .from("staff_conversations")
+      .select("id")
+      .eq("clinic_id", CLINIC_ID)
+      .eq("user_low", userLow)
+      .eq("user_high", userHigh)
+      .maybeSingle();
+    if (again?.id) return again.id as string;
+    throw new Error(error.message);
+  }
+  return created.id as string;
+}
+
+/** Open (or create) a 1:1 staff chat and return messages + read receipts. */
+export const getStaffChat = createServerFn({ method: "GET" })
+  .validator((data: { peerUserId: string }) => data)
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await assertStaffPeer(ctx, data.peerUserId);
+    const conversationId = await getOrCreateConversationId(ctx, data.peerUserId);
+
+    const [{ data: messages }, { data: reads }, { data: peerProfile }] = await Promise.all([
+      ctx.supabase
+        .from("staff_chat_messages")
+        .select("id, sender_id, body, created_at")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(200),
+      ctx.supabase
+        .from("staff_conversation_reads")
+        .select("user_id, last_read_at")
+        .eq("conversation_id", conversationId),
+      ctx.supabase.from("profiles").select("id, full_name, job_title, avatar_url").eq("id", data.peerUserId).maybeSingle(),
+    ]);
+
+    const peerReadAt =
+      ((reads ?? []) as { user_id: string; last_read_at: string }[]).find((r) => r.user_id === data.peerUserId)
+        ?.last_read_at ?? null;
+    const myReadAt =
+      ((reads ?? []) as { user_id: string; last_read_at: string }[]).find((r) => r.user_id === ctx.userId)
+        ?.last_read_at ?? null;
+
+    return {
+      conversationId,
+      peer: {
+        id: data.peerUserId,
+        full_name: (peerProfile as { full_name?: string } | null)?.full_name ?? "Teammate",
+        job_title: (peerProfile as { job_title?: string | null } | null)?.job_title ?? null,
+        avatar_url: (peerProfile as { avatar_url?: string | null } | null)?.avatar_url ?? null,
+      },
+      peerReadAt,
+      myReadAt,
+      messages: ((messages ?? []) as { id: string; sender_id: string; body: string; created_at: string }[]).map(
+        (m) => ({
+          ...m,
+          mine: m.sender_id === ctx.userId,
+          readByPeer:
+            m.sender_id === ctx.userId && peerReadAt != null && peerReadAt >= m.created_at,
+        }),
+      ),
+    };
+  });
+
+/** Send a live chat message to a clinic teammate. */
+export const sendStaffChatMessage = createServerFn({ method: "POST" })
+  .validator((data: { peerUserId: string; body: string }) => data)
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await assertStaffPeer(ctx, data.peerUserId);
+    const body = data.body.trim();
+    if (!body) throw new Error("Write a message first");
+    if (body.length > 4000) throw new Error("Message is too long");
+
+    const conversationId = await getOrCreateConversationId(ctx, data.peerUserId);
+    const now = new Date().toISOString();
+    const { data: row, error } = await ctx.supabase
+      .from("staff_chat_messages")
+      .insert({
+        conversation_id: conversationId,
+        clinic_id: CLINIC_ID,
+        sender_id: ctx.userId,
+        body,
+        created_at: now,
+      })
+      .select("id, sender_id, body, created_at")
+      .single();
+    if (error) throw new Error(error.message);
+
+    await ctx.supabase
+      .from("staff_conversations")
+      .update({ updated_at: now })
+      .eq("id", conversationId);
+
+    // Sender has read up to this message.
+    await ctx.supabase.from("staff_conversation_reads").upsert(
+      { conversation_id: conversationId, user_id: ctx.userId, last_read_at: now },
+      { onConflict: "conversation_id,user_id" },
+    );
+
+    // Lightweight bell notice for the peer (one pending chat ping per sender).
+    const from = identity.profile?.full_name || identity.email || "A colleague";
+    await ctx.supabase
+      .from("staff_notifications")
+      .delete()
+      .eq("recipient_id", data.peerUserId)
+      .eq("sender_id", ctx.userId)
+      .eq("kind", "staff_chat")
+      .is("read_at", null);
+    await ctx.supabase.from("staff_notifications").insert({
+      clinic_id: CLINIC_ID,
+      recipient_id: data.peerUserId,
+      sender_id: ctx.userId,
+      urgent: false,
+      kind: "staff_chat",
+      title: `Message from ${from}`,
+      body: body.slice(0, 180),
+    });
+
+    return {
+      conversationId,
+      message: { ...row, mine: true, readByPeer: false },
+    };
+  });
+
+/** Mark the open staff chat as read (drives peer read receipts). */
+export const markStaffChatRead = createServerFn({ method: "POST" })
+  .validator((data: { peerUserId: string }) => data)
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await assertStaffPeer(ctx, data.peerUserId);
+    const conversationId = await getOrCreateConversationId(ctx, data.peerUserId);
+    const now = new Date().toISOString();
+    const { error } = await ctx.supabase.from("staff_conversation_reads").upsert(
+      { conversation_id: conversationId, user_id: ctx.userId, last_read_at: now },
+      { onConflict: "conversation_id,user_id" },
+    );
+    if (error) throw new Error(error.message);
+
+    // Clear chat pings from this peer in the bell.
+    await ctx.supabase
+      .from("staff_notifications")
+      .update({ read_at: now })
+      .eq("recipient_id", ctx.userId)
+      .eq("sender_id", data.peerUserId)
+      .eq("kind", "staff_chat")
+      .is("read_at", null);
+
+    return { ok: true, lastReadAt: now, conversationId };
   });

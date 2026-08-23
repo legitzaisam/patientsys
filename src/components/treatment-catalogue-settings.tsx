@@ -130,9 +130,9 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
   return (
     <Card className="space-y-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <ClipboardList className="h-4 w-4 text-ink-3" />
-          <div>
+        <div className="flex min-w-0 items-center gap-2">
+          <ClipboardList className="h-4 w-4 shrink-0 text-ink-3" />
+          <div className="min-w-0">
             <h2 className="text-sm font-semibold text-foreground">Treatments offered</h2>
             <p className="text-xs text-muted-foreground">
               {canEdit
@@ -141,7 +141,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
           <div className="relative w-full sm:w-56">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input

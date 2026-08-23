@@ -42,42 +42,50 @@ const phaseMeta: Record<
   {
     label: string;
     icon: ElementType;
-    bg: string;
+    /** Soft wash over the glass card — same pastel intensity as pill/badge. */
+    wash: string;
     ring: string;
     badge: string;
+    /** Collapsed pill — mid pastel fill + dark ink text. */
+    pill: string;
     hint: string;
   }
 > = {
   due: {
     label: "Soon",
     icon: Clock,
-    bg: "bg-sky-bg",
-    ring: "ring-arrived/25",
-    badge: "bg-sky-bg text-arrived-ink",
+    wash: "bg-[rgba(156,207,227,0.52)]",
+    ring: "ring-arrived/40",
+    badge: "bg-[#9ccfe3] text-[#2a5f7a]",
+    pill: "bg-[#9ccfe3] text-[#2a5f7a] ring-arrived/40",
     hint: "Due soon. Confirm arrival when the patient checks in.",
   },
   arrival: {
     label: "Due now",
     icon: CalendarClock,
-    bg: "bg-warning-bg",
-    ring: "ring-warning/30",
-    badge: "bg-warning-bg text-warning-ink",
+    wash: "bg-[rgba(184,168,224,0.52)]",
+    ring: "ring-warning/40",
+    badge: "bg-[#b8a8e0] text-[#4a3a7a]",
+    pill: "bg-[#b8a8e0] text-[#4a3a7a] ring-warning/40",
     hint: "Reception to confirm check-in now.",
   },
   late: {
     label: "Late",
     icon: TriangleAlert,
-    bg: "bg-warning-bg",
-    ring: "ring-warning/30",
-    badge: "bg-warning-bg text-warning-ink",
+    // Soft pastel orange — light urgency step, not butter-gold Arrived.
+    wash: "bg-[rgba(232,196,154,0.52)]",
+    ring: "ring-[rgba(224,154,92,0.45)]",
+    badge: "bg-[#e8c49a] text-[#7a4518]",
+    pill: "bg-[#e8c49a] text-[#7a4518] ring-[rgba(224,154,92,0.45)]",
     hint: "Not marked as arrived yet.",
   },
   overdue: {
     label: "Overdue",
     icon: TriangleAlert,
-    bg: "bg-destructive-bg",
-    ring: "ring-destructive/30",
-    badge: "bg-[#f3d0e0] text-destructive-ink",
+    wash: "bg-[rgba(224,168,196,0.52)]",
+    ring: "ring-destructive/40",
+    badge: "bg-[#e0a8c4] text-[#7a2a4a]",
+    pill: "bg-[#e0a8c4] text-[#7a2a4a] ring-destructive/40",
     hint: "Over 15 minutes late — contact the patient to reschedule.",
   },
 };
@@ -193,8 +201,8 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
         : time;
 
   if (collapsed) {
-    const isUrgent = mostUrgentPhase === "late" || mostUrgentPhase === "overdue";
-    const isDestructive = mostUrgentPhase === "overdue";
+    const pill = phaseMeta[mostUrgentPhase];
+    const PillIcon = pill.icon;
     return (
       <>
         <button
@@ -203,19 +211,9 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
           aria-expanded={false}
           aria-label={`Show ${visible.length} arrival alert${visible.length > 1 ? "s" : ""}`}
           onClick={() => setCollapsed(false)}
-          className={`fixed bottom-5 right-5 z-50 inline-flex h-10 cursor-pointer items-center gap-2 rounded-full px-3.5 text-xs font-semibold shadow-glass ring-1 transition-all hover:-translate-y-0.5 ${
-            isDestructive
-              ? "bg-[#e094b6] text-destructive-ink ring-destructive/45"
-              : `bg-glass text-foreground backdrop-blur-glass ${phaseMeta[mostUrgentPhase].ring}`
-          }`}
+          className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-full px-3.5 text-xs font-semibold shadow-glass ring-1 transition-all hover:-translate-y-0.5 ${pill.pill}`}
         >
-          {isUrgent ? (
-            <TriangleAlert
-              className={`h-3.5 w-3.5 ${isDestructive ? "text-destructive-ink" : "text-warning-ink"}`}
-            />
-          ) : (
-            <BellRing className="h-3.5 w-3.5 text-arrived-ink" />
-          )}
+          <PillIcon className="h-3.5 w-3.5" />
           <span className="tabular-nums">{visible.length}</span> Alert
           {visible.length > 1 ? "s" : ""}
           <ChevronUp className="h-3.5 w-3.5 opacity-70" />
@@ -231,12 +229,12 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
         ref={panelRef}
         role="region"
         aria-label="Arrival alerts"
-        className="fixed bottom-5 right-5 z-50 w-[min(18rem,calc(100vw-2.5rem))]"
+        className="w-full"
       >
         <div
           className={`glass-card relative overflow-hidden !rounded-2xl p-3 shadow-popover ring-1 ${meta.ring}`}
         >
-          <div className={`pointer-events-none absolute inset-0 ${meta.bg}`} aria-hidden />
+          <div className={`pointer-events-none absolute inset-0 ${meta.wash}`} aria-hidden />
 
           <div className="relative flex items-start gap-2">
             <span
@@ -329,28 +327,28 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
             </p>
           </div>
 
-          <div className="relative mt-3 flex gap-1.5">
+          <div className="relative mt-3 flex gap-2">
             <Button
               size="sm"
-              className="h-8 flex-1 text-xs"
+              className="h-8 flex-1 px-3 text-xs"
               disabled={setState.isPending}
               onClick={() => {
                 setState.mutate({ data: { id: a.id, stage: "arrived" } });
                 setCursor(0);
               }}
             >
-              <UserCheck className="mr-1 h-3.5 w-3.5" /> Arrived
+              <UserCheck className="h-3.5 w-3.5" /> Arrived
             </Button>
             <Button
               size="sm"
               variant="outline"
-              className="h-8 flex-1 text-xs"
+              className="h-8 flex-1 px-3 text-xs"
               onClick={() => {
                 setNoShowAppt(a);
                 setCursor(0);
               }}
             >
-              <UserX className="mr-1 h-3.5 w-3.5" /> No show
+              <UserX className="h-3.5 w-3.5" /> No show
             </Button>
           </div>
         </div>

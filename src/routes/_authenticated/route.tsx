@@ -2,8 +2,35 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  ForcePasswordChangeGate,
+  StaffWelcomeDialog,
+  hasClearedPasswordGate,
+  shouldShowWelcomeAfterGate,
+} from "@/components/force-password-change-gate";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { useIdentity } from "@/lib/use-identity";
+
+const wasStaffKey = (userId: string) => `aetheria:was-staff:${userId}`;
+
+function markWasStaff(userId: string) {
+  try {
+    sessionStorage.setItem(wasStaffKey(userId), "1");
+  } catch {
+    /* private mode / blocked storage */
+  }
+}
+
+function consumeWasStaff(userId: string) {
+  try {
+    const key = wasStaffKey(userId);
+    if (sessionStorage.getItem(key) !== "1") return false;
+    sessionStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -30,7 +57,7 @@ function AuthenticatedLayout() {
     // If the session disappears or expires while the app is open, stop
     // rendering protected children (their server calls would 401) and send
     // the user back to sign-in.
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       if (!session) {
         setReady(false);
@@ -61,7 +88,50 @@ function AuthenticatedLayout() {
  * once here covers the whole authenticated tree.
  */
 function IdentityGate() {
-  const { error, isError, isFetching, refetch } = useIdentity();
+  const { data: identity, error, isError, isFetching, refetch, isLoading } = useIdentity();
+  const [signingOutRevoked, setSigningOutRevoked] = useState(false);
+
+  // Revoked staff must not fall through to the patient shell — kick them out
+  // as soon as identity reflects the lost staff role.
+  useEffect(() => {
+    if (!identity?.userId || signingOutRevoked) return;
+    if (identity.isStaff) {
+      markWasStaff(identity.userId);
+      return;
+    }
+    if (!consumeWasStaff(identity.userId)) return;
+    setSigningOutRevoked(true);
+    void (async () => {
+      try {
+        await supabase.auth.signOut();
+      } finally {
+        window.location.replace("/auth");
+      }
+    })();
+  }, [identity, signingOutRevoked]);
+
+  // Banned / revoked accounts: getMe fails — sign out instead of showing the error card forever.
+  useEffect(() => {
+    if (!isError || signingOutRevoked) return;
+    const message = error instanceof Error ? error.message : "";
+    if (!message.includes("clinic access has been removed")) return;
+    setSigningOutRevoked(true);
+    void (async () => {
+      try {
+        await supabase.auth.signOut();
+      } finally {
+        window.location.replace("/auth");
+      }
+    })();
+  }, [isError, error, signingOutRevoked]);
+
+  if (signingOutRevoked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
+      </div>
+    );
+  }
 
   if (isError) {
     return (
@@ -91,5 +161,52 @@ function IdentityGate() {
     );
   }
 
-  return <Outlet />;
+  if (isLoading || !identity || signingOutRevoked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
+      </div>
+    );
+  }
+
+  // Synchronous check so we never paint the patient shell for a just-revoked member.
+  let lostStaffAccess = false;
+  try {
+    lostStaffAccess =
+      !identity.isStaff && sessionStorage.getItem(wasStaffKey(identity.userId)) === "1";
+  } catch {
+    lostStaffAccess = false;
+  }
+  if (lostStaffAccess) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
+      </div>
+    );
+  }
+
+  const needsPassword =
+    Boolean(identity.mustChangePassword) && !hasClearedPasswordGate(identity.userId);
+  // Welcome only after the invite password gate — not after later password resets.
+  const showWelcome =
+    Boolean(identity.isStaff) &&
+    !needsPassword &&
+    shouldShowWelcomeAfterGate(identity.userId);
+
+  return (
+    <>
+      {needsPassword && (
+        <ForcePasswordChangeGate
+          userId={identity.userId}
+          welcomePending={Boolean(identity.welcomePending)}
+        />
+      )}
+      <StaffWelcomeDialog
+        open={showWelcome}
+        userId={identity.userId}
+        name={identity.profile?.full_name}
+      />
+      <Outlet />
+    </>
+  );
 }

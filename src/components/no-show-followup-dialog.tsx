@@ -114,7 +114,7 @@ export function NoShowFollowUpDialog({
 
         {mode === "ask" && (
           <div className="grid gap-2 sm:grid-cols-2">
-            <Button className="" onClick={() => handleAction("reschedule")}>
+            <Button className="" enterSubmit onClick={() => handleAction("reschedule")}>
               <CalendarClock className="mr-2 h-4 w-4" /> Yes, reschedule
             </Button>
             <Button variant="outline" className="" onClick={() => handleAction("task")}>
@@ -145,12 +145,13 @@ export function NoShowFollowUpDialog({
                 />
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2" data-slot="dialog-footer">
               <Button variant="ghost" className="" onClick={() => setMode("ask")}>
                 Back
               </Button>
               <Button
                 className="flex-1 "
+                enterSubmit
                 disabled={rebook.isPending}
                 onClick={() =>
                   rebook.mutate({
@@ -185,12 +186,13 @@ export function NoShowFollowUpDialog({
                 This appears in “My tasks” on the dashboard so the patient can be contacted by chat, phone or email.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2" data-slot="dialog-footer">
               <Button variant="ghost" className="" onClick={() => setMode("ask")}>
                 Back
               </Button>
               <Button
                 className="flex-1 "
+                enterSubmit
                 disabled={task.isPending}
                 onClick={() =>
                   task.mutate({

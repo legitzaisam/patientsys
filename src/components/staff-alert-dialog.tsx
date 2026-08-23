@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 type Audience = "managers" | "front_desk" | "all" | "user";
 
 const AUDIENCES: { value: Audience; label: string }[] = [
-  { value: "managers", label: "Manager" },
+  { value: "managers", label: "Owners & managers" },
   { value: "front_desk", label: "Reception" },
   { value: "all", label: "Everyone" },
 ];
@@ -70,6 +70,7 @@ export function StaffAlertDialog({
       });
       toast.success(`Sent to ${res.sent} ${res.sent === 1 ? "person" : "people"}`);
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
       setTitle("");
       setBody("");
       setUrgent(false);
@@ -85,8 +86,6 @@ export function StaffAlertDialog({
     <Dialog open={isOpen} onOpenChange={setOpen}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
       <DialogContent
-        dismissOnOverlayClick
-        hideDismissHint
         className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]"
       >
         <DialogHeader className="shrink-0 pr-8 text-left">
@@ -153,11 +152,11 @@ export function StaffAlertDialog({
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex justify-end gap-2" data-slot="dialog-footer">
           <Button variant="outline" className="text-xs" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button className="text-xs" onClick={submit} disabled={saving}>
+          <Button className="text-xs" enterSubmit onClick={submit} disabled={saving}>
             <Send className="mr-1 h-4 w-4" />
             {saving ? "Sending…" : "Send"}
           </Button>

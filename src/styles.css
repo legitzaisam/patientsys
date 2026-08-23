@@ -396,13 +396,18 @@
     color: var(--foreground);
   }
 
-  /* Title + actions row so header buttons sit on the same line across pages. */
+  /* Title + actions row so header buttons sit on the same line across pages.
+     Actions stay end-aligned when the column stacks on narrow viewports. */
   .page-header {
     display: flex;
     flex-shrink: 0;
     flex-direction: column;
     gap: 0.75rem;
     margin-bottom: 1.25rem;
+  }
+
+  .page-header > :last-child:not(:only-child) {
+    align-self: flex-end;
   }
 
   /* Label → control spacing in dialog / card forms. */

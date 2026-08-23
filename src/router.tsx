@@ -9,6 +9,8 @@ export const getRouter = () => {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
+    // AppShell scrolls inside <main>, not the window.
+    scrollToTopSelectors: ["#app-main-scroll"],
     defaultPreloadStaleTime: 0,
   });
 

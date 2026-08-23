@@ -53,7 +53,7 @@ export function PractitionerHoverCard({
         >
           <div className="flex items-center justify-between gap-2">
             <Link
-              to="/team/$id"
+              to="/team/$id" search={{}}
               params={{ id: practitionerId }}
               className={`truncate text-sm font-semibold hover:underline ${lane.text}`}
             >

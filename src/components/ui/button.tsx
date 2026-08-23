@@ -14,21 +14,21 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/80",
         outline:
-          "border border-edge bg-glass-2 font-medium text-foreground shadow-inset-hi hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:shadow-lift active:bg-[rgba(47,63,102,0.14)]",
+          "border border-edge bg-glass-2 font-semibold text-foreground shadow-inset-hi hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:shadow-lift active:bg-[rgba(47,63,102,0.14)]",
         /** Selected choice in dialogs / popovers — navy brand fill. */
         selected:
-          "border border-foreground bg-foreground font-medium text-white shadow-lift hover:border-foreground hover:bg-foreground/90 hover:text-white active:bg-foreground/80",
+          "border border-foreground bg-foreground font-semibold text-white shadow-lift hover:border-foreground hover:bg-foreground/90 hover:text-white active:bg-foreground/80",
         secondary:
-          "border border-edge bg-glass-2 font-medium text-secondary-foreground shadow-inset-hi hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:shadow-lift active:bg-[rgba(47,63,102,0.14)]",
+          "border border-edge bg-glass-2 font-semibold text-secondary-foreground shadow-inset-hi hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:shadow-lift active:bg-[rgba(47,63,102,0.14)]",
         ghost:
-          "font-medium hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]",
-        link: "font-medium text-accent-ink underline-offset-4 hover:underline",
+          "font-semibold hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]",
+        link: "font-semibold text-accent-ink underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-[34px] px-[15px]",
-        sm: "h-[28px] px-3 text-xs",
-        lg: "h-10 px-7",
-        icon: "h-[34px] w-[34px]",
+        default: "h-9 px-3.5",
+        sm: "h-8 px-3 text-xs",
+        lg: "h-10 px-4",
+        icon: "h-9 w-9",
       },
     },
     defaultVariants: {
@@ -41,13 +41,20 @@ const buttonVariants = cva(
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  /** Enter in the open dialog / panel runs this button’s click handler. */
+  enterSubmit?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, enterSubmit = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        className={cn(buttonVariants({ variant, size }), className)}
+        ref={ref}
+        {...(enterSubmit && !asChild ? { "data-enter-submit": "" } : {})}
+        {...props}
+      />
     );
   },
 );

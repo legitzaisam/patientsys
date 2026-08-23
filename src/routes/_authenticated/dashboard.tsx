@@ -156,8 +156,10 @@ function DashboardPage() {
 
       <section className="mb-2">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">{diaryHeading}</h2>
-          <div className="flex flex-wrap items-center gap-2">
+          <h2 className="min-w-0 text-[17px] font-semibold tracking-[-0.016em] text-foreground">
+            {diaryHeading}
+          </h2>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
             <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
               {(["day", "week"] as const).map((span) => (
                 <button

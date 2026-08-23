@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Calendar, Check, ChevronsUpDown, Clock, GripVertical, Plus, Search, UserPlus } from "lucide-react";
 import { saveAppointment, savePatient } from "@/lib/clinic.functions";
+import { checkEmail } from "@/lib/email";
 import { bookingNotifyDescription } from "@/lib/payment-link";
 import { durationForCatalogueItem } from "@/lib/treatment-duration";
 import { Button } from "@/components/ui/button";
@@ -197,6 +198,8 @@ export function QuickAddAppointment({
   const [lastName, setLastName] = useState("");
   const [dob, setDob] = useState("");
   const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
   const [catalogueId, setCatalogueId] = useState("");
   const [practitionerId, setPractitionerId] = useState(defaultPractitionerId ?? "");
@@ -215,16 +218,21 @@ export function QuickAddAppointment({
   }, [isOpen, date, defaultStart, defaultPractitionerId]);
 
   useEffect(() => {
-    if (!catalogueId && catalogue.length) setCatalogueId(catalogue[0].id);
-    if (!practitionerId && practitioners.length) setPractitionerId(practitioners[0].id);
-  }, [catalogue, practitioners, catalogueId, practitionerId]);
-
-  useEffect(() => {
     const item = catalogue.find((c) => c.id === catalogueId);
     if (!item) return;
     setDuration(String(durationForCatalogueItem(item)));
   }, [catalogue, catalogueId]);
 
+  const patientReady = newPatient
+    ? Boolean(firstName.trim() && lastName.trim() && dob)
+    : Boolean(patientId);
+  const scheduleReady =
+    Boolean(catalogueId) &&
+    Boolean(practitionerId) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(day) &&
+    /^\d{2}:\d{2}$/.test(time);
+  const emailReady = !email.trim() || (!emailError && checkEmail(email).ok);
+  const canBook = patientReady && scheduleReady && emailReady;
   const addPatient = useMutation({
     mutationFn: useServerFn(savePatient),
     onError: (e: Error) => toast.error(e.message),
@@ -241,6 +249,8 @@ export function QuickAddAppointment({
       setLastName("");
       setDob("");
       setEmail("");
+      setEmailError(null);
+      setEmailSuggestion(null);
       setPhone("");
       queryClient.invalidateQueries({ queryKey: ["appointments"] });
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
@@ -254,19 +264,63 @@ export function QuickAddAppointment({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    let id = patientId;
-    if (newPatient) {
-      if (!firstName.trim() || !lastName.trim()) {
-        toast.error("Enter the new patient's first and last name");
+    if (!canBook) {
+      if (newPatient) {
+        if (!firstName.trim() || !lastName.trim()) {
+          toast.error("Enter the patient's first and last name");
+          return;
+        }
+        if (!dob) {
+          toast.error("Enter the patient's date of birth");
+          return;
+        }
+      } else if (!patientId) {
+        toast.error("Choose a patient");
         return;
       }
+      if (!catalogueId) {
+        toast.error("Choose a treatment");
+        return;
+      }
+      if (!practitionerId) {
+        toast.error("Choose a practitioner");
+        return;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time)) {
+        toast.error("Choose a date and time");
+        return;
+      }
+      if (email.trim()) {
+        const check = checkEmail(email);
+        if (!check.ok) {
+          setEmailError(check.error);
+          setEmailSuggestion(check.suggestion ?? null);
+        }
+      }
+      return;
+    }
+
+    let id = patientId;
+    if (newPatient) {
+      let patientEmail: string | undefined;
+      if (email.trim()) {
+        const check = checkEmail(email);
+        if (!check.ok) {
+          setEmailError(check.error);
+          setEmailSuggestion(check.suggestion ?? null);
+          return;
+        }
+        patientEmail = check.email;
+      }
+      setEmailError(null);
+      setEmailSuggestion(null);
       try {
         const created = await addPatient.mutateAsync({
           data: {
             first_name: firstName.trim(),
             last_name: lastName.trim(),
-            date_of_birth: dob || undefined,
-            email: email.trim() || undefined,
+            date_of_birth: dob,
+            email: patientEmail,
             phone: phone.trim() || undefined,
           },
         });
@@ -278,10 +332,6 @@ export function QuickAddAppointment({
     }
     if (!id) {
       toast.error("Choose a patient");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time)) {
-      toast.error("Choose a date and time");
       return;
     }
     const [h, m] = time.split(":").map(Number);
@@ -353,12 +403,12 @@ export function QuickAddAppointment({
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent
         align={align}
-        className="w-[480px] max-w-[calc(100vw-2rem)] rounded-2xl p-4"
+        className="flex max-h-[min(90dvh,var(--radix-popover-content-available-height))] w-[480px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0"
         style={{ translate: `${offset.x}px ${offset.y}px` }}
       >
-        <form className="space-y-3" onSubmit={submit}>
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
           <div
-            className="flex cursor-grab items-center justify-between active:cursor-grabbing"
+            className="flex shrink-0 cursor-grab items-center justify-between px-4 pt-4 active:cursor-grabbing"
             onPointerDown={onDragHandleDown}
           >
             <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -367,7 +417,11 @@ export function QuickAddAppointment({
             </p>
             <button
               type="button"
-              onClick={() => setNewPatient((v) => !v)}
+              onClick={() => {
+                setNewPatient((v) => !v);
+                setEmailError(null);
+                setEmailSuggestion(null);
+              }}
               className="inline-flex items-center gap-1 text-2xs text-accent-ink hover:underline"
             >
               <UserPlus className="h-3 w-3" />
@@ -375,6 +429,7 @@ export function QuickAddAppointment({
             </button>
           </div>
 
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
           <div className="grid grid-cols-2 gap-x-2 gap-y-3">
             {newPatient ? (
               <>
@@ -385,6 +440,7 @@ export function QuickAddAppointment({
                       className={field}
                       placeholder="First name"
                       value={firstName}
+                      required
                       onChange={(e) => setFirstName(e.target.value)}
                       aria-label="First name"
                     />
@@ -392,6 +448,7 @@ export function QuickAddAppointment({
                       className={field}
                       placeholder="Last name"
                       value={lastName}
+                      required
                       onChange={(e) => setLastName(e.target.value)}
                       aria-label="Last name"
                     />
@@ -404,6 +461,7 @@ export function QuickAddAppointment({
                     <Input
                       type="date"
                       value={dob}
+                      required
                       onChange={(e) => setDob(e.target.value)}
                       aria-label="Date of birth"
                       className={`${field} pl-[34px] pr-2 [&::-webkit-datetime-edit]:p-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-2 [&::-webkit-calendar-picker-indicator]:h-4 [&::-webkit-calendar-picker-indicator]:w-4 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0`}
@@ -417,9 +475,45 @@ export function QuickAddAppointment({
                     className={field}
                     placeholder="Email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    aria-invalid={Boolean(emailError)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setEmailError(null);
+                      setEmailSuggestion(null);
+                    }}
+                    onBlur={() => {
+                      if (!email.trim()) {
+                        setEmailError(null);
+                        setEmailSuggestion(null);
+                        return;
+                      }
+                      const check = checkEmail(email);
+                      setEmailError(check.ok ? null : check.error);
+                      setEmailSuggestion(check.ok ? null : (check.suggestion ?? null));
+                    }}
                     aria-label="Email"
                   />
+                  {emailError && (
+                    <p className="text-xs text-destructive">
+                      {emailError}
+                      {emailSuggestion && (
+                        <>
+                          {" "}
+                          <button
+                            type="button"
+                            className="font-medium underline underline-offset-2 hover:text-destructive/90"
+                            onClick={() => {
+                              setEmail(emailSuggestion);
+                              setEmailError(null);
+                              setEmailSuggestion(null);
+                            }}
+                          >
+                            Yes
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  )}
                 </div>
                 <div className="col-span-2 field-stack">
                   <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Phone</Label>
@@ -449,9 +543,11 @@ export function QuickAddAppointment({
               <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Treatment</Label>
               <select
                 value={catalogueId}
+                required
                 onChange={(e) => setCatalogueId(e.target.value)}
                 className="h-9 w-full rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-xs"
               >
+                <option value="">Select treatment</option>
                 {catalogue.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -468,6 +564,7 @@ export function QuickAddAppointment({
                   <Input
                     type="date"
                     value={day}
+                    required
                     onChange={(e) => setDay(e.target.value)}
                     className={`${field} pl-[34px] pr-2 [&::-webkit-datetime-edit]:p-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-2 [&::-webkit-calendar-picker-indicator]:h-4 [&::-webkit-calendar-picker-indicator]:w-4 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0`}
                   />
@@ -480,6 +577,7 @@ export function QuickAddAppointment({
                   <Input
                     type="time"
                     value={time}
+                    required
                     onChange={(e) => setTime(e.target.value)}
                     className={`${field} pl-[34px] pr-2 [&::-webkit-datetime-edit]:p-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-2 [&::-webkit-calendar-picker-indicator]:h-4 [&::-webkit-calendar-picker-indicator]:w-4 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0`}
                   />
@@ -502,9 +600,11 @@ export function QuickAddAppointment({
               <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Practitioner</Label>
               <select
                 value={practitionerId}
+                required
                 onChange={(e) => setPractitionerId(e.target.value)}
                 className="h-9 w-full rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-xs"
               >
+                <option value="">Select practitioner</option>
                 {practitioners.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.full_name || "Unnamed"}
@@ -513,15 +613,18 @@ export function QuickAddAppointment({
               </select>
             </div>
           </div>
+          </div>
 
-          <Button
-            type="submit"
-            className="h-9 w-full text-xs"
-            disabled={book.isPending || addPatient.isPending}
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" /> Book appointment
-          </Button>
-          <p className="text-center text-2xs text-muted-foreground">Press Esc to dismiss</p>
+          <div className="shrink-0 space-y-2 border-t border-edge/60 px-4 pb-4 pt-3">
+            <Button
+              type="submit"
+              className="h-9 w-full text-xs"
+              disabled={!canBook || book.isPending || addPatient.isPending}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Book appointment
+            </Button>
+            <p className="text-center text-2xs text-muted-foreground">Press Esc to dismiss</p>
+          </div>
         </form>
       </PopoverContent>
     </Popover>

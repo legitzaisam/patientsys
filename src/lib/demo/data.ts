@@ -21,7 +21,7 @@ export const USERS = {
 export type DemoRole = "owner" | "practitioner" | "front_desk" | "patient";
 
 export const DEMO_ACCOUNTS: Record<DemoRole, { userId: string; email: string; label: string }> = {
-  owner: { userId: USERS.owner, email: "amara.osei@aetheria.clinic", label: "Manager" },
+  owner: { userId: USERS.owner, email: "amara.osei@aetheria.clinic", label: "Clinic owner" },
   practitioner: {
     userId: USERS.practitioner,
     email: "nadia.rahman@aetheria.clinic",
@@ -177,6 +177,13 @@ export const staffEmails: Record<string, string> = {
 };
 
 export const rolePermissions: Row[] = [
+  { role: "manager", permission: "reports.retention", enabled: true },
+  { role: "manager", permission: "reports.performance", enabled: true },
+  { role: "manager", permission: "team.view", enabled: true },
+  { role: "manager", permission: "team.approve_changes", enabled: true },
+  { role: "manager", permission: "settings.treatments", enabled: true },
+  { role: "manager", permission: "notifications.delete", enabled: true },
+  { role: "manager", permission: "tasks.delete", enabled: true },
   { role: "practitioner", permission: "reports.retention", enabled: true },
   { role: "practitioner", permission: "reports.performance", enabled: false },
   { role: "practitioner", permission: "team.view", enabled: true },
@@ -2168,6 +2175,11 @@ export const appointmentNotes: Row[] = [];
 /* mutable store                                                     */
 /* ---------------------------------------------------------------- */
 
+
+export const staffConversations: Row[] = [];
+export const staffChatMessages: Row[] = [];
+export const staffConversationReads: Row[] = [];
+
 export const db = {
   clinic,
   profiles,
@@ -2185,6 +2197,9 @@ export const db = {
   recallTasks,
   retentionOutreach,
   staffNotifications,
+  staffConversations,
+  staffChatMessages,
+  staffConversationReads,
   messageTemplates,
   treatmentColours,
   colourThemes,

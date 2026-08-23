@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Bell, Check, X } from "lucide-react";
+import { Bell, Check, MessageSquare, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { getUnreadMessages, listStaffNotifications, markStaffNotificationRead } from "@/lib/clinic.functions";
@@ -65,13 +65,18 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
     };
   }, [isStaff, navigate, queryClient]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!isStaff || DEMO_MODE) return;
+    // Any insert can be a clinic-wide booking notice; peer alerts are filtered on fetch.
     const channel = supabase
       .channel("staff-notification-alerts")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "staff_notifications" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
-      })
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "staff_notifications" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+        },
+      )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
@@ -116,8 +121,17 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
                   if (!alert.urgent) setPressedNonUrgent((prev) => new Set(prev).add(alert.id));
                   await markAlertRead({ data: { id: alert.id } });
                   queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
-                  if (alert.patient_id) navigate({ to: "/patients/$id", params: { id: alert.patient_id } });
-                  else if (alert.kind === "appointment") navigate({ to: "/schedule" });
+                  if (alert.sender_id) {
+                    navigate({
+                      to: "/team/$id",
+                      params: { id: alert.sender_id },
+                      search: { chat: true },
+                    });
+                  } else if (alert.patient_id) {
+                    navigate({ to: "/patients/$id", params: { id: alert.patient_id } });
+                  } else if (alert.kind === "appointment") {
+                    navigate({ to: "/schedule" });
+                  }
                 }}
               >
                 <div className="flex items-center justify-between">
@@ -132,8 +146,31 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
                 {alert.sender_name && (
                   <p className="mt-1 text-2xs text-muted-foreground">{alert.sender_name}</p>
                 )}
+                {alert.sender_id && (
+                  <p className="mt-1.5 text-2xs font-medium text-accent-ink">Message · open chat</p>
+                )}
               </button>
               <div className="flex items-center gap-0.5 pt-3">
+                {alert.sender_id && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-foreground hover:text-accent-ink"
+                    aria-label={`Message ${alert.sender_name || "sender"}`}
+                    title="Message"
+                    onClick={async () => {
+                      await markAlertRead({ data: { id: alert.id } });
+                      queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+                      navigate({
+                        to: "/team/$id",
+                        params: { id: alert.sender_id! },
+                        search: { chat: true },
+                      });
+                    }}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 {canClear && alert.urgent && (
                   <Button
                     variant="ghost"

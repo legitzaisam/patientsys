@@ -63,67 +63,80 @@ export function AppointmentTimeEditor({
         <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
           <Clock className="h-3.5 w-3.5 text-ink-3" /> Change appointment time
         </p>
-        <div className="mt-3 space-y-3">
-          <div className="field-stack">
-            <Label htmlFor={`date-${a.id}`} className="text-2xs uppercase tracking-wide text-muted-foreground">
-              Date
-            </Label>
-            <DrilldownDatePicker
-              id={`date-${a.id}`}
-              value={datePart}
-              onChange={(d) => setValue(`${d}T${timePart}`)}
-            />
-          </div>
-          <div className="field-stack">
-            <Label htmlFor={`time-${a.id}`} className="text-2xs uppercase tracking-wide text-muted-foreground">
-              Time
-            </Label>
-            <Input
-              id={`time-${a.id}`}
-              type="time"
-              step={300}
-              value={timePart}
-              onChange={(e) => setValue(`${datePart}T${e.target.value}`)}
-              className="h-9 rounded-xl text-xs"
-            />
-          </div>
-          <div className="field-stack">
-            <Label htmlFor={`dur-${a.id}`} className="text-2xs uppercase tracking-wide text-muted-foreground">
-              Duration (minutes)
-            </Label>
-            <Input
-              id={`dur-${a.id}`}
-              type="number"
-              min={5}
-              step={5}
-              value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
-              className="h-9 rounded-xl text-xs"
-            />
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {[-30, -15, 15, 30].map((d) => (
-            <Button
-              key={d}
-              size="sm"
-              variant="secondary"
-              className="h-7 px-2.5 text-2xs"
-              disabled={move.isPending}
-              onClick={() => nudge(d)}
-            >
-              {d > 0 ? `+${d}` : d} min
-            </Button>
-          ))}
-        </div>
-        <Button
-          size="sm"
-          className="mt-3 w-full "
-          disabled={move.isPending}
-          onClick={() => save()}
+        <form
+          className="mt-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!move.isPending) save();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.stopPropagation();
+          }}
         >
-          {move.isPending ? "Saving…" : "Save new time"}
-        </Button>
+          <div className="space-y-3">
+            <div className="field-stack">
+              <Label htmlFor={`date-${a.id}`} className="text-2xs uppercase tracking-wide text-muted-foreground">
+                Date
+              </Label>
+              <DrilldownDatePicker
+                id={`date-${a.id}`}
+                value={datePart}
+                onChange={(d) => setValue(`${d}T${timePart}`)}
+              />
+            </div>
+            <div className="field-stack">
+              <Label htmlFor={`time-${a.id}`} className="text-2xs uppercase tracking-wide text-muted-foreground">
+                Time
+              </Label>
+              <Input
+                id={`time-${a.id}`}
+                type="time"
+                step={300}
+                value={timePart}
+                onChange={(e) => setValue(`${datePart}T${e.target.value}`)}
+                className="h-9 rounded-xl text-xs"
+              />
+            </div>
+            <div className="field-stack">
+              <Label htmlFor={`dur-${a.id}`} className="text-2xs uppercase tracking-wide text-muted-foreground">
+                Duration (minutes)
+              </Label>
+              <Input
+                id={`dur-${a.id}`}
+                type="number"
+                min={5}
+                step={5}
+                value={minutes}
+                onChange={(e) => setMinutes(Number(e.target.value))}
+                className="h-9 rounded-xl text-xs"
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {[-30, -15, 15, 30].map((d) => (
+              <Button
+                key={d}
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7 px-2.5 text-2xs"
+                disabled={move.isPending}
+                onClick={() => nudge(d)}
+              >
+                {d > 0 ? `+${d}` : d} min
+              </Button>
+            ))}
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            className="mt-3 w-full"
+            disabled={move.isPending}
+          >
+            {move.isPending ? "Saving…" : "Save new time"}
+          </Button>
+        </form>
       </HoverCardContent>
     </HoverCard>
   );

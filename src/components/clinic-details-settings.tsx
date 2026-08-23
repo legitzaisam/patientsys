@@ -4,6 +4,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Building2 } from "lucide-react";
 import { getClinicDetails, updateClinicDetails } from "@/lib/clinic.functions";
+import { checkEmail, isEmailOk } from "@/lib/email";
+import { toastEmailError } from "@/lib/email-toast";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,8 +72,21 @@ export function ClinicDetailsSettings({ canEdit }: { canEdit: boolean }) {
         <div className="flex justify-end">
           <Button
             size="sm"
-            disabled={!form.name.trim() || save.isPending}
-            onClick={() => save.mutate({ data: form })}
+            disabled={!form.name.trim() || save.isPending || !isEmailOk(form.email ?? "", true)}
+            onClick={() => {
+              if (form.email?.trim()) {
+                const check = checkEmail(form.email, "clinic email");
+                if (!check.ok) {
+                  toastEmailError(check, (suggestion) =>
+                    setForm((f) => ({ ...f, email: suggestion })),
+                  );
+                  return;
+                }
+                save.mutate({ data: { ...form, email: check.email } });
+                return;
+              }
+              save.mutate({ data: form });
+            }}
           >
             Save changes
           </Button>

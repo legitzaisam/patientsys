@@ -149,8 +149,6 @@ function EditRecallDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        dismissOnOverlayClick
-        hideDismissHint
         className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]"
       >
         <DialogHeader className="shrink-0 pr-8 text-left">
@@ -259,8 +257,6 @@ function RetractRecallDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        dismissOnOverlayClick
-        hideDismissHint
         className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]"
       >
         <DialogHeader className="shrink-0 pr-8 text-left">

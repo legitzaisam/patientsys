@@ -32,6 +32,7 @@ import {
   savePatient,
   updateAppointmentState,
 } from "@/lib/clinic.functions";
+import { checkEmail } from "@/lib/email";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -332,6 +333,16 @@ function SchedulePage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["appointments"] });
   const [newPatient, setNewPatient] = useState(false);
+  const [newFirstName, setNewFirstName] = useState("");
+  const [newLastName, setNewLastName] = useState("");
+  const [newDob, setNewDob] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newEmailError, setNewEmailError] = useState<string | null>(null);
+  const [newEmailSuggestion, setNewEmailSuggestion] = useState<string | null>(null);
+  const [bookingPatientId, setBookingPatientId] = useState("");
+  const [bookingCatalogueId, setBookingCatalogueId] = useState("");
+  const [bookingPractitionerId, setBookingPractitionerId] = useState("");
+  const [bookingStartsAt, setBookingStartsAt] = useState("");
   const [bookingDuration, setBookingDuration] = useState("60");
   const [bookingPrice, setBookingPrice] = useState("");
   const [bookingPayAction, setBookingPayAction] = useState<"unpaid" | "take" | "link">("unpaid");
@@ -342,6 +353,18 @@ function SchedulePage() {
   const bookingNotesPrefs = useNotesPrefs("notes-prefs:visit-notes");
   const seededBookingDuration = useRef(false);
 
+  const patientReady = newPatient
+    ? Boolean(newFirstName.trim() && newLastName.trim() && newDob)
+    : Boolean(bookingPatientId);
+  const emailReady =
+    !newPatient || !newEmail.trim() || (!newEmailError && checkEmail(newEmail).ok);
+  const canSubmitBooking =
+    patientReady &&
+    emailReady &&
+    Boolean(bookingCatalogueId) &&
+    Boolean(bookingPractitionerId) &&
+    Boolean(bookingStartsAt);
+
   useEffect(() => {
     if (!open) {
       seededBookingDuration.current = false;
@@ -351,15 +374,21 @@ function SchedulePage() {
       setBookingPayAction("unpaid");
       setBookingPayKind("deposit");
       setNewPatient(false);
+      setNewFirstName("");
+      setNewLastName("");
+      setNewDob("");
+      setNewEmail("");
+      setNewEmailError(null);
+      setNewEmailSuggestion(null);
+      setBookingPatientId("");
+      setBookingCatalogueId("");
+      setBookingPractitionerId("");
+      setBookingStartsAt("");
       return;
     }
     if (seededBookingDuration.current) return;
-    const first = (catalogue ?? [])[0];
-    if (!first) return;
-    setBookingDuration(String(durationForCatalogueItem(first)));
-    setBookingPrice(first.price != null && first.price !== "" ? String(first.price) : "");
     seededBookingDuration.current = true;
-  }, [open, catalogue]);
+  }, [open]);
 
   useEffect(() => {
     if (!bookingNotesDirty) return;
@@ -426,7 +455,7 @@ function SchedulePage() {
             <h1 className="page-title">Clinic diary</h1>
             <p className="mt-1 truncate text-sm text-muted-foreground">{heading}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => shift(-1)} aria-label="Previous">
               <ChevronLeft className="h-4 w-4" />
@@ -459,8 +488,6 @@ function SchedulePage() {
               <Button>New booking</Button>
             </DialogTrigger>
             <DialogContent
-              dismissOnOverlayClick
-              hideDismissHint
               className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
             >
               <DialogHeader className="shrink-0 pr-8 text-left">
@@ -477,14 +504,39 @@ function SchedulePage() {
                 onSubmit={async (e) => {
                   e.preventDefault();
                   const f = new FormData(e.currentTarget as HTMLFormElement);
-                  const catalogueId = String(f.get("catalogue_id") ?? "");
-                  const item = (catalogue ?? []).find((c: any) => c.id === catalogueId);
-                  let patientId = String(f.get("patient_id") ?? "");
+                  const item = (catalogue ?? []).find((c: any) => c.id === bookingCatalogueId);
+                  let patientId = "";
                   if (newPatient) {
-                    const first = String(f.get("new_first_name") ?? "").trim();
-                    const last = String(f.get("new_last_name") ?? "").trim();
+                    const first = newFirstName.trim();
+                    const last = newLastName.trim();
                     if (!first || !last) {
-                      toast.error("Enter the new patient's first and last name");
+                      toast.error("Enter the patient's first and last name");
+                      return;
+                    }
+                    if (!newDob) {
+                      toast.error("Enter the patient's date of birth");
+                      return;
+                    }
+                    let patientEmail = "";
+                    if (newEmail.trim()) {
+                      const check = checkEmail(newEmail);
+                      if (!check.ok) {
+                        setNewEmailError(check.error);
+                        setNewEmailSuggestion(check.suggestion ?? null);
+                        return;
+                      }
+                      patientEmail = check.email;
+                    }
+                    if (!bookingCatalogueId) {
+                      toast.error("Choose a treatment");
+                      return;
+                    }
+                    if (!bookingPractitionerId) {
+                      toast.error("Choose a practitioner");
+                      return;
+                    }
+                    if (!bookingStartsAt) {
+                      toast.error("Choose a date and time");
                       return;
                     }
                     try {
@@ -493,15 +545,33 @@ function SchedulePage() {
                           first_name: first,
                           last_name: last,
                           title: String(f.get("new_title") ?? ""),
-                          email: String(f.get("new_email") ?? "").trim(),
+                          email: patientEmail,
                           phone: String(f.get("new_phone") ?? "").trim(),
-                          date_of_birth: String(f.get("new_dob") ?? ""),
+                          date_of_birth: newDob,
                         },
                       });
                       patientId = created.id;
                       queryClient.invalidateQueries({ queryKey: ["patients"] });
                       toast.success(`${first} ${last} added to patients`);
                     } catch {
+                      return;
+                    }
+                  } else {
+                    patientId = bookingPatientId;
+                    if (!patientId) {
+                      toast.error("Choose a patient");
+                      return;
+                    }
+                    if (!bookingCatalogueId) {
+                      toast.error("Choose a treatment");
+                      return;
+                    }
+                    if (!bookingPractitionerId) {
+                      toast.error("Choose a practitioner");
+                      return;
+                    }
+                    if (!bookingStartsAt) {
+                      toast.error("Choose a date and time");
                       return;
                     }
                   }
@@ -523,12 +593,12 @@ function SchedulePage() {
                   book.mutate({
                     data: {
                       patient_id: patientId,
-                      practitioner_id: String(f.get("practitioner_id") ?? ""),
-                      catalogue_id: catalogueId,
+                      practitioner_id: bookingPractitionerId,
+                      catalogue_id: bookingCatalogueId,
                       treatment_name: item?.name ?? "Treatment",
                       treatment_number: Number(f.get("treatment_number") ?? 1),
-                      starts_at: new Date(String(f.get("starts_at"))).toISOString(),
-                      duration_minutes: Number(f.get("duration_minutes") ?? 30),
+                      starts_at: new Date(bookingStartsAt).toISOString(),
+                      duration_minutes: Number(f.get("duration_minutes") ?? bookingDuration ?? 30),
                       price,
                       payment_status: paymentStatus,
                       notes: String(f.get("notes") ?? ""),
@@ -552,14 +622,87 @@ function SchedulePage() {
                   {newPatient ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <TextField name="new_title" label="Title" />
-                      <TextField name="new_first_name" label="First name" required />
-                      <TextField name="new_last_name" label="Last name" required />
-                      <TextField name="new_dob" label="Date of birth" type="date" />
-                      <TextField name="new_email" label="Email" type="email" />
+                      <TextField
+                        name="new_first_name"
+                        label="First name"
+                        required
+                        value={newFirstName}
+                        onChange={setNewFirstName}
+                      />
+                      <TextField
+                        name="new_last_name"
+                        label="Last name"
+                        required
+                        value={newLastName}
+                        onChange={setNewLastName}
+                      />
+                      <TextField
+                        name="new_dob"
+                        label="Date of birth"
+                        type="date"
+                        required
+                        value={newDob}
+                        onChange={setNewDob}
+                      />
+                      <div className="field-stack">
+                        <Label htmlFor="new_email">Email</Label>
+                        <Input
+                          id="new_email"
+                          name="new_email"
+                          type="email"
+                          value={newEmail}
+                          aria-invalid={Boolean(newEmailError)}
+                          onChange={(e) => {
+                            setNewEmail(e.target.value);
+                            // Only show email errors after blur or submit — not while typing.
+                            setNewEmailError(null);
+                            setNewEmailSuggestion(null);
+                          }}
+                          onBlur={() => {
+                            if (!newEmail.trim()) {
+                              setNewEmailError(null);
+                              setNewEmailSuggestion(null);
+                              return;
+                            }
+                            const check = checkEmail(newEmail);
+                            setNewEmailError(check.ok ? null : check.error);
+                            setNewEmailSuggestion(check.ok ? null : (check.suggestion ?? null));
+                          }}
+                          className="rounded-xl"
+                        />
+                        {newEmailError && (
+                          <p className="text-xs text-destructive">
+                            {newEmailError}
+                            {newEmailSuggestion ? (
+                              <>
+                                {" "}
+                                <button
+                                  type="button"
+                                  className="font-medium underline underline-offset-2 hover:text-destructive/90"
+                                  onClick={() => {
+                                    setNewEmail(newEmailSuggestion);
+                                    setNewEmailError(null);
+                                    setNewEmailSuggestion(null);
+                                  }}
+                                >
+                                  Yes
+                                </button>
+                              </>
+                            ) : null}
+                          </p>
+                        )}
+                      </div>
                       <TextField name="new_phone" label="Mobile" />
                     </div>
                   ) : (
-                    <SelectField name="patient_id" label="">
+                    <SelectField
+                      name="patient_id"
+                      label=""
+                      value={bookingPatientId}
+                      required
+                      onChange={(e) => setBookingPatientId(e.target.value)}
+                    >
+                      <option value="">Select patient</option>
                       {(patients ?? []).map((p: any) => (
                         <option key={p.id} value={p.id}>
                           {p.first_name} {p.last_name}
@@ -568,7 +711,14 @@ function SchedulePage() {
                     </SelectField>
                   )}
                 </div>
-                <SelectField name="practitioner_id" label="Practitioner">
+                <SelectField
+                  name="practitioner_id"
+                  label="Practitioner"
+                  value={bookingPractitionerId}
+                  required
+                  onChange={(e) => setBookingPractitionerId(e.target.value)}
+                >
+                  <option value="">Select practitioner</option>
                   {(practitioners ?? []).map((p: any) => (
                     <option key={p.id} value={p.id}>
                       {p.full_name || "Unnamed"}
@@ -578,12 +728,17 @@ function SchedulePage() {
                 <SelectField
                   name="catalogue_id"
                   label="Treatment"
+                  value={bookingCatalogueId}
+                  required
                   onChange={(e) => {
-                    const item = (catalogue ?? []).find((c: any) => c.id === e.target.value);
+                    const id = e.target.value;
+                    setBookingCatalogueId(id);
+                    const item = (catalogue ?? []).find((c: any) => c.id === id);
                     setBookingDuration(String(durationForCatalogueItem(item)));
                     setBookingPrice(item?.price != null && item.price !== "" ? String(item.price) : "");
                   }}
                 >
+                  <option value="">Select treatment</option>
                   {(catalogue ?? []).map((c: any) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -598,7 +753,14 @@ function SchedulePage() {
                   value={bookingDuration}
                   onChange={setBookingDuration}
                 />
-                <TextField name="starts_at" label="Date & time" type="datetime-local" required />
+                <TextField
+                  name="starts_at"
+                  label="Date & time"
+                  type="datetime-local"
+                  required
+                  value={bookingStartsAt}
+                  onChange={setBookingStartsAt}
+                />
                 <TextField
                   name="price"
                   label="Price (£)"
@@ -717,7 +879,10 @@ function SchedulePage() {
                   <input type="hidden" name="notes" value={bookingNotes} />
                   <div className="mt-1.5 flex items-center justify-between gap-2 pl-1">
                     <SaveState saving={false} dirty={bookingNotesDirty} />
-                    <Button type="submit" disabled={book.isPending || addPatient.isPending}>
+                    <Button
+                      type="submit"
+                      disabled={!canSubmitBooking || book.isPending || addPatient.isPending}
+                    >
                       {newPatient ? "Add patient & book" : "Book appointment"}
                     </Button>
                   </div>
@@ -1507,7 +1672,7 @@ function DayPlanner({
                       date={`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`}
                     >
                     <Link
-                      to="/team/$id"
+                      to="/team/$id" search={{}}
                       params={{ id: col.id }}
                       className="flex min-w-0 items-center gap-3 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
@@ -1755,6 +1920,7 @@ function DayPlanner({
             </Button>
             <Button
               className=""
+              enterSubmit
               disabled={reschedule.isPending || !!dropConflict}
               onClick={() => {
                 if (!confirmDrop || !dropTarget || dropConflict) return;
@@ -2178,18 +2344,24 @@ function SelectField({
   label,
   children,
   className,
+  value,
+  required,
   onChange,
 }: {
   name: string;
   label: string;
   children: React.ReactNode;
   className?: string;
+  value?: string;
+  required?: boolean;
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
 }) {
   const select = (
     <select
       id={name}
       name={name}
+      value={value}
+      required={required}
       onChange={onChange}
       className="h-10 w-full rounded-md border border-edge bg-glass-2 px-3 text-sm shadow-inset-hi"
     >

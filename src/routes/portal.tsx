@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
+import { checkEmail } from "@/lib/email";
+import { toastEmailError } from "@/lib/email-toast";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,9 +74,17 @@ function PortalLogin() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const emailCheck = checkEmail(email);
+    if (!emailCheck.ok) {
+      toastEmailError(emailCheck, (suggestion) => setEmail(suggestion));
+      return;
+    }
     setBusy(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: emailCheck.email,
+        password,
+      });
       if (error) throw error;
       navigate({ ...dest, replace: true } as any);
     } catch (err) {

@@ -13,8 +13,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { StaffChatPanel } from "@/components/staff-chat-panel";
 
 export const Route = createFileRoute("/_authenticated/team/$id")({
+  validateSearch: (search: Record<string, unknown>): { chat?: boolean } => {
+    const raw = search["chat"];
+    if (raw === true || raw === "1" || raw === 1) return { chat: true };
+    return {};
+  },
   head: () => ({
     meta: [
       { title: "Staff profile — Aetheria" },
@@ -30,13 +36,15 @@ export const Route = createFileRoute("/_authenticated/team/$id")({
 });
 
 const ROLES = [
-  { value: "owner", label: "Manager" },
+  { value: "owner", label: "Clinic owner" },
+  { value: "manager", label: "Manager" },
   { value: "practitioner", label: "Practitioner" },
   { value: "front_desk", label: "Receptionist" },
 ] as const;
 
 function StaffProfilePage() {
   const { id } = Route.useParams();
+  const { chat: openChat } = Route.useSearch();
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
   const fetchProfile = useServerFn(getStaffProfile);
@@ -54,7 +62,7 @@ function StaffProfilePage() {
   const { data } = useQuery({
     queryKey: ["staff-profile", id],
     queryFn: () => fetchProfile({ data: { userId: id } }),
-    enabled: can(identity, "team.view"),
+    enabled: Boolean(identity?.isStaff),
   });
 
   const [form, setForm] = useState({
@@ -79,12 +87,22 @@ function StaffProfilePage() {
   }, [data?.profile, data?.role]);
 
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
-  if (!can(identity, "team.view"))
+  if (!identity.isStaff)
     return (
       <AppShell identity={identity}>
-        <p className="text-sm text-muted-foreground">Manager access only.</p>
+        <p className="text-sm text-muted-foreground">Staff access only.</p>
       </AppShell>
     );
+
+
+  useEffect(() => {
+    if (!openChat) return;
+    const el = document.getElementById("staff-chat");
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [openChat, data?.profile?.full_name]);
+
+  const canEdit = can(identity, "team.view") && identity.isOwner;
+  const isSelf = identity.userId === id;
 
   return (
     <AppShell identity={identity}>
@@ -112,11 +130,11 @@ function StaffProfilePage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="field-stack sm:col-span-2">
                 <Label htmlFor="sp-name">Full name</Label>
-                <Input id="sp-name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
+                <Input id="sp-name" value={form.fullName} readOnly={!canEdit} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
               </div>
               <div className="field-stack">
                 <Label htmlFor="sp-job">Job title</Label>
-                <Input id="sp-job" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} />
+                <Input id="sp-job" value={form.jobTitle} readOnly={!canEdit} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} />
               </div>
               <div className="field-stack">
                 <Label htmlFor="sp-email">Work email</Label>
@@ -174,6 +192,7 @@ function StaffProfilePage() {
               </div>
             </div>
         </div>
+        {canEdit && (
         <div className="mt-5 flex items-center justify-end gap-4">
           <Button
             disabled={save.isPending || !form.fullName.trim()}
@@ -194,7 +213,20 @@ function StaffProfilePage() {
             Save changes
           </Button>
         </div>
+        )}
       </Card>
+
+      {!isSelf && (
+        <div className="mt-6">
+          <StaffChatPanel
+            peerUserId={id}
+            {...(form.fullName || data?.profile?.full_name
+              ? { peerName: form.fullName || data?.profile?.full_name || "" }
+              : {})}
+            autoFocus={Boolean(openChat)}
+          />
+        </div>
+      )}
 
       <div className="mt-6">
         <StaffDocuments userId={id} readOnly queryKey={["staff-documents", id]} />

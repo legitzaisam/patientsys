@@ -144,7 +144,7 @@ function ExpandRow({
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--sheen)] via-transparent to-transparent" />
 
           <div className="relative z-[1] flex flex-wrap items-center justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <p className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">
                 {label}’s extras
               </p>
@@ -153,10 +153,10 @@ function ExpandRow({
               </p>
             </div>
             <Link
-              to="/team/$id"
+              to="/team/$id" search={{}}
               params={{ id: row.userId }}
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1.5 rounded-full border border-accent-line bg-accent-soft px-3 py-1.5 text-2xs font-semibold text-accent-ink shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
+              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-accent-line bg-accent-soft px-3 py-1.5 text-2xs font-semibold text-accent-ink shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
             >
               Commission {row.commissionRate}%
               <span className="font-medium opacity-80">· Edit on Team</span>
@@ -253,7 +253,7 @@ export function PerformanceTable({
             </div>
           </div>
           <Button asChild variant="outline" className="">
-            <Link to="/team/$id" params={{ id: top.userId }}>
+            <Link to="/team/$id" search={{}} params={{ id: top.userId }}>
               View profile
             </Link>
           </Button>

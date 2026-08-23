@@ -22,6 +22,9 @@ import {
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrivalAlerts } from "@/components/arrival-alerts";
+import { AlertAckToaster } from "@/components/alert-ack-toaster";
+import { UrgentStaffAlerts } from "@/components/urgent-staff-alerts";
+import { SentStaffAlerts } from "@/components/sent-staff-alerts";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,7 +39,7 @@ import { NotificationBell } from "@/components/notification-bell";
 import { StaffAlertDialog } from "@/components/staff-alert-dialog";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
-import { listAppointments, listPractitioners, listStaffNotifications } from "@/lib/clinic.functions";
+import { listAppointments, listPractitioners } from "@/lib/clinic.functions";
 import { clinicDayRange } from "@/lib/clinic-time";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { can } from "@/lib/permissions";
@@ -46,6 +49,7 @@ import { cn } from "@/lib/utils";
 type Identity = {
   email: string;
   isStaff: boolean;
+  isOwner?: boolean;
   isManager?: boolean;
   roles: string[];
   permissions?: string[];
@@ -104,11 +108,9 @@ function NavGroup({ label, children }: { label: string; children: ReactNode }) {
 
 function ToolbarAlerts({
   identity,
-  urgentUnread,
   scrolled,
 }: {
   identity: Identity;
-  urgentUnread: number;
   scrolled: boolean;
 }) {
   const iconHover =
@@ -121,16 +123,14 @@ function ToolbarAlerts({
             variant={scrolled ? "outline" : "ghost"}
             size="icon"
             className={cn("relative h-9 w-9", iconHover, !scrolled && "border border-transparent")}
-            aria-label={`Alert team${urgentUnread ? `, ${urgentUnread} urgent unread` : ""}`}
+            aria-label="Alert team"
           >
             <Megaphone className="h-4 w-4" />
-            {urgentUnread > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-medium text-destructive-foreground">
-                {urgentUnread > 9 ? "9+" : urgentUnread}
-              </span>
-            )}
           </Button>
         </StaffAlertDialog>
+      )}
+      {identity.isStaff && (
+        <SentStaffAlerts scrolled={scrolled} className={iconHover} />
       )}
       <NotificationBell isStaff={identity.isStaff} scrolled={scrolled} />
     </>
@@ -314,7 +314,7 @@ function SidebarChrome({
                 </>
               );
               return canTeam ? (
-                <Link key={p.id} to="/team/$id" params={{ id: p.id }} onClick={onNavigate} className={className}>
+                <Link key={p.id} to="/team/$id" search={{}} params={{ id: p.id }} onClick={onNavigate} className={className}>
                   {body}
                 </Link>
               ) : (
@@ -357,24 +357,23 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   const queryClient = useQueryClient();
   const sessionReady = useAuthSessionReady();
   const searchRef = useRef<HTMLInputElement>(null);
+  const mainScrollRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const [scrolled, setScrolled] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
-  const fetchAlerts = useServerFn(listStaffNotifications);
+  useEffect(() => {
+    const main = mainScrollRef.current;
+    if (!main) return;
+    main.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    setScrolled(false);
+  }, [pathname]);
+
   const fetchPractitioners = useServerFn(listPractitioners);
   const fetchAppointments = useServerFn(listAppointments);
   const { startISO, endISO } = clinicDayRange();
-
-  const { data: staffAlerts } = useQuery({
-    queryKey: ["staff-notifications"],
-    queryFn: () => fetchAlerts(),
-    refetchInterval: 60_000,
-    enabled: identity.isStaff && sessionReady,
-  });
-  const urgentUnread = (staffAlerts ?? []).filter((a) => a.urgent).length;
 
   const { data: practitioners } = useQuery({
     queryKey: ["practitioners"],
@@ -418,9 +417,11 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     identity.profile?.full_name ||
     (identity.patient ? `${identity.patient.first_name} ${identity.patient.last_name}` : identity.email);
   const roleLabel = identity.isStaff
-    ? identity.isManager
-      ? "Manager"
-      : identity.profile?.job_title || identity.roles[0]?.replace("_", " ") || "Staff"
+    ? identity.isOwner
+      ? "Clinic owner"
+      : identity.roles.includes("manager")
+        ? "Manager"
+        : identity.profile?.job_title || identity.roles[0]?.replace("_", " ") || "Staff"
     : "Patient";
 
   async function signOut() {
@@ -567,6 +568,8 @@ export function AppShell({ identity, children }: { identity: Identity; children:
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <main
+          id="app-main-scroll"
+          ref={mainScrollRef}
           className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-5 sm:px-[26px]"
           onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 8)}
         >
@@ -583,7 +586,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
               </Button>
             )}
             <div className="pointer-events-auto ml-auto flex items-center gap-2">
-              <ToolbarAlerts identity={identity} urgentUnread={urgentUnread} scrolled={scrolled} />
+              <ToolbarAlerts identity={identity} scrolled={scrolled} />
               <AccountMenu
                 identity={identity}
                 displayName={displayName}
@@ -600,7 +603,17 @@ export function AppShell({ identity, children }: { identity: Identity; children:
         </main>
       </div>
 
-      {identity.isStaff && <ArrivalAlerts roles={identity.roles} />}
+      {identity.isStaff && (
+        <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex w-[min(18rem,calc(100vw-2.5rem))] flex-col-reverse items-end gap-3">
+          <div className="pointer-events-auto flex w-full justify-end">
+            <ArrivalAlerts roles={identity.roles} />
+          </div>
+          <div className="pointer-events-auto flex w-full justify-end">
+            <UrgentStaffAlerts />
+          </div>
+        </div>
+      )}
+      {identity.isStaff && <AlertAckToaster />}
       {DEMO_MODE && <DemoRoleSwitcher />}
     </div>
   );

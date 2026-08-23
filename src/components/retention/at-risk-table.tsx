@@ -88,8 +88,10 @@ export function AtRiskTable({
     <Card className="p-5">
       <div className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Patients at risk</h2>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <h2 className="min-w-0 text-[17px] font-semibold tracking-[-0.016em] text-foreground">
+            Patients at risk
+          </h2>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
             <div
               className={cn(
                 "relative h-9 overflow-hidden rounded-full border border-edge bg-glass-2 shadow-inset-hi transition-[width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -215,7 +217,7 @@ export function AtRiskTable({
                     >
                       {r.practitionerId ? (
                         <Link
-                          to="/team/$id"
+                          to="/team/$id" search={{}}
                           params={{ id: r.practitionerId }}
                           className="underline-offset-4 hover:underline"
                         >
@@ -229,7 +231,7 @@ export function AtRiskTable({
                     </StaffTaskHoverCard>
                   ) : r.practitionerId ? (
                     <Link
-                      to="/team/$id"
+                      to="/team/$id" search={{}}
                       params={{ id: r.practitionerId }}
                       className="underline-offset-4 hover:underline"
                     >

@@ -102,13 +102,16 @@ export function TodaySnapshot({
   }, [ordered, queryClient]);
 
   if (ordered.length === 0) {
+    // Match carousel bottom padding (item pb-1 + viewport pb-8).
     return (
-      <Link
-        to="/schedule"
-        className="block rounded-2xl bg-glass-2 p-8 text-center text-sm text-muted-foreground transition-colors hover:bg-accent-wash hover:text-foreground"
-      >
-        {span === "week" ? "No appointments this week." : "No appointments today."}
-      </Link>
+      <div className="pb-9">
+        <Link
+          to="/schedule"
+          className="block rounded-2xl bg-glass-2 p-8 text-center text-sm text-muted-foreground transition-colors hover:bg-accent-wash hover:text-foreground"
+        >
+          {span === "week" ? "No appointments this week." : "No appointments today."}
+        </Link>
+      </div>
     );
   }
 
@@ -340,6 +343,9 @@ function TodayCard({
         aria-label={`View appointment for ${patientName}`}
         onClick={openDetail}
         onKeyDown={(e) => {
+          // Only when the card itself is focused — ignore Enter from nested controls
+          // (e.g. “Save new time” in the hover editor).
+          if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             openDetail();
@@ -356,7 +362,7 @@ function TodayCard({
           <div className="space-y-1">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1 space-y-1">
-                <div onClick={stopCardOpen} onPointerDown={stopCardOpen}>
+                <div onClick={stopCardOpen} onPointerDown={stopCardOpen} onKeyDown={stopCardOpen}>
                   <AppointmentTimeEditor appointment={a}>
                     <button
                       type="button"
@@ -415,8 +421,6 @@ function TodayCard({
         }}
       >
         <DialogContent
-          dismissOnOverlayClick
-          hideDismissHint
           className="max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md gap-0 overflow-y-auto overscroll-contain rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
         >
           <DialogHeader className="pr-8 text-left">
@@ -462,6 +466,7 @@ function TodayCard({
                 </Button>
                 <Button
                   type="button"
+                  enterSubmit
                   disabled={setState.isPending || !cancelReason.trim()}
                   onClick={confirmCancel}
                 >
