@@ -406,7 +406,7 @@ function ChatQuickReplyToast({
       {!expanded ? (
         <>
           {preview ? (
-            <div className="mt-1 rounded-xl border border-edge bg-glass-2/90 px-3 py-2">
+            <div className="-mt-1.5 rounded-xl border border-edge bg-glass-2/90 px-3 py-2">
               <p className="line-clamp-3 text-[13px] leading-snug text-foreground">{preview}</p>
             </div>
           ) : null}
