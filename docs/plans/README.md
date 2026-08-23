@@ -28,3 +28,4 @@ Start from [_TEMPLATE.md](_TEMPLATE.md).
 | Phase | Plan | Status |
 |---|---|---|
 | 0 | [Audit refresh and emergency copy fix](phase-00-audit-refresh.md) | Complete |
+| 1 | [Authorization foundation](phase-01-authorization-foundation.md) | Complete |

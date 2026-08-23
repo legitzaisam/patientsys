@@ -63,3 +63,58 @@ Two bugs were found while editing these files and, per the plan, recorded in the
 **High, and unchanged by this phase.** The honest copy makes the gap visible instead of hiding it, which is the entire point, but a clinic running this today still cannot contact a patient through the software. Staff need to be told explicitly that portal messages are not notifications and that anything time-critical must be phoned, until Phase 9 lands.
 
 Also standing: `npx tsc --noEmit` does not pass and never has (§13.3.5). Until that is ratcheted down, no later phase can use "the types still pass" as evidence that a refactor was safe.
+
+---
+
+## Phase 1 — Authorization foundation
+
+**Date:** 23 August 2026
+**Plan:** [plans/phase-01-authorization-foundation.md](plans/phase-01-authorization-foundation.md)
+**Base:** `572ba7a`
+**Commits:** guards extraction, failure surfacing, docs (three)
+
+### Why this went next
+
+Authorization was 40 scattered `loadIdentity` calls followed by hand-written `if` statements, in six different shapes, with no single place to change a rule. Phase 2 has to touch 22 handlers; against that structure it would be 22 chances to write a subtly different check. Build the layer once, then apply it mechanically.
+
+### Changed
+
+**New module [src/lib/auth/guards.server.ts](../src/lib/auth/guards.server.ts).** `Ctx`, `loadIdentity`, `resolveAppMetaFlag`, `requirePermission`, `requireOwner` and `requireManager` moved out of the god-module unchanged in behaviour, joined by three new guards — `requireStaff`, `requirePatientSelf(patientId)` and `requireStaffOrOwnPatient(patientId)` — which are deliberately unused until Phase 2. Every guard now returns the identity, so callers stop re-loading it. `clinic.functions.ts` lost 121 lines.
+
+**`PERMISSION_KEYS` was defined twice.** [permissions.ts](../src/lib/permissions.ts) had it with a `can()` helper for the client; the server file had a byte-identical copy and `requirePermission` reimplemented `can()` inline. There is now one list and one implementation, so client and server agree by construction.
+
+**Identity cache.** A `WeakMap` keyed on the context object, which the auth middleware rebuilds per request. It caches the promise rather than the value, so callers arriving mid-flight share the read instead of racing another four queries.
+
+**Two guards stopped lying about failure.** `requireOwner` ran its own query and discarded the error, so a database hiccup was indistinguishable from "not an owner" and told the owner they lacked access; it now resolves through `loadIdentity`, which already throws on a failed read, so the bug is gone by construction rather than by another error check. `reviewProfileChange` discarded the error on its status write, so an approval could apply the profile change, fail to mark the request reviewed, and still return `{ ok: true }`.
+
+**`audit()` stopped being silent.** 46 call sites, and the insert error was never destructured. It now logs actor, action and entity. It deliberately does **not** throw: every call runs after its mutation has already committed, so throwing would report a successful clinical write as an error and invite a retry that duplicates it.
+
+### Verified
+
+- `npx tsc --noEmit` reports **52** errors, exactly the baseline, and **zero** in the new module. Nothing regressed and nothing was papered over.
+- No stale `loadIdentity` / `requireOwner` / `requireManager` / `requirePermission` definitions survive in `clinic.functions.ts` — the originals are gone, not shadowed.
+- `reloadIdentity` appears at exactly the two `getMe` sites and nowhere else.
+- Signed in as owner on `localhost:8080`, all of `/dashboard`, `/schedule`, `/patients`, `/patients/$id`, `/team`, `/settings`, `/performance`, `/retention` and `/profile` render with **zero console errors**. Between them these exercise `requireOwner` at 11 sites and `requirePermission` for `team.view`, `reports.performance` and `reports.retention`.
+- The audit trail still writes: `audit_log` went from 201 to 203 across the sweep, with a fresh `recall_task.status` row attributed to the owner.
+
+### The trap that was worth writing down
+
+`getMe` re-reads identity twice after inserting the caller's first role. With a naive cache both reloads would have returned the pre-insert identity (`roles: []`), execution would have fallen through to the ex-staff check, and a brand-new clinic owner would have been told **"Your clinic access has been removed"** on their first ever sign-in. `reloadIdentity()` exists for those two lines and nothing else.
+
+### Deferred
+
+No handler gained or lost a guard — that is the whole of Phase 2, including the ownership predicate `deleteMyDocument` needs. The decision table naming which guard each of the 22 open handlers takes is in the plan, with line numbers recomputed after the extraction so Phase 2 is not working from stale references.
+
+No demo twin changes. The Vite plugin swaps `clinic.functions.ts` by resolved path, so `guards.server.ts` never loads in demo mode; demo remains looser than production on four team-admin handlers that have no owner gate there at all.
+
+Found while working, recorded rather than fixed: the profile-change approval flow has no entry point (§13.3.6). Nothing in the UI calls `submitProfileChange`, so the queue `/team` renders can never receive a request.
+
+### Residual risk
+
+**Two of the six verification steps could not be executed, only reasoned about.**
+
+The `getMe` bootstrap branches only fire for a user with no roles — the first-ever staff account, or a patient linked to a `patients` row. The live project has neither spare, so the fix for the trap above is backed by code review and a grep, not by a run.
+
+`reviewProfileChange` could not be exercised end to end because nothing creates a request to review. The two-line error check typechecks and `/team` renders its queue without error, but the approval path itself is untested.
+
+**Phase 2 is blocked on credentials and this should be settled before it starts.** Verifying that a guard denies the right people needs sign-in credentials for a practitioner, a front_desk user, a manager and a patient. Only the owner's are held, and there is no patient portal user at all. Without them, a 22-handler authorization retrofit can be verified by reading code and nothing else — which is precisely the kind of verification that lets an authorization bug through.
