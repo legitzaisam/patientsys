@@ -106,7 +106,7 @@ export function NotesPanel() {
     >
       <div className="mb-4 shrink-0">
         <h2 className="section-title">My notes</h2>
-        <p className="text-xs text-muted-foreground">Private to you · saves automatically.</p>
+        <p className="text-xs text-muted-foreground">Private to you · share anytime · saves automatically.</p>
       </div>
       <div className="glass-card relative flex min-h-[180px] flex-col p-4">
         {value !== null ? (

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useNotesPrefs, type NotesTheme } from "@/components/notes/ios-notes-editor";
+import { ShareNoteButton } from "@/components/notes/share-note-button";
 
 const THEMES: Record<NotesTheme, { label: string; surface: string; text: string; rule: string }> = {
   paper: { label: "Paper", surface: "bg-glass-2", text: "text-foreground", rule: "border-glass-line" },
@@ -316,6 +317,13 @@ export function RichNotesEditor({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <Sep />
+
+        <ShareNoteButton
+          className={btn}
+          getPlainText={() => editor.getText({ blockSeparator: "\n" })}
+        />
       </div>
 
       <div className={cn("rounded-2xl border transition-colors", theme.rule, theme.surface)}>

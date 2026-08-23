@@ -87,6 +87,7 @@ export function UrgentStaffAlerts() {
     mutationFn: (id: string) => markRead({ data: { id } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
       void queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
       void queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
       toast.success("Alert acknowledged");
@@ -111,6 +112,7 @@ export function UrgentStaffAlerts() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
       void queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
       void queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
       toast.success("Reply sent");

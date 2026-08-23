@@ -1623,17 +1623,6 @@ function DayPlanner({
           <span className="tabular-nums">{label(startMin)}–{label(endMin)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <QuickAddAppointment
-            patients={patients}
-            practitioners={practitioners}
-            catalogue={catalogue}
-            date={date}
-            align="end"
-          >
-            <Button variant="outline" className="h-9 px-3 text-xs">
-              <Plus className="mr-1 h-3.5 w-3.5" /> Quick add
-            </Button>
-          </QuickAddAppointment>
           <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
           <PractitionerFilter
             practitioners={practitioners}
@@ -2070,17 +2059,6 @@ function WeekView({
           <span className="tabular-nums">{rows.length} booked</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <QuickAddAppointment
-            patients={patients}
-            practitioners={practitioners}
-            catalogue={catalogue}
-            date={date}
-            align="end"
-          >
-            <Button variant="outline" className="h-9 px-3 text-xs">
-              <Plus className="mr-1 h-3.5 w-3.5" /> Quick add
-            </Button>
-          </QuickAddAppointment>
           <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
           <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
         </div>
@@ -2218,17 +2196,6 @@ function MonthView({
           <span className="tabular-nums">{rows.length} booked</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <QuickAddAppointment
-            patients={patients}
-            practitioners={practitioners}
-            catalogue={catalogue}
-            date={anchor}
-            align="end"
-          >
-            <Button variant="outline" className="h-9 px-3 text-xs">
-              <Plus className="mr-1 h-3.5 w-3.5" /> Quick add
-            </Button>
-          </QuickAddAppointment>
           <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
           <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
         </div>

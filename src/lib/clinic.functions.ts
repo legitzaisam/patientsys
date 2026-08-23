@@ -1299,6 +1299,7 @@ export const listStaffNotifications = createServerFn({ method: "GET" })
       .select("id, title, body, patient_id, appointment_id, read_at, created_at, urgent, sender_id, kind")
       .eq("recipient_id", ctx.userId)
       .is("read_at", null)
+      .is("recipient_dismissed_at", null)
       .order("created_at", { ascending: false })
       .limit(20);
     const list = (rows ?? []) as {
@@ -1484,6 +1485,41 @@ export const markStaffNotificationRead = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Hide a team inbox row for the signed-in user only (incoming or sent). */
+export const dismissStaffInboxItem = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => data)
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const { data: row, error: fetchErr } = await ctx.supabase
+      .from("staff_notifications")
+      .select("id, recipient_id, sender_id, read_at")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (fetchErr) throw new Error(fetchErr.message);
+    if (!row) throw new Error("Message not found");
+
+    const now = new Date().toISOString();
+    const isRecipient = row.recipient_id === ctx.userId;
+    const isSender = row.sender_id === ctx.userId;
+    if (!isRecipient && !isSender) throw new Error("You can only dismiss your own messages");
+
+    const patch: {
+      recipient_dismissed_at?: string;
+      sender_dismissed_at?: string;
+      read_at?: string;
+    } = {};
+    if (isRecipient) {
+      patch.recipient_dismissed_at = now;
+      if (!row.read_at) patch.read_at = now;
+    }
+    if (isSender) patch.sender_dismissed_at = now;
+
+    const { error } = await ctx.supabase.from("staff_notifications").update(patch).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 /** Alerts the signed-in staff member sent recently (seen / waiting per recipient). */
 export const listSentStaffAlerts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -1494,7 +1530,8 @@ export const listSentStaffAlerts = createServerFn({ method: "GET" })
       .from("staff_notifications")
       .select("id, title, body, urgent, kind, recipient_id, read_at, created_at")
       .eq("sender_id", ctx.userId)
-      .in("kind", ["urgent", "staff_message"])
+      .in("kind", ["urgent", "staff_message", "staff_chat"])
+      .is("sender_dismissed_at", null)
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -1523,6 +1560,49 @@ export const listSentStaffAlerts = createServerFn({ method: "GET" })
     return list.map((r) => ({
       ...r,
       recipient_name: names.get(r.recipient_id) ?? "Teammate",
+    }));
+  });
+
+/** Team alerts / chat pings addressed to the signed-in staff member (last 7 days). */
+export const listIncomingTeamAlerts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: rows, error } = await ctx.supabase
+      .from("staff_notifications")
+      .select("id, title, body, urgent, kind, sender_id, read_at, created_at")
+      .eq("recipient_id", ctx.userId)
+      .in("kind", ["urgent", "staff_message", "staff_chat"])
+      .is("recipient_dismissed_at", null)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) throw new Error(error.message);
+    const list = (rows ?? []) as {
+      id: string;
+      title: string;
+      body: string | null;
+      urgent: boolean | null;
+      kind: string;
+      sender_id: string | null;
+      read_at: string | null;
+      created_at: string;
+    }[];
+    const senderIds = [...new Set(list.map((r) => r.sender_id).filter(Boolean))] as string[];
+    let names = new Map<string, string>();
+    if (senderIds.length > 0) {
+      const { data: profiles } = await ctx.supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", senderIds);
+      names = new Map(
+        ((profiles ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]),
+      );
+    }
+    return list.map((r) => ({
+      ...r,
+      sender_name: r.sender_id ? (names.get(r.sender_id) ?? "Teammate") : "Clinic",
     }));
   });
 

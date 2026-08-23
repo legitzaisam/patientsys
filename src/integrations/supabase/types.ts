@@ -911,7 +911,9 @@ export type Database = {
           kind: string
           patient_id: string | null
           read_at: string | null
+          recipient_dismissed_at: string | null
           recipient_id: string
+          sender_dismissed_at: string | null
           sender_id: string | null
           title: string
           urgent: boolean
@@ -925,7 +927,9 @@ export type Database = {
           kind?: string
           patient_id?: string | null
           read_at?: string | null
+          recipient_dismissed_at?: string | null
           recipient_id: string
+          sender_dismissed_at?: string | null
           sender_id?: string | null
           title: string
           urgent?: boolean
@@ -939,7 +943,9 @@ export type Database = {
           kind?: string
           patient_id?: string | null
           read_at?: string | null
+          recipient_dismissed_at?: string | null
           recipient_id?: string
+          sender_dismissed_at?: string | null
           sender_id?: string | null
           title?: string
           urgent?: boolean

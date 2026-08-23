@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type 
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { getStaffProfile, updateStaffMember } from "@/lib/clinic.functions";
+import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { usePanelWidth } from "@/hooks/use-panel-width";
 import { AppShell } from "@/components/app-shell";
@@ -139,6 +140,7 @@ function StaffProfilePage() {
   }
 
   const canEdit = identity.isManager;
+  const canViewTeam = can(identity, "team.view");
   const showChat = true;
   const canViewDocuments = Boolean(data?.canViewDocuments);
   const displayName = form.fullName || data?.profile?.full_name || "Team member";
@@ -147,17 +149,19 @@ function StaffProfilePage() {
 
   return (
     <AppShell identity={identity}>
-      <Link
-        to="/team"
-        className="mb-3 mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back to team
-      </Link>
+      {canViewTeam ? (
+        <Link
+          to="/team"
+          className="-mt-1 mb-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to team
+        </Link>
+      ) : null}
 
       <div
         className={
           showChat
-            ? "relative grid items-start gap-5 md:grid-cols-[minmax(0,1fr)_var(--chat-width)]"
+            ? "relative grid items-start gap-5 md:grid-cols-[minmax(0,1fr)_var(--chat-width)] md:gap-[26px]"
             : "relative space-y-5"
         }
         style={showChat ? ({ "--chat-width": `${chatWidth}px` } as CSSProperties) : undefined}

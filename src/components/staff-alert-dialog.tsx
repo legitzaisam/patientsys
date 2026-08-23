@@ -136,6 +136,7 @@ export function StaffAlertDialog({
       });
       toast.success(`Sent to ${res.sent} ${res.sent === 1 ? "person" : "people"}`);
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
       resetCompose();

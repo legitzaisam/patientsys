@@ -1265,7 +1265,12 @@ export const deleteMessageTemplate = createServerFn({ method: "POST" })
 export const listStaffNotifications = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
   return sortDesc(
-    staffNotifications.filter((n) => !n.read_at && n.recipient_id === me.userId),
+    staffNotifications.filter(
+      (n) =>
+        !n.read_at &&
+        n.recipient_id === me.userId &&
+        !(n as { recipient_dismissed_at?: string | null }).recipient_dismissed_at,
+    ),
     "created_at",
   )
     .slice(0, 20)
@@ -1285,17 +1290,44 @@ export const markStaffNotificationRead = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Hide a team inbox row for the signed-in user only (incoming or sent). */
+export const dismissStaffInboxItem = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const me = identity();
+    const row = staffNotifications.find((n) => n.id === data.id) as
+      | (typeof staffNotifications)[number] & {
+          recipient_dismissed_at?: string | null;
+          sender_dismissed_at?: string | null;
+        }
+      | undefined;
+    if (!row) throw new Error("Message not found");
+    const now = new Date().toISOString();
+    const isRecipient = row.recipient_id === me.userId;
+    const isSender = row.sender_id === me.userId;
+    if (!isRecipient && !isSender) throw new Error("You can only dismiss your own messages");
+    if (isRecipient) {
+      row.recipient_dismissed_at = now;
+      if (!row.read_at) row.read_at = now;
+    }
+    if (isSender) row.sender_dismissed_at = now;
+    return { ok: true };
+  });
+
 /** Alerts the signed-in staff member sent recently (seen / waiting per recipient). */
 export const listSentStaffAlerts = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
   const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
   return sortDesc(
-    staffNotifications.filter(
-      (n) =>
+    staffNotifications.filter((n) => {
+      const dismissed = (n as { sender_dismissed_at?: string | null }).sender_dismissed_at;
+      return (
         n.sender_id === me.userId &&
-        (n.kind === "urgent" || n.kind === "staff_message") &&
-        new Date(n.created_at).getTime() >= since,
-    ),
+        !dismissed &&
+        (n.kind === "urgent" || n.kind === "staff_message" || n.kind === "staff_chat") &&
+        new Date(n.created_at).getTime() >= since
+      );
+    }),
     "created_at",
   )
     .slice(0, 50)
@@ -1309,6 +1341,36 @@ export const listSentStaffAlerts = createServerFn({ method: "GET" }).handler(asy
       read_at: n.read_at ?? null,
       created_at: n.created_at,
       recipient_name: profileName(n.recipient_id) || "Teammate",
+    }));
+});
+
+/** Team alerts / chat pings addressed to the signed-in staff member (last 7 days). */
+export const listIncomingTeamAlerts = createServerFn({ method: "GET" }).handler(async () => {
+  const me = identity();
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return sortDesc(
+    staffNotifications.filter((n) => {
+      const dismissed = (n as { recipient_dismissed_at?: string | null }).recipient_dismissed_at;
+      return (
+        n.recipient_id === me.userId &&
+        !dismissed &&
+        (n.kind === "urgent" || n.kind === "staff_message" || n.kind === "staff_chat") &&
+        new Date(n.created_at).getTime() >= since
+      );
+    }),
+    "created_at",
+  )
+    .slice(0, 50)
+    .map((n) => ({
+      id: n.id as string,
+      title: n.title as string,
+      body: (n.body as string | null) ?? null,
+      urgent: !!n.urgent,
+      kind: n.kind as string,
+      sender_id: (n.sender_id as string | null) ?? null,
+      read_at: (n.read_at as string | null) ?? null,
+      created_at: n.created_at as string,
+      sender_name: profileName(n.sender_id) || "Teammate",
     }));
 });
 

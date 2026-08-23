@@ -1,0 +1,10 @@
+---
+description: Never use left-edge accent rails or vertical colour bars on cards/popovers
+alwaysApply: true
+---
+
+# No left accent rails
+
+Do **not** use a vertical colour strip / left-edge accent rail on cards, popovers, hover cards, dialogs, or list rows (e.g. `absolute left-0 w-[3px]`, coloured `border-l-*` as a decorative bar, or similar).
+
+Prefer on-brand glass accents instead: soft washes, avatar/chip colour, sheen, inset wells, and butter/accent CTAs.

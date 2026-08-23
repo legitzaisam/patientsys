@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
 
+const TEAM_KINDS = new Set(["urgent", "staff_message", "staff_chat"]);
+
 /** Unread-message alerts: live badge, dropdown and toast for new incoming messages. */
 export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boolean; scrolled?: boolean }) {
   const { data: identity } = useIdentity();
@@ -87,6 +89,7 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
             urgent?: boolean | null;
           };
           queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+          queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
           if (!row.id || seenStaffAlerts.current.has(row.id)) return;
           if (row.recipient_id && identity?.userId && row.recipient_id !== identity.userId) return;
           seenStaffAlerts.current.add(row.id);
@@ -115,7 +118,9 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
     };
   }, [identity?.userId, isStaff, navigate, queryClient]);
 
-  const alertList = isStaff ? (alerts ?? []).filter((a) => !pressedNonUrgent.has(a.id)) : [];
+  const alertList = isStaff
+    ? (alerts ?? []).filter((a) => !pressedNonUrgent.has(a.id) && !TEAM_KINDS.has(a.kind))
+    : [];
   const total = (data?.total ?? 0) + alertList.length;
 
   // Demo: no realtime — toast when a new staff/chat alert appears in the polled list.
@@ -172,7 +177,7 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
       <PopoverContent align="end" className="w-80 rounded-2xl p-0">
         <div className="bg-glass-2 px-4 py-3">
           <p className="text-sm font-medium text-foreground">Notifications</p>
-          <p className="text-xs text-muted-foreground">Bookings and unread messages</p>
+          <p className="text-xs text-muted-foreground">Bookings and patient messages</p>
         </div>
         <ul className="max-h-80 divide-y divide-glass-line overflow-y-auto">
           {alertList.map((alert) => {
@@ -188,6 +193,7 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
                       if (!alert.urgent) setPressedNonUrgent((prev) => new Set(prev).add(alert.id));
                       await markAlertRead({ data: { id: alert.id } });
                       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+                      queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
                       queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
                       queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
                       if (alert.sender_id) {
@@ -234,6 +240,7 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
                         onClick={async () => {
                           await markAlertRead({ data: { id: alert.id } });
                           queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+                          queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
                           queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
                           queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
                           navigate({
@@ -254,6 +261,7 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
                         onClick={async () => {
                           await markAlertRead({ data: { id: alert.id } });
                           queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+                          queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
                           queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
                           queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
                           toast.success("Marked as read and completed");
@@ -270,6 +278,7 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
                         onClick={async () => {
                           await markAlertRead({ data: { id: alert.id } });
                           queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+                          queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
                           queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
                           queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
                         }}

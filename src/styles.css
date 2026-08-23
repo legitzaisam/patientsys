@@ -388,8 +388,12 @@
     box-shadow: var(--shadow-inset-hi);
   }
 
-  /* Staff 1:1 thread — soft glass bubbles on a quiet wash. */
+  /* Staff 1:1 thread — soft glass bubbles on a quiet wash.
+   * --staff-chat-fs drives body text; padding/radii/meta use em so A−/A+ scales the whole bubble. */
   .staff-chat-thread {
+    --staff-chat-fs: 13px;
+    --staff-chat-stack: calc(var(--staff-chat-fs) * 0.46);
+    --staff-chat-break: calc(var(--staff-chat-fs) * 1.08);
     min-height: 0;
     -webkit-overflow-scrolling: touch;
     background:
@@ -406,13 +410,29 @@
     -webkit-backdrop-filter: blur(14px);
     box-shadow: var(--shadow-inset-hi);
     color: var(--ink-3);
+    font-size: calc(var(--staff-chat-fs) * 0.78);
+    padding: 0.35em 0.9em;
+  }
+
+  .staff-chat-item {
+    display: flex;
+  }
+
+  .staff-chat-item--stack {
+    margin-top: var(--staff-chat-stack);
+  }
+
+  .staff-chat-item--break {
+    margin-top: var(--staff-chat-break);
   }
 
   .staff-chat-bubble {
     position: relative;
     max-width: 82%;
-    border-radius: 18px;
-    padding: 0.5rem 0.75rem 0.45rem;
+    font-size: var(--staff-chat-fs);
+    line-height: 1.45;
+    border-radius: 1.15em;
+    padding: 0.38em 0.58em 0.35em;
     backdrop-filter: blur(20px) saturate(1.4);
     -webkit-backdrop-filter: blur(20px) saturate(1.4);
     box-shadow:
@@ -423,7 +443,7 @@
   /* Sent — soft butter glass (brand yellow, not solid). */
   .staff-chat-bubble--out {
     margin-left: auto;
-    border-bottom-right-radius: 5px;
+    border-bottom-right-radius: 0.32em;
     border: 1px solid color-mix(in srgb, var(--accent-line) 70%, transparent);
     background: color-mix(in srgb, var(--primary) 34%, var(--glass));
     color: var(--foreground);
@@ -432,7 +452,7 @@
   /* Received — frosted white glass. */
   .staff-chat-bubble--in {
     margin-right: auto;
-    border-bottom-left-radius: 5px;
+    border-bottom-left-radius: 0.32em;
     border: 1px solid var(--edge);
     background: color-mix(in srgb, var(--glass) 96%, transparent);
     color: var(--foreground);
@@ -441,8 +461,10 @@
   .staff-chat-alert {
     position: relative;
     max-width: 88%;
-    border-radius: 16px;
-    padding: 0.55rem 0.8rem 0.45rem;
+    font-size: var(--staff-chat-fs);
+    line-height: 1.45;
+    border-radius: 1.05em;
+    padding: 0.42em 0.62em 0.35em;
     border: 1px solid color-mix(in srgb, var(--sky) 28%, var(--edge));
     background: color-mix(in srgb, var(--sky-bg) 48%, var(--glass));
     backdrop-filter: blur(20px) saturate(1.3);
@@ -455,12 +477,12 @@
 
   .staff-chat-alert--out {
     margin-left: auto;
-    border-bottom-right-radius: 5px;
+    border-bottom-right-radius: 0.32em;
   }
 
   .staff-chat-alert--in {
     margin-right: auto;
-    border-bottom-left-radius: 5px;
+    border-bottom-left-radius: 0.32em;
   }
 
   .staff-chat-alert--urgent {
@@ -468,14 +490,36 @@
     background: color-mix(in srgb, var(--destructive-bg) 55%, var(--glass));
   }
 
+  .staff-chat-alert__label {
+    margin-bottom: 0.35em;
+    font-size: 0.72em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .staff-chat-alert__label-name {
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--muted-foreground);
+  }
+
   .staff-chat-meta {
-    margin-top: 0.25rem;
+    margin-top: 0.25em;
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 0.15rem;
+    gap: 0.2em;
+    font-size: 0.78em;
     color: var(--ink-3);
     opacity: 0.8;
+  }
+
+  .staff-chat-meta svg {
+    width: 1.15em;
+    height: 1.15em;
+    flex-shrink: 0;
   }
 
 
@@ -662,5 +706,74 @@
     height: 0;
     pointer-events: none;
     color: var(--muted-foreground);
+  }
+
+  /* Sonner toasts — glass cards aligned with popovers / dialogs. */
+  [data-sonner-toaster] {
+    --normal-bg: transparent;
+    --normal-border: transparent;
+    --normal-text: var(--foreground);
+    font-family: var(--font-sans);
+  }
+
+  [data-sonner-toast].aetheria-toast {
+    position: relative;
+    overflow: hidden;
+  }
+
+  [data-sonner-toast].aetheria-toast::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, var(--sheen), transparent 46%);
+    pointer-events: none;
+  }
+
+  [data-sonner-toast].aetheria-toast > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  [data-sonner-toast][data-type="success"].aetheria-toast {
+    border-color: color-mix(in srgb, var(--success) 22%, var(--edge));
+  }
+
+  [data-sonner-toast][data-type="error"].aetheria-toast {
+    border-color: color-mix(in srgb, var(--destructive) 28%, var(--edge));
+  }
+
+  [data-sonner-toast][data-type="warning"].aetheria-toast {
+    border-color: color-mix(in srgb, var(--warning) 28%, var(--edge));
+  }
+
+  [data-sonner-toast][data-type="info"].aetheria-toast,
+  [data-sonner-toast][data-type="default"].aetheria-toast,
+  [data-sonner-toast]:not([data-type]).aetheria-toast {
+    border-color: var(--edge);
+  }
+
+  [data-sonner-toast] [data-close-button].aetheria-toast-close {
+    transform: none !important;
+    background: var(--glass-2) !important;
+    border: 1px solid var(--edge) !important;
+    color: var(--ink-3) !important;
+  }
+
+  [data-sonner-toast] [data-close-button].aetheria-toast-close:hover {
+    background: rgba(47, 63, 102, 0.08) !important;
+    border-color: var(--edge-2) !important;
+    color: var(--foreground) !important;
+  }
+
+  [data-sonner-toast] [data-button][data-action] {
+    margin-left: auto;
+  }
+
+  [data-sonner-toast].aetheria-toast-pinned {
+    cursor: pointer;
+    box-shadow:
+      var(--shadow-popover),
+      0 0 0 1px color-mix(in srgb, var(--accent-line) 70%, transparent);
   }
 }
