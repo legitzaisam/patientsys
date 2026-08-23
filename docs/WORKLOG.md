@@ -118,3 +118,19 @@ The `getMe` bootstrap branches only fire for a user with no roles — the first-
 `reviewProfileChange` could not be exercised end to end because nothing creates a request to review. The two-line error check typechecks and `/team` renders its queue without error, but the approval path itself is untested.
 
 **Phase 2 is blocked on credentials and this should be settled before it starts.** Verifying that a guard denies the right people needs sign-in credentials for a practitioner, a front_desk user, a manager and a patient. Only the owner's are held, and there is no patient portal user at all. Without them, a 22-handler authorization retrofit can be verified by reading code and nothing else — which is precisely the kind of verification that lets an authorization bug through.
+
+### Decisions taken at the close of Phase 1
+
+**Test accounts will be provisioned before Phase 2.** The owner sets passwords for the existing staff; a patient portal user is created for the first time.
+
+**The three reference reads become staff-only.** `getCatalogue`, `listTreatmentColours` and `getClinicDetails` take `requireStaff` in Phase 2. If the portal is later meant to show treatments or clinic contact details, that guard has to come back off deliberately rather than by default.
+
+### What the roster actually contains
+
+Queried while working out who could be given a test password. Three things that Phase 2 has to account for:
+
+**There is no manager account.** The roles in use are `owner`, `practitioner` (Nadia Rahman, Tom Whitfield) and `front_desk` (Sofia Marchetti). The `manager` role was added by migration and is seeded in `role_permissions`, but nobody holds it — so the entire manager tier, including `requireManager` and the `team.approve_changes` permission, has never been exercised by a real session. One must be created.
+
+**No patient can sign in.** Three `patients` rows exist and **none** has a `user_id`, so the portal has zero users. Every patient-facing guard, including the `getUnreadMessages` branch that Phase 2 must not break, is currently unreachable in this project.
+
+**One account is locked out and one profile is orphaned.** `z.bassim@hotmail.com` has an auth user and a `profiles` row but no role and no patient record, which sends `getMe` straight into "Your clinic access has been removed" on every sign-in. A second profile, "Invite Test", has no auth user at all — a residue of the invite flow. Neither is a Phase 1 regression; both predate it.
