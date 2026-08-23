@@ -47,6 +47,7 @@ ALTER TABLE public.staff_conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.staff_chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.staff_conversation_reads ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Staff read own conversations" ON public.staff_conversations;
 CREATE POLICY "Staff read own conversations"
   ON public.staff_conversations FOR SELECT TO authenticated
   USING (
@@ -54,6 +55,7 @@ CREATE POLICY "Staff read own conversations"
     AND (user_low = auth.uid() OR user_high = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Staff create conversations they join" ON public.staff_conversations;
 CREATE POLICY "Staff create conversations they join"
   ON public.staff_conversations FOR INSERT TO authenticated
   WITH CHECK (
@@ -61,6 +63,7 @@ CREATE POLICY "Staff create conversations they join"
     AND (user_low = auth.uid() OR user_high = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Staff update own conversations" ON public.staff_conversations;
 CREATE POLICY "Staff update own conversations"
   ON public.staff_conversations FOR UPDATE TO authenticated
   USING (
@@ -72,6 +75,7 @@ CREATE POLICY "Staff update own conversations"
     AND (user_low = auth.uid() OR user_high = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Staff read messages in their threads" ON public.staff_chat_messages;
 CREATE POLICY "Staff read messages in their threads"
   ON public.staff_chat_messages FOR SELECT TO authenticated
   USING (
@@ -83,6 +87,7 @@ CREATE POLICY "Staff read messages in their threads"
     )
   );
 
+DROP POLICY IF EXISTS "Staff send messages in their threads" ON public.staff_chat_messages;
 CREATE POLICY "Staff send messages in their threads"
   ON public.staff_chat_messages FOR INSERT TO authenticated
   WITH CHECK (
@@ -95,6 +100,7 @@ CREATE POLICY "Staff send messages in their threads"
     )
   );
 
+DROP POLICY IF EXISTS "Staff read own read-receipts" ON public.staff_conversation_reads;
 CREATE POLICY "Staff read own read-receipts"
   ON public.staff_conversation_reads FOR SELECT TO authenticated
   USING (
@@ -106,6 +112,7 @@ CREATE POLICY "Staff read own read-receipts"
     )
   );
 
+DROP POLICY IF EXISTS "Staff upsert own read-receipts" ON public.staff_conversation_reads;
 CREATE POLICY "Staff upsert own read-receipts"
   ON public.staff_conversation_reads FOR INSERT TO authenticated
   WITH CHECK (
@@ -118,10 +125,22 @@ CREATE POLICY "Staff upsert own read-receipts"
     )
   );
 
+DROP POLICY IF EXISTS "Staff update own read-receipts" ON public.staff_conversation_reads;
 CREATE POLICY "Staff update own read-receipts"
   ON public.staff_conversation_reads FOR UPDATE TO authenticated
   USING (public.is_staff(auth.uid()) AND user_id = auth.uid())
   WITH CHECK (public.is_staff(auth.uid()) AND user_id = auth.uid());
 
-ALTER PUBLICATION supabase_realtime ADD TABLE public.staff_chat_messages;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.staff_conversation_reads;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.staff_chat_messages;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.staff_conversation_reads;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
