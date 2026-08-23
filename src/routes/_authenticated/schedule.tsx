@@ -453,7 +453,7 @@ function SchedulePage() {
         <div className="page-header">
           <div className="min-w-0">
             <h1 className="page-title">Clinic diary</h1>
-            <p className="mt-1 truncate text-sm text-muted-foreground">{heading}</p>
+            <p className="page-subtitle truncate">{heading}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
@@ -491,7 +491,7 @@ function SchedulePage() {
               className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
             >
               <DialogHeader className="shrink-0 pr-8 text-left">
-                <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+                <DialogTitle>
                   New booking
                 </DialogTitle>
                 <DialogDescription>Patient, treatment, time and payment.</DialogDescription>
@@ -1892,7 +1892,7 @@ function DayPlanner({
       <Dialog open={!!confirmDrop} onOpenChange={(v) => { if (!v) setConfirmDrop(null); }}>
         <DialogContent className="rounded-xl sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif">Move this appointment?</DialogTitle>
+            <DialogTitle>Move this appointment?</DialogTitle>
           </DialogHeader>
           {confirmDrop && dropTarget && (
             <div className="space-y-2 text-sm">
@@ -1915,11 +1915,11 @@ function DayPlanner({
             </div>
           )}
           <DialogFooter className="flex-col gap-2 sm:flex-row">
-            <Button variant="outline" className="" onClick={() => setConfirmDrop(null)}>
+            <Button variant="outline" onClick={() => setConfirmDrop(null)}>
               Keep as it was
             </Button>
             <Button
-              className=""
+             
               enterSubmit
               disabled={reschedule.isPending || !!dropConflict}
               onClick={() => {

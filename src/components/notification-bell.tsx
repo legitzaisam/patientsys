@@ -12,6 +12,7 @@ import { useIdentity } from "@/lib/use-identity";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
 
 /** Unread-message alerts: live badge, dropdown and toast for new incoming messages. */
 export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boolean; scrolled?: boolean }) {
@@ -111,99 +112,108 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
           <p className="text-xs text-muted-foreground">Bookings and unread messages</p>
         </div>
         <ul className="max-h-80 divide-y divide-glass-line overflow-y-auto">
-          {alertList.map((alert) => (
+          {alertList.map((alert) => {
+            const { headline, topic } = parseStaffAlertTitle(alert.title);
+            return (
             <li key={alert.id}>
-              <div className="flex items-start gap-1 pr-2 hover:bg-glass-2">
-              <button
-                type="button"
-                className="flex-1 px-4 py-3 text-left"
-                onClick={async () => {
-                  if (!alert.urgent) setPressedNonUrgent((prev) => new Set(prev).add(alert.id));
-                  await markAlertRead({ data: { id: alert.id } });
-                  queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
-                  if (alert.sender_id) {
-                    navigate({
-                      to: "/team/$id",
-                      params: { id: alert.sender_id },
-                      search: { chat: true },
-                    });
-                  } else if (alert.patient_id) {
-                    navigate({ to: "/patients/$id", params: { id: alert.patient_id } });
-                  } else if (alert.kind === "appointment") {
-                    navigate({ to: "/schedule" });
-                  }
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm ${alert.urgent ? "font-medium text-destructive" : "text-foreground"}`}>
-                    {alert.title}
-                  </span>
-                  <span className={`text-xs ${alert.urgent ? "text-destructive" : "text-destructive-ink"}`}>
-                    {alert.urgent ? "Urgent" : "New"}
-                  </span>
+              <div className="px-4 py-3 hover:bg-glass-2">
+                <div className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={async () => {
+                      if (!alert.urgent) setPressedNonUrgent((prev) => new Set(prev).add(alert.id));
+                      await markAlertRead({ data: { id: alert.id } });
+                      queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+                      if (alert.sender_id) {
+                        navigate({
+                          to: "/team/$id",
+                          params: { id: alert.sender_id },
+                          search: { chat: true },
+                        });
+                      } else if (alert.patient_id) {
+                        navigate({ to: "/patients/$id", params: { id: alert.patient_id } });
+                      } else if (alert.kind === "appointment") {
+                        navigate({ to: "/schedule" });
+                      }
+                    }}
+                  >
+                    <p
+                      className={`text-sm leading-5 ${
+                        alert.urgent ? "font-medium text-destructive" : "font-medium text-foreground"
+                      }`}
+                    >
+                      {headline}
+                    </p>
+                    {topic ? (
+                      <p className="mt-1 text-xs italic text-muted-foreground">{topic}</p>
+                    ) : null}
+                    {alert.body ? (
+                      <p className="mt-1.5 text-xs font-medium leading-snug text-foreground">
+                        {alert.body}
+                      </p>
+                    ) : null}
+                  </button>
+                  <div className="flex h-5 shrink-0 items-center gap-2.5">
+                    <span
+                      className={`text-xs font-semibold leading-none ${
+                        alert.urgent ? "text-destructive" : "text-accent-ink"
+                      }`}
+                    >
+                      {alert.urgent ? "Urgent" : "New"}
+                    </span>
+                    {alert.sender_id && (
+                      <button
+                        type="button"
+                        className="inline-flex text-foreground hover:text-accent-ink"
+                        aria-label={`Message ${alert.sender_name || "sender"}`}
+                        title="Message"
+                        onClick={async () => {
+                          await markAlertRead({ data: { id: alert.id } });
+                          queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+                          navigate({
+                            to: "/team/$id",
+                            params: { id: alert.sender_id! },
+                            search: { chat: true },
+                          });
+                        }}
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                      </button>
+                    )}
+                    {canClear && alert.urgent && (
+                      <button
+                        type="button"
+                        className="inline-flex text-success hover:text-success"
+                        aria-label="Mark as read and completed"
+                        onClick={async () => {
+                          await markAlertRead({ data: { id: alert.id } });
+                          queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+                          toast.success("Marked as read and completed");
+                        }}
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                    )}
+                    {canClear && (
+                      <button
+                        type="button"
+                        className="inline-flex text-muted-foreground hover:text-destructive"
+                        aria-label="Dismiss notification"
+                        onClick={async () => {
+                          await markAlertRead({ data: { id: alert.id } });
+                          queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{alert.body}</p>
-                {alert.sender_name && (
-                  <p className="mt-1 text-2xs text-muted-foreground">{alert.sender_name}</p>
-                )}
-                {alert.sender_id && (
-                  <p className="mt-1.5 text-2xs font-medium text-accent-ink">Message · open chat</p>
-                )}
-              </button>
-              <div className="flex items-center gap-0.5 pt-3">
-                {alert.sender_id && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-foreground hover:text-accent-ink"
-                    aria-label={`Message ${alert.sender_name || "sender"}`}
-                    title="Message"
-                    onClick={async () => {
-                      await markAlertRead({ data: { id: alert.id } });
-                      queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
-                      navigate({
-                        to: "/team/$id",
-                        params: { id: alert.sender_id! },
-                        search: { chat: true },
-                      });
-                    }}
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-                {canClear && alert.urgent && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-success hover:text-success"
-                    aria-label="Mark as read and completed"
-                    onClick={async () => {
-                      await markAlertRead({ data: { id: alert.id } });
-                      queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
-                      toast.success("Marked as read and completed");
-                    }}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-                {canClear && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                  aria-label="Dismiss notification"
-                  onClick={async () => {
-                    await markAlertRead({ data: { id: alert.id } });
-                    queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
-                  }}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-                )}
-              </div>
               </div>
             </li>
-          ))}
+            );
+          })}
           {(data?.items ?? []).map((item) => (
             <li key={item.patient_id}>
               <button
@@ -215,9 +225,11 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
                     : navigate({ to: "/my-record" })
                 }
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">{item.name}</span>
-                  <span className="text-xs text-destructive-ink">{item.count}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium text-foreground">{item.name}</span>
+                  <span className="shrink-0 rounded-full bg-destructive-bg/70 px-2 py-0.5 text-2xs font-semibold text-destructive-ink">
+                    {item.count}
+                  </span>
                 </div>
                 <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.last}</p>
               </button>

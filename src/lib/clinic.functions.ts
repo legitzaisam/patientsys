@@ -2553,7 +2553,9 @@ export const listMyDocuments = createServerFn({ method: "GET" })
     const identity = await loadIdentity(ctx);
     if (!identity.isStaff) throw new Error("Staff access only");
     const targetUserId = data.targetUserId ?? ctx.userId;
-    if (targetUserId !== ctx.userId) await requireOwner(ctx);
+    if (targetUserId !== ctx.userId && !identity.isManager) {
+      throw new Error("Only managers can open staff documents");
+    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const client = targetUserId === ctx.userId ? ctx.supabase : supabaseAdmin;
     const { data: rows, error } = await client
@@ -2611,7 +2613,7 @@ export const deleteMyDocument = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Manager-only: full staff profile, documents and recent change requests for a given user. */
+/** Staff profiles: managers see full HR detail; other staff see a public card for chat/contact. */
 export const getStaffProfile = createServerFn({ method: "GET" })
   .validator((data: { userId: string }) => data)
   .middleware([requireSupabaseAuth])
@@ -2619,22 +2621,63 @@ export const getStaffProfile = createServerFn({ method: "GET" })
     const ctx = context as Ctx;
     const identity = await loadIdentity(ctx);
     if (!identity.isStaff) throw new Error("Staff only");
+    const isSelf = data.userId === ctx.userId;
+    const canViewPrivateDetails = identity.isManager || isSelf;
+    const canViewDocuments = identity.isManager || isSelf;
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: profile }, { data: roles }, { data: docs }, users, { data: requests }] = await Promise.all([
       supabaseAdmin.from("profiles").select("*").eq("id", data.userId).maybeSingle(),
       supabaseAdmin.from("user_roles").select("role").eq("user_id", data.userId),
-      supabaseAdmin.from("staff_documents").select("*").eq("user_id", data.userId).order("created_at", { ascending: false }),
-      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
       supabaseAdmin
-        .from("profile_change_requests")
-        .select("*")
+        .from("staff_documents")
+        .select(canViewDocuments ? "*" : "category")
         .eq("user_id", data.userId)
-        .order("created_at", { ascending: false })
-        .limit(20),
+        .order("created_at", { ascending: false }),
+      canViewPrivateDetails
+        ? supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 })
+        : Promise.resolve({ data: { users: [] as { id: string; email?: string }[] } }),
+      identity.isOwner
+        ? supabaseAdmin
+            .from("profile_change_requests")
+            .select("*")
+            .eq("user_id", data.userId)
+            .order("created_at", { ascending: false })
+            .limit(20)
+        : Promise.resolve({ data: [] as never[] }),
     ]);
-    const email = users.data?.users?.find((u) => u.id === data.userId)?.email ?? "";
+    const email = canViewPrivateDetails
+      ? (users.data?.users?.find((u) => u.id === data.userId)?.email ?? "")
+      : "";
     const role = (roles ?? []).find((r) => r.role !== "patient")?.role ?? "";
-    return { profile, role, email, documents: docs ?? [], requests: requests ?? [] };
+    const presentCategories = [
+      ...new Set((docs ?? []).map((d: { category: string }) => d.category).filter(Boolean)),
+    ];
+    const safeProfile = profile
+      ? canViewPrivateDetails
+        ? profile
+        : {
+            id: profile.id,
+            clinic_id: profile.clinic_id,
+            full_name: profile.full_name,
+            job_title: profile.job_title,
+            avatar_url: profile.avatar_url ?? null,
+            registration_body: null,
+            registration_number: null,
+            commission_rate: null,
+          }
+      : null;
+
+    return {
+      profile: safeProfile,
+      role,
+      email,
+      documents: canViewDocuments ? (docs ?? []) : [],
+      presentCategories,
+      canViewDocuments,
+      canViewPrivateDetails,
+      requests: identity.isOwner ? (requests ?? []) : [],
+    };
   });
 
 /** Retention insight: rolling rate, at-risk patients, cohorts and per-treatment repeat rates. */

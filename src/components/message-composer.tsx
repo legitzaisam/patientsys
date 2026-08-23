@@ -199,7 +199,7 @@ export function MessageComposer({
               </DialogTrigger>
               <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl sm:max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle className="font-serif">Message templates</DialogTitle>
+                  <DialogTitle>Message templates</DialogTitle>
                 </DialogHeader>
                 <ul className="divide-y divide-glass-line">
                   {(templates ?? []).map((t: any) => (
@@ -213,7 +213,7 @@ export function MessageComposer({
                           <p className="mt-1 text-xs text-muted-foreground">{t.body}</p>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
-                          <Button type="button" size="sm" className="" onClick={() => applyTemplate(t.body)}>
+                          <Button type="button" size="sm" onClick={() => applyTemplate(t.body)}>
                             Use
                           </Button>
                           {canDeleteTemplates && (
@@ -255,7 +255,7 @@ export function MessageComposer({
                 <DialogFooter>
                   <Button
                     type="button"
-                    className=""
+                   
                     disabled={saveTemplate.isPending}
                     onClick={() =>
                       saveTemplate.mutate({ data: { title: newTitle, body: newBody, category: newCategory } })

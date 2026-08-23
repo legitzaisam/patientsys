@@ -19,7 +19,7 @@ import {
   PanelLeftClose,
   Search,
 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrivalAlerts } from "@/components/arrival-alerts";
 import { AlertAckToaster } from "@/components/alert-ack-toaster";
@@ -39,14 +39,16 @@ import { NotificationBell } from "@/components/notification-bell";
 import { StaffAlertDialog } from "@/components/staff-alert-dialog";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
-import { listAppointments, listPractitioners } from "@/lib/clinic.functions";
+import { listAppointments, listTeam } from "@/lib/clinic.functions";
 import { clinicDayRange } from "@/lib/clinic-time";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { can } from "@/lib/permissions";
 import { initialsOf, laneFor } from "@/lib/practitioner-colours";
+import { useStaffPresence } from "@/lib/use-staff-presence";
 import { cn } from "@/lib/utils";
 
 type Identity = {
+  userId?: string;
   email: string;
   isStaff: boolean;
   isOwner?: boolean;
@@ -100,7 +102,7 @@ function NavItem({
 function NavGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
-      <p className="px-1.5 pb-2 pt-1 text-[10.5px] font-semibold tracking-[0.02em] text-ink-3">{label}</p>
+      <p className="px-1.5 pb-2 pt-1 text-sm font-semibold tracking-[0.02em] text-ink-3">{label}</p>
       {children}
     </div>
   );
@@ -213,7 +215,8 @@ function SidebarChrome({
   clinicLinks,
   reportLinks,
   extraLinks,
-  practitioners,
+  teamMembers,
+  onlineIds,
   canTeam,
   query,
   setQuery,
@@ -227,7 +230,8 @@ function SidebarChrome({
   clinicLinks: NavLink[];
   reportLinks: NavLink[];
   extraLinks: NavLink[];
-  practitioners: { id: string; full_name: string | null }[];
+  teamMembers: { id: string; fullName: string }[];
+  onlineIds: Set<string>;
   canTeam: boolean;
   query: string;
   setQuery: (value: string) => void;
@@ -288,39 +292,41 @@ function SidebarChrome({
           </NavGroup>
         )}
 
-        {identity.isStaff && practitioners.length > 0 && (
-          <NavGroup label="Practitioners">
-            {practitioners.map((p) => {
-              const name = p.full_name || "Practitioner";
-              const tone = laneFor(p.id);
-              const active = pathname === `/team/${p.id}`;
+        {identity.isStaff && teamMembers.length > 0 && (
+          <NavGroup label="Team">
+            {teamMembers.map((member) => {
+              const name = member.fullName || "Team member";
+              const tone = laneFor(member.id);
+              const active = pathname === `/team/${member.id}`;
+              const online = onlineIds.has(member.id);
               const className = cn(
                 "flex items-center gap-2.5 rounded-[11px] px-2.5 py-2.5 text-[13px] font-medium transition-colors",
                 active
                   ? "bg-[linear-gradient(96deg,var(--accent-soft),transparent_96%)] font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge),inset_0_1px_0_var(--edge-hi)]"
                   : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.12)]",
               );
-              const body = (
-                <>
+              return (
+                <Link
+                  key={member.id}
+                  to="/team/$id"
+                  search={{}}
+                  params={{ id: member.id }}
+                  onClick={onNavigate}
+                  className={className}
+                >
                   <span
                     className={cn(
                       "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-accent-foreground",
                       tone.edge,
+                      online && "ring-2 ring-[#4a9d75] ring-offset-2 ring-offset-[var(--sidebar)]",
                     )}
+                    title={online ? "Online" : undefined}
+                    aria-label={online ? `${name}, online` : name}
                   >
                     {initialsOf(name)}
                   </span>
                   <span className="truncate">{name}</span>
-                </>
-              );
-              return canTeam ? (
-                <Link key={p.id} to="/team/$id" search={{}} params={{ id: p.id }} onClick={onNavigate} className={className}>
-                  {body}
                 </Link>
-              ) : (
-                <span key={p.id} className={className}>
-                  {body}
-                </span>
               );
             })}
           </NavGroup>
@@ -371,15 +377,30 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     setScrolled(false);
   }, [pathname]);
 
-  const fetchPractitioners = useServerFn(listPractitioners);
+  const fetchTeam = useServerFn(listTeam);
   const fetchAppointments = useServerFn(listAppointments);
   const { startISO, endISO } = clinicDayRange();
 
-  const { data: practitioners } = useQuery({
-    queryKey: ["practitioners"],
-    queryFn: () => fetchPractitioners(),
+  const { data: team } = useQuery({
+    queryKey: ["team"],
+    queryFn: () => fetchTeam(),
     enabled: identity.isStaff && sessionReady,
   });
+
+  const teamMembers = useMemo(() => {
+    const rows = team ?? [];
+    const byId = new Map<string, { id: string; fullName: string }>();
+    for (const row of rows) {
+      if (byId.has(row.userId)) continue;
+      byId.set(row.userId, {
+        id: row.userId,
+        fullName: row.fullName?.trim() || row.email || "Team member",
+      });
+    }
+    return [...byId.values()].sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }, [team]);
+
+  const onlineIds = useStaffPresence(Boolean(identity.isStaff && sessionReady), identity.userId);
 
   const { data: todayAppointments } = useQuery({
     queryKey: ["sidebar-diary-count", startISO],
@@ -525,7 +546,8 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     clinicLinks,
     reportLinks,
     extraLinks,
-    practitioners: (practitioners ?? []) as { id: string; full_name: string | null }[],
+    teamMembers,
+    onlineIds,
     canTeam,
     query,
     setQuery,

@@ -138,7 +138,7 @@ function DashboardPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{heading}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{subheading}</p>
+          <p className="page-subtitle">{subheading}</p>
         </div>
       </div>
 
@@ -156,7 +156,7 @@ function DashboardPage() {
 
       <section className="mb-2">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="min-w-0 text-[17px] font-semibold tracking-[-0.016em] text-foreground">
+          <h2 className="min-w-0 section-title">
             {diaryHeading}
           </h2>
           <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -195,7 +195,7 @@ function DashboardPage() {
         <section className="flex min-w-0 flex-1 flex-col gap-6">
           <div>
             <div className="mb-4">
-              <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Attention needed</h2>
+              <h2 className="section-title">Attention needed</h2>
               <p className="text-xs text-muted-foreground">Outstanding items that need action today or this week.</p>
             </div>
             <AttentionList items={[...(data?.attentionItems ?? []), ...incompleteItems]} />

@@ -143,7 +143,7 @@ export function RetentionBreakdown({
       <Tabs value={tab} onValueChange={(value) => setTab(value as keyof typeof PANELS)}>
         <div className="mb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="min-w-0 text-[17px] font-semibold tracking-[-0.016em] text-foreground">
+            <h2 className="min-w-0 section-title">
               {panel.title}
             </h2>
             <TabsList className="ml-auto shrink-0">

@@ -60,7 +60,7 @@ function PerformancePage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Performance</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="page-subtitle">
             Earnings, retention and the clinic split. Practitioners only ever see their own share.
           </p>
         </div>
@@ -81,7 +81,7 @@ function PerformancePage() {
 
       <div className="mb-3 flex items-end justify-between gap-4">
         <div>
-          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Practitioner KPIs</h2>
+          <h2 className="section-title">Practitioner KPIs</h2>
           <p className="text-sm text-muted-foreground">
             Expand a row for cash collected, outstanding balances, and activity. Edit commission under Team.
           </p>

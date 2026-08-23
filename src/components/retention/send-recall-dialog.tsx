@@ -203,7 +203,7 @@ export function SendRecallDialog({
         <Button
           type="button"
           size="sm"
-          className=""
+         
           onClick={(e) => {
             e.preventDefault();
             openDialog();
@@ -215,7 +215,7 @@ export function SendRecallDialog({
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="font-serif">Send recall to {patientName}</DialogTitle>
+          <DialogTitle>Send recall to {patientName}</DialogTitle>
         </DialogHeader>
 
         <Tabs value={channel} onValueChange={(v) => applyChannel(v as Channel)}>
@@ -310,7 +310,7 @@ export function SendRecallDialog({
           <Button
             type="button"
             variant="outline"
-            className=""
+           
             disabled={!body.trim() || saveTemplate.isPending}
             onClick={() => {
               const title = window.prompt("Template name", `Recall (${channel})`);
@@ -325,7 +325,7 @@ export function SendRecallDialog({
           </Button>
           <Button
             type="button"
-            className=""
+           
             disabled={!body.trim() || post.isPending}
             onClick={submit}
           >

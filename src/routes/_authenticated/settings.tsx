@@ -33,7 +33,7 @@ function SettingsPage() {
     <AppShell identity={identity}>
       <div className="mb-6">
         <h1 className="page-title">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="page-subtitle">
           {identity.isManager
             ? "Clinic-wide preferences. Changes here apply to everyone on the team."
             : "Clinic preferences set by your manager."}

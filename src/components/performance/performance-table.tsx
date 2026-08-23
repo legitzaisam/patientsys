@@ -243,7 +243,7 @@ export function PerformanceTable({
             </div>
             <div>
               <p className="text-xs font-medium tracking-[0.02em] text-muted-foreground">Top performer</p>
-              <p className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">
+              <p className="section-title">
                 {top.fullName}{" "}
                 <span className="text-sm font-normal text-muted-foreground">{top.jobTitle || "Practitioner"}</span>
               </p>
@@ -252,7 +252,7 @@ export function PerformanceTable({
               </p>
             </div>
           </div>
-          <Button asChild variant="outline" className="">
+          <Button asChild variant="outline">
             <Link to="/team/$id" search={{}} params={{ id: top.userId }}>
               View profile
             </Link>
@@ -328,7 +328,7 @@ export function PerformanceTable({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className=""
+                         
                           onClick={(e) => {
                             e.stopPropagation();
                             toggle(r.userId);

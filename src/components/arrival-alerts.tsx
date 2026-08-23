@@ -16,10 +16,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getDashboard, updateAppointmentState } from "@/lib/clinic.functions";
+import {
+  isArrivalAlertSnoozed,
+  loadArrivalAlertSnoozes,
+  snoozeArrivalAlert,
+  type ArrivalAlertPhase,
+} from "@/lib/arrival-alert-snooze";
 import { Button } from "@/components/ui/button";
 import { NoShowFollowUpDialog } from "@/components/no-show-followup-dialog";
 
-type Phase = "due" | "arrival" | "late" | "overdue";
+type Phase = ArrivalAlertPhase;
 
 const WINDOW_BEFORE_MS = 5 * 60 * 1000;
 const OVERDUE_MS = 15 * 60 * 1000;
@@ -96,7 +102,8 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
   const fetchDashboard = useServerFn(getDashboard);
   const [now, setNow] = useState(() => Date.now());
   const [collapsed, setCollapsed] = useState(false);
-  const [dismissed, setDismissed] = useState<Record<string, Phase>>({});
+  /** Snooze map (appointment id → until/phase); mirrored in sessionStorage for all pages. */
+  const [snoozes, setSnoozes] = useState(() => loadArrivalAlertSnoozes());
   const [cursor, setCursor] = useState(0);
   const [noShowAppt, setNoShowAppt] = useState<any | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -110,8 +117,29 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
   });
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 15_000);
-    return () => clearInterval(t);
+    const tick = () => {
+      const t = Date.now();
+      setNow(t);
+      setSnoozes(loadArrivalAlertSnoozes(t));
+    };
+    const id = setInterval(tick, 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Re-read snoozes when this shell remounts, and on client navigations
+  // (in case a sibling route remounts us without a full reload).
+  useEffect(() => {
+    setSnoozes(loadArrivalAlertSnoozes());
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setSnoozes(loadArrivalAlertSnoozes());
+    window.addEventListener("pageshow", sync);
+    window.addEventListener("focus", sync);
+    return () => {
+      window.removeEventListener("pageshow", sync);
+      window.removeEventListener("focus", sync);
+    };
   }, []);
 
   useEffect(() => {
@@ -157,7 +185,9 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
       .sort((a, b) => new Date(a.appt.starts_at).getTime() - new Date(b.appt.starts_at).getTime());
   }, [data, now, noShowAppt]);
 
-  const visible = alerts.filter((a) => dismissed[a.appt.id] !== a.phase);
+  const visible = alerts.filter(
+    (a) => !isArrivalAlertSnoozed(a.appt.id, a.phase, now, snoozes),
+  );
 
   const mostUrgentPhase = useMemo<Phase>(() => {
     const order: Phase[] = ["due", "arrival", "late", "overdue"];
@@ -272,9 +302,11 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
               )}
               <button
                 type="button"
-                aria-label="Dismiss this alert"
+                aria-label="Snooze this alert for 5 minutes"
+                title="Snooze for 5 minutes"
                 onClick={() => {
-                  setDismissed((d) => ({ ...d, [a.id]: phase }));
+                  snoozeArrivalAlert(a.id, phase);
+                  setSnoozes(loadArrivalAlertSnoozes());
                   setCursor(0);
                 }}
                 className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"

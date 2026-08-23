@@ -36,7 +36,7 @@ export function RouteErrorBoundary({
         <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-glass-2">
           <AlertTriangle className="h-5 w-5 text-ink-3" aria-hidden />
         </div>
-        <h1 className="mt-4 text-lg font-semibold tracking-tight text-foreground">
+        <h1 className="mt-4 page-title">
           {moduleFailure ? "This page needs a quick reload" : "This page didn't load"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">

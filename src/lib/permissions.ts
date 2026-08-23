@@ -21,7 +21,8 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
   },
   "team.view": {
     label: "Team & staff details",
-    description: "Open the team page and view staff profiles and documents.",
+    description:
+      "Open the team page and staff profiles. Reception sees public details, chat and missing essential documents — private HR fields and file contents stay with managers.",
   },
   "team.approve_changes": {
     label: "Approve profile changes",

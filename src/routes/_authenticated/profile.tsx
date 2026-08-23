@@ -92,7 +92,7 @@ function ProfilePage() {
     <AppShell identity={identity}>
       <div className="mb-6">
         <h1 className="page-title">My profile</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="page-subtitle">
           Changes to your name, role or registration details are reviewed by a manager before they go live.
         </p>
       </div>
@@ -177,7 +177,7 @@ function ProfilePage() {
 
       {!identity.isManager && (
         <Card className="p-5">
-          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Request history</h2>
+          <h2 className="section-title">Request history</h2>
           <div className="mt-4 space-y-3">
             {requests.length === 0 && <p className="text-sm text-muted-foreground">No changes requested yet.</p>}
             {requests.map((r) => {

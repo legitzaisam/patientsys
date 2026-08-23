@@ -211,7 +211,7 @@ function TeamPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Team &amp; access</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="page-subtitle">
             {(team ?? []).length} staff accounts{canAdmin ? " · you hold manager access" : ""}
           </p>
         </div>
@@ -273,15 +273,6 @@ function TeamPage() {
                 )}
                 {canAdmin && (
                   <>
-                    <EditStaffDialog
-                      member={m}
-                      onSave={(data) => update.mutate({ data })}
-                      saving={update.isPending}
-                      onSetPassword={(password) =>
-                        setPassword.mutate({ data: { userId: m.userId, password } })
-                      }
-                      passwordSaving={setPassword.isPending}
-                    />
                     <Button
                       variant="ghost"
                       size="icon"
@@ -302,6 +293,15 @@ function TeamPage() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                    <EditStaffDialog
+                      member={m}
+                      onSave={(data) => update.mutate({ data })}
+                      saving={update.isPending}
+                      onSetPassword={(password) =>
+                        setPassword.mutate({ data: { userId: m.userId, password } })
+                      }
+                      passwordSaving={setPassword.isPending}
+                    />
                   </>
                 )}
               </div>
@@ -315,7 +315,7 @@ function TeamPage() {
             className="rounded-[22px] border border-edge bg-glass-2/50 p-4 lg:sticky lg:top-4"
           >
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h2 className="text-[15px] font-semibold tracking-[-0.016em] text-foreground">
+              <h2 className="section-title">
                 Profile change requests
               </h2>
               {(requests ?? []).filter((r: any) => r.status === "pending").length > 0 && (
@@ -343,10 +343,10 @@ function TeamPage() {
 
       <section className="mt-10 space-y-3">
         <div>
-          <h2 className="text-[15px] font-semibold tracking-[-0.016em] text-foreground">
+          <h2 className="section-title">
             Former team members
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="page-subtitle">
             Staff identity is kept here for 90 days after access is removed. Patient records,
             appointments and clinical notes stay on the system permanently — they are never
             deleted with this archive.
@@ -448,7 +448,7 @@ function EditStaffDialog({
       </DialogTrigger>
       <DialogContent className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
         <DialogHeader className="shrink-0 pr-8 text-left">
-          <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+          <DialogTitle>
             Edit {member.fullName || member.email}
           </DialogTitle>
           <DialogDescription>
@@ -526,7 +526,7 @@ function EditStaffDialog({
           </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="outline" className="text-xs" onClick={() => setOpen(false)}>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
           <Button

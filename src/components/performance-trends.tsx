@@ -62,7 +62,7 @@ function ChartCard({
 }) {
   return (
     <Card className="p-5">
-      <p className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">{title}</p>
+      <p className="section-title">{title}</p>
       <p className="mb-4 text-xs text-muted-foreground">{hint}</p>
       <div className="h-52">
         <ResponsiveContainer width="100%" height="100%">
@@ -100,7 +100,7 @@ export function PerformanceTrends({ trend, practitioners }: Props) {
     <section className="mb-8">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Trends</h2>
+          <h2 className="section-title">Trends</h2>
           <p className="text-sm text-muted-foreground">
             {trend?.monthly ? "By month" : "By day"} over the selected period — clinic total or a single practitioner.
           </p>

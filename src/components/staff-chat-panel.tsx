@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type TouchEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, CheckCheck, MessageSquare, Send } from "lucide-react";
+import { CheckCheck, Send } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { getStaffChat, markStaffChatRead, sendStaffChatMessage } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
-import { cn } from "@/lib/utils";
+import { usePanelWidth } from "@/hooks/use-panel-width";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 
 type ChatMessage = {
@@ -20,15 +21,17 @@ type ChatMessage = {
   readByPeer: boolean;
 };
 
-/** Live 1:1 staff chat with read receipts, shown on a teammate's profile. */
+/** Live 1:1 staff chat — same shell and bubbles as clinic ↔ patient messages. */
 export function StaffChatPanel({
   peerUserId,
   peerName,
   autoFocus = false,
+  onResizeStart,
 }: {
   peerUserId: string;
   peerName?: string;
   autoFocus?: boolean;
+  onResizeStart?: (e: MouseEvent | TouchEvent) => void;
 }) {
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
@@ -36,6 +39,7 @@ export function StaffChatPanel({
   const sendMessage = useServerFn(sendStaffChatMessage);
   const markRead = useServerFn(markStaffChatRead);
   const [draft, setDraft] = useState("");
+  const [chatFontSize, setChatFontSize] = usePanelWidth("staff-chat-font", 12);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const selfId = identity?.userId;
@@ -113,59 +117,84 @@ export function StaffChatPanel({
   if (!enabled) return null;
 
   const title = peerName || data?.peer?.full_name || "Teammate";
+  const messages = (data?.messages as ChatMessage[] | undefined) ?? [];
+
+  function submit() {
+    const body = draft.trim();
+    if (!body || send.isPending) return;
+    send.mutate(body);
+  }
 
   return (
-    <section
-      id="staff-chat"
-      className="glass-card relative flex min-h-[22rem] flex-col overflow-hidden !rounded-2xl p-0 shadow-popover"
-    >
-      <div className="flex items-center gap-2 border-b border-edge px-4 py-3">
-        <MessageSquare className="h-4 w-4 text-muted-foreground" aria-hidden />
+    <Card id="staff-chat" className="relative flex min-h-[420px] flex-col rounded-2xl p-0">
+      {onResizeStart ? (
+        <div
+          className="group absolute -left-3 top-0 bottom-0 z-10 hidden w-6 cursor-col-resize items-center justify-center md:flex"
+          onMouseDown={onResizeStart}
+          onTouchStart={onResizeStart}
+          aria-label="Resize messages panel"
+          role="separator"
+        >
+          <div className="h-10 w-1 rounded-full bg-foreground/20 transition-colors group-hover:bg-foreground/40" />
+        </div>
+      ) : null}
+      <div className="flex items-start justify-between gap-2 border-b border-edge px-5 py-4">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
-            Chat with {title}
-          </h2>
-          <p className="text-2xs text-muted-foreground">Live clinic chat · read receipts</p>
+          <h2 className="section-title">Messages</h2>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            Secure clinic thread with {title}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center rounded-lg border border-edge bg-glass-2 p-0.5">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-5 w-5 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
+            aria-label="Decrease message text size"
+            disabled={chatFontSize <= 10}
+            onClick={() => setChatFontSize(Math.max(10, chatFontSize - 1))}
+          >
+            <span className="text-2xs font-medium leading-none">A−</span>
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-5 w-5 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
+            aria-label="Increase message text size"
+            disabled={chatFontSize >= 18}
+            onClick={() => setChatFontSize(Math.min(18, chatFontSize + 1))}
+          >
+            <span className="text-2xs font-medium leading-none">A+</span>
+          </Button>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
-        {isLoading && <p className="text-xs text-muted-foreground">Loading conversation…</p>}
-        {!isLoading && (data?.messages?.length ?? 0) === 0 && (
-          <p className="py-8 text-center text-xs text-muted-foreground">
-            No messages yet. Say hello to start the thread.
-          </p>
+      <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+        {isLoading && <p className="text-sm text-muted-foreground">Loading conversation…</p>}
+        {!isLoading && messages.length === 0 && (
+          <p className="text-sm text-muted-foreground">No messages yet.</p>
         )}
-        {(data?.messages as ChatMessage[] | undefined)?.map((m) => (
-          <div key={m.id} className={cn("flex", m.mine ? "justify-end" : "justify-start")}>
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            style={{ fontSize: `${chatFontSize}px`, lineHeight: 1.45 }}
+            className={`max-w-[85%] rounded-xl px-3 py-2 ${
+              m.mine ? "ml-auto bg-primary text-primary-foreground" : "bg-glass-2 text-foreground"
+            }`}
+          >
+            <p className="whitespace-pre-wrap break-words">{m.body}</p>
             <div
-              className={cn(
-                "max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-inset-hi",
-                m.mine
-                  ? "rounded-br-md bg-accent-soft text-foreground"
-                  : "rounded-bl-md border border-edge bg-glass-2 text-foreground",
-              )}
+              className="mt-1 flex items-center gap-1 opacity-70"
+              style={{ fontSize: `${Math.max(9, chatFontSize - 3)}px` }}
             >
-              <p className="whitespace-pre-wrap break-words">{m.body}</p>
-              <div
-                className={cn(
-                  "mt-1 flex items-center gap-1 text-2xs",
-                  m.mine ? "justify-end text-muted-foreground" : "text-muted-foreground",
-                )}
-              >
-                <span>
-                  {new Date(m.created_at).toLocaleTimeString("en-GB", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+              <span>{new Date(m.created_at).toLocaleString("en-GB")}</span>
+              {m.mine && m.readByPeer && (
+                <span className="inline-flex items-center gap-0.5" title="Read by teammate">
+                  <CheckCheck className="h-3 w-3" /> Read
                 </span>
-                {m.mine &&
-                  (m.readByPeer ? (
-                    <CheckCheck className="h-3.5 w-3.5 text-accent-ink" aria-label="Read" />
-                  ) : (
-                    <Check className="h-3.5 w-3.5 opacity-70" aria-label="Sent" />
-                  ))}
-              </div>
+              )}
             </div>
           </div>
         ))}
@@ -173,40 +202,38 @@ export function StaffChatPanel({
       </div>
 
       <form
-        className="flex items-end gap-2 border-t border-edge p-3"
+        className="space-y-2 border-t border-edge p-3"
         onSubmit={(e) => {
           e.preventDefault();
-          const body = draft.trim();
-          if (!body || send.isPending) return;
-          send.mutate(body);
+          submit();
         }}
       >
-        <Textarea
-          ref={inputRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={`Message ${title}…`}
-          rows={2}
-          className="min-h-[2.75rem] flex-1 resize-none rounded-2xl"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              const body = draft.trim();
-              if (!body || send.isPending) return;
-              send.mutate(body);
-            }
-          }}
-        />
-        <Button
-          type="submit"
-          size="icon"
-          className="h-10 w-10 shrink-0 rounded-full"
-          disabled={send.isPending || !draft.trim()}
-          aria-label="Send message"
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+        <div className="flex items-end gap-1.5">
+          <Textarea
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={`Message ${title}…`}
+            rows={1}
+            className="min-h-9 h-9 flex-1 resize-none rounded-xl py-2 text-sm leading-5"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+          />
+          <Button
+            type="submit"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            disabled={send.isPending || !draft.trim()}
+            aria-label="Send message"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
       </form>
-    </section>
+    </Card>
   );
 }

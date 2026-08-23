@@ -17,7 +17,7 @@ export function RetentionTrend({ monthly }: { monthly: MonthPoint[] }) {
   }
   return (
     <Card className="p-5">
-      <p className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Retention over time</p>
+      <p className="section-title">Retention over time</p>
       <p className="mb-4 text-xs text-muted-foreground">
         Rolling 12-month rate — patients who came back more than once, measured at the end of each month.
       </p>

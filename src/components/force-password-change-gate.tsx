@@ -120,7 +120,7 @@ export function ForcePasswordChangeGate({
       >
         <h2
           id="force-pw-title"
-          className="text-balance text-[17px] font-semibold tracking-[-0.016em] text-foreground"
+          className="text-balance section-title"
         >
           Choose a new password
         </h2>
@@ -215,7 +215,7 @@ export function StaffWelcomeDialog({
           <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl border border-edge bg-glass-2 text-foreground">
             <Sparkles className="h-4 w-4" aria-hidden />
           </div>
-          <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+          <DialogTitle>
             {hello}
           </DialogTitle>
           <DialogDescription>
@@ -224,7 +224,7 @@ export function StaffWelcomeDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="mt-4 flex justify-end">
-          <Button className="text-xs" onClick={dismiss}>
+          <Button onClick={dismiss}>
             Get started
           </Button>
         </div>

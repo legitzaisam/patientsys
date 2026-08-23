@@ -396,6 +396,23 @@
     color: var(--foreground);
   }
 
+  /* One line under page-title — keep identical across authenticated pages. */
+  .page-subtitle {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: var(--muted-foreground);
+  }
+
+  /* Card / panel / dialog section headings (Messages, Documents, KPIs, …). */
+  .section-title {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.016em;
+    line-height: 1.25;
+    color: var(--foreground);
+  }
+
   /* Title + actions row so header buttons sit on the same line across pages.
      Actions stay end-aligned when the column stacks on narrow viewports. */
   .page-header {

@@ -106,7 +106,7 @@ export function NoShowFollowUpDialog({
     >
       <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-serif">Marked as no show</DialogTitle>
+          <DialogTitle>Marked as no show</DialogTitle>
           <DialogDescription>
             {patientName} missed {a.treatment_name}. Would you like to reschedule now?
           </DialogDescription>
@@ -114,10 +114,10 @@ export function NoShowFollowUpDialog({
 
         {mode === "ask" && (
           <div className="grid gap-2 sm:grid-cols-2">
-            <Button className="" enterSubmit onClick={() => handleAction("reschedule")}>
+            <Button enterSubmit onClick={() => handleAction("reschedule")}>
               <CalendarClock className="mr-2 h-4 w-4" /> Yes, reschedule
             </Button>
-            <Button variant="outline" className="" onClick={() => handleAction("task")}>
+            <Button variant="outline" onClick={() => handleAction("task")}>
               <PhoneCall className="mr-2 h-4 w-4" /> No, follow up later
             </Button>
           </div>
@@ -146,7 +146,7 @@ export function NoShowFollowUpDialog({
               </div>
             </div>
             <div className="flex gap-2" data-slot="dialog-footer">
-              <Button variant="ghost" className="" onClick={() => setMode("ask")}>
+              <Button variant="ghost" onClick={() => setMode("ask")}>
                 Back
               </Button>
               <Button
@@ -187,7 +187,7 @@ export function NoShowFollowUpDialog({
               </p>
             </div>
             <div className="flex gap-2" data-slot="dialog-footer">
-              <Button variant="ghost" className="" onClick={() => setMode("ask")}>
+              <Button variant="ghost" onClick={() => setMode("ask")}>
                 Back
               </Button>
               <Button

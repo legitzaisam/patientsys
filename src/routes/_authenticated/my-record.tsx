@@ -94,7 +94,7 @@ function PortalPage() {
     return (
       <AppShell identity={identity}>
         <Card className="p-8">
-          <h1 className="text-[19px] font-semibold tracking-[-0.016em] text-foreground">No record linked yet</h1>
+          <h1 className="page-title">No record linked yet</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Your clinic will link this account to your patient record. Please check back shortly.
           </p>
@@ -108,7 +108,7 @@ function PortalPage() {
     <AppShell identity={identity}>
       <div className="mb-6">
         <h1 className="page-title">Hello {p.first_name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="page-subtitle">
           Your treatments, forms and messages with the clinic.
         </p>
       </div>
@@ -116,7 +116,7 @@ function PortalPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <Card className="p-5">
-            <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Forms to complete</h2>
+            <h2 className="section-title">Forms to complete</h2>
             <ul className="mt-3 divide-y divide-glass-line">
               {data.documents.map((d: any) => (
                 <li key={d.id} className="py-3">
@@ -145,7 +145,7 @@ function PortalPage() {
                         required
                         className="rounded-xl"
                       />
-                      <Button type="submit" className="">
+                      <Button type="submit">
                         Sign
                       </Button>
                     </form>
@@ -159,7 +159,7 @@ function PortalPage() {
           </Card>
 
           <Card className="p-5">
-            <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Update your health information</h2>
+            <h2 className="section-title">Update your health information</h2>
             <p className="text-xs text-muted-foreground">
               Tell us about changes to medication, allergies, diet or health so your practitioner can treat you safely.
             </p>
@@ -189,7 +189,7 @@ function PortalPage() {
               <PField name="pregnancy" label="Pregnancy or breastfeeding" />
               <PField name="other" label="Anything else" />
               <div className="sm:col-span-2">
-                <Button type="submit" className="" disabled={updateHistory.isPending}>
+                <Button type="submit" disabled={updateHistory.isPending}>
                   Send update to my clinic
                 </Button>
               </div>
@@ -197,7 +197,7 @@ function PortalPage() {
           </Card>
 
           <Card className="p-5">
-            <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My treatments</h2>
+            <h2 className="section-title">My treatments</h2>
             <ul className="mt-3 divide-y divide-glass-line">
               {data.treatments.map((t: any) => (
                 <li key={t.id} className="flex items-center justify-between py-3">
@@ -220,7 +220,7 @@ function PortalPage() {
 
         <Card className="flex h-[calc(100vh-8rem)] flex-col rounded-2xl p-0 lg:sticky lg:top-24">
           <div className="border-b border-edge px-5 py-4">
-            <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Message the clinic</h2>
+            <h2 className="section-title">Message the clinic</h2>
           </div>
           <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
             {data.messages.map((m: any) => (

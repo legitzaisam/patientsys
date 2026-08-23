@@ -136,7 +136,7 @@ function PatientsPage() {
       <div className="page-header !mb-3">
         <div>
           <h1 className="page-title">Patients</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{rows.length} records</p>
+          <p className="page-subtitle">{rows.length} records</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Input
@@ -174,7 +174,7 @@ function PatientsPage() {
             </DialogTrigger>
             <DialogContent className="rounded-xl">
               <DialogHeader>
-                <DialogTitle className="font-serif">New patient</DialogTitle>
+                <DialogTitle>New patient</DialogTitle>
               </DialogHeader>
               <form
                 id="new-patient"

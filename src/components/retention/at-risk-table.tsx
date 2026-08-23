@@ -88,7 +88,7 @@ export function AtRiskTable({
     <Card className="p-5">
       <div className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="min-w-0 text-[17px] font-semibold tracking-[-0.016em] text-foreground">
+          <h2 className="min-w-0 section-title">
             Patients at risk
           </h2>
           <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -260,7 +260,7 @@ export function AtRiskTable({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className=""
+                     
                       disabled={pendingId === r.patientId}
                       onClick={() => onContacted(r.patientId)}
                     >

@@ -137,10 +137,10 @@ function IdentityGate() {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
         <div className="glass-card max-w-md p-8 text-center">
-          <h1 className="text-xl font-semibold tracking-[-0.015em] text-foreground">
+          <h1 className="page-title">
             We could not load your account
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="page-subtitle">
             {error instanceof Error ? error.message : "Something went wrong reaching the clinic."}
           </p>
           <div className="mt-6 flex justify-center gap-2">

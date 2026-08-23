@@ -152,7 +152,7 @@ function EditRecallDialog({
         className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]"
       >
         <DialogHeader className="shrink-0 pr-8 text-left">
-          <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+          <DialogTitle>
             Edit recall task
           </DialogTitle>
           <DialogDescription>
@@ -220,7 +220,7 @@ function EditRecallDialog({
             >
               Cancel
             </Button>
-            <Button type="button" className="text-xs" disabled={save.isPending} onClick={() => save.mutate()}>
+            <Button type="button" disabled={save.isPending} onClick={() => save.mutate()}>
               {save.isPending ? "Saving…" : "Save changes"}
             </Button>
           </div>
@@ -260,7 +260,7 @@ function RetractRecallDialog({
         className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]"
       >
         <DialogHeader className="shrink-0 pr-8 text-left">
-          <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+          <DialogTitle>
             Retract assignment
           </DialogTitle>
           <DialogDescription>
@@ -294,7 +294,7 @@ function RetractRecallDialog({
         </div>
 
         <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="outline" className="text-xs" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
@@ -441,7 +441,7 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
   if (groups.length === 0 && pendingIds.length === 0) {
     return (
       <Card className="mt-4 p-5">
-        <h3 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Recall tasks</h3>
+        <h3 className="section-title">Recall tasks</h3>
         <p className="text-xs text-muted-foreground">
           No recall tasks yet. Assign one from the Retention page by hovering a patient's
           practitioner.
@@ -453,7 +453,7 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
   return (
     <Card className="mt-4 p-5">
       <div className="mb-3">
-        <h3 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Recall tasks</h3>
+        <h3 className="section-title">Recall tasks</h3>
         <p className="text-xs text-muted-foreground">
           Mark contacted or completed — status syncs live for the whole team.
         </p>

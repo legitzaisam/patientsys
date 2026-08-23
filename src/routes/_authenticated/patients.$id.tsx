@@ -280,7 +280,7 @@ function PatientRecord() {
                   {p.last_name}, {p.title ? `${p.title} ` : ""}
                   {p.first_name}
                 </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="page-subtitle">
                   {p.reference} · {p.date_of_birth ? new Date(p.date_of_birth).toLocaleDateString("en-GB") : "DOB not set"} ·{" "}
                   {p.email ?? "no email"} · {p.phone ?? "no phone"}
                 </p>
@@ -299,11 +299,11 @@ function PatientRecord() {
               <div className="flex gap-2">
                 <Dialog open={treatmentOpen} onOpenChange={setTreatmentOpen}>
                   <DialogTrigger asChild>
-                    <Button className="">Record treatment</Button>
+                    <Button>Record treatment</Button>
                   </DialogTrigger>
                   <DialogContent className="rounded-xl">
                     <DialogHeader>
-                      <DialogTitle className="font-serif">Record treatment</DialogTitle>
+                      <DialogTitle>Record treatment</DialogTitle>
                     </DialogHeader>
                     <form
                       id="treatment-form"
@@ -355,7 +355,7 @@ function PatientRecord() {
                       </div>
                     </form>
                     <DialogFooter>
-                      <Button type="submit" form="treatment-form" className="">
+                      <Button type="submit" form="treatment-form">
                         Save treatment
                       </Button>
                     </DialogFooter>
@@ -364,13 +364,13 @@ function PatientRecord() {
 
                 <Dialog open={docOpen} onOpenChange={setDocOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" className="">
+                    <Button variant="outline">
                       Send form
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="rounded-xl">
                     <DialogHeader>
-                      <DialogTitle className="font-serif">Send to patient</DialogTitle>
+                      <DialogTitle>Send to patient</DialogTitle>
                     </DialogHeader>
                     <form
                       id="doc-form"
@@ -412,7 +412,7 @@ function PatientRecord() {
                       </div>
                     </form>
                     <DialogFooter>
-                      <Button type="submit" form="doc-form" className="">
+                      <Button type="submit" form="doc-form">
                         Send
                       </Button>
                     </DialogFooter>
@@ -468,7 +468,7 @@ function PatientRecord() {
             <TabsContent value="visit-notes">
               <Card className="p-5">
                 <div className="mb-3">
-                  <h3 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">
+                  <h3 className="section-title">
                     Visit notes
                   </h3>
                   <p className="text-xs text-muted-foreground">From diary appointments.</p>
@@ -496,7 +496,7 @@ function PatientRecord() {
                   <div className="p-5 lg:border-r lg:border-edge">
                     <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
                       <div>
-                        <h3 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Image comparison</h3>
+                        <h3 className="section-title">Image comparison</h3>
                         <p className="text-xs text-muted-foreground">
                           Select two points in the course to compare side by side.
                         </p>
@@ -634,7 +634,7 @@ function PatientRecord() {
                   {/* Sidebar: treatment history & upload */}
                   <div className="flex flex-col gap-5 border-t border-edge bg-glass-2 p-5 lg:border-t-0">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Treatment history</h3>
+                      <h3 className="section-title">Treatment history</h3>
                       <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-edge-2 bg-glass-2 shadow-inset-hi px-2.5 py-1.5 text-xs font-medium text-accent-ink hover:bg-accent-wash">
                         <Upload className="h-3.5 w-3.5" /> Upload
                         <input
@@ -761,7 +761,7 @@ function PatientRecord() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className=""
+                           
                             onClick={() => resend.mutate({ data: { id: d.id, patient_id: id } })}
                           >
                             Remind
@@ -790,7 +790,7 @@ function PatientRecord() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className=""
+                           
                             onClick={() => markReviewed.mutate({ data: { id: h.id, patient_id: id } })}
                           >
                             Mark reviewed
@@ -829,7 +829,7 @@ function PatientRecord() {
           </div>
           <div className="flex items-start justify-between gap-2 border-b border-edge px-5 py-4">
             <div>
-              <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Messages</h2>
+              <h2 className="section-title">Messages</h2>
               <p className="text-xs text-muted-foreground">Secure clinic ↔ patient thread</p>
             </div>
             <div className="flex shrink-0 items-center rounded-lg border border-edge bg-glass-2 p-0.5">

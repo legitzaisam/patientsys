@@ -53,7 +53,7 @@ function Landing() {
           built around JCCP expectations and UK data protection.
         </p>
         <div className="mt-8 flex gap-3">
-          <Button asChild size="lg" className="">
+          <Button asChild size="lg">
             <Link to="/auth">Open your clinic</Link>
           </Button>
         </div>
@@ -66,7 +66,7 @@ function Landing() {
               <span className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-glass-2 text-ink-3 shadow-inset-hi">
                 <f.icon className="h-4 w-4" />
               </span>
-              <h2 className="mt-4 text-[17px] font-semibold tracking-[-0.016em] text-foreground">{f.title}</h2>
+              <h2 className="mt-4 section-title">{f.title}</h2>
               <p className="mt-2 text-sm text-muted-foreground">{f.body}</p>
             </div>
           ))}

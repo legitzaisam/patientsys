@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -63,12 +63,16 @@ export function StaffAlertDialog({
   recipientName,
   open,
   onOpenChange,
+  defaultTitle = "",
+  defaultBody = "",
 }: {
   children?: ReactNode;
   recipientId?: string;
   recipientName?: string;
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
+  defaultTitle?: string;
+  defaultBody?: string;
 }) {
   const send = useServerFn(sendStaffAlert);
   const fetchTeam = useServerFn(listTeam);
@@ -80,10 +84,16 @@ export function StaffAlertDialog({
   const [target, setTarget] = useState(
     recipientId ? encodeTarget("user", recipientId) : encodeTarget("managers"),
   );
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const [title, setTitle] = useState(defaultTitle);
+  const [body, setBody] = useState(defaultBody);
   const [urgent, setUrgent] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setTitle(defaultTitle);
+    setBody(defaultBody);
+  }, [isOpen, defaultTitle, defaultBody]);
 
   const { data: team } = useQuery({
     queryKey: ["team"],
@@ -102,8 +112,8 @@ export function StaffAlertDialog({
   );
 
   function resetCompose() {
-    setTitle("");
-    setBody("");
+    setTitle(defaultTitle);
+    setBody(defaultBody);
     setUrgent(false);
     if (!lockedToPerson) setTarget(encodeTarget("managers"));
   }
@@ -148,7 +158,7 @@ export function StaffAlertDialog({
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
       <DialogContent className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
         <DialogHeader className="shrink-0 pr-8 text-left">
-          <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+          <DialogTitle>
             {recipientName ? `Message ${recipientName}` : "Alert the team"}
           </DialogTitle>
           <DialogDescription>
@@ -244,10 +254,10 @@ export function StaffAlertDialog({
         </div>
 
         <div className="mt-4 flex justify-end gap-2" data-slot="dialog-footer">
-          <Button variant="outline" className="text-xs" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button className="text-xs" enterSubmit onClick={submit} disabled={saving}>
+          <Button enterSubmit onClick={submit} disabled={saving}>
             <Send className="mr-1 h-4 w-4" />
             {saving ? "Sending…" : "Send"}
           </Button>

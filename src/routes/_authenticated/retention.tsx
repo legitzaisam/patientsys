@@ -90,7 +90,7 @@ function RetentionPage() {
     <AppShell identity={identity}>
       <div className="mb-6">
         <h1 className="page-title">Retention</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="page-subtitle">
           {ownBookOnly
             ? "How well you keep your own patients, and who needs a nudge."
             : "How well the clinic keeps patients, who is slipping away and what to do next."}

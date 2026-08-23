@@ -126,7 +126,7 @@ export function FollowUpTasks() {
   return (
     <section>
       <div className="mb-4">
-        <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">My tasks</h2>
+        <h2 className="section-title">My tasks</h2>
         <p className="text-xs text-muted-foreground">Patients to contact and rebook by chat, phone or email.</p>
       </div>
       {!visible.length ? (

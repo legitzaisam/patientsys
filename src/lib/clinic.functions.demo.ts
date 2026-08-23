@@ -2085,6 +2085,9 @@ export const listMyDocuments = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const me = requireStaff();
     const target = data.targetUserId ?? me.userId;
+    if (target !== me.userId && !me.isManager) {
+      throw new Error("Only managers can open staff documents");
+    }
     return sortDesc(
       staffDocuments.filter((d) => d.user_id === target),
       "created_at",
@@ -2131,18 +2134,40 @@ export const getStaffProfile = createServerFn({ method: "GET" })
   .validator((data: { userId: string }) => data)
   .handler(async ({ data }) => {
     const me = requireStaff();
+    const isSelf = data.userId === me.userId;
+    const canViewPrivateDetails = me.isManager || isSelf;
+    const canViewDocuments = me.isManager || isSelf;
+    const docs = sortDesc(
+      staffDocuments.filter((d) => d.user_id === data.userId),
+      "created_at",
+    );
+    const presentCategories = [...new Set(docs.map((d) => d.category).filter(Boolean))];
+    const profile = profiles.find((p) => p.id === data.userId) ?? null;
+    const safeProfile = profile
+      ? canViewPrivateDetails
+        ? profile
+        : {
+            ...profile,
+            registration_body: null,
+            registration_number: null,
+            commission_rate: null,
+          }
+      : null;
+
     return {
-      profile: profiles.find((p) => p.id === data.userId) ?? null,
+      profile: safeProfile,
       role: roleFor(data.userId),
-      email: db.staffEmails[data.userId] ?? "",
-      documents: sortDesc(
-        staffDocuments.filter((d) => d.user_id === data.userId),
-        "created_at",
-      ),
-      requests: sortDesc(
-        profileChangeRequests.filter((r) => r.user_id === data.userId),
-        "created_at",
-      ).slice(0, 20),
+      email: canViewPrivateDetails ? (db.staffEmails[data.userId] ?? "") : "",
+      documents: canViewDocuments ? docs : [],
+      presentCategories,
+      canViewDocuments,
+      canViewPrivateDetails,
+      requests: me.isOwner
+        ? sortDesc(
+            profileChangeRequests.filter((r) => r.user_id === data.userId),
+            "created_at",
+          ).slice(0, 20)
+        : [],
     };
   });
 

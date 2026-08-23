@@ -377,7 +377,7 @@ function TodayCard({
                   params={{ id: a.patient_id }}
                   onClick={stopCardOpen}
                   onPointerDown={stopCardOpen}
-                  className="block text-[15px] font-semibold leading-snug tracking-[-0.012em] text-foreground text-balance hover:text-accent-ink"
+                  className="block text-sm font-semibold leading-snug tracking-[-0.012em] text-foreground text-balance hover:text-accent-ink"
                 >
                   {patientName}
                 </Link>
@@ -424,7 +424,7 @@ function TodayCard({
           className="max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md gap-0 overflow-y-auto overscroll-contain rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
         >
           <DialogHeader className="pr-8 text-left">
-            <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+            <DialogTitle>
               {cancelStep ? "Cancel appointment" : patientName}
             </DialogTitle>
             <DialogDescription>

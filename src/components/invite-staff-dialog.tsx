@@ -129,7 +129,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
           <DialogHeader className="shrink-0 pr-8 text-left">
-            <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
+            <DialogTitle>
               {result ? "Invitation ready" : "Invite a team member"}
             </DialogTitle>
             <DialogDescription>
@@ -178,7 +178,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                 >
                   Invite another
                 </Button>
-                <Button className="text-xs" asChild>
+                <Button asChild>
                   <a href={mailto}>
                     <Mail className="mr-1 h-4 w-4" />
                     Email instructions
@@ -317,7 +317,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                 </p>
               </div>
               <div className="mt-4 flex justify-end gap-2" data-slot="dialog-footer">
-                <Button type="button" variant="outline" className="text-xs" onClick={() => setOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
                 <Button

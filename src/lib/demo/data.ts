@@ -193,7 +193,7 @@ export const rolePermissions: Row[] = [
   { role: "practitioner", permission: "tasks.delete", enabled: false },
   { role: "front_desk", permission: "reports.retention", enabled: true },
   { role: "front_desk", permission: "reports.performance", enabled: false },
-  { role: "front_desk", permission: "team.view", enabled: false },
+  { role: "front_desk", permission: "team.view", enabled: true },
   { role: "front_desk", permission: "team.approve_changes", enabled: false },
   { role: "front_desk", permission: "settings.treatments", enabled: true },
   { role: "front_desk", permission: "notifications.delete", enabled: false },

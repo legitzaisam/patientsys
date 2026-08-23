@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const BUCKET = "staff-files";
@@ -69,12 +70,15 @@ export function StaffAvatar({
   avatarPath,
   readOnly,
   queryKey,
+  size = "lg",
 }: {
   userId: string;
   fullName: string;
   avatarPath?: string | null;
   readOnly?: boolean;
   queryKey?: string[];
+  /** lg = own profile; sm = compact staff card */
+  size?: "sm" | "lg";
 }) {
   const queryClient = useQueryClient();
   const { data: identity } = useIdentity();
@@ -150,10 +154,22 @@ export function StaffAvatar({
     .toUpperCase();
 
   return (
-    <div className="flex flex-col items-center gap-3 text-center">
-      <Avatar className="h-40 w-40 ring-1 ring-border/60">
+    <div
+      className={cn(
+        "flex flex-col items-center text-center",
+        size === "sm" ? "w-full gap-3" : "gap-3",
+      )}
+    >
+      <Avatar
+        className={cn(
+          "ring-1 ring-border/60",
+          size === "sm" ? "h-20 w-20" : "h-40 w-40",
+        )}
+      >
         {avatarUrl && <AvatarImage src={avatarUrl} alt={`${fullName} profile picture`} />}
-        <AvatarFallback className="text-3xl">{initials || "?"}</AvatarFallback>
+        <AvatarFallback className={size === "sm" ? "text-lg" : "text-3xl"}>
+          {initials || "?"}
+        </AvatarFallback>
       </Avatar>
       <input
         ref={avatarRef}
@@ -163,9 +179,16 @@ export function StaffAvatar({
         onChange={(e) => void handleAvatar(e.target.files?.[0])}
       />
       {!readOnly && (
-        <div className="flex flex-col items-center gap-1">
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => avatarRef.current?.click()}>
-            <Camera className="mr-1.5 h-3.5 w-3.5" /> {avatarPath ? "Change photo" : "Upload photo"}
+        <div className={cn("flex w-full flex-col items-center gap-1.5", size === "sm" && "px-0.5")}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-full max-w-[10.5rem]"
+            disabled={busy}
+            onClick={() => avatarRef.current?.click()}
+          >
+            <Camera className="mr-1.5 h-3.5 w-3.5" />
+            {avatarPath ? "Change photo" : "Upload photo"}
           </Button>
           {avatarPath && (
             <Button
@@ -182,7 +205,9 @@ export function StaffAvatar({
               Remove
             </Button>
           )}
-          <p className="text-2xs text-muted-foreground">JPG or PNG, up to 10 MB</p>
+          <p className="max-w-[10.5rem] text-pretty text-2xs leading-snug text-muted-foreground">
+            JPG or PNG, up to 10 MB
+          </p>
         </div>
       )}
     </div>
@@ -274,7 +299,7 @@ export function StaffDocuments({
     <Card className="p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-[17px] font-semibold tracking-[-0.016em] text-foreground">Documents</h2>
+          <h2 className="section-title">Documents</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             {readOnly
               ? "Records held on file for JCCP and UK clinic practice. Managers can open but not edit these."
