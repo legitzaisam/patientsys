@@ -131,7 +131,7 @@ function useToastPinning() {
       if (!target) return;
 
       // Our in-toast close control handles dismiss itself.
-      if (target.closest("[data-aetheria-quick-reply-close], [data-aetheria-quick-reply-minimize], [data-aetheria-quick-reply-slide]")) return;
+      if (target.closest("[data-aetheria-quick-reply-close], [data-aetheria-quick-reply-minimize]")) return;
 
       const toastEl = target.closest("[data-sonner-toast]") as HTMLElement | null;
       if (!toastEl || toastEl.getAttribute("data-removed") === "true") return;
@@ -256,8 +256,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
         classNames: {
           toast: cn(
             "group toast aetheria-toast !w-[20rem] cursor-pointer",
-            "border border-edge bg-[rgba(255,255,255,0.78)] text-foreground shadow-popover",
-            "backdrop-blur-sm rounded-[22px]",
+            "border border-edge bg-[rgba(255,255,255,0.95)] text-foreground shadow-popover",
+            "backdrop-blur-glass backdrop-saturate-150 rounded-[22px]",
             "!font-sans",
           ),
           title:

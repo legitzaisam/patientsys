@@ -185,9 +185,8 @@ export function FollowUpTasks() {
                 </Button>
                 {t.status === "sent" ? (
                   <Button
-                    size="sm"
+                    size="xs"
                     variant="secondary"
-                    className="h-7 px-2 text-2xs"
                     disabled={update.isPending}
                     onClick={() => update.mutate({ data: { task_id: t.id, status: "contacted" } })}
                   >
@@ -195,9 +194,9 @@ export function FollowUpTasks() {
                   </Button>
                 ) : t.status === "contacted" ? (
                   <Button
-                    size="sm"
+                    size="xs"
                     variant="ghost"
-                    className="inline-flex h-7 items-center gap-1 bg-success-bg px-2 text-2xs font-semibold text-success hover:brightness-105 hover:text-success"
+                    className="gap-1 bg-success-bg font-semibold text-success hover:brightness-105 hover:text-success"
                     disabled={update.isPending}
                     onClick={() => {
                       clearChannel(t.id);
@@ -207,13 +206,12 @@ export function FollowUpTasks() {
                     <Check className="h-3 w-3" /> Contacted
                   </Button>
                 ) : (
-                  <span className="inline-flex h-7 items-center gap-1 rounded-full bg-success-bg px-2 text-2xs font-semibold text-success shadow-inset-hi">
+                  <span className="inline-flex h-7 items-center gap-1 rounded-full bg-success-bg px-2 text-2xs font-semibold leading-none text-success shadow-inset-hi">
                     <Check className="h-3 w-3" /> Contacted
                   </span>
                 )}
                 <Button
-                  size="sm"
-                  className="h-7 px-2 text-2xs"
+                  size="xs"
                   disabled={update.isPending}
                   onClick={() => update.mutate({ data: { task_id: t.id, status: "completed" } })}
                 >

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, ChevronRight, MessageSquare, Minus, Send, X } from "lucide-react";
+import { Check, MessageSquare, Minus, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { getStaffChat, markStaffChatRead, sendStaffChatMessage } from "@/lib/clinic.functions";
 import { DEMO_MODE } from "@/lib/demo/enabled";
@@ -80,115 +80,122 @@ function timeLabel(iso: string) {
 /** How much of the toast stays visible when docked off the left edge. */
 const PEEK_VISIBLE = 0.15;
 
-function dockedTranslate(el: HTMLElement) {
-  const width = el.offsetWidth || 320;
-  const peek = width * PEEK_VISIBLE;
-  const prev = el.style.transform;
-  el.style.transform = "none";
-  const naturalLeft = el.getBoundingClientRect().left;
-  el.style.transform = prev;
-  // Leftmost `peek` pixels stay visible at the viewport edge.
-  const targetLeft = peek - width;
-  return targetLeft - naturalLeft;
-}
-
-function useQuickReplyToastDock(containerRef: React.RefObject<HTMLDivElement | null>) {
+/**
+ * Slide the Sonner toast shell via `left` (not transform) so we don't fight
+ * Sonner's stacking transform, and the whole glass card moves together.
+ */
+function useQuickReplyToastDock(contentRef: React.RefObject<HTMLDivElement | null>) {
   const [docked, setDocked] = useState(false);
-  const [dragOffset, setDragOffset] = useState<number | null>(null);
   const dragging = useRef(false);
   const dragMoved = useRef(false);
-  const dragStart = useRef({ x: 0, offset: 0, width: 320, hidden: -272 });
+  const pointerId = useRef<number | null>(null);
+  const dragStart = useRef({ x: 0, offset: 0, hidden: -272 });
+  const offsetRef = useRef(0);
+  const dockedRef = useRef(docked);
+  dockedRef.current = docked;
 
-  const toastEl = () => containerRef.current?.closest("[data-sonner-toast]") as HTMLElement | null;
+  const shell = () =>
+    contentRef.current?.closest("[data-sonner-toast]") as HTMLElement | null;
+
+  const dockOffset = (el: HTMLElement) => -((el.offsetWidth || 320) * (1 - PEEK_VISIBLE));
+
+  const applyLeft = (el: HTMLElement, x: number, animate: boolean) => {
+    offsetRef.current = x;
+    el.style.left = `${x}px`;
+    el.style.transition = animate
+      ? "left 0.38s cubic-bezier(0.4, 0, 0.2, 1)"
+      : "none";
+    el.dataset.aetheriaDocked = x < -8 || dockedRef.current ? "true" : "false";
+  };
 
   useEffect(() => {
-    const el = toastEl();
+    const el = shell();
     if (!el) return;
-
-    const apply = () => {
-      if (dragging.current && dragOffset !== null) {
-        el.style.transform = `translateX(${dragOffset}px)`;
-        el.style.transition = "none";
-        return;
-      }
-      const hidden = dockedTranslate(el);
-      const x = docked ? hidden : 0;
-      el.style.transform = x === 0 ? "" : `translateX(${x}px)`;
-      el.style.transition = "transform 0.38s cubic-bezier(0.4, 0, 0.2, 1)";
-      el.dataset.aetheriaDocked = docked ? "true" : "false";
-    };
-
-    apply();
-    const ro = new ResizeObserver(apply);
+    applyLeft(el, docked ? dockOffset(el) : 0, true);
+    const ro = new ResizeObserver(() => {
+      if (dragging.current) return;
+      applyLeft(el, dockedRef.current ? dockOffset(el) : 0, false);
+    });
     ro.observe(el);
     return () => {
       ro.disconnect();
-      el.style.transform = "";
+      el.style.left = "";
       el.style.transition = "";
       delete el.dataset.aetheriaDocked;
     };
-  }, [containerRef, docked, dragOffset]);
+  }, [contentRef, docked]);
 
-  const beginDrag = (clientX: number) => {
-    const el = toastEl();
+  useEffect(() => {
+    const el = shell();
     if (!el) return;
-    dragMoved.current = false;
-    const hidden = dockedTranslate(el);
-    const current = dragOffset ?? (docked ? hidden : 0);
-    dragStart.current = {
-      x: clientX,
-      offset: current,
-      width: el.offsetWidth || 320,
-      hidden,
+
+    const isInteractive = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return false;
+      return Boolean(
+        target.closest(
+          "button, a, textarea, input, label, [data-aetheria-quick-reply-close], [data-aetheria-quick-reply-minimize], [data-aetheria-quick-reply-composer]",
+        ),
+      );
     };
-    dragging.current = true;
-    setDragOffset(current);
-  };
 
-  const moveDrag = (clientX: number) => {
-    if (!dragging.current) return;
-    const { x, offset, hidden } = dragStart.current;
-    if (Math.abs(clientX - x) > 4) dragMoved.current = true;
-    const next = Math.max(hidden, Math.min(0, offset + clientX - x));
-    setDragOffset(next);
-  };
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      if (!dockedRef.current && isInteractive(e.target)) return;
+      dragMoved.current = false;
+      const hidden = dockOffset(el);
+      const current = dockedRef.current ? hidden : offsetRef.current;
+      dragStart.current = { x: e.clientX, offset: current, hidden };
+      dragging.current = true;
+      pointerId.current = e.pointerId;
+      applyLeft(el, current, false);
+      el.setPointerCapture(e.pointerId);
+    };
 
-  const endDrag = (toggleOnTap: boolean) => {
-    if (!dragging.current) return;
-    dragging.current = false;
-    const { hidden } = dragStart.current;
-    const final = dragOffset ?? (docked ? hidden : 0);
-    const midpoint = hidden / 2;
-    if (toggleOnTap && !dragMoved.current) {
-      setDocked((prev) => !prev);
-    } else {
-      setDocked(final < midpoint);
-    }
-    setDragOffset(null);
-  };
+    const onMove = (e: PointerEvent) => {
+      if (!dragging.current || pointerId.current !== e.pointerId) return;
+      const { x, offset, hidden } = dragStart.current;
+      if (Math.abs(e.clientX - x) > 6) dragMoved.current = true;
+      applyLeft(el, Math.max(hidden, Math.min(0, offset + (e.clientX - x))), false);
+    };
 
-  const onSlidePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    beginDrag(e.clientX);
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
+    const onUp = (e: PointerEvent) => {
+      if (!dragging.current || pointerId.current !== e.pointerId) return;
+      dragging.current = false;
+      pointerId.current = null;
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
 
-  const onSlidePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!dragging.current) return;
-    e.stopPropagation();
-    moveDrag(e.clientX);
-  };
+      const { hidden } = dragStart.current;
+      const final = offsetRef.current;
+      const dockThreshold = hidden * 0.2;
 
-  const onSlidePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!dragging.current) return;
-    e.stopPropagation();
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-    endDrag(true);
-  };
+      if (dockedRef.current && !dragMoved.current) {
+        setDocked(false);
+        applyLeft(el, 0, true);
+        return;
+      }
+      if (!dragMoved.current) {
+        applyLeft(el, dockedRef.current ? hidden : 0, true);
+        return;
+      }
 
-  return { docked, onSlidePointerDown, onSlidePointerMove, onSlidePointerUp };
+      const shouldDock = final <= dockThreshold;
+      setDocked(shouldDock);
+      applyLeft(el, shouldDock ? hidden : 0, true);
+    };
+
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+    return () => {
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+    };
+  }, [contentRef]);
+
+  return { docked };
 }
 
 /** Expandable toast: reply in place without leaving the current page. */
@@ -212,8 +219,7 @@ function ChatQuickReplyToast({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const { docked, onSlidePointerDown, onSlidePointerMove, onSlidePointerUp } =
-    useQuickReplyToastDock(rootRef);
+  const { docked } = useQuickReplyToastDock(rootRef);
   const peerName = peerFromTitle(title);
   const selfId = identity?.userId;
   const chatEnabled = Boolean(sessionReady && selfId && senderId && selfId !== senderId);
@@ -315,37 +321,9 @@ function ChatQuickReplyToast({
       data-aetheria-quick-reply=""
       data-expanded={expanded ? "true" : "false"}
       data-docked={docked ? "true" : "false"}
-      className="relative w-full text-left"
+      className="relative w-full touch-pan-y text-left"
       onClick={(e) => e.stopPropagation()}
     >
-      <button
-        type="button"
-        data-aetheria-quick-reply-slide=""
-        aria-label={docked ? "Slide message in" : "Slide message aside"}
-        title={docked ? "Slide in" : "Slide aside"}
-        className={cn(
-          "absolute -left-0.5 top-0 z-20 flex h-full w-9 cursor-grab touch-none flex-col items-center justify-center gap-0.5",
-          "rounded-l-[22px] border-r border-edge/60 bg-glass-2/95 text-ink-3 shadow-inset-hi",
-          "transition-colors active:cursor-grabbing hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground",
-          docked && "bg-accent-wash/90 text-accent-ink",
-        )}
-        onPointerDown={onSlidePointerDown}
-        onPointerMove={onSlidePointerMove}
-        onPointerUp={onSlidePointerUp}
-        onPointerCancel={onSlidePointerUp}
-      >
-        <ChevronRight
-          className={cn("h-4 w-4 shrink-0 transition-transform duration-300", !docked && "rotate-180")}
-          strokeWidth={2.25}
-        />
-        {docked ? (
-          <span className="max-w-[2rem] truncate text-[9px] font-semibold leading-tight text-accent-ink">
-            {peerName.split(/\s+/)[0]}
-          </span>
-        ) : null}
-      </button>
-
-      <div className={cn("relative", docked ? "pointer-events-none opacity-0" : "pl-7")}>
       <div className="absolute right-0 top-0 z-10 flex h-7 items-center gap-1.5">
         {expanded ? (
           <button
@@ -428,11 +406,11 @@ function ChatQuickReplyToast({
       {!expanded ? (
         <>
           {preview ? (
-            <div className="mt-2 rounded-xl border border-edge bg-glass-2/90 px-3 py-2">
+            <div className="mt-1 rounded-xl border border-edge bg-glass-2/90 px-3 py-2">
               <p className="line-clamp-3 text-[13px] leading-snug text-foreground">{preview}</p>
             </div>
           ) : null}
-          <div className="mt-2 flex items-center justify-end gap-3">
+          <div className="mt-1 flex items-center justify-end gap-3">
             <button
               type="button"
               className="text-2xs font-semibold text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
@@ -555,7 +533,6 @@ function ChatQuickReplyToast({
         </div>
       )}
       <span className="sr-only">{notificationId}</span>
-      </div>
     </div>
   );
 }
@@ -595,9 +572,9 @@ export function showChatQuickReplyToast(opts: {
       closeButton: false,
       className: cn(
         "aetheria-toast aetheria-quick-reply-toast aetheria-toast-pinned",
-        "border border-edge bg-[rgba(255,255,255,0.78)] text-foreground shadow-popover",
-        "backdrop-blur-sm rounded-[22px]",
-        "!font-sans",
+        "border border-edge bg-[rgba(255,255,255,0.95)] text-foreground shadow-popover",
+        "backdrop-blur-glass backdrop-saturate-150 rounded-[22px]",
+        "!font-sans cursor-grab active:cursor-grabbing",
       ),
       onDismiss: () => {
         unpinAetheriaToast(`team-alert-${opts.notificationId}`);

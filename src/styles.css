@@ -769,9 +769,11 @@
     padding-bottom: 0.75rem !important;
     padding-left: 0.875rem !important;
     padding-right: 2.75rem !important;
-    background: rgba(255, 255, 255, 0.78) !important;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    border-radius: 22px !important;
+    /* True 95% white — don't mix var(--card) (already 0.82 alpha). */
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.5) !important;
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.5) !important;
   }
 
   /* Action / cancel: icon+copy on row 1, button on row 2. */
@@ -874,47 +876,58 @@
     word-break: break-word;
   }
 
-  /* Custom expandable quick-reply toast — own layout, ignore action grid. */
-  [data-sonner-toast].aetheria-quick-reply-toast {
+  /* Quick-reply toast — own layout; dock slides the whole shell via `left`. */
+  [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast {
     display: block !important;
     grid-template-columns: none !important;
     grid-template-areas: none !important;
+    align-items: stretch !important;
+    gap: 0 !important;
     width: 20rem !important;
-    padding: 0.875rem !important;
-    overflow: hidden;
-    cursor: default !important;
-    will-change: transform;
+    padding: 0.75rem 0.875rem !important;
+    border-radius: 22px !important;
+    overflow: hidden !important;
+    cursor: grab !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.5) !important;
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.5) !important;
+    box-shadow:
+      var(--shadow-popover),
+      0 0 0 1px color-mix(in srgb, var(--accent-line) 55%, transparent) !important;
   }
 
-  [data-sonner-toast].aetheria-quick-reply-toast[data-aetheria-docked="true"] {
+  [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast:active {
+    cursor: grabbing !important;
+  }
+
+  [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast[data-aetheria-docked="true"] {
     box-shadow:
       var(--shadow-lift),
-      0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent);
+      0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent) !important;
   }
 
-  [data-sonner-toast].aetheria-quick-reply-toast:has([data-expanded="true"]) {
+  [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast:has([data-expanded="true"]) {
     width: 23rem !important;
     padding-bottom: 0.625rem !important;
-    /* Expanded mini-chat stays more solid for readability. */
-    background: color-mix(in srgb, var(--card) 95%, transparent) !important;
-    backdrop-filter: blur(18px) saturate(1.5);
-    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.5) !important;
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.5) !important;
   }
 
-  [data-sonner-toast].aetheria-quick-reply-toast [data-content] {
+  [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast [data-content],
+  [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast [data-title] {
     display: contents;
   }
 
-  /* Sonner doesn’t render × for custom toasts; we use our own. Hide any stray one. */
-  [data-sonner-toast].aetheria-quick-reply-toast [data-close-button] {
+  [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast [data-close-button] {
     display: none !important;
   }
 
-  [data-sonner-toast].aetheria-quick-reply-toast.aetheria-toast-pinned {
-    cursor: default !important;
+  [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast.aetheria-toast-pinned {
+    cursor: grab !important;
     box-shadow:
       var(--shadow-popover),
-      0 0 0 1px color-mix(in srgb, var(--accent-line) 55%, transparent);
+      0 0 0 1px color-mix(in srgb, var(--accent-line) 55%, transparent) !important;
   }
 
   .quick-reply-thread {

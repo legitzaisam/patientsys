@@ -464,6 +464,35 @@ function PatientRecord() {
             </TabsList>
 
             <TabsContent value="treatments" className="space-y-4">
+              <Card className="p-5">
+                <div className="mb-3">
+                  <h3 className="section-title">Treatment history</h3>
+                  <p className="text-xs text-muted-foreground">Recorded treatments and follow-up dates.</p>
+                </div>
+                <ul className="divide-y divide-glass-line">
+                  {data.treatments.map((t: any) => (
+                    <li key={t.id} className="py-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-foreground">{t.name}</p>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(t.performed_at).toLocaleDateString("en-GB")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {[t.area, t.product, t.dose, t.price ? `£${t.price}` : null].filter(Boolean).join(" · ")}
+                        {t.next_due_at
+                          ? ` · due ${new Date(t.next_due_at).toLocaleDateString("en-GB")}`
+                          : ""}
+                      </p>
+                      {t.notes && <p className="mt-1 text-xs text-foreground/80">{t.notes}</p>}
+                    </li>
+                  ))}
+                  {data.treatments.length === 0 && (
+                    <li className="py-6 text-sm text-muted-foreground">No treatments recorded.</li>
+                  )}
+                </ul>
+              </Card>
+
               <Card ref={bookingsRef} className="p-5">
                 <div className="mb-4">
                   <h3 className="section-title">Upcoming appointments</h3>
@@ -523,35 +552,6 @@ function PatientRecord() {
                     Open diary
                   </Link>
                 </div>
-              </Card>
-
-              <Card className="p-5">
-                <div className="mb-3">
-                  <h3 className="section-title">Treatment history</h3>
-                  <p className="text-xs text-muted-foreground">Recorded treatments and follow-up dates.</p>
-                </div>
-                <ul className="divide-y divide-glass-line">
-                  {data.treatments.map((t: any) => (
-                    <li key={t.id} className="py-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-foreground">{t.name}</p>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(t.performed_at).toLocaleDateString("en-GB")}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {[t.area, t.product, t.dose, t.price ? `£${t.price}` : null].filter(Boolean).join(" · ")}
-                        {t.next_due_at
-                          ? ` · due ${new Date(t.next_due_at).toLocaleDateString("en-GB")}`
-                          : ""}
-                      </p>
-                      {t.notes && <p className="mt-1 text-xs text-foreground/80">{t.notes}</p>}
-                    </li>
-                  ))}
-                  {data.treatments.length === 0 && (
-                    <li className="py-6 text-sm text-muted-foreground">No treatments recorded.</li>
-                  )}
-                </ul>
               </Card>
               <RecallTasksPanel patientId={id} />
             </TabsContent>

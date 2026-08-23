@@ -30,6 +30,7 @@ import {
 } from "@/lib/clinic.functions";
 import { invalidateRecallTasks, useRecallTasksLiveSync } from "@/lib/use-recall-tasks-sync";
 import { useIdentity } from "@/lib/use-identity";
+import { cn } from "@/lib/utils";
 
 type Status = "sent" | "contacted" | "completed";
 
@@ -44,6 +45,19 @@ const STEPS: { key: Status; label: string; icon: typeof Send }[] = [
   { key: "contacted", label: "Contacted", icon: PhoneCall },
   { key: "completed", label: "Completed", icon: CheckCircle2 },
 ];
+
+const STATUS_ORDER: Status[] = ["sent", "contacted", "completed"];
+
+function statusRank(status: Status) {
+  return STATUS_ORDER.indexOf(status);
+}
+
+/** Pressing the active step again steps back one (Sent has nowhere to undo). */
+const PREV_STATUS: Record<Status, Status | null> = {
+  sent: null,
+  contacted: "sent",
+  completed: "contacted",
+};
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Manager",
@@ -361,12 +375,38 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
   });
 
   const update = useMutation({
-    mutationFn: (vars: { task_id: string; status: Status }) => setStatus({ data: vars }),
+    mutationFn: (vars: { task_id: string; status: Status; undo?: boolean }) =>
+      setStatus({ data: { task_id: vars.task_id, status: vars.status } }),
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: ["recall-tasks", patientId] });
+      const previous = queryClient.getQueryData(["recall-tasks", patientId]);
+      queryClient.setQueryData(["recall-tasks", patientId], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        const target = old.find((t: any) => t.id === vars.task_id);
+        const groupId = target?.group_id;
+        return old.map((t: any) => {
+          const same =
+            t.id === vars.task_id || (groupId != null && t.group_id === groupId);
+          if (!same) return t;
+          return { ...t, status: vars.status };
+        });
+      });
+      return { previous };
+    },
     onSuccess: (_r, vars) => {
-      toast.success(`Recall task marked ${STATUS[vars.status].label.toLowerCase()}`);
+      toast.success(
+        vars.undo
+          ? `Recall task unmarked — back to ${STATUS[vars.status].label.toLowerCase()}`
+          : `Recall task marked ${STATUS[vars.status].label.toLowerCase()}`,
+      );
       void invalidateRecallTasks(queryClient);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _vars, ctx) => {
+      if (ctx?.previous !== undefined) {
+        queryClient.setQueryData(["recall-tasks", patientId], ctx.previous);
+      }
+      toast.error(e.message);
+    },
   });
 
   const commitRetract = (
@@ -615,19 +655,42 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
 
               {canUpdate ? (
                 <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-edge/70 pt-2">
-                  {STEPS.map((s) => (
-                    <Button
-                      key={s.key}
-                      size="sm"
-                      variant={status === s.key ? "secondary" : "ghost"}
-                      className="h-7 text-2xs"
-                      disabled={update.isPending || status === s.key}
-                      onClick={() => update.mutate({ task_id: t.id, status: s.key })}
-                    >
-                      <s.icon className="mr-1 h-3 w-3" />
-                      {s.label}
-                    </Button>
-                  ))}
+                  {STEPS.map((s) => {
+                    const isCurrent = status === s.key;
+                    const isSelected = statusRank(s.key) <= statusRank(status);
+                    const undoTo = isCurrent ? PREV_STATUS[s.key] : null;
+                    return (
+                      <Button
+                        key={s.key}
+                        size="xs"
+                        variant={isSelected ? "ghost" : "secondary"}
+                        className={cn(
+                          isSelected &&
+                            "bg-success-bg font-semibold text-success-ink hover:brightness-105 hover:text-success-ink disabled:opacity-100",
+                        )}
+                        disabled={update.isPending}
+                        aria-disabled={isCurrent && !undoTo ? true : undefined}
+                        title={undoTo ? `Press again to undo → ${STATUS[undoTo].label}` : undefined}
+                        aria-pressed={isSelected}
+                        onClick={() => {
+                          if (update.isPending) return;
+                          if (undoTo) {
+                            update.mutate({ task_id: t.id, status: undoTo, undo: true });
+                            return;
+                          }
+                          if (isSelected && !isCurrent) {
+                            update.mutate({ task_id: t.id, status: s.key, undo: true });
+                            return;
+                          }
+                          if (isSelected) return;
+                          update.mutate({ task_id: t.id, status: s.key });
+                        }}
+                      >
+                        <s.icon className="h-3 w-3" />
+                        {s.label}
+                      </Button>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="mt-2.5 border-t border-edge/70 pt-2 text-2xs text-ink-3">
