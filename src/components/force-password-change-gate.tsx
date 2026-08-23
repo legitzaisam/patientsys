@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { acknowledgeWelcome, changeOwnPassword } from "@/lib/clinic.functions";
-import { handleEnterSubmit } from "@/lib/enter-submit";
+import { handleOverlayKeyDown } from "@/lib/overlay-keys";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { Button } from "@/components/ui/button";
@@ -115,7 +115,8 @@ export function ForcePasswordChangeGate({
         aria-modal="true"
         aria-labelledby="force-pw-title"
         className="w-full max-w-md rounded-[22px] border border-edge-2 bg-card/95 p-5 shadow-popover"
-        onKeyDown={handleEnterSubmit}
+        onKeyDown={handleOverlayKeyDown}
+        data-overlay-keys=""
       >
         <h2
           id="force-pw-title"

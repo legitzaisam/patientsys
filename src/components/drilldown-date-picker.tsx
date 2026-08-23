@@ -60,6 +60,7 @@ export function DrilldownDatePicker({
           id={id}
           type="button"
           variant="outline"
+          data-tab-field=""
           className={cn(
             "relative h-9 w-full justify-start pl-[34px] pr-3 text-xs font-normal",
             className,

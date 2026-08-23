@@ -15,6 +15,7 @@ import { installClientErrorReporting } from "../lib/client-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
+import { onDocumentTabBetweenFields } from "@/lib/tab-fields";
 
 function NotFoundComponent() {
   return (
@@ -149,6 +150,11 @@ function RootComponent() {
   }, [router, queryClient]);
 
   useEffect(() => installClientErrorReporting(), []);
+
+  useEffect(() => {
+    document.addEventListener("keydown", onDocumentTabBetweenFields);
+    return () => document.removeEventListener("keydown", onDocumentTabBetweenFields);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

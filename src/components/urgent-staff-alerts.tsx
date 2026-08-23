@@ -136,7 +136,7 @@ export function UrgentStaffAlerts() {
         aria-expanded={false}
         aria-label={`Show ${urgent.length} urgent team alert${urgent.length > 1 ? "s" : ""}`}
         onClick={() => setCollapsed(false)}
-        className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-warning px-3.5 text-xs font-semibold text-warning-ink shadow-glass ring-1 ring-warning/55 transition-all hover:-translate-y-0.5"
+        className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-[#b8a8e0] px-3.5 text-xs font-semibold text-[#4a3a7a] shadow-glass ring-1 ring-warning/40 transition-all hover:-translate-y-0.5"
       >
         <Megaphone className="h-3.5 w-3.5" />
         <span className="tabular-nums">{urgent.length}</span> Alert
@@ -148,14 +148,14 @@ export function UrgentStaffAlerts() {
 
   return (
     <div ref={panelRef} role="region" aria-label="Urgent team alerts" className="w-full">
-      <div className="glass-card relative overflow-hidden !rounded-2xl p-3 shadow-popover ring-1 ring-warning/25">
+      <div className="glass-card relative overflow-hidden !rounded-2xl p-3 shadow-popover ring-1 ring-warning/40">
         <div
-          className="pointer-events-none absolute inset-0 bg-[rgba(224,213,248,0.32)]"
+          className="pointer-events-none absolute inset-0 bg-[rgba(184,168,224,0.52)]"
           aria-hidden
         />
 
         <div className="relative flex items-start gap-2">
-          <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-2xs font-semibold text-warning-ink">
+          <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-[#b8a8e0] px-2 py-0.5 text-2xs font-semibold text-[#4a3a7a]">
             <Megaphone className="h-3 w-3" />
             Team alert
             <span className="tabular-nums">· Urgent</span>
@@ -211,7 +211,7 @@ export function UrgentStaffAlerts() {
 
         <div className="relative mt-2.5 min-w-0">
           <p className="text-xs font-semibold text-foreground">From {fromName}</p>
-          <p className="mt-0.5 text-sm font-semibold text-foreground">{displayTitle}</p>
+          <p className="mt-0.5 truncate text-sm font-semibold text-foreground">{displayTitle}</p>
           {current.body ? (
             <p className="mt-1.5 text-2xs text-muted-foreground line-clamp-3">{current.body}</p>
           ) : null}

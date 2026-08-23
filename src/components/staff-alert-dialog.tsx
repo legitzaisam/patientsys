@@ -1,9 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, Send } from "lucide-react";
-import { sendStaffAlert } from "@/lib/clinic.functions";
+import { listTeam, sendStaffAlert } from "@/lib/clinic.functions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,17 +15,46 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
-type Audience = "managers" | "front_desk" | "all" | "user";
+type Audience = "managers" | "practitioners" | "front_desk" | "all" | "user";
 
-const AUDIENCES: { value: Audience; label: string }[] = [
+const DEPARTMENTS: { value: Exclude<Audience, "user">; label: string }[] = [
   { value: "managers", label: "Owners & managers" },
+  { value: "practitioners", label: "Practitioners" },
   { value: "front_desk", label: "Reception" },
   { value: "all", label: "Everyone" },
 ];
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Owner",
+  manager: "Manager",
+  practitioner: "Practitioner",
+  front_desk: "Reception",
+};
+
+function encodeTarget(audience: Audience, userId?: string) {
+  return audience === "user" ? `user:${userId ?? ""}` : `dept:${audience}`;
+}
+
+function decodeTarget(value: string): { audience: Audience; userId?: string } {
+  if (value.startsWith("user:")) {
+    return { audience: "user", userId: value.slice(5) };
+  }
+  return { audience: value.slice(5) as Exclude<Audience, "user"> };
+}
 
 /** Compose an urgent or standard alert to teammates; lands in their notification bell. */
 export function StaffAlertDialog({
@@ -42,27 +71,61 @@ export function StaffAlertDialog({
   onOpenChange?: (v: boolean) => void;
 }) {
   const send = useServerFn(sendStaffAlert);
+  const fetchTeam = useServerFn(listTeam);
   const queryClient = useQueryClient();
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = open ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
-  const [audience, setAudience] = useState<Audience>(recipientId ? "user" : "managers");
+  const lockedToPerson = Boolean(recipientId);
+  const [target, setTarget] = useState(
+    recipientId ? encodeTarget("user", recipientId) : encodeTarget("managers"),
+  );
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [urgent, setUrgent] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const { data: team } = useQuery({
+    queryKey: ["team"],
+    queryFn: () => fetchTeam(),
+    enabled: isOpen && !lockedToPerson,
+  });
+
+  const teammates = useMemo(
+    () =>
+      (team ?? [])
+        .filter((m: { isSelf?: boolean }) => !m.isSelf)
+        .sort((a: { fullName: string }, b: { fullName: string }) =>
+          (a.fullName || "").localeCompare(b.fullName || ""),
+        ),
+    [team],
+  );
+
+  function resetCompose() {
+    setTitle("");
+    setBody("");
+    setUrgent(false);
+    if (!lockedToPerson) setTarget(encodeTarget("managers"));
+  }
 
   async function submit() {
     if (!title.trim() || !body.trim()) {
       toast.error("Add a subject and a message");
       return;
     }
+    const decoded = lockedToPerson
+      ? { audience: "user" as const, userId: recipientId }
+      : decodeTarget(target);
+    if (decoded.audience === "user" && !decoded.userId) {
+      toast.error("Choose who to send this to");
+      return;
+    }
     setSaving(true);
     try {
       const res = await send({
         data: {
-          audience,
-          ...(recipientId ? { recipientId } : {}),
+          audience: decoded.audience,
+          ...(decoded.audience === "user" ? { recipientId: decoded.userId } : {}),
           title: title.trim(),
           body: body.trim(),
           urgent,
@@ -71,9 +134,7 @@ export function StaffAlertDialog({
       toast.success(`Sent to ${res.sent} ${res.sent === 1 ? "person" : "people"}`);
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
-      setTitle("");
-      setBody("");
-      setUrgent(false);
+      resetCompose();
       setOpen(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not send");
@@ -85,37 +146,65 @@ export function StaffAlertDialog({
   return (
     <Dialog open={isOpen} onOpenChange={setOpen}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent
-        className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]"
-      >
+      <DialogContent className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
         <DialogHeader className="shrink-0 pr-8 text-left">
           <DialogTitle className="text-balance text-[17px] tracking-[-0.016em]">
             {recipientName ? `Message ${recipientName}` : "Alert the team"}
           </DialogTitle>
           <DialogDescription>
-            Delivered instantly to the notification bell of whoever you choose.
+            {recipientName
+              ? "Delivered instantly to their notification bell."
+              : "Choose a department or someone specific — delivered to their notification bell."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-4 space-y-4">
-          {!recipientId && (
+        <div className="mt-4 space-y-3">
+          {!lockedToPerson && (
             <div className="field-stack">
-              <Label>Send to</Label>
-              <div className="flex flex-wrap gap-2">
-                {AUDIENCES.map((a) => (
-                  <Button
-                    key={a.value}
-                    type="button"
-                    size="sm"
-                    variant={audience === a.value ? "selected" : "outline"}
-                    onClick={() => setAudience(a.value)}
-                  >
-                    {a.label}
-                  </Button>
-                ))}
-              </div>
+              <Label htmlFor="alert-target">Send to</Label>
+              <Select value={target} onValueChange={setTarget}>
+                <SelectTrigger id="alert-target">
+                  <SelectValue placeholder="Choose recipients" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">
+                      Department
+                    </SelectLabel>
+                    {DEPARTMENTS.map((d) => (
+                      <SelectItem key={d.value} value={encodeTarget(d.value)}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  {teammates.length > 0 && (
+                    <>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">
+                          Person
+                        </SelectLabel>
+                        {teammates.map(
+                          (m: {
+                            userId: string;
+                            fullName: string;
+                            email: string;
+                            role: string;
+                          }) => (
+                            <SelectItem key={m.userId} value={encodeTarget("user", m.userId)}>
+                              {(m.fullName || m.email || "Teammate") +
+                                (ROLE_LABEL[m.role] ? ` · ${ROLE_LABEL[m.role]}` : "")}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectGroup>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           )}
+
           <div className="field-stack">
             <Label htmlFor="alert-title">Subject</Label>
             <Input
@@ -125,6 +214,7 @@ export function StaffAlertDialog({
               placeholder="Running 15 minutes late"
             />
           </div>
+
           <div className="field-stack">
             <Label htmlFor="alert-body">Message</Label>
             <Textarea
@@ -135,6 +225,7 @@ export function StaffAlertDialog({
               placeholder="Please let my 14:30 patient know…"
             />
           </div>
+
           <div
             className={cn(
               "flex items-center justify-between rounded-2xl border px-4 py-3",

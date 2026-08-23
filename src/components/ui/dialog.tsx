@@ -5,7 +5,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { handleEnterSubmit } from "@/lib/enter-submit";
+import { handleOverlayKeyDown } from "@/lib/overlay-keys";
 import { isToastEventTarget } from "@/lib/toast-target";
 
 const Dialog = DialogPrimitive.Root;
@@ -62,8 +62,9 @@ const DialogContent = React.forwardRef<
       }}
       onKeyDown={(e) => {
         onKeyDown?.(e);
-        handleEnterSubmit(e);
+        handleOverlayKeyDown(e);
       }}
+      data-overlay-keys=""
       className={cn(
         "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border border-edge bg-popover p-6 shadow-popover backdrop-blur-glass backdrop-saturate-150 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
         className,

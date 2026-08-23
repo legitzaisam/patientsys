@@ -1358,7 +1358,7 @@ export const listStaffDirectory = createServerFn({ method: "GET" })
 export const sendStaffAlert = createServerFn({ method: "POST" })
   .validator(
     (data: {
-      audience: "managers" | "front_desk" | "all" | "user";
+      audience: "managers" | "practitioners" | "front_desk" | "all" | "user";
       recipientId?: string;
       title: string;
       body: string;
@@ -1378,9 +1378,11 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
       const wanted =
         data.audience === "managers"
           ? ["owner", "manager"]
-          : data.audience === "front_desk"
-            ? ["front_desk"]
-            : ["owner", "manager", "front_desk", "practitioner"];
+          : data.audience === "practitioners"
+            ? ["practitioner"]
+            : data.audience === "front_desk"
+              ? ["front_desk"]
+              : ["owner", "manager", "front_desk", "practitioner"];
       const { data: roles } = await ctx.supabase.from("user_roles").select("user_id").in("role", wanted);
       recipients = [...new Set((roles ?? []).map((r: { user_id: string }) => r.user_id))] as string[];
     }

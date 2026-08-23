@@ -1329,7 +1329,7 @@ export const listStaffDirectory = createServerFn({ method: "GET" }).handler(asyn
 export const sendStaffAlert = createServerFn({ method: "POST" })
   .validator(
     (data: {
-      audience: "managers" | "front_desk" | "all" | "user";
+      audience: "managers" | "practitioners" | "front_desk" | "all" | "user";
       recipientId?: string;
       title: string;
       body: string;
@@ -1345,9 +1345,11 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
       const wanted =
         data.audience === "managers"
           ? ["owner", "manager"]
-          : data.audience === "front_desk"
-            ? ["front_desk"]
-            : ["owner", "manager", "front_desk", "practitioner"];
+          : data.audience === "practitioners"
+            ? ["practitioner"]
+            : data.audience === "front_desk"
+              ? ["front_desk"]
+              : ["owner", "manager", "front_desk", "practitioner"];
       recipients = [
         ...new Set(userRoles.filter((r) => wanted.includes(r.role)).map((r) => r.user_id)),
       ];
@@ -1507,9 +1509,6 @@ function roleFor(userId: string) {
 export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
   if (!me.isStaff) throw new Error("Staff access only");
-  if (!me.isOwner && !me.permissions.includes("team.view")) {
-    throw new Error("You do not have access to this area");
-  }
   return userRoles
     .filter((r) => r.role !== "patient")
     .map((r) => {
