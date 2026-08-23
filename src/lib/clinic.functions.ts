@@ -1491,18 +1491,36 @@ export const dismissStaffInboxItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const { data: row, error: fetchErr } = await ctx.supabase
-      .from("staff_notifications")
-      .select("id, recipient_id, sender_id, read_at")
-      .eq("id", data.id)
-      .maybeSingle();
-    if (fetchErr) throw new Error(fetchErr.message);
-    if (!row) throw new Error("Message not found");
+    await dismissStaffInboxRows(ctx, [data.id]);
+    return { ok: true };
+  });
 
-    const now = new Date().toISOString();
+/** Hide several inbox rows for the signed-in user (e.g. whole peer stack). */
+export const dismissStaffInboxItems = createServerFn({ method: "POST" })
+  .validator((data: { ids: string[] }) => data)
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const ids = [...new Set(data.ids.filter(Boolean))];
+    if (ids.length === 0) return { ok: true };
+    await dismissStaffInboxRows(ctx, ids);
+    return { ok: true };
+  });
+
+async function dismissStaffInboxRows(ctx: Ctx, ids: string[]) {
+  const { data: rows, error: fetchErr } = await ctx.supabase
+    .from("staff_notifications")
+    .select("id, recipient_id, sender_id, read_at")
+    .in("id", ids);
+  if (fetchErr) throw new Error(fetchErr.message);
+  if (!rows?.length) throw new Error("Message not found");
+
+  const now = new Date().toISOString();
+  let updated = 0;
+  for (const row of rows) {
     const isRecipient = row.recipient_id === ctx.userId;
     const isSender = row.sender_id === ctx.userId;
-    if (!isRecipient && !isSender) throw new Error("You can only dismiss your own messages");
+    if (!isRecipient && !isSender) continue;
 
     const patch: {
       recipient_dismissed_at?: string;
@@ -1515,10 +1533,12 @@ export const dismissStaffInboxItem = createServerFn({ method: "POST" })
     }
     if (isSender) patch.sender_dismissed_at = now;
 
-    const { error } = await ctx.supabase.from("staff_notifications").update(patch).eq("id", data.id);
+    const { error } = await ctx.supabase.from("staff_notifications").update(patch).eq("id", row.id);
     if (error) throw new Error(error.message);
-    return { ok: true };
-  });
+    updated += 1;
+  }
+  if (updated === 0) throw new Error("You can only dismiss your own messages");
+}
 
 /** Alerts the signed-in staff member sent recently (seen / waiting per recipient). */
 export const listSentStaffAlerts = createServerFn({ method: "GET" })

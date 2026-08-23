@@ -1294,25 +1294,41 @@ export const markStaffNotificationRead = createServerFn({ method: "POST" })
 export const dismissStaffInboxItem = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    const me = identity();
-    const row = staffNotifications.find((n) => n.id === data.id) as
-      | (typeof staffNotifications)[number] & {
-          recipient_dismissed_at?: string | null;
-          sender_dismissed_at?: string | null;
-        }
-      | undefined;
-    if (!row) throw new Error("Message not found");
-    const now = new Date().toISOString();
+    dismissDemoInboxIds([data.id]);
+    return { ok: true };
+  });
+
+/** Hide several inbox rows for the signed-in user (e.g. whole peer stack). */
+export const dismissStaffInboxItems = createServerFn({ method: "POST" })
+  .validator((data: { ids: string[] }) => data)
+  .handler(async ({ data }) => {
+    dismissDemoInboxIds(data.ids);
+    return { ok: true };
+  });
+
+function dismissDemoInboxIds(ids: string[]) {
+  const me = identity();
+  const now = new Date().toISOString();
+  const wanted = new Set(ids);
+  let found = false;
+  for (const n of staffNotifications) {
+    if (!wanted.has(n.id)) continue;
+    found = true;
+    const row = n as typeof n & {
+      recipient_dismissed_at?: string | null;
+      sender_dismissed_at?: string | null;
+    };
     const isRecipient = row.recipient_id === me.userId;
     const isSender = row.sender_id === me.userId;
-    if (!isRecipient && !isSender) throw new Error("You can only dismiss your own messages");
+    if (!isRecipient && !isSender) continue;
     if (isRecipient) {
       row.recipient_dismissed_at = now;
       if (!row.read_at) row.read_at = now;
     }
     if (isSender) row.sender_dismissed_at = now;
-    return { ok: true };
-  });
+  }
+  if (!found) throw new Error("Message not found");
+}
 
 /** Alerts the signed-in staff member sent recently (seen / waiting per recipient). */
 export const listSentStaffAlerts = createServerFn({ method: "GET" }).handler(async () => {
