@@ -81,15 +81,11 @@ export function bookingDetailsMessage(opts: {
   return body;
 }
 
-export function bookingNotifyDescription(email?: string | null, phone?: string | null) {
-  const parts: string[] = [];
-  if (email) parts.push(`email (${email})`);
-  if (phone) parts.push(`text (${phone})`);
-  if (parts.length === 0) {
-    return "Confirmation saved to their patient portal. Add email or mobile to send email and text next time.";
-  }
-  if (parts.length === 2) {
-    return `Confirmation and payment details sent by ${parts[0]} and ${parts[1]}.`;
-  }
-  return `Confirmation and payment details sent by ${parts[0]}.`;
+/**
+ * Booking confirmations reach the patient's portal thread and nowhere else:
+ * the clinic has no email or SMS transport yet. Do not reinstate a claim that
+ * either was sent until dispatch actually exists.
+ */
+export function bookingNotifyDescription() {
+  return "Confirmation and payment details saved to their patient portal.";
 }

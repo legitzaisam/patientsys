@@ -868,7 +868,7 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
           ).toLocaleDateString("en-GB")}, please complete and sign your consent form. You can open and sign it securely from your patient portal.`,
         },
       },
-      { onSuccess: () => toast.success(`Consent reminder sent to ${target}`) },
+      { onSuccess: () => toast.success("Consent reminder posted to their patient portal") },
     );
   };
 
@@ -943,7 +943,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
     }
     send.mutate(
       { data: { patient_id: a.patient_id, as: "staff" as const, body } },
-      { onSuccess: () => toast.success(`${label} sent to ${target}`) },
+      { onSuccess: () => toast.success(`${label} posted to their patient portal`) },
     );
   };
 

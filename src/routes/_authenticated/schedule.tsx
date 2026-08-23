@@ -398,9 +398,9 @@ function SchedulePage() {
 
   const book = useMutation({
     mutationFn: useServerFn(saveAppointment),
-    onSuccess: (res) => {
+    onSuccess: () => {
       toast.success("Appointment booked", {
-        description: bookingNotifyDescription(res?.email, res?.phone),
+        description: bookingNotifyDescription(),
       });
       setOpen(false);
       setNewPatient(false);
@@ -795,7 +795,7 @@ function SchedulePage() {
 
                         {bookingPayAction === "unpaid" && (
                           <p className="text-2xs text-muted-foreground">
-                            Confirmation is sent by email and text with a full payment link.
+                            Confirmation and payment link are saved to their patient portal.
                           </p>
                         )}
 
@@ -833,11 +833,11 @@ function SchedulePage() {
                                 <span className="font-semibold text-foreground">
                                   {formatMoney(selectedAmount)}
                                 </span>
-                                . Confirmation is still sent by email and text.
+                                . Confirmation is still saved to their portal.
                               </p>
                             ) : (
                               <p className="text-2xs text-muted-foreground">
-                                After booking, confirmation goes by email and text with a{" "}
+                                After booking, confirmation goes to their patient portal with a{" "}
                                 {bookingPayKind === "deposit" ? "deposit" : "full payment"} link for{" "}
                                 <span className="font-semibold text-foreground">
                                   {formatMoney(selectedAmount)}
@@ -1046,7 +1046,7 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
     }
     send.mutate(
       { data: { patient_id: a.patient_id, as: "staff" as const, body } },
-      { onSuccess: () => toast.success(`${label} sent to ${target}`) },
+      { onSuccess: () => toast.success(`${label} posted to their patient portal`) },
     );
   };
 
@@ -1233,7 +1233,7 @@ function ConsentChip({ a, signed, compact }: { a: any; signed: boolean; compact?
           ).toLocaleDateString("en-GB")}, please complete and sign your consent form. You can open and sign it securely from your patient portal — it only takes a couple of minutes.`,
         },
       },
-      { onSuccess: () => toast.success(`Consent reminder sent to ${target}`) },
+      { onSuccess: () => toast.success("Consent reminder posted to their patient portal") },
     );
   };
 

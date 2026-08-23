@@ -142,7 +142,7 @@ function PatientRecord() {
   const issueDocument = useMutation({
     mutationFn: useServerFn(sendDocument),
     onSuccess: () => {
-      toast.success("Sent to patient");
+      toast.success("Consent form issued - it is now in their portal");
       setDocOpen(false);
       invalidate();
     },
@@ -151,7 +151,7 @@ function PatientRecord() {
   const resend = useMutation({
     mutationFn: useServerFn(resendDocument),
     onSuccess: () => {
-      toast.success("Reminder sent");
+      toast.success("Reminder posted to their portal");
       invalidate();
     },
   });

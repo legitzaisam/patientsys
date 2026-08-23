@@ -956,7 +956,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       );
     }
 
-    // Confirmation + payment link for email/text (and portal thread).
+    // Confirmation + payment link, written to the patient's portal thread.
     const [{ data: patient }, { data: practitioner }] = await Promise.all([
       supabase.from("patients").select("first_name, last_name, email, phone").eq("id", data.patient_id).maybeSingle(),
       supabase.from("profiles").select("full_name").eq("id", payload.practitioner_id).maybeSingle(),
