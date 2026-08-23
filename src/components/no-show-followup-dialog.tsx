@@ -104,8 +104,8 @@ export function NoShowFollowUpDialog({
         }
       }}
     >
-      <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
+        <DialogHeader className="shrink-0 pr-8 text-left">
           <DialogTitle>Marked as no show</DialogTitle>
           <DialogDescription>
             {patientName} missed {a.treatment_name}. Would you like to reschedule now?
@@ -113,18 +113,18 @@ export function NoShowFollowUpDialog({
         </DialogHeader>
 
         {mode === "ask" && (
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button enterSubmit onClick={() => handleAction("reschedule")}>
-              <CalendarClock className="mr-2 h-4 w-4" /> Yes, reschedule
-            </Button>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => handleAction("task")}>
               <PhoneCall className="mr-2 h-4 w-4" /> No, follow up later
+            </Button>
+            <Button enterSubmit onClick={() => handleAction("reschedule")}>
+              <CalendarClock className="mr-2 h-4 w-4" /> Yes, reschedule
             </Button>
           </div>
         )}
 
         {mode === "reschedule" && (
-          <div className="space-y-3">
+          <div className="mt-4 space-y-3">
             <div className="field-stack">
               <Label className="text-2xs uppercase tracking-wide text-muted-foreground">New date</Label>
               <DrilldownDatePicker value={date} onChange={setDate} />
@@ -141,16 +141,16 @@ export function NoShowFollowUpDialog({
                   step={300}
                   value={time}
                   onChange={(e) => setTime(e.target.value)}
-                  className="h-9 w-full rounded-xl border-input bg-background pl-[34px] text-xs font-normal md:text-xs"
+                  className="h-9 w-full rounded-xl border-input bg-background pl-[34px] pr-2 text-xs font-normal md:text-xs [&::-webkit-datetime-edit]:p-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-2 [&::-webkit-calendar-picker-indicator]:h-4 [&::-webkit-calendar-picker-indicator]:w-4 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
                 />
               </div>
             </div>
-            <div className="flex gap-2" data-slot="dialog-footer">
-              <Button variant="ghost" onClick={() => setMode("ask")}>
+            <div className="flex justify-end gap-2" data-slot="dialog-footer">
+              <Button type="button" variant="outline" onClick={() => setMode("ask")}>
                 Back
               </Button>
               <Button
-                className="flex-1 "
+                type="button"
                 enterSubmit
                 disabled={rebook.isPending}
                 onClick={() =>
@@ -170,7 +170,7 @@ export function NoShowFollowUpDialog({
         )}
 
         {mode === "task" && (
-          <div className="space-y-3">
+          <div className="mt-4 space-y-3">
             <div className="field-stack">
               <Label htmlFor="no-show-note" className="text-2xs uppercase tracking-wide text-muted-foreground">
                 Task note
@@ -186,12 +186,12 @@ export function NoShowFollowUpDialog({
                 This appears in “My tasks” on the dashboard so the patient can be contacted by chat, phone or email.
               </p>
             </div>
-            <div className="flex gap-2" data-slot="dialog-footer">
-              <Button variant="ghost" onClick={() => setMode("ask")}>
+            <div className="flex justify-end gap-2" data-slot="dialog-footer">
+              <Button type="button" variant="outline" onClick={() => setMode("ask")}>
                 Back
               </Button>
               <Button
-                className="flex-1 "
+                type="button"
                 enterSubmit
                 disabled={task.isPending}
                 onClick={() =>

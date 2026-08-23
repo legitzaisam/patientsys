@@ -13,6 +13,7 @@ import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { parseStaffAlertTitle, formatTeamAlertToast } from "@/lib/staff-alert-title";
+import { cn } from "@/lib/utils";
 import { showChatQuickReplyToast } from "@/components/chat-quick-reply-toast";
 
 const TEAM_KINDS = new Set(["urgent", "staff_message", "staff_chat"]);
@@ -59,7 +60,13 @@ function showTeamAlertToast(opts: {
 }
 
 /** Unread-message alerts: live badge, dropdown and toast for new incoming messages. */
-export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boolean; scrolled?: boolean }) {
+export function NotificationBell({
+  isStaff,
+  chipClassName,
+}: {
+  isStaff: boolean;
+  chipClassName?: string;
+}) {
   const { data: identity } = useIdentity();
   const canClear = can(identity, "notifications.delete");
   const queryClient = useQueryClient();
@@ -189,11 +196,12 @@ export function NotificationBell({ isStaff, scrolled = false }: { isStaff: boole
     <Popover>
       <PopoverTrigger asChild>
         <Button
-          variant={scrolled ? "outline" : "ghost"}
+          variant="ghost"
           size="icon"
-          className={`relative hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground hover:shadow-lift active:bg-[rgba(47,63,102,0.14)] ${
-            scrolled ? "" : "border border-transparent"
-          }`}
+          className={cn(
+            "relative h-9 w-9",
+            chipClassName ?? "border border-transparent",
+          )}
           aria-label={`Notifications${total ? `, ${total} unread` : ""}`}
         >
           <Bell className="h-4 w-4" />

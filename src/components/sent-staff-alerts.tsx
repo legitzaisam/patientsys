@@ -15,21 +15,14 @@ import {
 } from "@/lib/clinic.functions";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
 import { cn } from "@/lib/utils";
 
 const TEAM_KINDS = new Set(["urgent", "staff_message", "staff_chat"]);
 
-/** ~5 peer stacks visible before scroll. */
-const INBOX_LIST_MAX_H = "max-h-[calc(5*6.25rem+4*0.75rem)]";
+/** ~5 peer stacks visible before scroll inside the toolbar popover. */
+const INBOX_LIST_MAX_H = "max-h-80";
 
 type InboxRow = {
   id: string;
@@ -157,7 +150,7 @@ function MessageRow({
         disabled={!row.peerId}
         className={cn(
           "min-w-0 flex-1 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-70",
-          compact ? "px-3 py-2.5" : "px-3.5 py-3",
+          compact ? "px-2 py-2" : "px-3.5 py-3",
         )}
         aria-label={`Open chat with ${row.peerName}`}
       >
@@ -213,12 +206,17 @@ function PeerMessageStack({
   const count = group.items.length;
   const hasStack = count > 1;
   const unreadInGroup = group.items.filter((r) => r.direction === "in" && !r.read_at).length;
-  const plateCount = Math.min(count - 1, 2);
+  /** Single under-plate: tucks under the card, thin peek only. */
+  const PLATE_PEEK = 4;
+  const PLATE_HEIGHT = 7;
+  const PLATE_INSET = 8;
+  const stackTailHeight = PLATE_PEEK + 2;
 
   if (!hasStack) {
     return (
       <MessageRow
         row={latest}
+        compact
         onOpen={() => onOpenChat(latest)}
         onDismiss={(e) => onDismiss(latest, e)}
         dismissing={dismissingId === latest.id}
@@ -237,8 +235,10 @@ function PeerMessageStack({
         className={cn(
           "relative z-[1] overflow-hidden rounded-2xl border border-edge bg-glass-2 shadow-inset-hi transition-colors",
           STACK_MOTION,
+          !expanded &&
+            "border-edge-2 bg-[color-mix(in_srgb,var(--foreground)_7%,var(--glass-2))]",
           "hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)]",
-          expanded && "bg-[rgba(47,63,102,0.04)]",
+          expanded && "border-edge bg-[rgba(47,63,102,0.04)]",
         )}
       >
         <div
@@ -262,8 +262,8 @@ function PeerMessageStack({
               : `Expand ${count} messages with ${group.peerName}`
           }
           className={cn(
-            "flex cursor-pointer items-start gap-2 pl-3.5 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            expanded ? "py-2.5" : "pb-3 pt-2.5",
+            "flex cursor-pointer items-start gap-2 px-2 pr-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            expanded ? "py-2" : "pb-2.5 pt-2",
             !group.peerId && "cursor-default",
           )}
         >
@@ -365,47 +365,38 @@ function PeerMessageStack({
         </div>
       </div>
 
-      {/* Tight under-stack edges — obvious, not tall; click expands */}
-      <div
-        className={cn(
-          "pointer-events-none relative z-0 transition-opacity",
-          STACK_MOTION,
-          expanded ? "h-0 opacity-0" : "h-[14px] opacity-100",
-          !expanded && group.peerId && "pointer-events-auto cursor-pointer",
-        )}
-        aria-hidden
-        onClick={() => {
-          if (!expanded && group.peerId) onExpand();
-        }}
-      >
-        {Array.from({ length: plateCount }, (_, i) => {
-          const depth = i + 1;
-          return (
-            <div
-              key={`plate-${depth}`}
-              className="absolute left-0 right-0 rounded-b-2xl border border-t-0 border-edge bg-glass-2"
-              style={{
-                top: depth * 5 - 2,
-                left: depth * 8,
-                right: depth * 8,
-                height: 12,
-                opacity: 0.75 - i * 0.2,
-                zIndex: -depth,
-              }}
-            />
-          );
-        })}
-      </div>
+      {!expanded && (
+        <div
+          className={cn(
+            "pointer-events-none relative z-0 -mt-[5px] transition-opacity",
+            STACK_MOTION,
+            group.peerId && "pointer-events-auto cursor-pointer",
+          )}
+          style={{ height: stackTailHeight }}
+          aria-hidden
+          onClick={() => {
+            if (group.peerId) onExpand();
+          }}
+        >
+          <div
+            className="absolute left-0 right-0 rounded-b-xl border border-t-0 border-[color-mix(in_srgb,var(--foreground)_14%,transparent)] bg-[color-mix(in_srgb,var(--foreground)_10%,#fff)]"
+            style={{
+              top: 0,
+              left: PLATE_INSET,
+              right: PLATE_INSET,
+              height: PLATE_HEIGHT,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 /** Toolbar inbox: team alerts and chat you received or sent. */
 export function SentStaffAlerts({
-  scrolled = false,
   className,
 }: {
-  scrolled?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -504,7 +495,7 @@ export function SentStaffAlerts({
     void queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
   }
 
-  function setDialogOpen(next: boolean) {
+  function handleOpenChange(next: boolean) {
     setOpen(next);
     if (!next) setExpandedPeers(new Set());
   }
@@ -519,7 +510,7 @@ export function SentStaffAlerts({
   }
 
   async function openChatWith(row: InboxRow) {
-    setDialogOpen(false);
+    handleOpenChange(false);
     if (row.direction === "in" && !row.read_at) {
       await markAlertRead({ data: { id: row.id } });
       invalidateInbox();
@@ -569,16 +560,12 @@ export function SentStaffAlerts({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setDialogOpen}>
-      <DialogTrigger asChild>
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
         <Button
-          variant={scrolled ? "outline" : "ghost"}
+          variant="ghost"
           size="icon"
-          className={cn(
-            "relative h-9 w-9",
-            className,
-            !scrolled && "border border-transparent",
-          )}
+          className={cn("relative h-9 w-9", className)}
           aria-label={unreadCount ? `Team messages, ${unreadCount} unread` : "Team messages"}
         >
           <Inbox className="h-4 w-4" />
@@ -588,23 +575,23 @@ export function SentStaffAlerts({
             </span>
           ) : null}
         </Button>
-      </DialogTrigger>
-      <DialogContent className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge bg-card/95 p-5 shadow-popover backdrop-blur-glass backdrop-saturate-150 sm:rounded-[22px]">
-        <DialogHeader className="shrink-0 space-y-1 pr-8 text-left">
-          <DialogTitle>Team messages</DialogTitle>
-          <DialogDescription>Last 7 days · tap a stack to expand</DialogDescription>
-        </DialogHeader>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 rounded-2xl p-0">
+        <div className="bg-glass-2 px-4 py-3">
+          <p className="text-sm font-medium text-foreground">Team messages</p>
+          <p className="text-xs text-muted-foreground">Last 7 days · tap a stack to expand</p>
+        </div>
         <ul
           className={cn(
-            "mt-4 -mr-4 min-h-0 shrink space-y-3.5 overflow-y-auto overscroll-contain pr-3.5",
+            "space-y-3 overflow-y-auto overscroll-contain px-2 pb-4 pt-3",
             INBOX_LIST_MAX_H,
           )}
         >
           {isLoading && (
-            <li className="py-8 text-center text-sm text-muted-foreground">Loading…</li>
+            <li className="py-6 text-center text-sm text-muted-foreground">Loading…</li>
           )}
           {!isLoading && groups.length === 0 && (
-            <li className="py-8 text-center text-sm text-muted-foreground">
+            <li className="py-6 text-center text-sm text-muted-foreground">
               No team messages this week.
             </li>
           )}
@@ -624,7 +611,7 @@ export function SentStaffAlerts({
             </li>
           ))}
         </ul>
-      </DialogContent>
-    </Dialog>
+      </PopoverContent>
+    </Popover>
   );
 }

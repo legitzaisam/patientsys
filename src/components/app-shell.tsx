@@ -19,7 +19,7 @@ import {
   PanelLeftClose,
   Search,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrivalAlerts } from "@/components/arrival-alerts";
 import { AlertAckToaster } from "@/components/alert-ack-toaster";
@@ -60,6 +60,14 @@ type Identity = {
 };
 
 type NavLink = { to: string; label: string; icon: typeof LayoutDashboard; badge?: number };
+
+const TOOLBAR_SCROLL_BLEND_RANGE = 72;
+
+function toolbarScrollBlend(scrollTop: number) {
+  const t = Math.min(1, Math.max(0, scrollTop / TOOLBAR_SCROLL_BLEND_RANGE));
+  // Ease-out so the glass fades in gently over the first ~72px of scroll.
+  return 1 - (1 - t) ** 2;
+}
 
 function NavItem({
   item,
@@ -110,21 +118,19 @@ function NavGroup({ label, children }: { label: string; children: ReactNode }) {
 
 function ToolbarAlerts({
   identity,
-  scrolled,
 }: {
   identity: Identity;
-  scrolled: boolean;
 }) {
-  const iconHover =
-    "hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground hover:shadow-lift active:bg-[rgba(47,63,102,0.14)]";
+  const iconHover = "hover:text-foreground active:bg-[rgba(47,63,102,0.14)]";
+  const chipSurface = "toolbar-scroll-chip";
   return (
     <>
       {identity.isStaff && (
         <StaffAlertDialog>
           <Button
-            variant={scrolled ? "outline" : "ghost"}
+            variant="ghost"
             size="icon"
-            className={cn("relative h-9 w-9", iconHover, !scrolled && "border border-transparent")}
+            className={cn("relative h-9 w-9", chipSurface, iconHover)}
             aria-label="Alert team"
           >
             <Megaphone className="h-4 w-4" />
@@ -132,9 +138,9 @@ function ToolbarAlerts({
         </StaffAlertDialog>
       )}
       {identity.isStaff && (
-        <SentStaffAlerts scrolled={scrolled} className={iconHover} />
+        <SentStaffAlerts className={cn(chipSurface, iconHover)} />
       )}
-      <NotificationBell isStaff={identity.isStaff} scrolled={scrolled} />
+      <NotificationBell isStaff={identity.isStaff} chipClassName={cn(chipSurface, iconHover)} />
     </>
   );
 }
@@ -156,11 +162,11 @@ function AccountMenu({
 }) {
   const navigate = useNavigate();
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex h-10 max-w-[220px] cursor-pointer items-center gap-2 rounded-full py-0 pl-1 pr-2.5 text-left hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
+          className="toolbar-scroll-chip flex h-10 max-w-[220px] cursor-pointer items-center gap-2 rounded-full py-0 pl-1 pr-2.5 text-left active:bg-[rgba(47,63,102,0.14)]"
           aria-label="Account menu"
         >
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground shadow-bloom">
@@ -370,14 +376,14 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
-  const [scrolled, setScrolled] = useState(false);
+  const [scrollBlend, setScrollBlend] = useState(0);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => {
     const main = mainScrollRef.current;
     if (!main) return;
     main.scrollTo({ top: 0, left: 0, behavior: "instant" });
-    setScrolled(false);
+    setScrollBlend(0);
   }, [pathname]);
 
   const fetchTeam = useServerFn(listTeam);
@@ -404,6 +410,15 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   }, [team]);
 
   const onlineIds = useStaffPresence(Boolean(identity.isStaff && sessionReady), identity.userId);
+
+  const teamMembersForNav = useMemo(() => {
+    return [...teamMembers].sort((a, b) => {
+      const aOnline = onlineIds.has(a.id);
+      const bOnline = onlineIds.has(b.id);
+      if (aOnline !== bOnline) return aOnline ? -1 : 1;
+      return a.fullName.localeCompare(b.fullName);
+    });
+  }, [teamMembers, onlineIds]);
 
   const { data: todayAppointments } = useQuery({
     queryKey: ["sidebar-diary-count", startISO],
@@ -483,10 +498,6 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     }
   }, []);
 
-  useEffect(() => {
-    setScrolled(false);
-  }, [pathname]);
-
   function persistWidth(next: number) {
     const width = clampSidebarWidth(next);
     setSidebarWidth(width);
@@ -549,7 +560,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     clinicLinks,
     reportLinks,
     extraLinks,
-    teamMembers,
+    teamMembers: teamMembersForNav,
     onlineIds,
     canTeam,
     query,
@@ -596,7 +607,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
           id="app-main-scroll"
           ref={mainScrollRef}
           className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-5 sm:px-[26px] sm:pb-[26px]"
-          onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 8)}
+          onScroll={(event) => setScrollBlend(toolbarScrollBlend(event.currentTarget.scrollTop))}
         >
           <div className="pointer-events-none sticky top-0 z-20 -mx-5 flex h-[3.5rem] shrink-0 items-center gap-3 px-5 sm:-mx-[26px] sm:px-[26px]">
             {!sidebarOpen && (
@@ -610,8 +621,11 @@ export function AppShell({ identity, children }: { identity: Identity; children:
                 <PanelLeft className="h-4 w-4" />
               </Button>
             )}
-            <div className="pointer-events-auto ml-auto flex h-10 items-center gap-2">
-              <ToolbarAlerts identity={identity} scrolled={scrolled} />
+            <div
+              className="pointer-events-auto ml-auto flex h-10 items-center gap-2"
+              style={{ "--toolbar-chip-blend": scrollBlend } as CSSProperties}
+            >
+              <ToolbarAlerts identity={identity} />
               <AccountMenu
                 identity={identity}
                 displayName={displayName}
