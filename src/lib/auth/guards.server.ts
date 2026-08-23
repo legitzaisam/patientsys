@@ -1,4 +1,5 @@
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
+import { POLICY, resolveScope, type HandlerName } from "@/lib/auth/policy";
 
 /**
  * Authorization for every server function.
@@ -189,4 +190,85 @@ export async function requirePermission(context: Ctx, key: PermissionKey) {
   const identity = await requireStaff(context);
   if (!can(identity, key)) throw new Error("You do not have access to this area");
   return identity;
+}
+
+/**
+ * The one authorization call a handler makes. It looks the handler up in
+ * `POLICY` and applies that rule, so the access decision lives in the table
+ * rather than in the handler body, and a handler missing from the table fails
+ * the startup completeness check instead of silently running unguarded.
+ *
+ * Returns the identity, so it replaces both the old guard call and the
+ * `loadIdentity` that usually followed it.
+ */
+export async function authorize(
+  context: Ctx,
+  name: HandlerName,
+  resource?: { patientId?: string | null },
+): Promise<Identity> {
+  const rule = POLICY[name] as import("@/lib/auth/policy").Access;
+
+  switch (rule.kind) {
+    case "self":
+      return loadIdentity(context);
+    case "staff":
+      return requireStaff(context);
+    case "manager":
+      return requireManager(context);
+    case "owner":
+      return requireOwner(context);
+    case "capability":
+      return requirePermission(context, rule.key);
+    case "patientSelf":
+      return requirePatientSelf(context, requirePatientId(name, resource));
+    case "staffOrOwnPatient": {
+      const identity = await requireStaffOrOwnPatient(context, requirePatientId(name, resource));
+      // The capability describes the staff side only. A patient legitimately
+      // messaging their own clinic holds no capabilities and must not be gated.
+      if (rule.staffKey && identity.isStaff && !can(identity, rule.staffKey)) {
+        throw new Error("You do not have access to this area");
+      }
+      return identity;
+    }
+  }
+}
+
+function requirePatientId(name: string, resource?: { patientId?: string | null }) {
+  const id = resource?.patientId;
+  // A programming error, not a caller error: an ownership rule with no resource
+  // to compare against would otherwise pass everyone.
+  if (!id) throw new Error(`${name} requires a patientId to check ownership`);
+  return id;
+}
+
+/** Which rows this caller may see. `null` is clinic-wide; a user id narrows to their own. */
+export function scopeFor(identity: Identity, name: HandlerName): string | null {
+  return resolveScope(identity, name);
+}
+
+/**
+ * What a given staff member can actually do, resolved through the same `can()`
+ * the guards call. Answering "does this person hold X" from the raw grant rows
+ * would miss the owner's implicit grant, so the displayed answer could disagree
+ * with what the server enforces. Deriving it here means it cannot.
+ */
+export async function effectiveCapabilities(context: Ctx, userId: string) {
+  const [rolesRes, permsRes] = await Promise.all([
+    context.supabase.from("user_roles").select("role").eq("user_id", userId),
+    context.supabase.from("role_permissions").select("role, permission, enabled"),
+  ]);
+  if (rolesRes.error) throw new Error(`Could not load roles: ${rolesRes.error.message}`);
+  if (permsRes.error) throw new Error(`Could not load permissions: ${permsRes.error.message}`);
+
+  const roles: string[] = (rolesRes.data ?? []).map((r: { role: string }) => r.role);
+  const isOwner = roles.includes("owner");
+  const permissions = ((permsRes.data ?? []) as { role: string; permission: string; enabled: boolean }[])
+    .filter((p) => p.enabled && roles.includes(p.role))
+    .map((p) => p.permission);
+
+  const subject = { isOwner, permissions };
+  return {
+    isOwner,
+    granted: PERMISSION_KEYS.filter((key) => can(subject, key)),
+  };
 }

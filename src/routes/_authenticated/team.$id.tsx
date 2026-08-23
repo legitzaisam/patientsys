@@ -12,6 +12,7 @@ import { AppShell } from "@/components/app-shell";
 import { StaffAvatar, StaffDocuments } from "@/components/staff-files";
 import { StaffDocCompliance } from "@/components/staff-doc-compliance";
 import { StaffChatPanel } from "@/components/staff-chat-panel";
+import { EffectivePermissions } from "@/components/effective-permissions";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -307,6 +308,10 @@ function StaffProfilePage() {
               </div>
             </div>
           </Card>
+
+          {data?.capabilities ? (
+            <EffectivePermissions capabilities={data.capabilities} name={displayName} />
+          ) : null}
 
           {canViewDocuments ? (
             <StaffDocuments userId={id} readOnly queryKey={["staff-documents", id]} />

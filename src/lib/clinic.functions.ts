@@ -11,14 +11,13 @@ import { assertEmail } from "@/lib/email";
 import { PERMISSION_KEYS, type PermissionKey } from "@/lib/permissions";
 import {
   type Ctx,
+  authorize,
+  effectiveCapabilities,
   loadIdentity,
   reloadIdentity,
-  requireManager,
   requireOwner,
-  requirePatientSelf,
-  requirePermission,
   requireStaff,
-  requireStaffOrOwnPatient,
+  scopeFor,
 } from "@/lib/auth/guards.server";
 
 export { PERMISSION_KEYS, type PermissionKey };
@@ -250,7 +249,7 @@ export const getMe = createServerFn({ method: "GET" })
       throw new Error("Your clinic access has been removed. Please contact your manager.");
     }
 
-    let identity = await loadIdentity(context as Ctx);
+    let identity = await authorize(context as Ctx, "getMe");
     if (identity.roles.length === 0 && !identity.patient) {
       const { count } = await supabaseAdmin
         .from("user_roles")
@@ -282,9 +281,8 @@ export const getMe = createServerFn({ method: "GET" })
 export const getDashboard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireStaff(context as Ctx);
+    const identity = await authorize(context as Ctx, "getDashboard");
     const supabase = (context as Ctx).supabase;
-    const identity = await loadIdentity(context as Ctx);
     const today = new Date();
     const in30 = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
     const weekAhead = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
@@ -379,13 +377,14 @@ export const getDashboard = createServerFn({ method: "GET" })
     let unpaidDeposits = (unpaidDepositRaw.data ?? []) as any[];
     let dueDates = (dueDatesRaw.data ?? []) as { next_due_at: string; practitioner_id: string | null }[];
 
-    if (isPractitioner && !isManager) {
-      due = due.filter((t: any) => t.practitioner_id === identity.userId || !t.practitioner_id);
-      dueDates = dueDates.filter((t) => t.practitioner_id === identity.userId || !t.practitioner_id);
-      monthTreats = monthTreats.filter((t: any) => t.practitioner_id === identity.userId);
-      prevMonthTreats = prevMonthTreats.filter((t: any) => t.practitioner_id === identity.userId);
-      todayAppts = todayAppts.filter((a: any) => a.practitioner_id === identity.userId);
-      unpaidDeposits = unpaidDeposits.filter((a: any) => a.practitioner_id === identity.userId);
+    const scoped = scopeFor(identity, "getDashboard");
+    if (scoped) {
+      due = due.filter((t: any) => t.practitioner_id === scoped || !t.practitioner_id);
+      dueDates = dueDates.filter((t) => t.practitioner_id === scoped || !t.practitioner_id);
+      monthTreats = monthTreats.filter((t: any) => t.practitioner_id === scoped);
+      prevMonthTreats = prevMonthTreats.filter((t: any) => t.practitioner_id === scoped);
+      todayAppts = todayAppts.filter((a: any) => a.practitioner_id === scoped);
+      unpaidDeposits = unpaidDeposits.filter((a: any) => a.practitioner_id === scoped);
     }
 
     const active = all.filter((p: { status: string }) => p.status === "active").length;
@@ -547,7 +546,7 @@ export const getDashboard = createServerFn({ method: "GET" })
 export const listPatients = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "listPatients");
     const supabase = (context as Ctx).supabase;
     const { data, error } = await supabase
       .from("patients")
@@ -597,7 +596,7 @@ export const getPatient = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     // Returns the full clinical record for whatever ID it is handed, so without
     // this any authenticated user could read any patient by ID.
-    await requireStaffOrOwnPatient(context as Ctx, data.id);
+    await authorize(context as Ctx, "getPatient", { patientId: data.id });
     const supabase = (context as Ctx).supabase;
     const { data: patient, error } = await supabase
       .from("patients")
@@ -734,7 +733,7 @@ export const getPatient = createServerFn({ method: "GET" })
 export const getCatalogue = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "getCatalogue");
     const { data } = await (context as Ctx).supabase
       .from("treatment_catalogue")
       .select("*")
@@ -746,7 +745,7 @@ export const getCatalogue = createServerFn({ method: "GET" })
 export const listPractitioners = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "listPractitioners");
     const ctx = context as Ctx;
     const { data: roles } = await ctx.supabase
       .from("user_roles")
@@ -766,7 +765,7 @@ export const listAppointments = createServerFn({ method: "GET" })
   .validator((data: { from: string; to: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "listAppointments");
     const { data: rows, error } = await (context as Ctx).supabase
       .from("appointments")
       .select(
@@ -802,6 +801,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "saveAppointment");
     const supabase = (context as Ctx).supabase;
     const start = new Date(data.starts_at);
     const endsAt = new Date(start.getTime() + (data.duration_minutes || 30) * 60000).toISOString();
@@ -970,7 +970,7 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "updateAppointmentState");
     const supabase = (context as Ctx).supabase;
     const patch: Record<string, unknown> = {};
     if (data.status) patch["status"] = data.status;
@@ -1020,6 +1020,7 @@ export const savePatient = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    const identity = await authorize(context as Ctx, "savePatient");
     const supabase = (context as Ctx).supabase;
     const payload = {
       clinic_id: CLINIC_ID,
@@ -1079,6 +1080,7 @@ export const addTreatment = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "addTreatment");
     const supabase = (context as Ctx).supabase;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rateRow } = await supabaseAdmin
@@ -1127,7 +1129,7 @@ export const addPhoto = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "addPhoto");
     const { error } = await (context as Ctx).supabase.from("treatment_photos").insert({
       clinic_id: CLINIC_ID,
       patient_id: data.patient_id,
@@ -1154,6 +1156,7 @@ export const sendDocument = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "sendDocument");
     const supabase = (context as Ctx).supabase;
     const { data: created, error } = await supabase
       .from("documents")
@@ -1186,7 +1189,7 @@ export const resendDocument = createServerFn({ method: "POST" })
   .validator((data: { id: string; patient_id: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "resendDocument");
     const { error } = await (context as Ctx).supabase
       .from("documents")
       .update({ status: "sent", sent_at: new Date().toISOString() })
@@ -1212,7 +1215,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     // post into their own thread as "staff", so the message rendered as clinical
     // advice from the clinic. Staff may write to any thread; a patient may write
     // only to their own.
-    const identity = await requireStaffOrOwnPatient(ctx, data.patient_id);
+    const identity = await authorize(ctx, "sendMessage", { patientId: data.patient_id });
     const author = identity.isStaff ? "staff" : "patient";
     const body = data.body.trim().slice(0, 2000);
     const attachments = (data.attachments ?? []).slice(0, 5);
@@ -1234,7 +1237,7 @@ export const getUnreadMessages = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const supabase = (context as Ctx).supabase;
-    const identity = await loadIdentity(context as Ctx);
+    const identity = await authorize(context as Ctx, "getUnreadMessages");
 
     if (identity.isPatient) {
       if (!identity.patient) return { total: 0, items: [] as { patient_id: string; name: string; count: number; last: string }[] };
@@ -1294,6 +1297,7 @@ export const listStaffNotifications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "listStaffNotifications");
     // Service-role client bypasses RLS — only show alerts addressed to this user.
     const { data: rows } = await ctx.supabase
       .from("staff_notifications")
@@ -1336,7 +1340,7 @@ export const listStaffNotifications = createServerFn({ method: "GET" })
 export const listStaffDirectory = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "listStaffDirectory");
     const ctx = context as Ctx;
     const { data: roles } = await ctx.supabase
       .from("user_roles")
@@ -1370,8 +1374,7 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff only");
+    const identity = await authorize(ctx, "sendStaffAlert");
 
     const body = data.body.trim();
     if (!body) throw new Error("Write a message");
@@ -1420,7 +1423,7 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
   .validator((data: { practitionerId: string; date: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "getPractitionerDay");
     const ctx = context as Ctx;
     const day = new Date(`${data.date}T00:00:00`);
     const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
@@ -1476,6 +1479,7 @@ export const markStaffNotificationRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "markStaffNotificationRead");
     // Service-role client bypasses RLS — only update the caller's own alerts.
     let q = ctx.supabase
       .from("staff_notifications")
@@ -1493,7 +1497,7 @@ export const dismissStaffInboxItem = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "dismissStaffInboxItem");
     const ctx = context as Ctx;
     await dismissStaffInboxRows(ctx, [data.id]);
     return { ok: true };
@@ -1505,6 +1509,7 @@ export const dismissStaffInboxItems = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "dismissStaffInboxItems");
     const ids = [...new Set(data.ids.filter(Boolean))];
     if (ids.length === 0) return { ok: true };
     await dismissStaffInboxRows(ctx, ids);
@@ -1549,6 +1554,7 @@ export const listSentStaffAlerts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "listSentStaffAlerts");
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: rows, error } = await ctx.supabase
       .from("staff_notifications")
@@ -1592,6 +1598,7 @@ export const listIncomingTeamAlerts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "listIncomingTeamAlerts");
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: rows, error } = await ctx.supabase
       .from("staff_notifications")
@@ -1633,7 +1640,7 @@ export const listIncomingTeamAlerts = createServerFn({ method: "GET" })
 export const listMessageTemplates = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "listMessageTemplates");
     const { data, error } = await (context as Ctx).supabase
       .from("message_templates")
       .select("*")
@@ -1647,9 +1654,8 @@ export const saveMessageTemplate = createServerFn({ method: "POST" })
   .validator((data: { id?: string; title: string; body: string; category?: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "saveMessageTemplate");
     const supabase = (context as Ctx).supabase;
-    const identity = await loadIdentity(context as Ctx);
-    if (!identity.isStaff) throw new Error("Staff only");
     const payload = {
       clinic_id: CLINIC_ID,
       title: data.title.trim(),
@@ -1669,8 +1675,7 @@ export const deleteMessageTemplate = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    const identity = await loadIdentity(context as Ctx);
-    if (!identity.canDelete) throw new Error("Only managers can delete templates");
+    await authorize(context as Ctx, "deleteMessageTemplate");
     const { error } = await (context as Ctx).supabase.from("message_templates").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -1683,7 +1688,9 @@ export const markMessagesRead = createServerFn({ method: "POST" })
     const supabase = (context as Ctx).supabase;
     // The author filter alone did not stop a patient passing someone else's
     // patient_id and marking that thread read.
-    const identity = await requireStaffOrOwnPatient(context as Ctx, data.patient_id);
+    const identity = await authorize(context as Ctx, "markMessagesRead", {
+      patientId: data.patient_id,
+    });
 
     // Patients read staff messages in their own thread; staff read patient messages for a given patient.
     const authorFilter = identity.isPatient ? "staff" : "patient";
@@ -1701,6 +1708,7 @@ export const reviewHistory = createServerFn({ method: "POST" })
   .validator((data: { id: string; patient_id: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "reviewHistory");
     const { error } = await (context as Ctx).supabase
       .from("medical_history_versions")
       .update({ reviewed_by: context.userId, reviewed_at: new Date().toISOString() })
@@ -1715,6 +1723,7 @@ export const reviewHistory = createServerFn({ method: "POST" })
 export const getMyRecord = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await authorize(context as Ctx, "getMyRecord");
     const supabase = (context as Ctx).supabase;
     const { data: patient } = await supabase
       .from("patients")
@@ -1766,6 +1775,7 @@ export const submitHistoryUpdate = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "submitHistoryUpdate");
     const supabase = (context as Ctx).supabase;
     const { data: patient } = await supabase
       .from("patients")
@@ -1802,7 +1812,7 @@ export const signDocument = createServerFn({ method: "POST" })
       .maybeSingle();
     if (docError) throw new Error(docError.message);
     if (!doc) throw new Error("Document not found");
-    await requirePatientSelf(ctx, doc.patient_id);
+    await authorize(ctx, "signDocument", { patientId: doc.patient_id });
     const { error } = await ctx.supabase
       .from("documents")
       .update({
@@ -1823,8 +1833,7 @@ export const listTeam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff only");
+    await authorize(ctx, "listTeam");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: profiles }, { data: roles }, users] = await Promise.all([
       supabaseAdmin.from("profiles").select("*"),
@@ -1871,7 +1880,7 @@ export const createStaffAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    await authorize(ctx, "createStaffAccount");
     const email = assertEmail(data.email, "work email")!;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const created = await supabaseAdmin.auth.admin.createUser({
@@ -1911,7 +1920,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireManager(ctx);
+    await authorize(ctx, "updateStaffMember");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const patch: Record<string, unknown> = {
       full_name: data.fullName,
@@ -1926,6 +1935,15 @@ export const updateStaffMember = createServerFn({ method: "POST" })
     if (data.userId === ctx.userId && data.role !== "owner") {
       throw new Error("You cannot remove your own manager access");
     }
+    // Read before the delete: a role change is only auditable if the entry says
+    // what it changed from.
+    const { data: priorRoles } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.userId)
+      .neq("role", "patient");
+    const previousRole = (priorRoles ?? []).map((r: { role: string }) => r.role)[0] ?? null;
+
     await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: data.userId, role: data.role });
     // Undo revoke / role restore must lift the Auth ban so they can sign in again.
@@ -1933,6 +1951,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
     await unbanAuthUser(data.userId);
     await audit(ctx, "staff.update", "user_roles", data.userId, null, {
       role: data.role,
+      previous_role: previousRole,
       ...(data.commissionRate !== undefined ? { commission_rate: patch.commission_rate } : {}),
     });
     return { ok: true };
@@ -1958,7 +1977,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    await authorize(ctx, "inviteStaffMember");
     const email = assertEmail(data.email, "work email")!;
     const temporaryPassword = generateTemporaryPassword();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -2041,7 +2060,7 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    const identity = await authorize(ctx, "revokeStaffAccess");
     if (data.userId === ctx.userId) throw new Error("You cannot revoke your own access");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -2081,7 +2100,7 @@ export const listExTeamMembers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    await requirePermission(ctx, "team.view");
+    await authorize(ctx, "listExTeamMembers");
     await purgeExpiredExTeamMembers();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const now = new Date().toISOString();
@@ -2119,7 +2138,7 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    await authorize(ctx, "restoreExTeamMember");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: archived, error } = await supabaseAdmin
       .from("ex_team_members")
@@ -2160,7 +2179,7 @@ export const setStaffPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    await authorize(ctx, "setStaffPassword");
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const existing = await supabaseAdmin.auth.admin.getUserById(data.userId);
@@ -2186,6 +2205,7 @@ export const changeOwnPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "changeOwnPassword");
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // Merge app_metadata so we clear the flag without wiping other Auth keys.
@@ -2208,6 +2228,7 @@ export const acknowledgeWelcome = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "acknowledgeWelcome");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const existing = await supabaseAdmin.auth.admin.getUserById(ctx.userId);
     if (existing.error) throw new Error(existing.error.message);
@@ -2227,7 +2248,7 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    await authorize(ctx, "listAccountsMissingEmail");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: patients }, { data: profiles }, { data: roles }, users] = await Promise.all([
       supabaseAdmin
@@ -2277,7 +2298,7 @@ export const setPatientEmail = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    await authorize(ctx, "setPatientEmail");
     const email = assertEmail(data.email)!;
     const { error } = await ctx.supabase.from("patients").update({ email }).eq("id", data.patientId);
     if (error) throw new Error(error.message);
@@ -2291,7 +2312,7 @@ export const setStaffEmail = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    await authorize(ctx, "setStaffEmail");
     const email = assertEmail(data.email)!;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const res = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
@@ -2309,7 +2330,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requirePermission(ctx, "reports.performance");
+    await authorize(ctx, "getPractitionerPerformance");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { buildStats, buildTrend } = await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
@@ -2416,8 +2437,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access required");
+    await authorize(ctx, "getMyEarnings");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { buildStats } = await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
@@ -2498,7 +2518,7 @@ export const setCommissionRate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requireOwner(ctx);
+    await authorize(ctx, "setCommissionRate");
     const rate = Math.min(100, Math.max(0, Number(data.rate) || 0));
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
@@ -2528,8 +2548,7 @@ export const submitProfileChange = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    await authorize(ctx, "submitProfileChange");
     if (!data.fullName?.trim()) throw new Error("Full name is required");
     const { error } = await ctx.supabase.from("profile_change_requests").insert({
       clinic_id: CLINIC_ID,
@@ -2558,8 +2577,7 @@ export const saveMyProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    await authorize(ctx, "saveMyProfile");
     if (!data.fullName?.trim()) throw new Error("Full name is required");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
@@ -2581,8 +2599,7 @@ export const getMyProfile = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    const identity = await authorize(ctx, "getMyProfile");
     const { data: requests } = await ctx.supabase
       .from("profile_change_requests")
       .select("*")
@@ -2601,7 +2618,7 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    await requirePermission(ctx, "team.approve_changes");
+    await authorize(ctx, "listProfileChangeRequests");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: requests }, { data: profiles }] = await Promise.all([
       supabaseAdmin
@@ -2623,7 +2640,7 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await requirePermission(ctx, "team.approve_changes");
+    await authorize(ctx, "reviewProfileChange");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: req, error: reqError } = await supabaseAdmin
       .from("profile_change_requests")
@@ -2676,8 +2693,7 @@ export const setMyAvatar = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    await authorize(ctx, "setMyAvatar");
     const targetUserId = data.targetUserId ?? ctx.userId;
     if (targetUserId !== ctx.userId) await requireOwner(ctx);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -2694,8 +2710,7 @@ export const listMyDocuments = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    const identity = await authorize(ctx, "listMyDocuments");
     const targetUserId = data.targetUserId ?? ctx.userId;
     if (targetUserId !== ctx.userId && !identity.isManager) {
       throw new Error("Only managers can open staff documents");
@@ -2726,8 +2741,7 @@ export const addMyDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    await authorize(ctx, "addMyDocument");
     if (!data.title?.trim()) throw new Error("A document title is required");
     const { error } = await ctx.supabase.from("staff_documents").insert({
       user_id: ctx.userId,
@@ -2749,7 +2763,7 @@ export const deleteMyDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await requireStaff(ctx);
+    const identity = await authorize(ctx, "deleteMyDocument");
     // Scoped to the caller: deleting by ID alone let any staff member remove any
     // other's work documents. No manager path depends on this - the delete control
     // is behind !readOnly, and team/$id renders StaffDocuments read-only.
@@ -2769,8 +2783,7 @@ export const getStaffProfile = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff only");
+    const identity = await authorize(ctx, "getStaffProfile");
     const isSelf = data.userId === ctx.userId;
     const canViewPrivateDetails = true;
     const canViewDocuments = identity.isManager || isSelf;
@@ -2816,6 +2829,9 @@ export const getStaffProfile = createServerFn({ method: "GET" })
       canViewDocuments,
       canViewPrivateDetails,
       requests: identity.isOwner ? (requests ?? []) : [],
+      // "What can this person actually do" — only the management tier needs it,
+      // and only they can act on the answer.
+      capabilities: identity.isManager ? await effectiveCapabilities(ctx, data.userId) : null,
     };
   });
 
@@ -2824,10 +2840,7 @@ export const getRetention = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
-    if (!identity.isOwner && !identity.permissions.includes("reports.retention"))
-      throw new Error("You do not have access to retention reports");
+    const identity = await authorize(ctx, "getRetention");
     const { buildRetention } = await import("./retention.server");
     const supabase = ctx.supabase;
     const twoYearsAgo = new Date(Date.now() - 730 * 86400000).toISOString();
@@ -2850,8 +2863,7 @@ export const getRetention = createServerFn({ method: "GET" })
 
     // Only a practitioner has a book of their own to scope to; other staff who
     // hold the permission (e.g. a coordinator) see the whole clinic.
-    const scoped =
-      identity.isManager || !identity.roles.includes("practitioner") ? null : ctx.userId;
+    const scoped = scopeFor(identity, "getRetention");
 
     const result = buildRetention({
       patients: (patients ?? []) as any,
@@ -2875,8 +2887,7 @@ export const logRetentionOutreach = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    await authorize(ctx, "logRetentionOutreach");
     const { error } = await ctx.supabase.from("retention_outreach").insert({
       clinic_id: CLINIC_ID,
       patient_id: data.patient_id,
@@ -2903,8 +2914,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    const identity = await authorize(ctx, "createRecallTask");
     const requested = data.recipients.length
       ? data.recipients
       : [{ id: ctx.userId, label: identity.profile?.full_name ?? "The team" }];
@@ -2973,8 +2983,7 @@ export const updateRecallTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isManager) throw new Error("Manager access only");
+    await authorize(ctx, "updateRecallTask");
     if (!data.recipients.length) throw new Error("Pick at least one team member");
 
     const { data: target, error: targetErr } = await ctx.supabase
@@ -3089,8 +3098,7 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    const identity = await authorize(ctx, "setRecallTaskStatus");
     const now = new Date().toISOString();
     const actor = identity.profile?.full_name || identity.email || "A team member";
     const { data: target } = await ctx.supabase
@@ -3149,9 +3157,7 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isOwner && !identity.permissions.includes("tasks.delete"))
-      throw new Error("You do not have access to delete tasks");
+    await authorize(ctx, "deleteRecallTask");
     const { data: target } = await ctx.supabase
       .from("recall_tasks")
       .select("id, group_id, patient_id, assigned_to, assigned_label")
@@ -3207,8 +3213,7 @@ export const listRecallTasks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    await authorize(ctx, "listRecallTasks");
     const { data: rows, error } = await ctx.supabase
       .from("recall_tasks")
       .select("*")
@@ -3260,15 +3265,15 @@ export const listOpenRecallTasks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    const identity = await authorize(ctx, "listOpenRecallTasks");
     let query = ctx.supabase
       .from("recall_tasks")
       .select("*, patients(id, first_name, last_name, phone, email)")
       .neq("status", "completed")
       .order("created_at", { ascending: false })
       .limit(50);
-    if (!identity.isManager) query = query.eq("assigned_to", ctx.userId);
+    const scoped = scopeFor(identity, "listOpenRecallTasks");
+    if (scoped) query = query.eq("assigned_to", scoped);
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
     return collapseOpenRecallRows(rows ?? [], ctx.userId).slice(0, 25);
@@ -3281,7 +3286,7 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "rescheduleAppointment");
     const ctx = context as Ctx;
     const start = new Date(data.starts_at);
     if (Number.isNaN(start.getTime())) throw new Error("Invalid date and time");
@@ -3328,7 +3333,7 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
 export const listTreatmentColours = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "listTreatmentColours");
     const { data } = await (context as Ctx).supabase
       .from("treatment_colours")
       .select("treatment_name, lane, hex");
@@ -3345,9 +3350,7 @@ export const saveTreatmentColour = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
-      throw new Error("You do not have access to change clinic settings");
+    await authorize(ctx, "saveTreatmentColour");
     const key = data.treatment_name.trim().toLowerCase();
     if (!key) throw new Error("Treatment name is required");
     const hex = data.hex ? data.hex.trim().toLowerCase() : null;
@@ -3381,7 +3384,7 @@ export const saveTreatmentColour = createServerFn({ method: "POST" })
 export const listColourThemes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requirePermission(context as Ctx, "settings.treatments");
+    await authorize(context as Ctx, "listColourThemes");
     const { data } = await (context as Ctx).supabase
       .from("treatment_colour_themes")
       .select("id, name, colours, updated_at")
@@ -3395,9 +3398,7 @@ export const saveColourTheme = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
-      throw new Error("You do not have access to change clinic settings");
+    await authorize(ctx, "saveColourTheme");
     const name = data.name.trim();
     if (!name) throw new Error("Theme name is required");
     const { data: rows } = await ctx.supabase.from("treatment_colours").select("treatment_name, lane, hex");
@@ -3435,9 +3436,7 @@ export const applyColourTheme = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
-      throw new Error("You do not have access to change clinic settings");
+    await authorize(ctx, "applyColourTheme");
     const { data: theme, error: themeError } = await ctx.supabase
       .from("treatment_colour_themes")
       .select("id, name, colours")
@@ -3473,9 +3472,7 @@ export const deleteColourTheme = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
-      throw new Error("You do not have access to change clinic settings");
+    await authorize(ctx, "deleteColourTheme");
     const { error } = await ctx.supabase.from("treatment_colour_themes").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     await audit(ctx, "delete", "colour_theme", data.id, null, {});
@@ -3486,7 +3483,7 @@ export const deleteColourTheme = createServerFn({ method: "POST" })
 export const listCatalogueItems = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requirePermission(context as Ctx, "settings.treatments");
+    await authorize(context as Ctx, "listCatalogueItems");
     const { data } = await (context as Ctx).supabase
       .from("treatment_catalogue")
       .select("*")
@@ -3514,9 +3511,7 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
-      throw new Error("You do not have access to change clinic settings");
+    await authorize(ctx, "saveCatalogueItem");
     const name = (data.name ?? "").trim();
     if (!name) throw new Error("Treatment name is required");
     const row = {
@@ -3553,9 +3548,7 @@ export const setCatalogueItemActive = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
-      throw new Error("You do not have access to change clinic settings");
+    await authorize(ctx, "setCatalogueItemActive");
     const { error } = await ctx.supabase
       .from("treatment_catalogue")
       .update({ active: data.active })
@@ -3569,7 +3562,7 @@ export const setCatalogueItemActive = createServerFn({ method: "POST" })
 export const getClinicDetails = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "getClinicDetails");
     const { data } = await (context as Ctx).supabase
       .from("clinics")
       .select("id, name, address, phone, email")
@@ -3584,9 +3577,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isOwner && !identity.permissions.includes("settings.treatments"))
-      throw new Error("You do not have access to change clinic settings");
+    await authorize(ctx, "updateClinicDetails");
     const name = (data.name ?? "").trim();
     if (!name) throw new Error("Clinic name is required");
     const { error } = await ctx.supabase
@@ -3608,8 +3599,7 @@ export const listRolePermissions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
+    const identity = await authorize(ctx, "listRolePermissions");
     const { data, error } = await ctx.supabase
       .from("role_permissions")
       .select("role, permission, enabled");
@@ -3642,8 +3632,7 @@ export const setRolePermission = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isOwner) throw new Error("Clinic owner access only");
+    await authorize(ctx, "setRolePermission");
     if (!(PERMISSION_KEYS as readonly string[]).includes(data.permission))
       throw new Error("Unknown permission");
     const { error } = await ctx.supabase
@@ -3670,6 +3659,7 @@ export const setRolePermission = createServerFn({ method: "POST" })
 export const getMyNote = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await authorize(context as Ctx, "getMyNote");
     const { supabase, userId } = context as Ctx;
     const { data, error } = await supabase
       .from("user_notes")
@@ -3686,6 +3676,7 @@ export const saveMyNote = createServerFn({ method: "POST" })
     body: sanitizeNoteHtml(String(data?.body ?? "")),
   }))
   .handler(async ({ context, data }) => {
+    await authorize(context as Ctx, "saveMyNote");
     const { supabase, userId } = context as Ctx;
     const { data: row, error } = await supabase
       .from("user_notes")
@@ -3700,7 +3691,7 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .validator((data: { appointment_id: string }) => ({ appointment_id: String(data.appointment_id) }))
   .handler(async ({ context, data }) => {
-    await requireStaff(context as Ctx);
+    await authorize(context as Ctx, "getAppointmentNote");
     const { supabase } = context as Ctx;
     const [{ data: row, error }, { data: appt }] = await Promise.all([
       supabase
@@ -3736,6 +3727,7 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
     body: String(data?.body ?? "").slice(0, 20000),
   }))
   .handler(async ({ context, data }) => {
+    const identity = await authorize(context as Ctx, "saveAppointmentNote");
     const { supabase, userId } = context as Ctx;
     const [{ data: appt }, { data: me }] = await Promise.all([
       supabase
@@ -3839,6 +3831,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "getStaffChat");
     await assertStaffPeer(ctx, data.peerUserId);
     const conversationId = await getOrCreateConversationId(ctx, data.peerUserId);
     const peer = data.peerUserId;
@@ -3964,6 +3957,7 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "sendStaffChatMessage");
     const identity = await assertStaffPeer(ctx, data.peerUserId);
     const attachments = (data.attachments ?? []).slice(0, 5);
     const body =
@@ -4032,6 +4026,7 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
+    await authorize(ctx, "markStaffChatRead");
     await assertStaffPeer(ctx, data.peerUserId);
     const conversationId = await getOrCreateConversationId(ctx, data.peerUserId);
     const now = new Date().toISOString();

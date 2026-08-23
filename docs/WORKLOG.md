@@ -210,3 +210,77 @@ Two in-staff IDORs remain and are noted for Phase 3: `listRecallTasks` lets any 
 **Every guard added here is application-layer.** §4.1 is untouched: the service-role client still bypasses RLS, so the database enforces nothing for application traffic. A handler that forgets its guard is open again, and nothing below it will catch that. Closing it properly means moving off the service-role client, which is architectural.
 
 **Two roles remain untested.** We hold owner, manager and patient logins. Practitioner and front_desk still have no passwords set, so their views of these guards are verified by reasoning about `isStaff` and nothing more.
+
+---
+
+## Phase 3 — Capability-based RBAC
+
+**Date:** 24 Aug 2026
+**Plan:** [plans/phase-03-rbac.md](plans/phase-03-rbac.md)
+**Audit:** §15 of [AUDIT-2026-08-22.md](AUDIT-2026-08-22.md)
+
+### What this phase actually found
+
+The phase was scoped as "turn coarse role checks into a capability model". Planning it turned up something worse than the thing it was meant to fix.
+
+Phase 2 closed the 22 handlers the audit listed, and that felt like the end of the authorization work. It was not, because the list was never complete — it had been assembled by reading handler bodies, and reading 88 handler bodies is not a control. A mechanical sweep found **six clinical write handlers with no authorization statement of any kind**: `savePatient`, `addTreatment`, `saveAppointment`, `sendDocument`, `reviewHistory` and `saveAppointmentNote`.
+
+We proved it rather than assuming it. Signed in as the patient test account against the live project, five of the six wrote real rows. The one that matters clinically: a patient set another patient's allergies to "none, safe to inject anything". Another stamped a medical history version as clinically reviewed, `reviewed_by` set to the patient's own auth user id. `addTreatment` and `saveAppointment` reached the database and bounced off a foreign key, not off a permission check.
+
+All of it was restored afterwards and the row counts verified back at baseline.
+
+### Changes
+
+**Tier 0 — the six.** Each now carries a capability through the policy map: `patients.edit`, `treatments.record` (three of them), `appointments.edit` and `documents.send`.
+
+**The policy map.** [auth/policy.ts](../src/lib/auth/policy.ts) declares an access rule for all 88 handlers. [guards.server.ts](../src/lib/auth/guards.server.ts) gained `authorize(ctx, name, resource?)`, which reads the rule and dispatches to the guards that already existed, returning the identity — so it replaces both the guard call and the `loadIdentity` that usually followed it.
+
+**The check that makes it stick.** `npm run check:policy` fails when a handler has no entry, when it never calls `authorize`, or when the map names a handler that does not exist. This is the actual deliverable of the phase. The capability keys are useful; the build failing when someone adds an unguarded handler is what prevents a repeat.
+
+**The retrofit.** Roughly 45 ad-hoc checks in `clinic.functions.ts` are gone: eight verbatim copies of `!identity.isOwner && !identity.permissions.includes("settings.treatments")`, around twenty `if (!identity.isStaff) throw`, and the rest. 80 handlers were rewritten by script, 8 ownership-based ones by hand.
+
+**Keys, 7 to 13.** Added `patients.edit`, `treatments.record`, `documents.send`, `photos.manage`, `appointments.edit`, `comms.send`. Seeded enabled for manager, practitioner and front desk so nobody lost an ability they had.
+
+**Scope.** `resolveScope` centralises the three handlers that already narrowed data, preserving each rule exactly.
+
+**UI.** The owner's grid is grouped into six sections. A new panel on the staff profile answers "what can this person actually do", computed server-side through the same `can()` the guards call, so the display cannot disagree with enforcement.
+
+### Deviations from the plan
+
+**`patients.delete` was dropped.** The master plan listed it; no handler hard-deletes a patient or its child rows, so it would have been a switch in the owner's grid governing nothing. `patients.edit` replaced it and governs `savePatient`. Flagged before starting.
+
+**The audit-coverage task was already done.** The plan asked for `audit()` on `updateStaffMember`, `revokeStaffAccess` and `restoreExTeamMember`. All eleven access-changing handlers already had it. What was genuinely missing was the *previous* role on a role change, so `updateStaffMember` now records `previous_role` — an audit entry saying only what someone was changed *to* does not tell you a demotion happened.
+
+**One UI change beyond the plan.** [sent-staff-alerts.tsx](../src/components/sent-staff-alerts.tsx) let practitioners and front desk dismiss inbox items with no capability check, because the server was not enforcing `notifications.delete`. Enforcing it would have left a visible button that fails on click, so `DismissButton` now hides itself when the caller lacks the key — matching what `notification-bell.tsx` already did.
+
+### Verification
+
+**The attack, both ways.** Seven attacks as the patient. Before: 7/7 reached the database, 5 wrote rows. After: 7/7 refused with "Staff access only", and a database read confirmed nothing was written.
+
+**Capability actually governs the handler.** Not a code-reading exercise: flip a grant off in `role_permissions` (what the owner's grid writes) and call the handler again. 8/8 as expected across `patients.edit`/`savePatient`, `treatments.record`/`saveAppointmentNote`, `documents.send`/`resendDocument` and `settings.treatments`/`listCatalogueItems` — allowed with the grant on, refused with it off.
+
+**Phase 2 protections held.** Re-ran the Phase 2 attacks: cross-thread messaging, signature forgery, patient directory and cross-patient record reads all still refused. Impersonation via `as: "staff"` still lands as `author: patient`, confirmed by reading the row back.
+
+**No regressions.** Owner and manager across eight routes each, patient on the portal: every page renders, zero console errors. All six patient portal actions work, including signing their own consent form. Owner and manager staff-side paths all work.
+
+**Static.** `npx tsc --noEmit` holds at the 52-error baseline. `npm run check:policy` passes at 88/88.
+
+### Note on a stale fixture
+
+The Phase 2 positive test failed on "sign OWN consent form" with "Document not found". Not a regression — the document that test referenced had been deleted from the project some time earlier, and `signDocument` checks existence before ownership. Recreated a real document for that patient and the sign path passed.
+
+### Deferred
+
+**Front desk keeps `treatments.record` for now.** Seeding every new key enabled for every staff role was deliberate: the phase should not silently remove an ability someone uses. But a receptionist holding clinical note and treatment write is not a defensible default. Turning it off is one switch in the owner's grid and should be a clinic decision, not one made here.
+
+**The two scoping rules still disagree.** Retention narrows a practitioner but not front desk; open tasks narrow anyone below manager, front desk included. Both are preserved exactly as they were, now visible side by side in one table. Reconciling them is a product decision.
+
+**`listRecallTasks` remains an in-staff IDOR** — any staff member can read any patient's recall tasks.
+
+**A pre-existing ordering bug in `updateStaffMember`**, not touched: the profile row is written at line 1934 before the self-demotion check throws at 1935, so a manager who tries to demote themselves gets the error but their profile edits have already been saved. Noted, not fixed, because it is unrelated to this phase.
+
+### Residual risk
+
+**The control is still application-layer.** `npm run check:policy` proves every handler calls `authorize`. It cannot prove the rule attached to a handler is the *right* rule — that judgment is still per-handler and still human. And §4.1 is untouched: the service-role client bypasses RLS, so the database enforces nothing underneath any of this.
+
+**Practitioner and front desk are still untested.** Two of the five roles have no password set. Their behaviour under the new capability checks is verified from the grant table and by reasoning about `can()`, not by signing in. Given this phase changed what those two roles can reach, that gap is now more material than it was in Phase 2.

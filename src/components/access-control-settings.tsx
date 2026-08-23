@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { ShieldCheck } from "lucide-react";
 import { listRolePermissions, setRolePermission } from "@/lib/clinic.functions";
-import { PERMISSION_KEYS, PERMISSION_META, type PermissionKey } from "@/lib/permissions";
+import { PERMISSION_GROUPS, PERMISSION_META, type PermissionKey } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 
@@ -58,26 +58,35 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
             </span>
           ))}
         </div>
-        {PERMISSION_KEYS.map((key: PermissionKey) => (
-          <div
-            key={key}
-            className="grid min-w-[32rem] items-center gap-4 border-b border-glass-line px-4 py-3 last:border-0"
-            style={{ gridTemplateColumns: `minmax(12rem,1fr) repeat(${ROLES.length}, 5.5rem)` }}
-          >
-            <div>
-              <p className="text-sm text-foreground">{PERMISSION_META[key].label}</p>
-              <p className="text-xs text-muted-foreground">{PERMISSION_META[key].description}</p>
+        {PERMISSION_GROUPS.map((group) => (
+          <div key={group.label}>
+            <div className="border-b border-glass-line bg-glass-1 px-4 py-1.5">
+              <span className="text-2xs font-medium uppercase tracking-[0.08em] text-ink-3">
+                {group.label}
+              </span>
             </div>
-            {ROLES.map((role) => (
-              <div key={role.key} className="flex justify-center">
-                <Switch
-                  aria-label={`${PERMISSION_META[key].label} for ${role.label}`}
-                  checked={grants?.[role.key]?.[key] ?? false}
-                  disabled={!canEdit || save.isPending || !grants}
-                  onCheckedChange={(enabled) =>
-                    save.mutate({ data: { role: role.key, permission: key, enabled } })
-                  }
-                />
+            {group.keys.map((key: PermissionKey) => (
+              <div
+                key={key}
+                className="grid min-w-[32rem] items-center gap-4 border-b border-glass-line px-4 py-3"
+                style={{ gridTemplateColumns: `minmax(12rem,1fr) repeat(${ROLES.length}, 5.5rem)` }}
+              >
+                <div>
+                  <p className="text-sm text-foreground">{PERMISSION_META[key].label}</p>
+                  <p className="text-xs text-muted-foreground">{PERMISSION_META[key].description}</p>
+                </div>
+                {ROLES.map((role) => (
+                  <div key={role.key} className="flex justify-center">
+                    <Switch
+                      aria-label={`${PERMISSION_META[key].label} for ${role.label}`}
+                      checked={grants?.[role.key]?.[key] ?? false}
+                      disabled={!canEdit || save.isPending || !grants}
+                      onCheckedChange={(enabled) =>
+                        save.mutate({ data: { role: role.key, permission: key, enabled } })
+                      }
+                    />
+                  </div>
+                ))}
               </div>
             ))}
           </div>

@@ -14,6 +14,8 @@ import {
   markStaffNotificationRead,
 } from "@/lib/clinic.functions";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
+import { useIdentity } from "@/lib/use-identity";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
@@ -108,6 +110,11 @@ function DismissButton({
   dismissing: boolean;
   label?: string;
 }) {
+  // The server enforces notifications.delete on the dismiss handlers, so without
+  // this the button would show for staff who lack it and fail on click.
+  const { data: identity } = useIdentity();
+  if (!can(identity, "notifications.delete")) return null;
+
   return (
     <button
       type="button"

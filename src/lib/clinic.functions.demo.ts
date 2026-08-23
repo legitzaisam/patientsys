@@ -26,17 +26,12 @@ import {
 } from "@/lib/appointment-overlap";
 import { bookingDetailsMessage, type PaymentLinkKind } from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
+// Re-exported rather than redeclared: a second copy of the key list silently
+// drifted from the real one, so demo mode enforced a different set of
+// capabilities than production.
+import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 
-export const PERMISSION_KEYS = [
-  "reports.retention",
-  "reports.performance",
-  "team.view",
-  "team.approve_changes",
-  "settings.treatments",
-  "notifications.delete",
-  "tasks.delete",
-] as const;
-export type PermissionKey = (typeof PERMISSION_KEYS)[number];
+export { PERMISSION_KEYS, type PermissionKey };
 
 const patients = db.patients as any[];
 const profiles = db.profiles as any[];
@@ -1642,6 +1637,17 @@ function roleFor(userId: string) {
   return userRoles.find((r) => r.user_id === userId && r.role !== "patient")?.role ?? "";
 }
 
+/** Mirrors guards.server.ts: resolved through can(), so display matches enforcement. */
+function effectiveCapabilities(userId: string) {
+  const roles = userRoles.filter((r) => r.user_id === userId).map((r) => r.role);
+  const isOwner = roles.includes("owner");
+  const permissions = rolePermissions
+    .filter((p) => p.enabled && roles.includes(p.role))
+    .map((p) => p.permission);
+  const subject = { isOwner, permissions };
+  return { isOwner, granted: PERMISSION_KEYS.filter((key) => can(subject, key)) };
+}
+
 export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
   if (!me.isStaff) throw new Error("Staff access only");
@@ -2322,6 +2328,7 @@ export const getStaffProfile = createServerFn({ method: "GET" })
             "created_at",
           ).slice(0, 20)
         : [],
+      capabilities: me.isManager ? effectiveCapabilities(data.userId) : null,
     };
   });
 

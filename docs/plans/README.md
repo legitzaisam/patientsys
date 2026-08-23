@@ -30,3 +30,4 @@ Start from [_TEMPLATE.md](_TEMPLATE.md).
 | 0 | [Audit refresh and emergency copy fix](phase-00-audit-refresh.md) | Complete |
 | 1 | [Authorization foundation](phase-01-authorization-foundation.md) | Complete |
 | 2 | [Guard retrofit](phase-02-guard-retrofit.md) | Complete |
+| 3 | [Capability-based RBAC](phase-03-rbac.md) | Complete |
