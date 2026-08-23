@@ -145,3 +145,68 @@ Both verified by signing in. The shared password is held outside the repo and is
 Worth noting what this proved: **a trigger creates a `profiles` row for every new auth user**, including patients. The provisioning script deletes it for the patient, because a profile row with no linked patient record is exactly the state that makes `getMe` throw "Your clinic access has been removed" — which is how the orphaned account below came about.
 
 **One account is locked out and one profile is orphaned.** `z.bassim@hotmail.com` has an auth user and a `profiles` row but no role and no patient record, which sends `getMe` straight into "Your clinic access has been removed" on every sign-in. A second profile, "Invite Test", has no auth user at all — a residue of the invite flow. Neither is a Phase 1 regression; both predate it.
+
+---
+
+## Phase 2 — Guard retrofit
+
+**Date:** 24 August 2026
+**Plan:** [plans/phase-02-guard-retrofit.md](plans/phase-02-guard-retrofit.md)
+**Base:** `f3a2190`
+**Commit:** one, at the end of the phase, per the revised workflow
+
+### Why the plan changed before it started
+
+I mapped every server function a patient can actually reach before touching code, and it moved the phase's centre of gravity twice.
+
+**Only 2 of the 22 open handlers are patient-reachable** — `markMessagesRead` and `getUnreadMessages`. The other 20 are staff-UI-only, so `requireStaff` on them could not break anything a user does today. The 22-handler retrofit was the low-risk half of the phase, not the dangerous half.
+
+**The two worst vulnerabilities were not among the 22 at all.** `sendMessage` and `signDocument` are both patient-reachable and both had no guard whatsoever. They were the real work.
+
+### Changed
+
+**`sendMessage` no longer trusts the request body for identity.** It took `author` from `data.as`, so a patient could post into their own thread as `"staff"` and the message rendered as if it came from the clinic. In a clinical setting that is forged medical advice. The author is now derived from the session, and `requireStaffOrOwnPatient` scopes the thread so a patient cannot write into someone else's. `data.as` stays in the validator and is ignored; removing it from the client is Phase 4's work.
+
+**`signDocument` no longer lets anyone sign anything.** It updated by `.eq("id", data.id)` with no guard at all, so any authenticated user could sign any consent form by ID. It now loads the document's `patient_id` and requires it to match the caller's own patient record.
+
+**`deleteMyDocument` is scoped to the caller.** It checked `isStaff` and then deleted by ID, so any staff member could remove any other's work documents. Before changing it I confirmed no manager path depends on the old behaviour: the delete control sits behind `!readOnly`, and `/team/$id` renders `StaffDocuments` read-only.
+
+**The 22 took their guards from the Phase 1 decision table** — 16 `requireStaff`, 2 `requireStaffOrOwnPatient`, 2 `requirePermission("settings.treatments")`, and `getUnreadMessages` guarded on its staff branch only.
+
+### The one that had to be done differently
+
+`getUnreadMessages` is polled by `NotificationBell` on every portal page. A guard at function entry would have broken the bell for every patient, so the guard sits after the patient branch returns. Phase 1 flagged this in advance, which is the only reason it was not written the obvious wrong way.
+
+It is worth being honest that this guard is currently redundant: `isPatient` means `!isStaff`, so anything reaching the staff branch is already staff. It earns its place because that equivalence is exactly what makes the clinic-wide read safe, and Phase 10's portal work may well give a user both a staff role and a patient record.
+
+### Verified by attack, not by reading
+
+This is the first phase where a guard could be tested by trying to get past it, because the project now has a patient login. **Each attack was run before the fix to confirm it succeeded** — an attack never seen to work proves nothing when it later fails.
+
+| Attack from the patient session | Before | After |
+|---|---|---|
+| Post to own thread as the clinic | stored `author: staff` | stored `author: patient` |
+| Write into another patient's thread | message inserted | "Not your record" |
+| Sign another patient's consent form | document marked `signed` | "Not your record" |
+| Read the whole patient directory | full directory returned | "Staff access only" |
+| Read another patient's clinical record | full record returned | "Not your record" |
+
+The positive paths matter as much as the refusals, since the risk in this phase was locking real users out. The patient can still read their record, poll the bell, message their own thread, mark it read, **sign their own consent form** and submit a health update. Owner and manager both retain the patient directory, individual records, the dashboard, the catalogue and both settings reads — the manager case also confirms `requirePermission` grants correctly through `role_permissions` rather than only for owners.
+
+Route sweeps for owner, manager and patient all render with **zero console errors**, and `npx tsc --noEmit` holds at the 52-error baseline.
+
+### Cleaning up after the attacks
+
+The attacks wrote real rows to the live project: a forged signature on a real patient's consent form and messages in a thread that was not ours. Prior state was captured first and restored afterwards — the consent form is back to `sent` with null signature fields, and the affected thread is back to its original two messages. All test messages, the temporary test document and the test health-history row were deleted, and the residual count verified at zero.
+
+### Deferred
+
+**Patients can still reach staff route chrome** (audit §14.3.1). `_authenticated/route.tsx` gates on session, not role, so a patient typing `/retention` or `/earnings` gets the staff page shell with empty data. No PHI leaks — every query is client-gated and now server-guarded — but it reads as a broken page rather than a refusal. One central role gate would fix all of them; left out so this phase stays server-side and revertable on its own.
+
+Two in-staff IDORs remain and are noted for Phase 3: `listRecallTasks` lets any staff member read any patient's recall tasks, and `deleteMessageTemplate` is owner-gated but unscoped by author.
+
+### Residual risk
+
+**Every guard added here is application-layer.** §4.1 is untouched: the service-role client still bypasses RLS, so the database enforces nothing for application traffic. A handler that forgets its guard is open again, and nothing below it will catch that. Closing it properly means moving off the service-role client, which is architectural.
+
+**Two roles remain untested.** We hold owner, manager and patient logins. Practitioner and front_desk still have no passwords set, so their views of these guards are verified by reasoning about `isStaff` and nothing more.

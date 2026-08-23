@@ -15,7 +15,10 @@ import {
   reloadIdentity,
   requireManager,
   requireOwner,
+  requirePatientSelf,
   requirePermission,
+  requireStaff,
+  requireStaffOrOwnPatient,
 } from "@/lib/auth/guards.server";
 
 export { PERMISSION_KEYS, type PermissionKey };
@@ -279,6 +282,7 @@ export const getMe = createServerFn({ method: "GET" })
 export const getDashboard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireStaff(context as Ctx);
     const supabase = (context as Ctx).supabase;
     const identity = await loadIdentity(context as Ctx);
     const today = new Date();
@@ -543,6 +547,7 @@ export const getDashboard = createServerFn({ method: "GET" })
 export const listPatients = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireStaff(context as Ctx);
     const supabase = (context as Ctx).supabase;
     const { data, error } = await supabase
       .from("patients")
@@ -590,6 +595,9 @@ export const getPatient = createServerFn({ method: "GET" })
   .validator((data: { id: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    // Returns the full clinical record for whatever ID it is handed, so without
+    // this any authenticated user could read any patient by ID.
+    await requireStaffOrOwnPatient(context as Ctx, data.id);
     const supabase = (context as Ctx).supabase;
     const { data: patient, error } = await supabase
       .from("patients")
@@ -726,6 +734,7 @@ export const getPatient = createServerFn({ method: "GET" })
 export const getCatalogue = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireStaff(context as Ctx);
     const { data } = await (context as Ctx).supabase
       .from("treatment_catalogue")
       .select("*")
@@ -737,6 +746,7 @@ export const getCatalogue = createServerFn({ method: "GET" })
 export const listPractitioners = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireStaff(context as Ctx);
     const ctx = context as Ctx;
     const { data: roles } = await ctx.supabase
       .from("user_roles")
@@ -756,6 +766,7 @@ export const listAppointments = createServerFn({ method: "GET" })
   .validator((data: { from: string; to: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await requireStaff(context as Ctx);
     const { data: rows, error } = await (context as Ctx).supabase
       .from("appointments")
       .select(
@@ -959,6 +970,7 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await requireStaff(context as Ctx);
     const supabase = (context as Ctx).supabase;
     const patch: Record<string, unknown> = {};
     if (data.status) patch["status"] = data.status;
@@ -1115,6 +1127,7 @@ export const addPhoto = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await requireStaff(context as Ctx);
     const { error } = await (context as Ctx).supabase.from("treatment_photos").insert({
       clinic_id: CLINIC_ID,
       patient_id: data.patient_id,
@@ -1173,6 +1186,7 @@ export const resendDocument = createServerFn({ method: "POST" })
   .validator((data: { id: string; patient_id: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await requireStaff(context as Ctx);
     const { error } = await (context as Ctx).supabase
       .from("documents")
       .update({ status: "sent", sent_at: new Date().toISOString() })
@@ -1193,13 +1207,20 @@ export const sendMessage = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    // `data.as` is ignored: taking the author from the request body let a patient
+    // post into their own thread as "staff", so the message rendered as clinical
+    // advice from the clinic. Staff may write to any thread; a patient may write
+    // only to their own.
+    const identity = await requireStaffOrOwnPatient(ctx, data.patient_id);
+    const author = identity.isStaff ? "staff" : "patient";
     const body = data.body.trim().slice(0, 2000);
     const attachments = (data.attachments ?? []).slice(0, 5);
     if (!body && attachments.length === 0) throw new Error("Message cannot be empty");
-    const { error } = await (context as Ctx).supabase.from("messages").insert({
+    const { error } = await ctx.supabase.from("messages").insert({
       clinic_id: CLINIC_ID,
       patient_id: data.patient_id,
-      author: data.as,
+      author,
       author_id: context.userId,
       body: body || (attachments.length === 1 ? "Sent an attachment" : "Sent attachments"),
       attachments,
@@ -1240,6 +1261,11 @@ export const getUnreadMessages = createServerFn({ method: "GET" })
       };
     }
 
+    // Guarded here rather than at the top: the patient branch above is polled by
+    // the portal's notification bell, and an entry guard would break it. Redundant
+    // while `isPatient` means `!isStaff`, but that equivalence is what makes the
+    // clinic-wide read below safe, so state it rather than rely on it.
+    await requireStaff(context as Ctx);
     const { data: rows } = await supabase
       .from("messages")
       .select("id, body, created_at, patient_id, patients(first_name, last_name)")
@@ -1310,6 +1336,7 @@ export const listStaffNotifications = createServerFn({ method: "GET" })
 export const listStaffDirectory = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireStaff(context as Ctx);
     const ctx = context as Ctx;
     const { data: roles } = await ctx.supabase
       .from("user_roles")
@@ -1393,6 +1420,7 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
   .validator((data: { practitionerId: string; date: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await requireStaff(context as Ctx);
     const ctx = context as Ctx;
     const day = new Date(`${data.date}T00:00:00`);
     const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
@@ -1465,6 +1493,7 @@ export const dismissStaffInboxItem = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await requireStaff(context as Ctx);
     const ctx = context as Ctx;
     await dismissStaffInboxRows(ctx, [data.id]);
     return { ok: true };
@@ -1604,6 +1633,7 @@ export const listIncomingTeamAlerts = createServerFn({ method: "GET" })
 export const listMessageTemplates = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireStaff(context as Ctx);
     const { data, error } = await (context as Ctx).supabase
       .from("message_templates")
       .select("*")
@@ -1651,7 +1681,9 @@ export const markMessagesRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const supabase = (context as Ctx).supabase;
-    const identity = await loadIdentity(context as Ctx);
+    // The author filter alone did not stop a patient passing someone else's
+    // patient_id and marking that thread read.
+    const identity = await requireStaffOrOwnPatient(context as Ctx, data.patient_id);
 
     // Patients read staff messages in their own thread; staff read patient messages for a given patient.
     const authorFilter = identity.isPatient ? "staff" : "patient";
@@ -1758,9 +1790,20 @@ export const signDocument = createServerFn({ method: "POST" })
   .validator((data: { id: string; signed_name: string }) => data)
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
     const name = data.signed_name.trim().slice(0, 120);
     if (!name) throw new Error("Please type your full name to sign");
-    const { error } = await (context as Ctx).supabase
+    // Signing is the patient's own act. Without this, any authenticated user could
+    // sign any consent form by ID, including one belonging to another patient.
+    const { data: doc, error: docError } = await ctx.supabase
+      .from("documents")
+      .select("patient_id")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (docError) throw new Error(docError.message);
+    if (!doc) throw new Error("Document not found");
+    await requirePatientSelf(ctx, doc.patient_id);
+    const { error } = await ctx.supabase
       .from("documents")
       .update({
         status: "signed",
@@ -2706,9 +2749,15 @@ export const deleteMyDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    const identity = await loadIdentity(ctx);
-    if (!identity.isStaff) throw new Error("Staff access only");
-    const { error } = await ctx.supabase.from("staff_documents").delete().eq("id", data.id);
+    const identity = await requireStaff(ctx);
+    // Scoped to the caller: deleting by ID alone let any staff member remove any
+    // other's work documents. No manager path depends on this - the delete control
+    // is behind !readOnly, and team/$id renders StaffDocuments read-only.
+    const { error } = await ctx.supabase
+      .from("staff_documents")
+      .delete()
+      .eq("id", data.id)
+      .eq("user_id", identity.userId);
     if (error) throw new Error(error.message);
     await audit(ctx, "profile.document_removed", "staff_documents", data.id, null);
     return { ok: true };
@@ -3232,6 +3281,7 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    await requireStaff(context as Ctx);
     const ctx = context as Ctx;
     const start = new Date(data.starts_at);
     if (Number.isNaN(start.getTime())) throw new Error("Invalid date and time");
@@ -3278,6 +3328,7 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
 export const listTreatmentColours = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireStaff(context as Ctx);
     const { data } = await (context as Ctx).supabase
       .from("treatment_colours")
       .select("treatment_name, lane, hex");
@@ -3330,6 +3381,7 @@ export const saveTreatmentColour = createServerFn({ method: "POST" })
 export const listColourThemes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requirePermission(context as Ctx, "settings.treatments");
     const { data } = await (context as Ctx).supabase
       .from("treatment_colour_themes")
       .select("id, name, colours, updated_at")
@@ -3434,6 +3486,7 @@ export const deleteColourTheme = createServerFn({ method: "POST" })
 export const listCatalogueItems = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requirePermission(context as Ctx, "settings.treatments");
     const { data } = await (context as Ctx).supabase
       .from("treatment_catalogue")
       .select("*")
@@ -3516,6 +3569,7 @@ export const setCatalogueItemActive = createServerFn({ method: "POST" })
 export const getClinicDetails = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireStaff(context as Ctx);
     const { data } = await (context as Ctx).supabase
       .from("clinics")
       .select("id, name, address, phone, email")
@@ -3646,6 +3700,7 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .validator((data: { appointment_id: string }) => ({ appointment_id: String(data.appointment_id) }))
   .handler(async ({ context, data }) => {
+    await requireStaff(context as Ctx);
     const { supabase } = context as Ctx;
     const [{ data: row, error }, { data: appt }] = await Promise.all([
       supabase
