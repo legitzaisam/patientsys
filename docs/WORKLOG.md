@@ -133,4 +133,15 @@ Queried while working out who could be given a test password. Three things that 
 
 **No patient can sign in.** Three `patients` rows exist and **none** has a `user_id`, so the portal has zero users. Every patient-facing guard, including the `getUnreadMessages` branch that Phase 2 must not break, is currently unreachable in this project.
 
+**Test accounts provisioned (Phase 2 precondition).** Two accounts were created with the service-role key, mirroring what `createStaffAccount` does:
+
+| Account | Role | Signs in at | Lands on |
+|---|---|---|---|
+| `test.manager@aetheria.clinic` | `manager` | `/auth` | `/dashboard` |
+| `damonsalvatore@hotmail.com` | `patient`, linked to the existing Damon Salvatore record | `/portal` | `/my-record` |
+
+Both verified by signing in. The shared password is held outside the repo and is deliberately not recorded here. The manager account is disposable and should be deleted once Phase 2 is verified. Passwords for the three existing staff (Sofia Marchetti, Nadia Rahman, Tom Whitfield) are set by the owner through `/team`.
+
+Worth noting what this proved: **a trigger creates a `profiles` row for every new auth user**, including patients. The provisioning script deletes it for the patient, because a profile row with no linked patient record is exactly the state that makes `getMe` throw "Your clinic access has been removed" — which is how the orphaned account below came about.
+
 **One account is locked out and one profile is orphaned.** `z.bassim@hotmail.com` has an auth user and a `profiles` row but no role and no patient record, which sends `getMe` straight into "Your clinic access has been removed" on every sign-in. A second profile, "Invite Test", has no auth user at all — a residue of the invite flow. Neither is a Phase 1 regression; both predate it.
