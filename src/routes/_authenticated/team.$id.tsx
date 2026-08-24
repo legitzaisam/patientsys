@@ -2,9 +2,14 @@ import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type TouchEvent } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { getStaffProfile, updateStaffMember } from "@/lib/clinic.functions";
+import { UpdateStaffMember } from "@/lib/validation/schemas";
+import { numericText } from "@/lib/validation/primitives";
 import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { usePanelWidth } from "@/hooks/use-panel-width";
@@ -17,6 +22,25 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+
+/** Commission is typed as text; the percentage bound comes from the server schema. */
+const StaffProfileSchema = z.object({
+  fullName: UpdateStaffMember.shape.fullName,
+  jobTitle: z.string().trim().max(200),
+  registrationBody: z.string().trim().max(200),
+  registrationNumber: z.string().trim().max(100),
+  role: UpdateStaffMember.shape.role,
+  commissionRate: numericText(UpdateStaffMember.shape.commissionRate, 0),
+});
+type StaffProfileValues = z.infer<typeof StaffProfileSchema>;
 
 export const Route = createFileRoute("/_authenticated/team/$id")({
   validateSearch: (search: Record<string, unknown>): { chat?: boolean } => {
@@ -73,14 +97,20 @@ function StaffProfilePage() {
     enabled: Boolean(identity?.isStaff),
   });
 
-  const [form, setForm] = useState({
-    fullName: "",
-    jobTitle: "",
-    registrationBody: "",
-    registrationNumber: "",
-    role: "practitioner" as "owner" | "manager" | "practitioner" | "front_desk",
-    commissionRate: "0",
+  const profileForm = useForm<StaffProfileValues>({
+    resolver: zodResolver(StaffProfileSchema),
+    defaultValues: {
+      fullName: "",
+      jobTitle: "",
+      registrationBody: "",
+      registrationNumber: "",
+      role: "practitioner",
+      commissionRate: "0",
+    },
+    mode: "onBlur",
+    reValidateMode: "onBlur",
   });
+  const watched = profileForm.watch();
 
   const [chatWidth, setChatWidth] = usePanelWidth("staff-messages", 360);
   const [resizing, setResizing] = useState(false);
@@ -117,7 +147,7 @@ function StaffProfilePage() {
 
   useEffect(() => {
     if (!data?.profile) return;
-    setForm({
+    profileForm.reset({
       fullName: data.profile.full_name ?? "",
       jobTitle: data.profile.job_title ?? "",
       registrationBody: data.profile.registration_body ?? "",
@@ -125,6 +155,8 @@ function StaffProfilePage() {
       role: (data.role as "owner" | "manager" | "practitioner" | "front_desk") || "practitioner",
       commissionRate: String(Number(data.profile.commission_rate ?? 0)),
     });
+    // profileForm is stable across renders; re-running on it would clobber edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.profile, data?.role]);
 
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
@@ -144,9 +176,9 @@ function StaffProfilePage() {
   const canViewTeam = can(identity, "team.view");
   const showChat = true;
   const canViewDocuments = Boolean(data?.canViewDocuments);
-  const displayName = form.fullName || data?.profile?.full_name || "Team member";
+  const displayName = watched.fullName || data?.profile?.full_name || "Team member";
   const asideTitle =
-    form.jobTitle.trim() || (canEdit ? roleLabel(form.role) : data?.email || "Team member");
+    watched.jobTitle.trim() || (canEdit ? roleLabel(watched.role) : data?.email || "Team member");
 
   return (
     <AppShell identity={identity}>
@@ -183,7 +215,7 @@ function StaffProfilePage() {
                 <div className="flex w-full max-w-[8.5rem] flex-col items-center gap-3">
                   <div className="w-full text-center">
                     <p className="text-balance text-sm font-semibold leading-none tracking-[-0.012em] text-foreground">
-                      {form.fullName.trim() || displayName}
+                      {watched.fullName.trim() || displayName}
                     </p>
                     <p className="mt-1 text-pretty text-2xs leading-snug text-muted-foreground">
                       {asideTitle}
@@ -201,110 +233,145 @@ function StaffProfilePage() {
               </aside>
 
               <div className="flex min-w-0 flex-col">
-                <div className="grid gap-x-5 gap-y-4 p-5 pb-4 sm:grid-cols-2 sm:gap-x-6 sm:p-6 sm:px-7 sm:pb-4">
-                  <div className="field-stack min-w-0 sm:col-span-2">
-                    <Label htmlFor="sp-name">Full name</Label>
-                    <Input
-                      id="sp-name"
-                      value={form.fullName}
-                      readOnly={!canEdit}
-                      onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                <Form {...profileForm}>
+                  <form
+                    noValidate
+                    onSubmit={profileForm.handleSubmit((values) =>
+                      save.mutate({
+                        data: {
+                          userId: id,
+                          role: values.role,
+                          fullName: values.fullName,
+                          jobTitle: values.jobTitle,
+                          registrationBody: values.registrationBody,
+                          registrationNumber: values.registrationNumber,
+                          commissionRate: Number(values.commissionRate),
+                        },
+                      }),
+                    )}
+                    className="grid gap-x-5 gap-y-4 p-5 pb-4 sm:grid-cols-2 sm:gap-x-6 sm:p-6 sm:px-7 sm:pb-4"
+                  >
+                    <FormField
+                      control={profileForm.control}
+                      name="fullName"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0 sm:col-span-2">
+                          <FormLabel>Full name</FormLabel>
+                          <FormControl>
+                            <Input readOnly={!canEdit} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                  </div>
-                  <div className="field-stack min-w-0">
-                    <Label htmlFor="sp-job">Job title</Label>
-                    <Input
-                      id="sp-job"
-                      value={form.jobTitle}
-                      readOnly={!canEdit}
-                      onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
-                      placeholder="e.g. Aesthetic practitioner"
+                    <FormField
+                      control={profileForm.control}
+                      name="jobTitle"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0">
+                          <FormLabel>Job title</FormLabel>
+                          <FormControl>
+                            <Input
+                              readOnly={!canEdit}
+                              placeholder="e.g. Aesthetic practitioner"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                  </div>
-                  <div className="field-stack min-w-0">
-                    <Label htmlFor="sp-email">Work email</Label>
-                    <Input id="sp-email" value={data?.email ?? ""} disabled />
-                  </div>
-                  <div className="field-stack min-w-0">
-                    <Label htmlFor="sp-body">Registration body</Label>
-                    <Input
-                      id="sp-body"
-                      value={form.registrationBody}
-                      readOnly={!canEdit}
-                      onChange={(e) => setForm({ ...form, registrationBody: e.target.value })}
-                      placeholder="e.g. JCCP, NMC"
-                    />
-                  </div>
-                  <div className="field-stack min-w-0">
-                    <Label htmlFor="sp-no">Registration number</Label>
-                    <Input
-                      id="sp-no"
-                      value={form.registrationNumber}
-                      readOnly={!canEdit}
-                      onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
-                    />
-                  </div>
-                  {canEdit ? (
                     <div className="field-stack min-w-0">
-                      <Label htmlFor="sp-role">Access level</Label>
-                      <select
-                        id="sp-role"
-                        value={form.role}
-                        onChange={(e) => setForm({ ...form, role: e.target.value as typeof form.role })}
-                        className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 px-3 text-sm text-foreground shadow-inset-hi disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r.value} value={r.value}>
-                            {r.label}
-                          </option>
-                        ))}
-                      </select>
+                      <Label htmlFor="sp-email">Work email</Label>
+                      <Input id="sp-email" value={data?.email ?? ""} disabled />
                     </div>
-                  ) : null}
-                  {canEdit ? (
-                    <div className="field-stack min-w-0">
-                      <Label htmlFor="sp-commission">Commission rate</Label>
-                      <div className="flex max-w-[10rem] items-center gap-2">
-                        <Input
-                          id="sp-commission"
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={1}
-                          value={form.commissionRate}
-                          onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
-                          className="rounded-xl"
-                        />
-                        <span className="shrink-0 text-sm text-muted-foreground">%</span>
+                    <FormField
+                      control={profileForm.control}
+                      name="registrationBody"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0">
+                          <FormLabel>Registration body</FormLabel>
+                          <FormControl>
+                            <Input readOnly={!canEdit} placeholder="e.g. JCCP, NMC" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="registrationNumber"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0">
+                          <FormLabel>Registration number</FormLabel>
+                          <FormControl>
+                            <Input readOnly={!canEdit} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {canEdit ? (
+                      <FormField
+                        control={profileForm.control}
+                        name="role"
+                        render={({ field }) => (
+                          <FormItem className="min-w-0">
+                            <FormLabel>Access level</FormLabel>
+                            <FormControl>
+                              <select
+                                className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 px-3 text-sm text-foreground shadow-inset-hi disabled:cursor-not-allowed disabled:opacity-50"
+                                {...field}
+                              >
+                                {ROLES.map((r) => (
+                                  <option key={r.value} value={r.value}>
+                                    {r.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ) : null}
+                    {canEdit ? (
+                      <FormField
+                        control={profileForm.control}
+                        name="commissionRate"
+                        render={({ field }) => (
+                          <FormItem className="min-w-0">
+                            <FormLabel>Commission rate</FormLabel>
+                            <div className="flex max-w-[10rem] items-center gap-2">
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step={1}
+                                  className="rounded-xl"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <span className="shrink-0 text-sm text-muted-foreground">%</span>
+                            </div>
+                            <p className="text-2xs text-muted-foreground">
+                              Share of treatment revenue paid to this person.
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ) : null}
+                    {canEdit ? (
+                      <div className="flex items-center justify-end sm:col-span-2">
+                        <Button type="submit" disabled={save.isPending}>
+                          {save.isPending ? "Saving…" : "Save changes"}
+                        </Button>
                       </div>
-                      <p className="text-2xs text-muted-foreground">
-                        Share of treatment revenue paid to this person.
-                      </p>
-                    </div>
-                  ) : null}
-                  {canEdit ? (
-                    <div className="flex items-center justify-end sm:col-span-2">
-                      <Button
-                        disabled={save.isPending || !form.fullName.trim()}
-                        onClick={() =>
-                          save.mutate({
-                            data: {
-                              userId: id,
-                              role: form.role,
-                              fullName: form.fullName.trim(),
-                              jobTitle: form.jobTitle,
-                              registrationBody: form.registrationBody,
-                              registrationNumber: form.registrationNumber,
-                              commissionRate: Number(form.commissionRate),
-                            },
-                          })
-                        }
-                      >
-                        {save.isPending ? "Saving…" : "Save changes"}
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
+                    ) : null}
+                  </form>
+                </Form>
               </div>
             </div>
           </Card>

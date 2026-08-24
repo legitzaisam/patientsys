@@ -284,3 +284,65 @@ The Phase 2 positive test failed on "sign OWN consent form" with "Document not f
 **The control is still application-layer.** `npm run check:policy` proves every handler calls `authorize`. It cannot prove the rule attached to a handler is the *right* rule — that judgment is still per-handler and still human. And §4.1 is untouched: the service-role client bypasses RLS, so the database enforces nothing underneath any of this.
 
 **Practitioner and front desk are still untested.** Two of the five roles have no password set. Their behaviour under the new capability checks is verified from the grant table and by reasoning about `can()`, not by signing in. Given this phase changed what those two roles can reach, that gap is now more material than it was in Phase 2.
+
+---
+
+## Phase 4 — Runtime validation with zod
+
+**Date:** 2026-08-24
+**Plan:** [plans/phase-04-validation.md](plans/phase-04-validation.md)
+**Audit sections closed:** §4.8 (no runtime validation), and §4.8's stored-XSS claim corrected rather than fixed.
+
+### What changed
+
+**All 62 validators now parse.** `src/lib/validation/` holds 62 named schemas built on a shared primitive set, and every `.validator(...)` in both `clinic.functions.ts` and its demo twin calls `parseInput(Schema, data)`. Zero pass-throughs remain in either file. Zod was already a dependency and had zero importers; it now has three.
+
+**Validators keep their function form deliberately.** Passing a zod schema straight to `.validator()` works, but TanStack Start reports the failure as `JSON.stringify(issues, null, 2)`, and roughly 52 call sites feed `e.message` into `toast.error`. `parseInput` flattens the error to one sentence instead, so the existing toast pipeline stays useful without touching a single `onError`. It also keeps the declared input type at each call site, which avoided type churn across 62 handlers.
+
+**Production and demo share one source.** The Vite plugin only rewrites `clinic.functions.ts`, so `src/lib/validation/` is never swapped. Unlike the Phase 1 guards, both sides validate identically with no drift to accept.
+
+**`saveAppointmentNote` now sanitises.** Defence-in-depth only — see the correction below.
+
+**Four pilot forms gained inline errors**, finally consuming `ui/form.tsx`, which had sat orphaned since the shadcn install: `invite-staff-dialog`, `patients.index` new-patient, `treatment-catalogue-settings` and `team.$id`. The invite dialog's hand-rolled email error state was replaced while keeping its "Did you mean …? Yes" one-tap correction.
+
+**`npm run check:validators`** joins `check:policy`: it fails on a pass-through validator, an unused schema, a prod/demo schema mismatch, or a schema whose fields do not match the fields its validator declares.
+
+### The audit was wrong and this is the correction
+
+§4.8 called the missing sanitiser on `saveAppointmentNote` "a stored-XSS path into a clinical record". Appointment notes render as escaped React text in both places they appear, and the only `dangerouslySetInnerHTML` in `src/` is static chart CSS. There was no sink, so no live vulnerability — the finding should have been Low, not High. The sanitiser was added anyway, because these notes are one product decision away from the rich-text editor. §16.3 records this as a correction, not a fix.
+
+### Verification
+
+**Malformed input is refused readably.** 12 malformed payloads against representative handlers — missing required fields, wrong primitive types, out-of-range numbers, invalid enum values, an over-length body, a role not assignable through the grid — every one refused with a sentence a user could act on, not a JSON blob and not a 500. Five positive controls in the same session still returned 200.
+
+**Unknown keys are dropped.** `savePatient` with injected `clinic_id` and `role` returns 200 with the extra keys silently stripped by `z.object`, which is the intended behaviour and worth stating explicitly.
+
+**No regressions.** Owner, manager and patient across every route: zero console errors. All six patient portal paths work, all staff-side paths work. A demo-mode sweep across four roles confirms the non-UUID fixture ids validate — the specific reason no schema uses `.uuid()`.
+
+**Forms.** 10/10 checks: inline errors appear under the right field with readable wording, and valid submits still save.
+
+**Static.** `tsc --noEmit` holds at the 52-error baseline. `check:policy` 88/88, `check:validators` 62/62.
+
+### Two bugs found while verifying, both in the wording
+
+The first pass produced "String must contain at least 1 character(s)" in the browser and friendly text on the server, because the friendly error map was only applied inside `parseInput`. Making it zod's global default via `z.setErrorMap` fixed both sides from one place — `zodResolver` picks it up automatically.
+
+The second: numeric fields read "Value is too small" instead of "Price is too small", because `numericText` validates the coerced number through an inner schema whose issues carry no path. Re-raising them without the precomputed message lets the outer map recompute the wording against the real field.
+
+### Deferred
+
+**`quick-add-appointment` and the `schedule.tsx` booking dialog have no inline validation.** Both branch into an inline new-patient path spanning two schemas and are the highest-regression forms in the app. They belong in their own pass now that the pattern is proven.
+
+**Every other form still validates only on the round trip.** Server enforcement is real everywhere; inline errors exist on four surfaces.
+
+**`sendMessage` still declares `as`.** Phase 2 made the handler ignore it and Phase 3 left it; the schema now types it as an enum, but the field is inert and still present because the client sends it. Removing it means touching the callers.
+
+**The Tiptap duplicate `link`/`underline` warning** in `rich-notes-editor.tsx:92` is still there. Out of scope, still noisy.
+
+### Residual risk
+
+**`sanitizeNoteHtml` is a regex, not a sanitiser.** It is now on both note paths, but it should not be trusted against a determined payload. `saveMyNote` is the one with a real sink — Tiptap `setContent` re-parses that HTML on read. The note is self-scoped, so the exposure is self-XSS. DOMPurify is the actual fix and this phase did not do it.
+
+**A schema could be stricter than reality in a field nothing sampled.** The attack script proves rejection and the sweeps prove acceptance, but neither enumerates all 62 shapes. The bound on this is that schemas mirror the declared types plus enums, ranges and lengths — no format assertions were added, precisely because `.uuid()` would have broken demo mode on day one.
+
+**Validation still does not imply authorization.** A payload that parses cleanly is still subject to the Phase 3 policy map, and §4.1 is untouched: the service-role client bypasses RLS, so the database still enforces nothing underneath any of this.

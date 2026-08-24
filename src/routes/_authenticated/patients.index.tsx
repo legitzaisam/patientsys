@@ -2,18 +2,27 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
+import { useForm, type Control } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import type { z } from "zod";
 import { toast } from "sonner";
 import { Calendar, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { listPatients, savePatient } from "@/lib/clinic.functions";
-import { checkEmail } from "@/lib/email";
-import { toastEmailError } from "@/lib/email-toast";
+import { SavePatient } from "@/lib/validation/schemas";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +36,35 @@ import { Textarea } from "@/components/ui/textarea";
 type SortColumn = "nextDue" | "paperwork" | "status";
 type SortDirection = "asc" | "desc";
 type PatientView = "all" | "active" | "inactive" | "due";
+
+/**
+ * Derived from the schema the savePatient server function validates against, so
+ * the two cannot drift; this dialog only collects the subset a new record needs.
+ */
+const NewPatient = SavePatient.pick({
+  first_name: true,
+  last_name: true,
+  title: true,
+  email: true,
+  phone: true,
+  date_of_birth: true,
+  allergies: true,
+  medications: true,
+});
+type NewPatientValues = z.infer<typeof NewPatient>;
+
+const EMPTY_PATIENT: NewPatientValues = {
+  first_name: "",
+  last_name: "",
+  title: "",
+  email: "",
+  phone: "",
+  date_of_birth: "",
+  allergies: "",
+  medications: "",
+};
+
+const TITLES = ["Mr", "Mrs", "Ms", "Miss", "Mx", "Dr", "Prof"];
 
 export const Route = createFileRoute("/_authenticated/patients/")({
   validateSearch: (search: Record<string, unknown>): { view?: PatientView; q?: string } => {
@@ -71,11 +109,19 @@ function PatientsPage() {
     enabled: !!identity?.isStaff,
   });
 
+  const patientForm = useForm<NewPatientValues>({
+    resolver: zodResolver(NewPatient),
+    defaultValues: EMPTY_PATIENT,
+    mode: "onBlur",
+    reValidateMode: "onBlur",
+  });
+
   const create = useMutation({
     mutationFn: useServerFn(savePatient),
     onSuccess: () => {
       toast.success("Patient added");
       setOpen(false);
+      patientForm.reset(EMPTY_PATIENT);
       queryClient.invalidateQueries({ queryKey: ["patients"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -176,73 +222,107 @@ function PatientsPage() {
               <DialogHeader>
                 <DialogTitle>New patient</DialogTitle>
               </DialogHeader>
-              <form
-                id="new-patient"
-                className="grid gap-4 sm:grid-cols-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const f = new FormData(e.currentTarget as HTMLFormElement);
-                  const rawEmail = String(f.get("email") ?? "");
-                  let email = rawEmail.trim();
-                  if (email) {
-                    const check = checkEmail(email);
-                    if (!check.ok) {
-                      const formEl = e.currentTarget as HTMLFormElement;
-                      toastEmailError(check, (suggestion) => {
-                        const input = formEl.elements.namedItem("email") as HTMLInputElement | null;
-                        if (input) {
-                          input.value = suggestion;
-                          input.dispatchEvent(new Event("input", { bubbles: true }));
-                        }
-                      });
-                      return;
-                    }
-                    email = check.email;
-                  }
-                  create.mutate({
-                    data: {
-                      first_name: String(f.get("first_name")),
-                      last_name: String(f.get("last_name")),
-                      title: String(f.get("title") ?? ""),
-                      email,
-                      phone: String(f.get("phone") ?? ""),
-                      date_of_birth: String(f.get("date_of_birth") ?? ""),
-                      allergies: String(f.get("allergies") ?? ""),
-                      medications: String(f.get("medications") ?? ""),
-                    },
-                  });
-                }}
-              >
-                <div className="field-stack">
-                  <Label htmlFor="title">Title</Label>
-                  <select
-                    id="title"
+              <Form {...patientForm}>
+                <form
+                  id="new-patient"
+                  className="grid gap-4 sm:grid-cols-2"
+                  noValidate
+                  onSubmit={patientForm.handleSubmit((values) =>
+                    create.mutate({
+                      data: {
+                        first_name: values.first_name,
+                        last_name: values.last_name,
+                        title: values.title ?? "",
+                        email: values.email ?? "",
+                        phone: values.phone ?? "",
+                        date_of_birth: values.date_of_birth ?? "",
+                        allergies: values.allergies ?? "",
+                        medications: values.medications ?? "",
+                      },
+                    }),
+                  )}
+                >
+                  <FormField
+                    control={patientForm.control}
                     name="title"
-                    className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-sm"
-                    defaultValue=""
-                  >
-                    <option value="">—</option>
-                    {["Mr", "Mrs", "Ms", "Miss", "Mx", "Dr", "Prof"].map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <Field name="first_name" label="First name" required />
-                <Field name="last_name" label="Last name" required />
-                <Field name="email" label="Email" type="email" />
-                <Field name="phone" label="Phone" />
-                <Field name="date_of_birth" label="Date of birth" type="date" />
-                <div className="sm:col-span-2 field-stack">
-                  <Label htmlFor="allergies">Allergies</Label>
-                  <Textarea id="allergies" name="allergies" rows={2} className="rounded-xl" />
-                </div>
-                <div className="sm:col-span-2 field-stack">
-                  <Label htmlFor="medications">Current medication</Label>
-                  <Textarea id="medications" name="medications" rows={2} className="rounded-xl" />
-                </div>
-              </form>
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Title</FormLabel>
+                        <FormControl>
+                          <select
+                            className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-sm"
+                            {...field}
+                            value={field.value ?? ""}
+                          >
+                            <option value="">—</option>
+                            {TITLES.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <PatientField
+                    control={patientForm.control}
+                    name="first_name"
+                    label="First name"
+                  />
+                  <PatientField control={patientForm.control} name="last_name" label="Last name" />
+                  <PatientField
+                    control={patientForm.control}
+                    name="email"
+                    label="Email"
+                    type="email"
+                  />
+                  <PatientField control={patientForm.control} name="phone" label="Phone" />
+                  <PatientField
+                    control={patientForm.control}
+                    name="date_of_birth"
+                    label="Date of birth"
+                    type="date"
+                  />
+                  <FormField
+                    control={patientForm.control}
+                    name="allergies"
+                    render={({ field }) => (
+                      <FormItem className="sm:col-span-2">
+                        <FormLabel>Allergies</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            rows={2}
+                            className="rounded-xl"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={patientForm.control}
+                    name="medications"
+                    render={({ field }) => (
+                      <FormItem className="sm:col-span-2">
+                        <FormLabel>Current medication</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            rows={2}
+                            className="rounded-xl"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </form>
+              </Form>
               <DialogFooter className="flex-row justify-end gap-2 sm:justify-end">
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                   Cancel
@@ -352,35 +432,45 @@ function PatientsPage() {
   );
 }
 
-function Field({
+function PatientField({
+  control,
   name,
   label,
   type = "text",
-  required,
 }: {
-  name: string;
+  control: Control<NewPatientValues>;
+  name: keyof NewPatientValues;
   label: string;
   type?: string;
-  required?: boolean;
 }) {
   return (
-    <div className="field-stack">
-      <Label htmlFor={name}>{label}</Label>
-      {type === "date" ? (
-        <div className="relative">
-          <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            id={name}
-            name={name}
-            type="date"
-            required={required}
-            className="rounded-xl pl-[34px] pr-2 [&::-webkit-datetime-edit]:p-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-2 [&::-webkit-calendar-picker-indicator]:h-4 [&::-webkit-calendar-picker-indicator]:w-4 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
-          />
-        </div>
-      ) : (
-        <Input id={name} name={name} type={type} required={required} className="rounded-xl" />
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          {type === "date" ? (
+            <div className="relative">
+              <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <FormControl>
+                <Input
+                  type="date"
+                  className="rounded-xl pl-[34px] pr-2 [&::-webkit-datetime-edit]:p-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-2 [&::-webkit-calendar-picker-indicator]:h-4 [&::-webkit-calendar-picker-indicator]:w-4 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+                  {...field}
+                  value={field.value ?? ""}
+                />
+              </FormControl>
+            </div>
+          ) : (
+            <FormControl>
+              <Input type={type} className="rounded-xl" {...field} value={field.value ?? ""} />
+            </FormControl>
+          )}
+          <FormMessage />
+        </FormItem>
       )}
-    </div>
+    />
   );
 }
 

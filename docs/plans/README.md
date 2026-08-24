@@ -31,3 +31,4 @@ Start from [_TEMPLATE.md](_TEMPLATE.md).
 | 1 | [Authorization foundation](phase-01-authorization-foundation.md) | Complete |
 | 2 | [Guard retrofit](phase-02-guard-retrofit.md) | Complete |
 | 3 | [Capability-based RBAC](phase-03-rbac.md) | Complete |
+| 4 | [Runtime validation with zod](phase-04-validation.md) | Complete |

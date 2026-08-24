@@ -9,6 +9,8 @@ import {
 import { bookingDetailsMessage, type PaymentLinkKind } from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
 import { PERMISSION_KEYS, type PermissionKey } from "@/lib/permissions";
+import { parseInput } from "@/lib/validation/parse";
+import * as schemas from "@/lib/validation/schemas";
 import {
   type Ctx,
   authorize,
@@ -591,7 +593,7 @@ export const listPatients = createServerFn({ method: "GET" })
   });
 
 export const getPatient = createServerFn({ method: "GET" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.GetPatient, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     // Returns the full clinical record for whatever ID it is handed, so without
@@ -762,7 +764,7 @@ export const listPractitioners = createServerFn({ method: "GET" })
   });
 
 export const listAppointments = createServerFn({ method: "GET" })
-  .validator((data: { from: string; to: string }) => data)
+  .validator((data: { from: string; to: string }) => parseInput(schemas.ListAppointments, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "listAppointments");
@@ -797,7 +799,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       app_origin?: string;
       /** Pay-link amount when status is unpaid (defaults to full). */
       pay_kind?: PaymentLinkKind;
-    }) => data,
+    }) => parseInput(schemas.SaveAppointment, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -966,7 +968,7 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       payment_status?: "unpaid" | "deposit_paid" | "paid" | "refunded";
       stage?: "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
       cancel_reason?: string;
-    }) => data,
+    }) => parseInput(schemas.UpdateAppointmentState, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1016,7 +1018,7 @@ export const savePatient = createServerFn({ method: "POST" })
       medications?: string;
       conditions?: string;
       notes?: string;
-    }) => data,
+    }) => parseInput(schemas.SavePatient, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1076,7 +1078,7 @@ export const addTreatment = createServerFn({ method: "POST" })
       price?: number;
       performed_at: string;
       next_due_at?: string;
-    }) => data,
+    }) => parseInput(schemas.AddTreatment, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1125,7 +1127,7 @@ export const addPhoto = createServerFn({ method: "POST" })
       kind: "before" | "after";
       caption?: string;
       marketing_consent?: boolean;
-    }) => data,
+    }) => parseInput(schemas.AddPhoto, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1152,7 +1154,7 @@ export const sendDocument = createServerFn({ method: "POST" })
       title: string;
       body?: string;
       treatment_id?: string;
-    }) => data,
+    }) => parseInput(schemas.SendDocument, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1186,7 +1188,7 @@ export const sendDocument = createServerFn({ method: "POST" })
   });
 
 export const resendDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; patient_id: string }) => data)
+  .validator((data: { id: string; patient_id: string }) => parseInput(schemas.ResendDocument, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "resendDocument");
@@ -1206,7 +1208,7 @@ export const sendMessage = createServerFn({ method: "POST" })
       body: string;
       as: "staff" | "patient";
       attachments?: { path: string; name: string; type: string; size: number }[];
-    }) => data,
+    }) => parseInput(schemas.SendMessage, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1369,7 +1371,7 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
       recipientId?: string;
       body: string;
       urgent?: boolean;
-    }) => data,
+    }) => parseInput(schemas.SendStaffAlert, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1420,7 +1422,7 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
 
 /** Day summary for a practitioner: bookings, free windows and their urgent notes to me. */
 export const getPractitionerDay = createServerFn({ method: "GET" })
-  .validator((data: { practitionerId: string; date: string }) => data)
+  .validator((data: { practitionerId: string; date: string }) => parseInput(schemas.GetPractitionerDay, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "getPractitionerDay");
@@ -1475,7 +1477,7 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
   });
 
 export const markStaffNotificationRead = createServerFn({ method: "POST" })
-  .validator((data: { id?: string; all?: boolean }) => data)
+  .validator((data: { id?: string; all?: boolean }) => parseInput(schemas.MarkStaffNotificationRead, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -1494,7 +1496,7 @@ export const markStaffNotificationRead = createServerFn({ method: "POST" })
 
 /** Hide a team inbox row for the signed-in user only (incoming or sent). */
 export const dismissStaffInboxItem = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.DismissStaffInboxItem, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "dismissStaffInboxItem");
@@ -1505,7 +1507,7 @@ export const dismissStaffInboxItem = createServerFn({ method: "POST" })
 
 /** Hide several inbox rows for the signed-in user (e.g. whole peer stack). */
 export const dismissStaffInboxItems = createServerFn({ method: "POST" })
-  .validator((data: { ids: string[] }) => data)
+  .validator((data: { ids: string[] }) => parseInput(schemas.DismissStaffInboxItems, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -1651,7 +1653,7 @@ export const listMessageTemplates = createServerFn({ method: "GET" })
   });
 
 export const saveMessageTemplate = createServerFn({ method: "POST" })
-  .validator((data: { id?: string; title: string; body: string; category?: string }) => data)
+  .validator((data: { id?: string; title: string; body: string; category?: string }) => parseInput(schemas.SaveMessageTemplate, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "saveMessageTemplate");
@@ -1672,7 +1674,7 @@ export const saveMessageTemplate = createServerFn({ method: "POST" })
   });
 
 export const deleteMessageTemplate = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.DeleteMessageTemplate, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "deleteMessageTemplate");
@@ -1682,7 +1684,7 @@ export const deleteMessageTemplate = createServerFn({ method: "POST" })
   });
 
 export const markMessagesRead = createServerFn({ method: "POST" })
-  .validator((data: { patient_id: string }) => data)
+  .validator((data: { patient_id: string }) => parseInput(schemas.MarkMessagesRead, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const supabase = (context as Ctx).supabase;
@@ -1705,7 +1707,7 @@ export const markMessagesRead = createServerFn({ method: "POST" })
   });
 
 export const reviewHistory = createServerFn({ method: "POST" })
-  .validator((data: { id: string; patient_id: string }) => data)
+  .validator((data: { id: string; patient_id: string }) => parseInput(schemas.ReviewHistory, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "reviewHistory");
@@ -1771,7 +1773,7 @@ export const submitHistoryUpdate = createServerFn({ method: "POST" })
       diet: string;
       pregnancy: string;
       other: string;
-    }) => data,
+    }) => parseInput(schemas.SubmitHistoryUpdate, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1797,7 +1799,7 @@ export const submitHistoryUpdate = createServerFn({ method: "POST" })
   });
 
 export const signDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; signed_name: string }) => data)
+  .validator((data: { id: string; signed_name: string }) => parseInput(schemas.SignDocument, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -1875,7 +1877,7 @@ export const createStaffAccount = createServerFn({ method: "POST" })
       role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
-    }) => data,
+    }) => parseInput(schemas.CreateStaffAccount, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1915,7 +1917,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       registrationBody?: string;
       registrationNumber?: string;
       commissionRate?: number;
-    }) => data,
+    }) => parseInput(schemas.UpdateStaffMember, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -1972,7 +1974,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
-    }) => data,
+    }) => parseInput(schemas.InviteStaffMember, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -2056,7 +2058,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
 
 
 export const revokeStaffAccess = createServerFn({ method: "POST" })
-  .validator((data: { userId: string }) => data)
+  .validator((data: { userId: string }) => parseInput(schemas.RevokeStaffAccess, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2134,7 +2136,7 @@ export const listExTeamMembers = createServerFn({ method: "GET" })
 
 /** Restore a former team member within the 90-day window. */
 export const restoreExTeamMember = createServerFn({ method: "POST" })
-  .validator((data: { userId: string }) => data)
+  .validator((data: { userId: string }) => parseInput(schemas.RestoreExTeamMember, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2175,7 +2177,7 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
  * invite link is opened, which is why sign-in fails with "Invalid credentials").
  */
 export const setStaffPassword = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; password: string }) => data)
+  .validator((data: { userId: string; password: string }) => parseInput(schemas.SetStaffPassword, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2201,7 +2203,7 @@ export const setStaffPassword = createServerFn({ method: "POST" })
 
 /** Signed-in staff: replace temporary/reset password and clear the must-change flag. */
 export const changeOwnPassword = createServerFn({ method: "POST" })
-  .validator((data: { password: string }) => data)
+  .validator((data: { password: string }) => parseInput(schemas.ChangeOwnPassword, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2294,7 +2296,7 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" })
 
 /** Manager-only: add or correct a patient's email address. */
 export const setPatientEmail = createServerFn({ method: "POST" })
-  .validator((data: { patientId: string; email: string }) => data)
+  .validator((data: { patientId: string; email: string }) => parseInput(schemas.SetPatientEmail, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2308,7 +2310,7 @@ export const setPatientEmail = createServerFn({ method: "POST" })
 
 /** Manager-only: add or correct a staff account's sign-in email. */
 export const setStaffEmail = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; email: string }) => data)
+  .validator((data: { userId: string; email: string }) => parseInput(schemas.SetStaffEmail, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2326,7 +2328,7 @@ export const setStaffEmail = createServerFn({ method: "POST" })
 
 /** Manager-only: earnings, KPIs, retention and the clinic/practitioner split per practitioner. */
 export const getPractitionerPerformance = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string }) => data)
+  .validator((data: { from: string; to: string }) => parseInput(schemas.GetPractitionerPerformance, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2433,7 +2435,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
 
 /** The caller's own earnings and KPIs. Never returns clinic figures or the split percentage. */
 export const getMyEarnings = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string }) => data)
+  .validator((data: { from: string; to: string }) => parseInput(schemas.GetMyEarnings, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2514,7 +2516,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
 
 /** Manager-only: set a staff member's commission percentage. */
 export const setCommissionRate = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; rate: number }) => data)
+  .validator((data: { userId: string; rate: number }) => parseInput(schemas.SetCommissionRate, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2543,7 +2545,7 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       registrationBody?: string;
       registrationNumber?: string;
       note?: string;
-    }) => data,
+    }) => parseInput(schemas.SubmitProfileChange, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -2572,7 +2574,7 @@ export const saveMyProfile = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
-    }) => data,
+    }) => parseInput(schemas.SaveMyProfile, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -2636,7 +2638,7 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
 
 /** Manager-only: approve (applies the change) or decline a request. */
 export const reviewProfileChange = createServerFn({ method: "POST" })
-  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) => data)
+  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) => parseInput(schemas.ReviewProfileChange, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2689,7 +2691,7 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
 
 /** Save a staff member's profile picture. Managers may update another user's avatar. */
 export const setMyAvatar = createServerFn({ method: "POST" })
-  .validator((data: { path: string | null; targetUserId?: string }) => data)
+  .validator((data: { path: string | null; targetUserId?: string }) => parseInput(schemas.SetMyAvatar, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2706,7 +2708,7 @@ export const setMyAvatar = createServerFn({ method: "POST" })
 
 /** A staff member's uploaded work documents. Managers may view another user's file. */
 export const listMyDocuments = createServerFn({ method: "GET" })
-  .validator((data: { targetUserId?: string }) => data)
+  .validator((data: { targetUserId?: string }) => parseInput(schemas.ListMyDocuments, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2736,7 +2738,7 @@ export const addMyDocument = createServerFn({ method: "POST" })
       file_name: string;
       file_type?: string;
       file_size?: number;
-    }) => data,
+    }) => parseInput(schemas.AddMyDocument, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -2759,7 +2761,7 @@ export const addMyDocument = createServerFn({ method: "POST" })
 
 /** Remove one of the signed-in staff member's work documents. */
 export const deleteMyDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.DeleteMyDocument, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2779,7 +2781,7 @@ export const deleteMyDocument = createServerFn({ method: "POST" })
 
 /** Staff profiles: all staff can view details; documents stay manager/self; edit is manager-only in UI. */
 export const getStaffProfile = createServerFn({ method: "GET" })
-  .validator((data: { userId: string }) => data)
+  .validator((data: { userId: string }) => parseInput(schemas.GetStaffProfile, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2883,7 +2885,7 @@ export const getRetention = createServerFn({ method: "GET" })
 
 /** Record that a lapsing patient has been contacted, so they drop off the recall list. */
 export const logRetentionOutreach = createServerFn({ method: "POST" })
-  .validator((data: { patient_id: string; channel?: string; note?: string }) => data)
+  .validator((data: { patient_id: string; channel?: string; note?: string }) => parseInput(schemas.LogRetentionOutreach, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2909,7 +2911,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
       patient_id: string;
       note?: string;
       recipients: { id: string; label: string }[];
-    }) => data,
+    }) => parseInput(schemas.CreateRecallTask, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -2978,7 +2980,7 @@ export const updateRecallTask = createServerFn({ method: "POST" })
       task_id: string;
       recipients: { id: string; label: string }[];
       note?: string;
-    }) => data,
+    }) => parseInput(schemas.UpdateRecallTask, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -3094,7 +3096,7 @@ export const updateRecallTask = createServerFn({ method: "POST" })
  * the patient never gets chased twice.
  */
 export const setRecallTaskStatus = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; status: "sent" | "contacted" | "completed" }) => data)
+  .validator((data: { task_id: string; status: "sent" | "contacted" | "completed" }) => parseInput(schemas.SetRecallTaskStatus, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3153,7 +3155,7 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
  * the group; omit it (or pass every assignee) to retract the whole assignment.
  */
 export const deleteRecallTask = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; assignee_ids?: string[] }) => data)
+  .validator((data: { task_id: string; assignee_ids?: string[] }) => parseInput(schemas.DeleteRecallTask, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3209,7 +3211,7 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
   });
 
 export const listRecallTasks = createServerFn({ method: "GET" })
-  .validator((data: { patient_id: string }) => data)
+  .validator((data: { patient_id: string }) => parseInput(schemas.ListRecallTasks, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3282,7 +3284,7 @@ export const listOpenRecallTasks = createServerFn({ method: "GET" })
 /** Move an appointment to a new start time (keeps or updates its duration). */
 export const rescheduleAppointment = createServerFn({ method: "POST" })
   .validator(
-    (data: { id: string; starts_at: string; duration_minutes?: number; practitioner_id?: string }) => data,
+    (data: { id: string; starts_at: string; duration_minutes?: number; practitioner_id?: string }) => parseInput(schemas.RescheduleAppointment, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -3346,7 +3348,7 @@ export const listTreatmentColours = createServerFn({ method: "GET" })
 
 /** Manager-only: set or clear the colour used for a treatment across the diary. */
 export const saveTreatmentColour = createServerFn({ method: "POST" })
-  .validator((data: { treatment_name: string; lane: number | null; hex?: string | null }) => data)
+  .validator((data: { treatment_name: string; lane: number | null; hex?: string | null }) => parseInput(schemas.SaveTreatmentColour, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3394,7 +3396,7 @@ export const listColourThemes = createServerFn({ method: "GET" })
 
 /** Manager-only: save the current treatment colours as a named theme. */
 export const saveColourTheme = createServerFn({ method: "POST" })
-  .validator((data: { name: string }) => data)
+  .validator((data: { name: string }) => parseInput(schemas.SaveColourTheme, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3432,7 +3434,7 @@ export const saveColourTheme = createServerFn({ method: "POST" })
 
 /** Manager-only: apply a saved theme to every treatment colour in the diary. */
 export const applyColourTheme = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.ApplyColourTheme, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3468,7 +3470,7 @@ export const applyColourTheme = createServerFn({ method: "POST" })
 
 /** Manager-only: delete a saved colour theme. */
 export const deleteColourTheme = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.DeleteColourTheme, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3507,7 +3509,7 @@ export type CatalogueInput = {
 
 /** Manager-only: create or update a treatment in the clinic catalogue. */
 export const saveCatalogueItem = createServerFn({ method: "POST" })
-  .validator((data: CatalogueInput) => data)
+  .validator((data: CatalogueInput) => parseInput(schemas.SaveCatalogueItem, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3544,7 +3546,7 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
 
 /** Manager-only: archive or restore a treatment (kept for historical records). */
 export const setCatalogueItemActive = createServerFn({ method: "POST" })
-  .validator((data: { id: string; active: boolean }) => data)
+  .validator((data: { id: string; active: boolean }) => parseInput(schemas.SetCatalogueItemActive, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3573,7 +3575,7 @@ export const getClinicDetails = createServerFn({ method: "GET" })
 
 /** Manager-only: update the clinic's contact details. */
 export const updateClinicDetails = createServerFn({ method: "POST" })
-  .validator((data: { name: string; address?: string | null; phone?: string | null; email?: string | null }) => data)
+  .validator((data: { name: string; address?: string | null; phone?: string | null; email?: string | null }) => parseInput(schemas.UpdateClinicDetails, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3627,7 +3629,7 @@ export const setRolePermission = createServerFn({ method: "POST" })
       role: "manager" | "front_desk" | "practitioner";
       permission: string;
       enabled: boolean;
-    }) => data,
+    }) => parseInput(schemas.SetRolePermission, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -3673,7 +3675,7 @@ export const getMyNote = createServerFn({ method: "GET" })
 export const saveMyNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { body: string }) => ({
-    body: sanitizeNoteHtml(String(data?.body ?? "")),
+    body: sanitizeNoteHtml(parseInput(schemas.SaveMyNote, { body: String(data?.body ?? "") }).body),
   }))
   .handler(async ({ context, data }) => {
     await authorize(context as Ctx, "saveMyNote");
@@ -3689,7 +3691,9 @@ export const saveMyNote = createServerFn({ method: "POST" })
 
 export const getAppointmentNote = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { appointment_id: string }) => ({ appointment_id: String(data.appointment_id) }))
+  .validator((data: { appointment_id: string }) =>
+    parseInput(schemas.GetAppointmentNote, { appointment_id: String(data.appointment_id) }),
+  )
   .handler(async ({ context, data }) => {
     await authorize(context as Ctx, "getAppointmentNote");
     const { supabase } = context as Ctx;
@@ -3722,10 +3726,15 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
 
 export const saveAppointmentNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { appointment_id: string; body: string }) => ({
-    appointment_id: String(data.appointment_id),
-    body: String(data?.body ?? "").slice(0, 20000),
-  }))
+  .validator((data: { appointment_id: string; body: string }) =>
+    parseInput(schemas.SaveAppointmentNote, {
+      appointment_id: String(data.appointment_id),
+      // Visit notes render as escaped React text today, so this is not closing a
+      // live XSS hole — it stops stored markup being inherited if these notes ever
+      // move to the rich-text editor that `saveMyNote` already sanitises for.
+      body: sanitizeNoteHtml(String(data?.body ?? "")).slice(0, 20000),
+    }),
+  )
   .handler(async ({ context, data }) => {
     const identity = await authorize(context as Ctx, "saveAppointmentNote");
     const { supabase, userId } = context as Ctx;
@@ -3827,7 +3836,7 @@ async function getOrCreateConversationId(ctx: Ctx, peerUserId: string) {
 
 /** Open (or create) a 1:1 staff chat and return messages, peer alerts, and read receipts. */
 export const getStaffChat = createServerFn({ method: "GET" })
-  .validator((data: { peerUserId: string }) => data)
+  .validator((data: { peerUserId: string }) => parseInput(schemas.GetStaffChat, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3952,7 +3961,7 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
       peerUserId: string;
       body: string;
       attachments?: { path: string; name: string; type: string; size: number }[];
-    }) => data,
+    }) => parseInput(schemas.SendStaffChatMessage, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -4022,7 +4031,7 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
 
 /** Mark the open staff chat as read (drives peer read receipts). */
 export const markStaffChatRead = createServerFn({ method: "POST" })
-  .validator((data: { peerUserId: string }) => data)
+  .validator((data: { peerUserId: string }) => parseInput(schemas.MarkStaffChatRead, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;

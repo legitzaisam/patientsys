@@ -20,6 +20,8 @@ import {
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
 import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
+import { parseInput } from "@/lib/validation/parse";
+import * as schemas from "@/lib/validation/schemas";
 import {
   findPractitionerOverlap,
   PRACTITIONER_OVERLAP_MESSAGE,
@@ -539,7 +541,7 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
 });
 
 export const getPatient = createServerFn({ method: "GET" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.GetPatient, data))
   .handler(async ({ data }) => {
     const patient = patientById(data.id);
     if (!patient) throw new Error("Patient not found");
@@ -650,7 +652,7 @@ export const savePatient = createServerFn({ method: "POST" })
       medications?: string;
       conditions?: string;
       notes?: string;
-    }) => data,
+    }) => parseInput(schemas.SavePatient, data),
   )
   .handler(async ({ data }) => {
     const email = assertEmail(data.email ?? "", "email address", true);
@@ -703,7 +705,7 @@ export const listPractitioners = createServerFn({ method: "GET" }).handler(async
 });
 
 export const listAppointments = createServerFn({ method: "GET" })
-  .validator((data: { from: string; to: string }) => data)
+  .validator((data: { from: string; to: string }) => parseInput(schemas.ListAppointments, data))
   .handler(async ({ data }) =>
     sortAsc(
       appointments.filter((a) => a.starts_at >= data.from && a.starts_at < data.to),
@@ -728,7 +730,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       notes?: string;
       app_origin?: string;
       pay_kind?: PaymentLinkKind;
-    }) => data,
+    }) => parseInput(schemas.SaveAppointment, data),
   )
   .handler(async ({ data }) => {
     const me = identity();
@@ -895,7 +897,7 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       stage?:
         "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
       cancel_reason?: string;
-    }) => data,
+    }) => parseInput(schemas.UpdateAppointmentState, data),
   )
   .handler(async ({ data }) => {
     const row = appointments.find((a) => a.id === data.id);
@@ -924,7 +926,7 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
       starts_at: string;
       duration_minutes?: number;
       practitioner_id?: string;
-    }) => data,
+    }) => parseInput(schemas.RescheduleAppointment, data),
   )
   .handler(async ({ data }) => {
     const start = new Date(data.starts_at);
@@ -958,9 +960,9 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
   });
 
 export const getAppointmentNote = createServerFn({ method: "GET" })
-  .validator((data: { appointment_id: string }) => ({
-    appointment_id: String(data.appointment_id),
-  }))
+  .validator((data: { appointment_id: string }) =>
+    parseInput(schemas.GetAppointmentNote, { appointment_id: String(data.appointment_id) }),
+  )
   .handler(async ({ data }) => {
     const row = appointmentNotes.find((n) => n.appointment_id === data.appointment_id);
     const visitBody = (row?.body ?? "").trim();
@@ -982,10 +984,12 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
   });
 
 export const saveAppointmentNote = createServerFn({ method: "POST" })
-  .validator((data: { appointment_id: string; body: string }) => ({
-    appointment_id: String(data.appointment_id),
-    body: String(data?.body ?? "").slice(0, 20000),
-  }))
+  .validator((data: { appointment_id: string; body: string }) =>
+    parseInput(schemas.SaveAppointmentNote, {
+      appointment_id: String(data.appointment_id),
+      body: sanitizeNoteHtml(String(data?.body ?? "")).slice(0, 20000),
+    }),
+  )
   .handler(async ({ data }) => {
     const me = identity();
     const appointment = appointments.find((a) => a.id === data.appointment_id);
@@ -1037,7 +1041,7 @@ export const addTreatment = createServerFn({ method: "POST" })
       price?: number;
       performed_at: string;
       next_due_at?: string;
-    }) => data,
+    }) => parseInput(schemas.AddTreatment, data),
   )
   .handler(async ({ data }) => {
     const me = identity();
@@ -1079,7 +1083,7 @@ export const addPhoto = createServerFn({ method: "POST" })
       kind: "before" | "after";
       caption?: string;
       marketing_consent?: boolean;
-    }) => data,
+    }) => parseInput(schemas.AddPhoto, data),
   )
   .handler(async ({ data }) => {
     photos.push({
@@ -1106,7 +1110,7 @@ export const sendDocument = createServerFn({ method: "POST" })
       title: string;
       body?: string;
       treatment_id?: string;
-    }) => data,
+    }) => parseInput(schemas.SendDocument, data),
   )
   .handler(async ({ data }) => {
     const me = identity();
@@ -1150,7 +1154,7 @@ export const sendDocument = createServerFn({ method: "POST" })
   });
 
 export const resendDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; patient_id: string }) => data)
+  .validator((data: { id: string; patient_id: string }) => parseInput(schemas.ResendDocument, data))
   .handler(async ({ data }) => {
     const row = documents.find((d) => d.id === data.id);
     if (row) {
@@ -1161,7 +1165,7 @@ export const resendDocument = createServerFn({ method: "POST" })
   });
 
 export const signDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; signed_name: string }) => data)
+  .validator((data: { id: string; signed_name: string }) => parseInput(schemas.SignDocument, data))
   .handler(async ({ data }) => {
     const name = data.signed_name.trim().slice(0, 120);
     if (!name) throw new Error("Please type your full name to sign");
@@ -1186,7 +1190,7 @@ export const sendMessage = createServerFn({ method: "POST" })
       body: string;
       as: "staff" | "patient";
       attachments?: { path: string; name: string; type: string; size: number }[];
-    }) => data,
+    }) => parseInput(schemas.SendMessage, data),
   )
   .handler(async ({ data }) => {
     const me = identity();
@@ -1255,7 +1259,7 @@ export const getUnreadMessages = createServerFn({ method: "GET" }).handler(async
 });
 
 export const markMessagesRead = createServerFn({ method: "POST" })
-  .validator((data: { patient_id: string }) => data)
+  .validator((data: { patient_id: string }) => parseInput(schemas.MarkMessagesRead, data))
   .handler(async ({ data }) => {
     const me = identity();
     const author = me.isPatient ? "staff" : "patient";
@@ -1276,7 +1280,7 @@ export const listMessageTemplates = createServerFn({ method: "GET" }).handler(as
 );
 
 export const saveMessageTemplate = createServerFn({ method: "POST" })
-  .validator((data: { id?: string; title: string; body: string; category?: string }) => data)
+  .validator((data: { id?: string; title: string; body: string; category?: string }) => parseInput(schemas.SaveMessageTemplate, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const title = data.title.trim();
@@ -1301,7 +1305,7 @@ export const saveMessageTemplate = createServerFn({ method: "POST" })
   });
 
 export const deleteMessageTemplate = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.DeleteMessageTemplate, data))
   .handler(async ({ data }) => {
     const me = identity();
     if (!me.canDelete) throw new Error("Only managers can delete templates");
@@ -1330,7 +1334,7 @@ export const listStaffNotifications = createServerFn({ method: "GET" }).handler(
 });
 
 export const markStaffNotificationRead = createServerFn({ method: "POST" })
-  .validator((data: { id?: string; all?: boolean }) => data)
+  .validator((data: { id?: string; all?: boolean }) => parseInput(schemas.MarkStaffNotificationRead, data))
   .handler(async ({ data }) => {
     const me = identity();
     const now = new Date().toISOString();
@@ -1344,7 +1348,7 @@ export const markStaffNotificationRead = createServerFn({ method: "POST" })
 
 /** Hide a team inbox row for the signed-in user only (incoming or sent). */
 export const dismissStaffInboxItem = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.DismissStaffInboxItem, data))
   .handler(async ({ data }) => {
     dismissDemoInboxIds([data.id]);
     return { ok: true };
@@ -1352,7 +1356,7 @@ export const dismissStaffInboxItem = createServerFn({ method: "POST" })
 
 /** Hide several inbox rows for the signed-in user (e.g. whole peer stack). */
 export const dismissStaffInboxItems = createServerFn({ method: "POST" })
-  .validator((data: { ids: string[] }) => data)
+  .validator((data: { ids: string[] }) => parseInput(schemas.DismissStaffInboxItems, data))
   .handler(async ({ data }) => {
     dismissDemoInboxIds(data.ids);
     return { ok: true };
@@ -1463,7 +1467,7 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
       recipientId?: string;
       body: string;
       urgent?: boolean;
-    }) => data,
+    }) => parseInput(schemas.SendStaffAlert, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -1509,7 +1513,7 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
   });
 
 export const getPractitionerDay = createServerFn({ method: "GET" })
-  .validator((data: { practitionerId: string; date: string }) => data)
+  .validator((data: { practitionerId: string; date: string }) => parseInput(schemas.GetPractitionerDay, data))
   .handler(async ({ data }) => {
     const base = new Date(`${data.date}T00:00:00`);
     const from = new Date(base.getFullYear(), base.getMonth(), base.getDate()).toISOString();
@@ -1560,7 +1564,7 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
 /* ---------------------------------------------------------------- */
 
 export const reviewHistory = createServerFn({ method: "POST" })
-  .validator((data: { id: string; patient_id: string }) => data)
+  .validator((data: { id: string; patient_id: string }) => parseInput(schemas.ReviewHistory, data))
   .handler(async ({ data }) => {
     const me = identity();
     const row = medicalHistory.find((h) => h.id === data.id);
@@ -1608,7 +1612,7 @@ export const submitHistoryUpdate = createServerFn({ method: "POST" })
       diet: string;
       pregnancy: string;
       other: string;
-    }) => data,
+    }) => parseInput(schemas.SubmitHistoryUpdate, data),
   )
   .handler(async ({ data }) => {
     const me = identity();
@@ -1680,7 +1684,7 @@ export const createStaffAccount = createServerFn({ method: "POST" })
       role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
-    }) => data,
+    }) => parseInput(schemas.CreateStaffAccount, data),
   )
   .handler(async ({ data }) => {
     const email = assertEmail(data.email, "work email")!;
@@ -1717,7 +1721,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       registrationBody?: string;
       registrationNumber?: string;
       commissionRate?: number;
-    }) => data,
+    }) => parseInput(schemas.UpdateStaffMember, data),
   )
   .handler(async ({ data }) => {
     const me = identity();
@@ -1757,7 +1761,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
-    }) => data,
+    }) => parseInput(schemas.InviteStaffMember, data),
   )
   .handler(async ({ data }) => {
     const email = assertEmail(data.email, "work email")!;
@@ -1799,7 +1803,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
   });
 
 export const revokeStaffAccess = createServerFn({ method: "POST" })
-  .validator((data: { userId: string }) => data)
+  .validator((data: { userId: string }) => parseInput(schemas.RevokeStaffAccess, data))
   .handler(async ({ data }) => {
     const me = identity();
     if (data.userId === me.userId) throw new Error("You cannot revoke your own access");
@@ -1851,7 +1855,7 @@ export const listExTeamMembers = createServerFn({ method: "GET" }).handler(async
 });
 
 export const restoreExTeamMember = createServerFn({ method: "POST" })
-  .validator((data: { userId: string }) => data)
+  .validator((data: { userId: string }) => parseInput(schemas.RestoreExTeamMember, data))
   .handler(async ({ data }) => {
     purgeExpiredExTeamMembersDemo();
     const archived = exTeamMembers.find(
@@ -1880,7 +1884,7 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
   });
 
 export const setStaffPassword = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; password: string }) => data)
+  .validator((data: { userId: string; password: string }) => parseInput(schemas.SetStaffPassword, data))
   .handler(async ({ data }) => {
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
     mustChangePasswordByUser.add(data.userId);
@@ -1890,7 +1894,7 @@ export const setStaffPassword = createServerFn({ method: "POST" })
 
 /** Signed-in staff: replace temporary/reset password and clear the must-change flag. */
 export const changeOwnPassword = createServerFn({ method: "POST" })
-  .validator((data: { password: string }) => data)
+  .validator((data: { password: string }) => parseInput(schemas.ChangeOwnPassword, data))
   .handler(async ({ data }) => {
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
     const me = identity();
@@ -1932,7 +1936,7 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handle
 }));
 
 export const setPatientEmail = createServerFn({ method: "POST" })
-  .validator((data: { patientId: string; email: string }) => data)
+  .validator((data: { patientId: string; email: string }) => parseInput(schemas.SetPatientEmail, data))
   .handler(async ({ data }) => {
     const email = assertEmail(data.email)!;
     const patient = patientById(data.patientId);
@@ -1941,7 +1945,7 @@ export const setPatientEmail = createServerFn({ method: "POST" })
   });
 
 export const setStaffEmail = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; email: string }) => data)
+  .validator((data: { userId: string; email: string }) => parseInput(schemas.SetStaffEmail, data))
   .handler(async ({ data }) => {
     const email = assertEmail(data.email)!;
     db.staffEmails[data.userId] = email;
@@ -1984,7 +1988,7 @@ function earningsInputs(from: string, to: string) {
 }
 
 export const getPractitionerPerformance = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string }) => data)
+  .validator((data: { from: string; to: string }) => parseInput(schemas.GetPractitionerPerformance, data))
   .handler(async ({ data }) => {
     const me = identity();
     if (!me.isStaff) throw new Error("Staff access only");
@@ -2075,7 +2079,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   });
 
 export const getMyEarnings = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string }) => data)
+  .validator((data: { from: string; to: string }) => parseInput(schemas.GetMyEarnings, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const { buildStats } = await import("./earnings.server");
@@ -2122,7 +2126,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
   });
 
 export const setCommissionRate = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; rate: number }) => data)
+  .validator((data: { userId: string; rate: number }) => parseInput(schemas.SetCommissionRate, data))
   .handler(async ({ data }) => {
     const rate = Math.min(100, Math.max(0, Number(data.rate) || 0));
     const profile = profiles.find((p) => p.id === data.userId);
@@ -2142,7 +2146,7 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       registrationBody?: string;
       registrationNumber?: string;
       note?: string;
-    }) => data,
+    }) => parseInput(schemas.SubmitProfileChange, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -2173,7 +2177,7 @@ export const saveMyProfile = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
-    }) => data,
+    }) => parseInput(schemas.SaveMyProfile, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -2213,7 +2217,7 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" }).handl
 });
 
 export const reviewProfileChange = createServerFn({ method: "POST" })
-  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) => data)
+  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) => parseInput(schemas.ReviewProfileChange, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const req = profileChangeRequests.find((r) => r.id === data.id);
@@ -2236,7 +2240,7 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
   });
 
 export const setMyAvatar = createServerFn({ method: "POST" })
-  .validator((data: { path: string | null; targetUserId?: string }) => data)
+  .validator((data: { path: string | null; targetUserId?: string }) => parseInput(schemas.SetMyAvatar, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const profile = profiles.find((p) => p.id === (data.targetUserId ?? me.userId));
@@ -2245,7 +2249,7 @@ export const setMyAvatar = createServerFn({ method: "POST" })
   });
 
 export const listMyDocuments = createServerFn({ method: "GET" })
-  .validator((data: { targetUserId?: string }) => data)
+  .validator((data: { targetUserId?: string }) => parseInput(schemas.ListMyDocuments, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const target = data.targetUserId ?? me.userId;
@@ -2267,7 +2271,7 @@ export const addMyDocument = createServerFn({ method: "POST" })
       file_name: string;
       file_type?: string;
       file_size?: number;
-    }) => data,
+    }) => parseInput(schemas.AddMyDocument, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -2287,7 +2291,7 @@ export const addMyDocument = createServerFn({ method: "POST" })
   });
 
 export const deleteMyDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.DeleteMyDocument, data))
   .handler(async ({ data }) => {
     const index = staffDocuments.findIndex((d) => d.id === data.id);
     if (index >= 0) staffDocuments.splice(index, 1);
@@ -2295,7 +2299,7 @@ export const deleteMyDocument = createServerFn({ method: "POST" })
   });
 
 export const getStaffProfile = createServerFn({ method: "GET" })
-  .validator((data: { userId: string }) => data)
+  .validator((data: { userId: string }) => parseInput(schemas.GetStaffProfile, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const isSelf = data.userId === me.userId;
@@ -2394,7 +2398,7 @@ export const getRetention = createServerFn({ method: "GET" }).handler(async () =
 });
 
 export const logRetentionOutreach = createServerFn({ method: "POST" })
-  .validator((data: { patient_id: string; channel?: string; note?: string }) => data)
+  .validator((data: { patient_id: string; channel?: string; note?: string }) => parseInput(schemas.LogRetentionOutreach, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     retentionOutreach.push({
@@ -2412,7 +2416,7 @@ export const logRetentionOutreach = createServerFn({ method: "POST" })
 export const createRecallTask = createServerFn({ method: "POST" })
   .validator(
     (data: { patient_id: string; note?: string; recipients: { id: string; label: string }[] }) =>
-      data,
+      parseInput(schemas.CreateRecallTask, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -2468,7 +2472,7 @@ export const updateRecallTask = createServerFn({ method: "POST" })
       task_id: string;
       recipients: { id: string; label: string }[];
       note?: string;
-    }) => data,
+    }) => parseInput(schemas.UpdateRecallTask, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -2542,7 +2546,7 @@ export const updateRecallTask = createServerFn({ method: "POST" })
   });
 
 export const setRecallTaskStatus = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; status: "sent" | "contacted" | "completed" }) => data)
+  .validator((data: { task_id: string; status: "sent" | "contacted" | "completed" }) => parseInput(schemas.SetRecallTaskStatus, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const now = new Date().toISOString();
@@ -2574,7 +2578,7 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
   });
 
 export const deleteRecallTask = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; assignee_ids?: string[] }) => data)
+  .validator((data: { task_id: string; assignee_ids?: string[] }) => parseInput(schemas.DeleteRecallTask, data))
   .handler(async ({ data }) => {
     const me = identity();
     if (!me.isOwner && !me.permissions.includes("tasks.delete")) {
@@ -2608,7 +2612,7 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
   });
 
 export const listRecallTasks = createServerFn({ method: "GET" })
-  .validator((data: { patient_id: string }) => data)
+  .validator((data: { patient_id: string }) => parseInput(schemas.ListRecallTasks, data))
   .handler(async ({ data }) => {
     requireStaff();
     return sortDesc(
@@ -2678,7 +2682,7 @@ export const listTreatmentColours = createServerFn({ method: "GET" }).handler(as
 });
 
 export const saveTreatmentColour = createServerFn({ method: "POST" })
-  .validator((data: { treatment_name: string; lane: number | null; hex?: string | null }) => data)
+  .validator((data: { treatment_name: string; lane: number | null; hex?: string | null }) => parseInput(schemas.SaveTreatmentColour, data))
   .handler(async ({ data }) => {
     const me = requireSettings();
     const key = data.treatment_name.trim().toLowerCase();
@@ -2711,7 +2715,7 @@ export const listColourThemes = createServerFn({ method: "GET" }).handler(async 
 );
 
 export const saveColourTheme = createServerFn({ method: "POST" })
-  .validator((data: { name: string }) => data)
+  .validator((data: { name: string }) => parseInput(schemas.SaveColourTheme, data))
   .handler(async ({ data }) => {
     const me = requireSettings();
     const name = data.name.trim();
@@ -2737,7 +2741,7 @@ export const saveColourTheme = createServerFn({ method: "POST" })
   });
 
 export const applyColourTheme = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.ApplyColourTheme, data))
   .handler(async ({ data }) => {
     const me = requireSettings();
     const theme = colourThemes.find((t) => t.id === data.id);
@@ -2757,7 +2761,7 @@ export const applyColourTheme = createServerFn({ method: "POST" })
   });
 
 export const deleteColourTheme = createServerFn({ method: "POST" })
-  .validator((data: { id: string }) => data)
+  .validator((data: { id: string }) => parseInput(schemas.DeleteColourTheme, data))
   .handler(async ({ data }) => {
     requireSettings();
     const index = colourThemes.findIndex((t) => t.id === data.id);
@@ -2785,7 +2789,7 @@ export type CatalogueInput = {
 };
 
 export const saveCatalogueItem = createServerFn({ method: "POST" })
-  .validator((data: CatalogueInput) => data)
+  .validator((data: CatalogueInput) => parseInput(schemas.SaveCatalogueItem, data))
   .handler(async ({ data }) => {
     requireSettings();
     const name = (data.name ?? "").trim();
@@ -2814,7 +2818,7 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
   });
 
 export const setCatalogueItemActive = createServerFn({ method: "POST" })
-  .validator((data: { id: string; active: boolean }) => data)
+  .validator((data: { id: string; active: boolean }) => parseInput(schemas.SetCatalogueItemActive, data))
   .handler(async ({ data }) => {
     requireSettings();
     const row = catalogue.find((c) => c.id === data.id);
@@ -2837,7 +2841,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
       address?: string | null;
       phone?: string | null;
       email?: string | null;
-    }) => data,
+    }) => parseInput(schemas.UpdateClinicDetails, data),
   )
   .handler(async ({ data }) => {
     requireSettings();
@@ -2864,7 +2868,7 @@ export const listRolePermissions = createServerFn({ method: "GET" }).handler(asy
 
 export const setRolePermission = createServerFn({ method: "POST" })
   .validator(
-    (data: { role: "manager" | "front_desk" | "practitioner"; permission: string; enabled: boolean }) => data,
+    (data: { role: "manager" | "front_desk" | "practitioner"; permission: string; enabled: boolean }) => parseInput(schemas.SetRolePermission, data),
   )
   .handler(async ({ data }) => {
     const me = identity();
@@ -2895,7 +2899,7 @@ export const getMyNote = createServerFn({ method: "GET" }).handler(async () => {
 
 export const saveMyNote = createServerFn({ method: "POST" })
   .validator((data: { body: string }) => ({
-    body: sanitizeNoteHtml(String(data?.body ?? "")),
+    body: sanitizeNoteHtml(parseInput(schemas.SaveMyNote, { body: String(data?.body ?? "") }).body),
   }))
   .handler(async ({ data }) => {
     const me = identity();
@@ -2934,7 +2938,7 @@ function getOrCreateDemoConversation(meId: string, peerUserId: string) {
 }
 
 export const getStaffChat = createServerFn({ method: "GET" })
-  .validator((data: { peerUserId: string }) => data)
+  .validator((data: { peerUserId: string }) => parseInput(schemas.GetStaffChat, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     if (data.peerUserId === me.userId) throw new Error("Choose a teammate to message");
@@ -3001,7 +3005,7 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
       peerUserId: string;
       body: string;
       attachments?: { path: string; name: string; type: string; size: number }[];
-    }) => data,
+    }) => parseInput(schemas.SendStaffChatMessage, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -3064,7 +3068,7 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
   });
 
 export const markStaffChatRead = createServerFn({ method: "POST" })
-  .validator((data: { peerUserId: string }) => data)
+  .validator((data: { peerUserId: string }) => parseInput(schemas.MarkStaffChatRead, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const conversation = getOrCreateDemoConversation(me.userId, data.peerUserId);

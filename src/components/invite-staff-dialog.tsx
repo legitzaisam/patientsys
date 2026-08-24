@@ -1,14 +1,26 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import type { z } from "zod";
 import { toast } from "sonner";
 import { Copy, Mail, Plus, Shield } from "lucide-react";
 import { inviteStaffMember, listRolePermissions } from "@/lib/clinic.functions";
 import { checkEmail } from "@/lib/email";
 import { PERMISSION_KEYS, PERMISSION_META, type PermissionKey } from "@/lib/permissions";
+import { InviteStaffMember } from "@/lib/validation/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
@@ -67,7 +79,9 @@ function roleAccessDescription(
   return `${base}, plus ${extras.length} staff access options.`;
 }
 
-const EMPTY = {
+type InviteValues = z.infer<typeof InviteStaffMember>;
+
+const EMPTY: InviteValues = {
   fullName: "",
   email: "",
   jobTitle: "",
@@ -78,10 +92,17 @@ const EMPTY = {
 
 export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(EMPTY);
   const [result, setResult] = useState<{ email: string; temporaryPassword: string } | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+
+  // Same schema the server function validates against, so a field the handler
+  // would reject is caught here first and shown against the field itself.
+  // onBlur matches the existing policy of never flagging an email mid-typing.
+  const form = useForm<InviteValues>({
+    resolver: zodResolver(InviteStaffMember),
+    defaultValues: EMPTY,
+    mode: "onBlur",
+    reValidateMode: "onBlur",
+  });
 
   const fetchGrants = useServerFn(listRolePermissions);
   const { data: accessData } = useQuery({
@@ -94,17 +115,35 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
     mutationFn: useServerFn(inviteStaffMember),
     onSuccess: (r: { email: string; temporaryPassword: string }) => {
       setResult({ email: r.email, temporaryPassword: r.temporaryPassword });
-      setForm(EMPTY);
+      form.reset(EMPTY);
       toast.success("Invitation created");
       onInvited?.();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const selectedRole = ROLES.find((r) => r.value === form.role);
+  const role = form.watch("role");
+  const selectedRole = ROLES.find((r) => r.value === role);
   const accessDescription = selectedRole
     ? roleAccessDescription(selectedRole.value, selectedRole.baseline, accessData?.grants)
     : "";
+
+  // The schema surfaces checkEmail's own message, so a typo still reads
+  // "Did you mean …?" — recover the correction so the one-tap fix survives.
+  const emailCheck = form.formState.errors.email ? checkEmail(form.watch("email") ?? "") : null;
+  const emailSuggestion = emailCheck && !emailCheck.ok ? (emailCheck.suggestion ?? null) : null;
+
+  const submit = (values: InviteValues) =>
+    invite.mutate({
+      data: {
+        email: values.email,
+        fullName: values.fullName,
+        jobTitle: values.jobTitle ?? "",
+        role: values.role,
+        registrationBody: values.registrationBody ?? "",
+        registrationNumber: values.registrationNumber ?? "",
+      },
+    });
   const mailto = result
     ? `mailto:${result.email}?subject=${encodeURIComponent("Your Aetheria clinic account")}&body=${encodeURIComponent(
         `Hello,\n\nAn account has been created for you on our clinic software.\n\nSign in at ${typeof window !== "undefined" ? window.location.origin : ""}/auth with:\n\nEmail: ${result.email}\nTemporary password: ${result.temporaryPassword}\n\nYou will be asked to choose a new password after you sign in. Do not share these details with anyone else.\n\nThank you.`,
@@ -116,8 +155,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
       <Button
         onClick={() => {
           setResult(null);
-          setEmailError(null);
-          setEmailSuggestion(null);
+          form.reset(EMPTY);
           setOpen(true);
         }}
         className="rounded-full"
@@ -187,172 +225,145 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
               </div>
             </>
           ) : (
-            <>
-              <div className="mt-4 -mr-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-3.5">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="field-stack sm:col-span-2">
-                    <Label htmlFor="inv-name">Full name</Label>
-                    <Input
-                      id="inv-name"
-                      value={form.fullName}
-                      onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+            <Form {...form}>
+              <form
+                onSubmit={form.handleSubmit(submit)}
+                className="flex min-h-0 flex-1 flex-col"
+                noValidate
+              >
+                <div className="mt-4 -mr-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-3.5">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="fullName"
+                      render={({ field }) => (
+                        <FormItem className="sm:col-span-2">
+                          <FormLabel>Full name</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                  </div>
-                  <div className="field-stack">
-                    <Label htmlFor="inv-email">Work email</Label>
-                    <Input
-                      id="inv-email"
-                      type="email"
-                      autoComplete="email"
-                      value={form.email}
-                      aria-invalid={Boolean(emailError)}
-                      onChange={(e) => {
-                        setForm({ ...form, email: e.target.value });
-                        // Only show email errors after blur or submit — not while typing.
-                        setEmailError(null);
-                        setEmailSuggestion(null);
-                      }}
-                      onBlur={() => {
-                        if (!form.email.trim()) {
-                          setEmailError(null);
-                          setEmailSuggestion(null);
-                          return;
-                        }
-                        const check = checkEmail(form.email, "work email");
-                        setEmailError(check.ok ? null : check.error);
-                        setEmailSuggestion(check.ok ? null : (check.suggestion ?? null));
-                      }}
-                    />
-                    {emailError && (
-                      <p className="text-xs text-destructive">
-                        {emailError}
-                        {emailSuggestion ? (
-                          <>
-                            {" "}
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Work email</FormLabel>
+                          <FormControl>
+                            <Input type="email" autoComplete="email" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                          {emailSuggestion ? (
                             <button
                               type="button"
-                              className="font-medium underline underline-offset-2 hover:text-destructive/90"
-                              onClick={() => {
-                                setForm((f) => ({ ...f, email: emailSuggestion }));
-                                setEmailError(null);
-                                setEmailSuggestion(null);
-                              }}
+                              className="self-start text-xs font-medium text-destructive underline underline-offset-2 hover:text-destructive/90"
+                              onClick={() =>
+                                form.setValue("email", emailSuggestion, { shouldValidate: true })
+                              }
                             >
                               Yes
                             </button>
-                          </>
-                        ) : null}
-                      </p>
-                    )}
-                  </div>
-                  <div className="field-stack">
-                    <Label htmlFor="inv-job">Job title</Label>
-                    <Input
-                      id="inv-job"
-                      value={form.jobTitle}
-                      onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
+                          ) : null}
+                        </FormItem>
+                      )}
                     />
-                  </div>
-                  <div className="field-stack sm:col-span-2">
-                    <Label>Access level</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {ROLES.map((r) => (
-                        <Button
-                          key={r.value}
-                          type="button"
-                          size="sm"
-                          variant={form.role === r.value ? "selected" : "outline"}
-                          onClick={() =>
-                            setForm({
-                              ...form,
-                              role: r.value,
-                              ...(r.value === "front_desk"
-                                ? { registrationBody: "", registrationNumber: "" }
-                                : {}),
-                            })
-                          }
-                        >
-                          {r.label}
-                        </Button>
-                      ))}
-                    </div>
-                    {selectedRole && (
-                      <div className="flex gap-2.5 rounded-2xl border border-edge px-3.5 py-3">
-                        <Shield className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden />
-                        <div className="min-w-0">
-                          <p className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">
-                            What this access covers
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">{accessDescription}</p>
-                        </div>
+                    <FormField
+                      control={form.control}
+                      name="jobTitle"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Job title</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value ?? ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="field-stack sm:col-span-2">
+                      <Label>Access level</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {ROLES.map((r) => (
+                          <Button
+                            key={r.value}
+                            type="button"
+                            size="sm"
+                            variant={role === r.value ? "selected" : "outline"}
+                            onClick={() => {
+                              form.setValue("role", r.value);
+                              if (r.value === "front_desk") {
+                                form.setValue("registrationBody", "");
+                                form.setValue("registrationNumber", "");
+                              }
+                            }}
+                          >
+                            {r.label}
+                          </Button>
+                        ))}
                       </div>
+                      {selectedRole && (
+                        <div className="flex gap-2.5 rounded-2xl border border-edge px-3.5 py-3">
+                          <Shield className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden />
+                          <div className="min-w-0">
+                            <p className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">
+                              What this access covers
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {accessDescription}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {(role === "practitioner" || role === "manager" || role === "owner") && (
+                      <>
+                        <FormField
+                          control={form.control}
+                          name="registrationBody"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Registration body</FormLabel>
+                              <FormControl>
+                                <Input {...field} value={field.value ?? ""} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="registrationNumber"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Registration number</FormLabel>
+                              <FormControl>
+                                <Input {...field} value={field.value ?? ""} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </>
                     )}
                   </div>
-                  {(form.role === "practitioner" ||
-                    form.role === "manager" ||
-                    form.role === "owner") && (
-                    <>
-                      <div className="field-stack">
-                        <Label htmlFor="inv-body">Registration body</Label>
-                        <Input
-                          id="inv-body"
-                          value={form.registrationBody}
-                          onChange={(e) => setForm({ ...form, registrationBody: e.target.value })}
-                        />
-                      </div>
-                      <div className="field-stack">
-                        <Label htmlFor="inv-no">Registration number</Label>
-                        <Input
-                          id="inv-no"
-                          value={form.registrationNumber}
-                          onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
-                        />
-                      </div>
-                    </>
-                  )}
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    They sign in with a temporary password, then choose their own. You can fine-tune
+                    what they see under staff access.
+                  </p>
                 </div>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  They sign in with a temporary password, then choose their own. You can fine-tune
-                  what they see under staff access.
-                </p>
-              </div>
-              <div className="mt-4 flex justify-end gap-2" data-slot="dialog-footer">
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  className="text-xs"
-                  enterSubmit
-                  disabled={
-                    invite.isPending ||
-                    !form.fullName.trim() ||
-                    !form.email.trim()
-                  }
-                  onClick={() => {
-                    const check = checkEmail(form.email, "work email");
-                    if (!check.ok) {
-                      setEmailError(check.error);
-                      setEmailSuggestion(check.suggestion ?? null);
-                      return;
-                    }
-                    setEmailError(null);
-                    setEmailSuggestion(null);
-                    invite.mutate({
-                      data: {
-                        email: check.email,
-                        fullName: form.fullName.trim(),
-                        jobTitle: form.jobTitle,
-                        role: form.role,
-                        registrationBody: form.registrationBody,
-                        registrationNumber: form.registrationNumber,
-                      },
-                    });
-                  }}
-                >
-                  {invite.isPending ? "Creating…" : "Create invitation"}
-                </Button>
-              </div>
-            </>
+                <div className="mt-4 flex justify-end gap-2" data-slot="dialog-footer">
+                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="text-xs" disabled={invite.isPending}>
+                    {invite.isPending ? "Creating…" : "Create invitation"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
           )}
         </DialogContent>
       </Dialog>

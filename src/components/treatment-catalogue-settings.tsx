@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useForm, type Control } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
 import { Archive, ClipboardList, Plus, RotateCcw, Search } from "lucide-react";
 import {
@@ -18,12 +21,21 @@ import {
   toneForTreatment,
   treatmentKey,
 } from "@/lib/practitioner-colours";
+import { SaveCatalogueItem } from "@/lib/validation/schemas";
+import { numericText } from "@/lib/validation/primitives";
 import { ColourWheelButton } from "@/components/colour-wheel-button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 
 type Item = {
   id: string;
@@ -39,7 +51,6 @@ type Item = {
 };
 
 type Draft = {
-  id?: string;
   name: string;
   category: string;
   price: string;
@@ -59,12 +70,37 @@ const blank: Draft = {
   requires_consent: true,
 };
 
+const shape = SaveCatalogueItem.shape;
+/** Blank fallbacks mirror `commit` exactly; the bounds come from the server schema. */
+const DraftSchema = z.object({
+  name: shape.name,
+  category: z.string().trim().max(120),
+  price: numericText(shape.price, null),
+  interval_days: numericText(shape.interval_days, null),
+  duration_minutes: numericText(shape.duration_minutes, 60),
+  cooling_off_hours: numericText(shape.cooling_off_hours, 0),
+  requires_consent: z.boolean(),
+});
+
 export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
   const queryClient = useQueryClient();
   const fetchItems = useServerFn(listCatalogueItems);
   const [search, setSearch] = useState("");
-  const [draft, setDraft] = useState<Draft | null>(null);
+  /** null closes the panel; `id` is null for a new treatment. */
+  const [editing, setEditing] = useState<{ id: string | null } | null>(null);
   const overrides = useTreatmentColours();
+
+  const draftForm = useForm<Draft>({
+    resolver: zodResolver(DraftSchema),
+    defaultValues: blank,
+    mode: "onBlur",
+    reValidateMode: "onBlur",
+  });
+
+  const openDraft = (id: string | null, values: Draft) => {
+    draftForm.reset(values);
+    setEditing({ id });
+  };
 
   const { data } = useQuery({ queryKey: ["catalogue-items"], queryFn: () => fetchItems() });
 
@@ -76,7 +112,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
   const save = useMutation({
     mutationFn: useServerFn(saveCatalogueItem),
     onSuccess: () => {
-      setDraft(null);
+      setEditing(null);
       refresh();
       toast.success("Treatment saved");
     },
@@ -111,18 +147,17 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
       : list;
   }, [data, search]);
 
-  const commit = () => {
-    if (!draft) return;
+  const commit = (values: Draft) => {
     save.mutate({
       data: {
-        id: draft.id ?? null,
-        name: draft.name,
-        category: draft.category,
-        price: draft.price === "" ? null : Number(draft.price),
-        interval_days: draft.interval_days === "" ? null : Number(draft.interval_days),
-        duration_minutes: draft.duration_minutes === "" ? 60 : Number(draft.duration_minutes),
-        cooling_off_hours: draft.cooling_off_hours === "" ? 0 : Number(draft.cooling_off_hours),
-        requires_consent: draft.requires_consent,
+        id: editing?.id ?? null,
+        name: values.name,
+        category: values.category,
+        price: values.price === "" ? null : Number(values.price),
+        interval_days: values.interval_days === "" ? null : Number(values.interval_days),
+        duration_minutes: values.duration_minutes === "" ? 60 : Number(values.duration_minutes),
+        cooling_off_hours: values.cooling_off_hours === "" ? 0 : Number(values.cooling_off_hours),
+        requires_consent: values.requires_consent,
       },
     });
   };
@@ -152,7 +187,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
             />
           </div>
           {canEdit && (
-            <Button size="sm" onClick={() => setDraft({ ...blank })}>
+            <Button size="sm" onClick={() => openDraft(null, { ...blank })}>
               <Plus className="h-3.5 w-3.5" />
               Add treatment
             </Button>
@@ -160,82 +195,85 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
         </div>
       </div>
 
-      {draft && (
-        <div className="space-y-3 rounded-2xl border border-edge bg-glass-2 p-4">
-          <h3 className="text-sm font-semibold text-foreground">
-            {draft.id ? "Edit treatment" : "New treatment"}
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Name">
-              <Input
-                value={draft.name}
+      {editing && (
+        <Form {...draftForm}>
+          <form
+            noValidate
+            onSubmit={draftForm.handleSubmit(commit)}
+            className="space-y-3 rounded-2xl border border-edge bg-glass-2 p-4"
+          >
+            <h3 className="text-sm font-semibold text-foreground">
+              {editing.id ? "Edit treatment" : "New treatment"}
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <DraftField
+                control={draftForm.control}
+                name="name"
+                label="Name"
                 placeholder="Lip filler"
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />
-            </Field>
-            <Field label="Category">
-              <Input
-                value={draft.category}
+              <DraftField
+                control={draftForm.control}
+                name="category"
+                label="Category"
                 placeholder="Injectables"
-                onChange={(e) => setDraft({ ...draft, category: e.target.value })}
               />
-            </Field>
-            <Field label="Price (£)">
-              <Input
+              <DraftField
+                control={draftForm.control}
+                name="price"
+                label="Price (£)"
+                placeholder="250"
                 type="number"
                 min="0"
                 step="1"
-                value={draft.price}
-                placeholder="250"
-                onChange={(e) => setDraft({ ...draft, price: e.target.value })}
               />
-            </Field>
-            <Field label="Recall interval (days)">
-              <Input
+              <DraftField
+                control={draftForm.control}
+                name="interval_days"
+                label="Recall interval (days)"
+                placeholder="90"
                 type="number"
                 min="0"
-                value={draft.interval_days}
-                placeholder="90"
-                onChange={(e) => setDraft({ ...draft, interval_days: e.target.value })}
               />
-            </Field>
-            <Field label="Appointment length (min)">
-              <Input
+              <DraftField
+                control={draftForm.control}
+                name="duration_minutes"
+                label="Appointment length (min)"
+                placeholder="60"
                 type="number"
                 min="5"
                 max="480"
                 step="5"
-                value={draft.duration_minutes}
-                placeholder="60"
-                onChange={(e) => setDraft({ ...draft, duration_minutes: e.target.value })}
               />
-            </Field>
-            <Field label="Cooling-off (hours)">
-              <Input
+              <DraftField
+                control={draftForm.control}
+                name="cooling_off_hours"
+                label="Cooling-off (hours)"
+                placeholder="48"
                 type="number"
                 min="0"
-                value={draft.cooling_off_hours}
-                placeholder="48"
-                onChange={(e) => setDraft({ ...draft, cooling_off_hours: e.target.value })}
               />
-            </Field>
-            <div className="glass-item flex items-center justify-between px-3 py-2">
-              <span className="text-xs text-muted-foreground">Consent form required</span>
-              <Switch
-                checked={draft.requires_consent}
-                onCheckedChange={(v) => setDraft({ ...draft, requires_consent: v })}
+              <FormField
+                control={draftForm.control}
+                name="requires_consent"
+                render={({ field }) => (
+                  <div className="glass-item flex items-center justify-between px-3 py-2">
+                    <span className="text-xs text-muted-foreground">Consent form required</span>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </div>
+                )}
               />
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setDraft(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" disabled={!draft.name.trim() || save.isPending} onClick={commit}>
-              Save treatment
-            </Button>
-          </div>
-        </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={save.isPending}>
+                Save treatment
+              </Button>
+            </div>
+          </form>
+        </Form>
       )}
 
       <div className="divide-y divide-glass-line rounded-2xl border border-edge">
@@ -280,8 +318,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                   variant="ghost"
                   size="sm"
                   onClick={() =>
-                    setDraft({
-                      id: item.id,
+                    openDraft(item.id, {
                       name: item.name,
                       category: item.category ?? "",
                       price: item.price == null ? "" : String(item.price),
@@ -312,12 +349,30 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function DraftField({
+  control,
+  name,
+  label,
+  ...input
+}: {
+  control: Control<Draft>;
+  name: Exclude<keyof Draft, "requires_consent">;
+  label: string;
+} & React.ComponentProps<typeof Input>) {
   return (
-    <div className="field-stack">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {children}
-    </div>
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel className="text-xs text-muted-foreground">{label}</FormLabel>
+          <FormControl>
+            <Input {...input} {...field} />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   );
 }
 
