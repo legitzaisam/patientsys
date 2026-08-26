@@ -15,7 +15,8 @@
     "lint": "eslint .",
     "check:policy": "node scripts/check-policy.mjs",
     "check:validators": "node scripts/check-validators.mjs",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "check:tenancy": "node scripts/check-tenancy.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -95,6 +96,7 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
+    "postgres": "^3.4.9",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
