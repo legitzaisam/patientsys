@@ -19,7 +19,7 @@ todos:
     status: completed
   - id: phase-5
     content: "Phase 5: Database hardening - revoke anon TRUNCATE/DELETE/UPDATE, UNIQUE on patients.user_id, signed-document immutability trigger, soft-delete for patients, tenancy decision, 9 missing indexes, reconcile migration ledger, move ES256 workaround out of the generated file"
-    status: pending
+    status: completed
   - id: phase-6
     content: "Phase 6: Identity and authentication hardening - Supabase Auth SMTP, self-service forgot password for staff and patients, migrate OAuth off the Lovable wrapper to native Supabase, add Microsoft/Azure, TOTP MFA enforced for owner/manager, optional SAML SSO, session management and idle logout, login rate limiting, close public signup, step-up auth for destructive actions"
     status: pending

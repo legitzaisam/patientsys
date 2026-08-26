@@ -346,3 +346,72 @@ The second: numeric fields read "Value is too small" instead of "Price is too sm
 **A schema could be stricter than reality in a field nothing sampled.** The attack script proves rejection and the sweeps prove acceptance, but neither enumerates all 62 shapes. The bound on this is that schemas mirror the declared types plus enums, ranges and lengths — no format assertions were added, precisely because `.uuid()` would have broken demo mode on day one.
 
 **Validation still does not imply authorization.** A payload that parses cleanly is still subject to the Phase 3 policy map, and §4.1 is untouched: the service-role client bypasses RLS, so the database still enforces nothing underneath any of this.
+
+---
+
+## Phase 5 — Database hardening
+
+**Plan:** [plans/phase-05-database-hardening.md](plans/phase-05-database-hardening.md)
+**Audit:** [AUDIT-2026-08-22.md §17](AUDIT-2026-08-22.md)
+
+### What changed
+
+**Six migrations, deliberately separate so each reverts alone.**
+
+`20260826000000_revoke_client_write_grants` — `anon` and `authenticated` both held all seven privileges on all 27 public tables. `anon` is now down to `SELECT`; `authenticated` keeps `INSERT/UPDATE/DELETE` because RLS governs those and the portal needs them, and loses `TRUNCATE`, which RLS cannot govern at all. `ALTER DEFAULT PRIVILEGES` so the next `CREATE TABLE` does not undo it.
+
+`20260826001000_patient_identity_unique` — `UNIQUE (user_id)` on `patients`, plus the actual cause: `handle_new_user` linked with an unbounded `UPDATE ... WHERE lower(email) = ...`, so two patients sharing an email both got the same login. It now links exactly one row, oldest first.
+
+`20260826002000_documents_signed_immutable` — a `BEFORE UPDATE OR DELETE` trigger rejecting any change to a signed document's body, title, kind, patient, status or signature columns. Triggers fire for the service-role client; policies do not, so this is the one item in the phase that closes its finding rather than deferring it.
+
+`20260826003000_patient_retention` — soft delete, 8-year retention from last treatment, legal hold, a `BEFORE DELETE` guard that makes the cascade unreachable, and `erase_patient()` as the only door. The `owners delete patients` policy is dropped.
+
+`20260826004000_clinic_isolation` — `current_clinic_id()`, `clinic_id` `NOT NULL` across 15 tables, `clinic_id` added to the three settings tables that lacked it (changing `treatment_colours`' primary key and `role_permissions`' unique key), and 23 `RESTRICTIVE` isolation policies.
+
+`20260826005000_missing_indexes` — the nine from §5.8.
+
+**Application layer.** `clinicScoped()` wraps the database client once in the session middleware, so every query on a clinic-scoped table is filtered and every insert stamped, without touching ~170 call sites. `identity.clinicId` and `Ctx.clinicId` are exposed; the hardcoded `CLINIC_ID` constant is deleted. 24 handler-level `supabaseAdmin` imports now go through `adminClient(context)`, which is the same client with the same wrapper.
+
+`archivePatient` (owner-only, reversible, audited) in production and demo, with an archive control and an archived banner on the patient page. `listPatients` excludes archived records.
+
+**ES256 extraction.** The hand-edited service-role middleware moved out of the auto-generated `auth-middleware.ts` — a file whose first line says not to edit it, in a branch that syncs to Lovable — into `src/lib/auth/session-middleware.server.ts`. The generated file was restored byte-for-byte from the initial commit.
+
+**Tooling.** `scripts/db-snapshot.mjs` (diffable introspection), `scripts/check-tenancy.mjs` as `npm run check:tenancy`, `scripts/lib/db.mjs` for shared connection handling, and `apply-migrations.mjs` made ledger-aware. `postgres` became a devDependency — the scripts had always imported it and it was never declared.
+
+### Verification
+
+**Cross-clinic isolation, twice, two different ways.** A second clinic with its own owner and patient: through the server functions neither side's patient list includes the other's, neither can read the other's patient by id, both dashboards load, and a write from clinic B carries clinic B. Independently through RLS with the service role dropped: clinic A's owner resolves to clinic A, sees zero of the probe clinic's patients and all five of their own, and a cross-clinic insert is refused. Both tenants removed afterwards; row counts back to 1 clinic and 5 patients.
+
+**Controls bind the service-role client.** Editing a signed consent, deleting a signed consent and hard-deleting a patient are all refused *through the same client the app uses*. An unsigned document is still editable. `patient_retain_until` returns 2034.
+
+**Retention end to end**, in a rolled-back transaction: refused with no reason, refused under legal hold, refused inside the window, permitted outside it, audit row written before the delete and surviving it.
+
+**Archive round-trip.** A manager is refused ("Clinic owner access required"); the owner archives, `deleted_at` and the reason are stamped, the patient leaves the directory, 19 messages remain untouched, restore puts them back, and both actions are audited.
+
+**No regressions.** Owner, manager and patient across every route with zero console errors. All Phase 2 attacks still refused and the message author still forced to `patient`. All seven Phase 3 clinical writers still refused. Demo sweep clean across four roles. `tsc --noEmit` at the 52-error baseline (confirmed against a clean worktree at HEAD, not from memory). `check:policy` 89/89, `check:validators` 63/63, `check:tenancy` 27 tables classified.
+
+### Deviations from the plan
+
+**The ledger work moved first.** The plan sequenced it near the end. Applying six migrations with a script that recorded nothing would have created exactly the drift this phase exists to fix, so `apply-migrations.mjs` was made ledger-aware before the first migration ran. An `--only` flag was added so the tenancy migration could be held back until the application changes that depend on it had landed.
+
+**The retrofit was not the ~170 hand edits the plan described.** The plan proposed a `scopedFrom()` helper applied at each query site. On inspection most queries are multi-line (`ctx.supabase` on one line, `.from(...)` on the next), and 78 of them use `ctx.supabase` directly with no local binding to change — so a call-site retrofit would have been both more invasive and easier to get wrong. Wrapping the client once at the middleware achieves the same thing in one place and cannot be forgotten.
+
+**Types were regenerated.** `check:tenancy` compares its table lists against `src/integrations/supabase/types.ts`, and that file was already stale — it was missing `staff_chat_messages` entirely. Regenerating cost nothing: `tsc` stayed at 52.
+
+### Deferred
+
+**§4.1, the service-role client, is untouched.** It is the reason the grants and the 23 isolation policies are defence-in-depth rather than enforcement. Phase 6.
+
+**§5.6 re-runnable migrations, §5.9 unbounded reads and `documents.access_token`, §5.10 missing foreign keys** — all still open, all explicitly out of scope.
+
+**Archive UI beyond a single control.** There is no archived-patients view; a restored patient has to be reached by URL or by the owner remembering.
+
+### Residual risk
+
+**The wrapper proves scope, not correctness.** `check:tenancy` proves every clinic-scoped table goes through the filter. It cannot prove the filter is right for a query that should legitimately cross a boundary. There are none today, and the one-clinic-per-person decision says there should not be.
+
+**`supabase_admin`'s default privileges could not be altered** from the migration connection. Tables created by `postgres` — every migration here — inherit the tightened defaults; a table created by Supabase itself would not.
+
+**`handle_new_user` still guesses the clinic** with `ORDER BY created_at LIMIT 1`. The invite flow overwrites it for staff, and a single-clinic deployment never notices, but a genuine second tenant would need this fixed.
+
+**`erase_patient` is genuinely destructive.** Owner-reachable only through the database, audited, and guarded three ways — but a bug there loses a medical record permanently.

@@ -32,3 +32,4 @@ Start from [_TEMPLATE.md](_TEMPLATE.md).
 | 2 | [Guard retrofit](phase-02-guard-retrofit.md) | Complete |
 | 3 | [Capability-based RBAC](phase-03-rbac.md) | Complete |
 | 4 | [Runtime validation with zod](phase-04-validation.md) | Complete |
+| 5 | [Database hardening](phase-05-database-hardening.md) | Complete |
