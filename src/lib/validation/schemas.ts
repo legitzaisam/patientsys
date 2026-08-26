@@ -93,6 +93,12 @@ export const SavePatient = z.object({
   notes: optionalText(20_000),
 });
 
+export const ArchivePatient = z.object({
+  id,
+  archived: z.boolean(),
+  reason: optionalText(500),
+});
+
 export const AddTreatment = z.object({
   patient_id: id,
   catalogue_id: optionalId,

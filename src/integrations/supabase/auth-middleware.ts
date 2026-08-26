@@ -71,12 +71,15 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       throw new Error('Unauthorized: Invalid token');
     }
 
-    const authClient = createClient<Database>(
+    const supabase = createClient<Database>(
       SUPABASE_URL!,
       SUPABASE_PUBLISHABLE_KEY!,
       {
         global: {
           fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY!),
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
         auth: {
           storage: undefined,
@@ -86,7 +89,7 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       }
     );
 
-    const { data, error } = await authClient.auth.getClaims(token);
+    const { data, error } = await supabase.auth.getClaims(token);
     if (error || !data?.claims) {
       throw new Error('Unauthorized: Invalid token');
     }
@@ -94,29 +97,6 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
     if (!data.claims.sub) {
       throw new Error('Unauthorized: No user ID found in token');
     }
-
-    // This project's user access tokens are ES256 (asymmetric signing keys).
-    // PostgREST still rejects them with PGRST303 "JWT issued at future", so
-    // server functions verify the user JWT via Auth, then query the database
-    // with the service-role key. RLS is not applied on that client — handlers
-    // must keep using context.userId.
-    const SUPABASE_SERVICE_ROLE_KEY = process.env['SUPABASE_SERVICE_ROLE_KEY'];
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error(
-        'Missing SUPABASE_SERVICE_ROLE_KEY. Copy the service_role (secret) key from Supabase → Project Settings → API into .env. User tokens from this project cannot be used with the Data API.',
-      );
-    }
-
-    const supabase = createClient<Database>(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY, {
-      global: {
-        fetch: createSupabaseFetch(SUPABASE_SERVICE_ROLE_KEY),
-      },
-      auth: {
-        storage: undefined,
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
 
     return next({
       context: {

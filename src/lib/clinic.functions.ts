@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireSupabaseAuth } from "@/lib/auth/session-middleware.server";
 import { clinicDayDiff, clinicDayKey, clinicDayRange } from "@/lib/clinic-time";
 import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
@@ -21,10 +21,33 @@ import {
   requireStaff,
   scopeFor,
 } from "@/lib/auth/guards.server";
+import { clinicScoped } from "@/lib/auth/clinic-scope.server";
 
 export { PERMISSION_KEYS, type PermissionKey };
 
-const CLINIC_ID = "11111111-1111-4111-8111-111111111111";
+/**
+ * The caller's clinic, resolved from their profile (staff) or patient record
+ * (portal) by the session middleware. This replaced a hardcoded constant, which
+ * meant every write was stamped with the same clinic no matter who made it.
+ */
+function clinicIdOf(context: unknown): string {
+  const id = (context as Ctx).clinicId;
+  if (!id) throw new Error("Your account is not linked to a clinic.");
+  return id;
+}
+
+/**
+ * The admin client, clinic-scoped the same way the request client is.
+ *
+ * `supabaseAdmin` is a module singleton with no request context, so reaching for
+ * it directly is the one way to sidestep the isolation the middleware applies.
+ * Handlers that need the Auth admin API go through here instead; `.auth` and
+ * `.storage` pass through untouched, only `.from()` gains the clinic filter.
+ */
+async function adminClient(context: unknown) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return clinicScoped(supabaseAdmin, (context as Ctx).clinicId);
+}
 
 /** Readable temporary password for new staff invites (manager shares it out-of-band). */
 function generateTemporaryPassword(): string {
@@ -52,7 +75,6 @@ async function assertNoPractitionerOverlap(
   let q = supabase
     .from("appointments")
     .select("id, starts_at, ends_at, status")
-    .eq("clinic_id", CLINIC_ID)
     .eq("practitioner_id", args.practitionerId)
     .neq("status", "cancelled")
     .lt("starts_at", args.endsAt)
@@ -107,6 +129,7 @@ function retainUntilFrom(revokedAt: Date = new Date()) {
  * Clinical rows (patients, appointments, treatments, …) are never copied here.
  */
 async function archiveExTeamMember(opts: {
+  clinicId: string;
   userId: string;
   role: string;
   email: string;
@@ -117,7 +140,7 @@ async function archiveExTeamMember(opts: {
   commissionRate: number | null;
   revokedBy: string;
 }) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const supabaseAdmin = await adminClient({ clinicId: opts.clinicId });
   const revokedAt = new Date();
   // Replace any prior active archive row for this user.
   await supabaseAdmin
@@ -126,7 +149,7 @@ async function archiveExTeamMember(opts: {
     .eq("user_id", opts.userId)
     .is("purged_at", null);
   const { error } = await supabaseAdmin.from("ex_team_members").insert({
-    clinic_id: CLINIC_ID,
+    clinic_id: opts.clinicId,
     user_id: opts.userId,
     email: opts.email || null,
     full_name: opts.fullName || "",
@@ -142,8 +165,8 @@ async function archiveExTeamMember(opts: {
   if (error) throw new Error(error.message);
 }
 
-async function clearExTeamArchive(userId: string) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+async function clearExTeamArchive(clinicId: string, userId: string) {
+  const supabaseAdmin = await adminClient({ clinicId });
   await supabaseAdmin.from("ex_team_members").delete().eq("user_id", userId).is("purged_at", null);
 }
 
@@ -152,8 +175,8 @@ async function clearExTeamArchive(userId: string) {
  * Never deletes patients, appointments, treatments, messages, or audit history.
  * Profiles stay as anonymised stubs so practitioner FKs remain valid.
  */
-async function purgeExpiredExTeamMembers() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+async function purgeExpiredExTeamMembers(clinicId: string) {
+  const supabaseAdmin = await adminClient({ clinicId });
   const now = new Date().toISOString();
   const { data: expired, error } = await supabaseAdmin
     .from("ex_team_members")
@@ -223,7 +246,7 @@ async function audit(
   meta?: Record<string, unknown>,
 ) {
   const { error } = await context.supabase.from("audit_log").insert({
-    clinic_id: CLINIC_ID,
+    clinic_id: clinicIdOf(context),
     actor_id: context.userId,
     actor_label: (context.claims["email"] as string) ?? null,
     action,
@@ -243,7 +266,7 @@ async function audit(
 export const getMe = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const authUser = await supabaseAdmin.auth.admin.getUserById(context.userId);
     if (authUser.error) throw new Error(authUser.error.message);
     const bannedUntil = authUser.data.user?.banned_until;
@@ -261,7 +284,7 @@ export const getMe = createServerFn({ method: "GET" })
         await supabaseAdmin.from("user_roles").insert({ user_id: context.userId, role: "owner" });
         await supabaseAdmin
           .from("profiles")
-          .update({ clinic_id: CLINIC_ID, job_title: "Clinic Owner" })
+          .update({ clinic_id: clinicIdOf(context), job_title: "Clinic Owner" })
           .eq("id", context.userId);
         // Roles just changed for this caller — the cached copy predates the insert.
         identity = await reloadIdentity(context as Ctx);
@@ -553,6 +576,9 @@ export const listPatients = createServerFn({ method: "GET" })
     const { data, error } = await supabase
       .from("patients")
       .select("id, first_name, last_name, title, date_of_birth, status, reference, last_visit_at, allergies, avatar_url")
+      // Archived records stay in the database for the retention window but drop
+      // out of every clinical view; getPatient still resolves them by id.
+      .is("deleted_at", null)
       .order("last_name", { ascending: true })
       .order("first_name", { ascending: true });
     if (error) throw new Error(error.message);
@@ -808,7 +834,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
     const start = new Date(data.starts_at);
     const endsAt = new Date(start.getTime() + (data.duration_minutes || 30) * 60000).toISOString();
     const payload = {
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       patient_id: data.patient_id,
       practitioner_id: data.practitioner_id || context.userId,
       catalogue_id: data.catalogue_id || null,
@@ -838,7 +864,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
         await supabase.from("appointment_notes").upsert(
           {
             appointment_id: data.id,
-            clinic_id: CLINIC_ID,
+            clinic_id: clinicIdOf(context),
             patient_id: data.patient_id,
             body: noteBody,
             updated_by: context.userId,
@@ -864,7 +890,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       await supabase.from("appointment_notes").upsert(
         {
           appointment_id: created.id,
-          clinic_id: CLINIC_ID,
+          clinic_id: clinicIdOf(context),
           patient_id: data.patient_id,
           body: noteBody,
           updated_by: context.userId,
@@ -910,7 +936,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
 
     // Patient-facing confirmation in their portal thread (email + text release).
     await supabase.from("messages").insert({
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       patient_id: data.patient_id,
       author: "staff",
       author_id: context.userId,
@@ -935,7 +961,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
         const body = `${`${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient"} — ${data.treatment_name} on ${when}`;
         await supabase.from("staff_notifications").insert(
           recipients.map((recipient_id) => ({
-            clinic_id: CLINIC_ID,
+            clinic_id: clinicIdOf(context),
             recipient_id,
             kind: "appointment",
             title: "New booking",
@@ -1025,7 +1051,7 @@ export const savePatient = createServerFn({ method: "POST" })
     const identity = await authorize(context as Ctx, "savePatient");
     const supabase = (context as Ctx).supabase;
     const payload = {
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       first_name: data.first_name.trim(),
       last_name: data.last_name.trim(),
       title: data.title?.trim() || null,
@@ -1065,6 +1091,45 @@ export const savePatient = createServerFn({ method: "POST" })
     return { id: created.id as string };
   });
 
+/**
+ * Archive or restore a patient record.
+ *
+ * Deleting one is not possible from any route: a BEFORE DELETE trigger refuses
+ * it, and the record has to be kept for 8 years after the last treatment under
+ * the NHS retention standard. Erasure, when it is genuinely lawful, runs through
+ * the `erase_patient` database function — deliberately not one click away.
+ */
+export const archivePatient = createServerFn({ method: "POST" })
+  .validator((data: { id: string; archived: boolean; reason?: string }) =>
+    parseInput(schemas.ArchivePatient, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const identity = await authorize(context as Ctx, "archivePatient");
+    const supabase = (context as Ctx).supabase;
+
+    const patch = data.archived
+      ? {
+          deleted_at: new Date().toISOString(),
+          deleted_by: identity.userId,
+          deletion_reason: data.reason?.trim() || null,
+          status: "archived",
+        }
+      : { deleted_at: null, deleted_by: null, deletion_reason: null, status: "active" };
+
+    const { error } = await supabase.from("patients").update(patch).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await audit(
+      context as Ctx,
+      data.archived ? "archive" : "restore",
+      "patient",
+      data.id,
+      data.id,
+      data.reason ? { reason: data.reason } : undefined,
+    );
+    return { id: data.id, archived: data.archived };
+  });
+
 export const addTreatment = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -1084,7 +1149,7 @@ export const addTreatment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "addTreatment");
     const supabase = (context as Ctx).supabase;
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const { data: rateRow } = await supabaseAdmin
       .from("profiles")
       .select("commission_rate")
@@ -1093,7 +1158,7 @@ export const addTreatment = createServerFn({ method: "POST" })
     const { data: created, error } = await supabase
       .from("treatments")
       .insert({
-        clinic_id: CLINIC_ID,
+        clinic_id: clinicIdOf(context),
         patient_id: data.patient_id,
         catalogue_id: data.catalogue_id || null,
         practitioner_id: context.userId,
@@ -1133,7 +1198,7 @@ export const addPhoto = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "addPhoto");
     const { error } = await (context as Ctx).supabase.from("treatment_photos").insert({
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       patient_id: data.patient_id,
       treatment_id: data.treatment_id || null,
       storage_path: data.storage_path,
@@ -1163,7 +1228,7 @@ export const sendDocument = createServerFn({ method: "POST" })
     const { data: created, error } = await supabase
       .from("documents")
       .insert({
-        clinic_id: CLINIC_ID,
+        clinic_id: clinicIdOf(context),
         patient_id: data.patient_id,
         treatment_id: data.treatment_id || null,
         kind: data.kind,
@@ -1177,7 +1242,7 @@ export const sendDocument = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
     await supabase.from("messages").insert({
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       patient_id: data.patient_id,
       author: "staff",
       author_id: context.userId,
@@ -1223,7 +1288,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     const attachments = (data.attachments ?? []).slice(0, 5);
     if (!body && attachments.length === 0) throw new Error("Message cannot be empty");
     const { error } = await ctx.supabase.from("messages").insert({
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       patient_id: data.patient_id,
       author,
       author_id: context.userId,
@@ -1402,7 +1467,7 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
     const from = identity.profile?.full_name || identity.email || "A colleague";
     const { error } = await ctx.supabase.from("staff_notifications").insert(
       recipients.map((id) => ({
-        clinic_id: CLINIC_ID,
+        clinic_id: clinicIdOf(context),
         recipient_id: id,
         sender_id: ctx.userId,
         urgent: !!data.urgent,
@@ -1659,7 +1724,7 @@ export const saveMessageTemplate = createServerFn({ method: "POST" })
     await authorize(context as Ctx, "saveMessageTemplate");
     const supabase = (context as Ctx).supabase;
     const payload = {
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       title: data.title.trim(),
       body: data.body.trim(),
       category: data.category?.trim() || null,
@@ -1836,7 +1901,7 @@ export const listTeam = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "listTeam");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const [{ data: profiles }, { data: roles }, users] = await Promise.all([
       supabaseAdmin.from("profiles").select("*"),
       supabaseAdmin.from("user_roles").select("user_id, role"),
@@ -1884,7 +1949,7 @@ export const createStaffAccount = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await authorize(ctx, "createStaffAccount");
     const email = assertEmail(data.email, "work email")!;
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const created = await supabaseAdmin.auth.admin.createUser({
       email,
       password: data.password,
@@ -1895,7 +1960,7 @@ export const createStaffAccount = createServerFn({ method: "POST" })
     const uid = created.data.user.id;
     await supabaseAdmin.from("profiles").upsert({
       id: uid,
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       full_name: data.fullName,
       job_title: data.jobTitle ?? null,
       registration_body: data.registrationBody ?? null,
@@ -1923,7 +1988,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "updateStaffMember");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const patch: Record<string, unknown> = {
       full_name: data.fullName,
       job_title: data.jobTitle ?? null,
@@ -1949,7 +2014,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
     await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: data.userId, role: data.role });
     // Undo revoke / role restore must lift the Auth ban so they can sign in again.
-    await clearExTeamArchive(data.userId);
+    await clearExTeamArchive(clinicIdOf(context), data.userId);
     await unbanAuthUser(data.userId);
     await audit(ctx, "staff.update", "user_roles", data.userId, null, {
       role: data.role,
@@ -1982,7 +2047,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
     await authorize(ctx, "inviteStaffMember");
     const email = assertEmail(data.email, "work email")!;
     const temporaryPassword = generateTemporaryPassword();
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
 
     let uid: string | undefined;
 
@@ -2036,7 +2101,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
 
     await supabaseAdmin.from("profiles").upsert({
       id: uid,
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       full_name: data.fullName,
       job_title: data.jobTitle ?? null,
       registration_body: data.registrationBody ?? null,
@@ -2044,7 +2109,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
     });
     await supabaseAdmin.from("user_roles").delete().eq("user_id", uid).neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: uid, role: data.role });
-    await clearExTeamArchive(uid);
+    await clearExTeamArchive(clinicIdOf(context), uid);
     await unbanAuthUser(uid);
     await audit(ctx, "staff.invite", "user_roles", uid, null, { email, role: data.role });
 
@@ -2064,7 +2129,7 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "revokeStaffAccess");
     if (data.userId === ctx.userId) throw new Error("You cannot revoke your own access");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
 
     const [{ data: roleRow }, { data: profile }, authUser] = await Promise.all([
       supabaseAdmin
@@ -2079,6 +2144,7 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
     if (!roleRow) throw new Error("That person is not on the team");
 
     await archiveExTeamMember({
+      clinicId: clinicIdOf(context),
       userId: data.userId,
       role: roleRow.role as string,
       email: authUser.data.user?.email ?? "",
@@ -2103,20 +2169,20 @@ export const listExTeamMembers = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "listExTeamMembers");
-    await purgeExpiredExTeamMembers();
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await purgeExpiredExTeamMembers(clinicIdOf(context));
     const now = new Date().toISOString();
-    const { data, error } = await supabaseAdmin
+    // The request client rather than supabaseAdmin: both are service-role, but
+    // only this one carries the clinic filter.
+    const { data, error } = await ctx.supabase
       .from("ex_team_members")
       .select(
         "id, user_id, email, full_name, job_title, registration_body, registration_number, role, revoked_at, retain_until",
       )
-      .eq("clinic_id", CLINIC_ID)
       .is("purged_at", null)
       .gt("retain_until", now)
       .order("revoked_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => ({
+    return (data ?? []).map((row: any) => ({
       id: row.id as string,
       userId: row.user_id as string,
       email: (row.email as string | null) ?? "",
@@ -2141,7 +2207,7 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "restoreExTeamMember");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const { data: archived, error } = await supabaseAdmin
       .from("ex_team_members")
       .select("*")
@@ -2165,7 +2231,7 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
       .eq("id", data.userId);
     await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: data.userId, role });
-    await clearExTeamArchive(data.userId);
+    await clearExTeamArchive(clinicIdOf(context), data.userId);
     await unbanAuthUser(data.userId);
     await audit(ctx, "staff.restore", "user_roles", data.userId, null, { role });
     return { ok: true, role };
@@ -2183,7 +2249,7 @@ export const setStaffPassword = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await authorize(ctx, "setStaffPassword");
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const existing = await supabaseAdmin.auth.admin.getUserById(data.userId);
     if (existing.error) throw new Error(existing.error.message);
     const res = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
@@ -2209,7 +2275,7 @@ export const changeOwnPassword = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await authorize(ctx, "changeOwnPassword");
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     // Merge app_metadata so we clear the flag without wiping other Auth keys.
     const existing = await supabaseAdmin.auth.admin.getUserById(ctx.userId);
     if (existing.error) throw new Error(existing.error.message);
@@ -2231,7 +2297,7 @@ export const acknowledgeWelcome = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "acknowledgeWelcome");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const existing = await supabaseAdmin.auth.admin.getUserById(ctx.userId);
     if (existing.error) throw new Error(existing.error.message);
     const res = await supabaseAdmin.auth.admin.updateUserById(ctx.userId, {
@@ -2251,7 +2317,7 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "listAccountsMissingEmail");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const [{ data: patients }, { data: profiles }, { data: roles }, users] = await Promise.all([
       supabaseAdmin
         .from("patients")
@@ -2316,7 +2382,7 @@ export const setStaffEmail = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await authorize(ctx, "setStaffEmail");
     const email = assertEmail(data.email)!;
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const res = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
       email,
       email_confirm: true,
@@ -2333,7 +2399,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "getPractitionerPerformance");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const { buildStats, buildTrend } = await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
 
@@ -2440,7 +2506,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "getMyEarnings");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const { buildStats } = await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
 
@@ -2522,7 +2588,7 @@ export const setCommissionRate = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await authorize(ctx, "setCommissionRate");
     const rate = Math.min(100, Math.max(0, Number(data.rate) || 0));
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({ commission_rate: rate })
@@ -2553,7 +2619,7 @@ export const submitProfileChange = createServerFn({ method: "POST" })
     await authorize(ctx, "submitProfileChange");
     if (!data.fullName?.trim()) throw new Error("Full name is required");
     const { error } = await ctx.supabase.from("profile_change_requests").insert({
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       user_id: ctx.userId,
       full_name: data.fullName.trim(),
       job_title: data.jobTitle?.trim() || null,
@@ -2581,7 +2647,7 @@ export const saveMyProfile = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await authorize(ctx, "saveMyProfile");
     if (!data.fullName?.trim()) throw new Error("Full name is required");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({
@@ -2621,7 +2687,7 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "listProfileChangeRequests");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const [{ data: requests }, { data: profiles }] = await Promise.all([
       supabaseAdmin
         .from("profile_change_requests")
@@ -2643,7 +2709,7 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "reviewProfileChange");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const { data: req, error: reqError } = await supabaseAdmin
       .from("profile_change_requests")
       .select("*")
@@ -2698,7 +2764,7 @@ export const setMyAvatar = createServerFn({ method: "POST" })
     await authorize(ctx, "setMyAvatar");
     const targetUserId = data.targetUserId ?? ctx.userId;
     if (targetUserId !== ctx.userId) await requireOwner(ctx);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const client = targetUserId === ctx.userId ? ctx.supabase : supabaseAdmin;
     const { error } = await client.from("profiles").update({ avatar_url: data.path }).eq("id", targetUserId);
     if (error) throw new Error(error.message);
@@ -2717,7 +2783,7 @@ export const listMyDocuments = createServerFn({ method: "GET" })
     if (targetUserId !== ctx.userId && !identity.isManager) {
       throw new Error("Only managers can open staff documents");
     }
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const client = targetUserId === ctx.userId ? ctx.supabase : supabaseAdmin;
     const { data: rows, error } = await client
       .from("staff_documents")
@@ -2791,7 +2857,7 @@ export const getStaffProfile = createServerFn({ method: "GET" })
     const canViewDocuments = identity.isManager || isSelf;
     const canViewCommission = identity.isManager;
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const [{ data: profile }, { data: roles }, { data: docs }, users, { data: requests }] = await Promise.all([
       supabaseAdmin.from("profiles").select("*").eq("id", data.userId).maybeSingle(),
       supabaseAdmin.from("user_roles").select("role").eq("user_id", data.userId),
@@ -2891,7 +2957,7 @@ export const logRetentionOutreach = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await authorize(ctx, "logRetentionOutreach");
     const { error } = await ctx.supabase.from("retention_outreach").insert({
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       patient_id: data.patient_id,
       contacted_by: ctx.userId,
       channel: data.channel ?? "message",
@@ -2952,7 +3018,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
       crypto.randomUUID();
     const { error } = await ctx.supabase.from("recall_tasks").insert(
       recipients.map((r) => ({
-        clinic_id: CLINIC_ID,
+        clinic_id: clinicIdOf(context),
         patient_id: data.patient_id,
         group_id: groupId,
         assigned_to: r.id,
@@ -3025,7 +3091,7 @@ export const updateRecallTask = createServerFn({ method: "POST" })
         : ((template.reassigned_at as string | null) ?? null);
 
     const shared = {
-      clinic_id: template.clinic_id ?? CLINIC_ID,
+      clinic_id: template.clinic_id ?? clinicIdOf(context),
       patient_id: template.patient_id,
       group_id: groupId,
       created_by: template.created_by ?? ctx.userId,
@@ -3042,7 +3108,7 @@ export const updateRecallTask = createServerFn({ method: "POST" })
 
     const toRemove = group.filter((g: any) => !nextIds.has(g.assigned_to));
     if (toRemove.length) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const supabaseAdmin = await adminClient(context);
       const { error } = await supabaseAdmin
         .from("recall_tasks")
         .delete()
@@ -3180,7 +3246,7 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
     if (!toRemove.length) return { ok: true, removed: [] as string[] };
 
     const ids = toRemove.map((g: any) => g.id as string);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = await adminClient(context);
     const { data: deleted, error } = await supabaseAdmin
       .from("recall_tasks")
       .delete()
@@ -3375,7 +3441,7 @@ export const saveTreatmentColour = createServerFn({ method: "POST" })
           updated_by: ctx.userId,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "treatment_name" },
+        { onConflict: "clinic_id,treatment_name" },
       );
     if (error) throw new Error(error.message);
     await audit(ctx, "update", "treatment_colour", key, null, { treatment_name: key, lane, hex });
@@ -3461,7 +3527,7 @@ export const applyColourTheme = createServerFn({ method: "POST" })
     if (rows.length) {
       const { error } = await ctx.supabase
         .from("treatment_colours")
-        .upsert(rows, { onConflict: "treatment_name" });
+        .upsert(rows, { onConflict: "clinic_id,treatment_name" });
       if (error) throw new Error(error.message);
     }
     await audit(ctx, "apply", "colour_theme", theme.id, null, { name: theme.name });
@@ -3517,7 +3583,7 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
     const name = (data.name ?? "").trim();
     if (!name) throw new Error("Treatment name is required");
     const row = {
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       name,
       category: data.category?.trim() || null,
       description: data.description?.trim() || null,
@@ -3568,7 +3634,7 @@ export const getClinicDetails = createServerFn({ method: "GET" })
     const { data } = await (context as Ctx).supabase
       .from("clinics")
       .select("id, name, address, phone, email")
-      .eq("id", CLINIC_ID)
+      .eq("id", clinicIdOf(context))
       .maybeSingle();
     return data ?? null;
   });
@@ -3590,9 +3656,9 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
         phone: data.phone?.trim() || null,
         email: assertEmail(data.email ?? "", "clinic email", true),
       })
-      .eq("id", CLINIC_ID);
+      .eq("id", clinicIdOf(context));
     if (error) throw new Error(error.message);
-    await audit(ctx, "update", "clinic", CLINIC_ID, null, { name });
+    await audit(ctx, "update", "clinic", clinicIdOf(context), null, { name });
     return { ok: true };
   });
 
@@ -3647,7 +3713,7 @@ export const setRolePermission = createServerFn({ method: "POST" })
           updated_by: ctx.userId,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "role,permission" },
+        { onConflict: "clinic_id,role,permission" },
       );
     if (error) throw new Error(error.message);
     await audit(ctx, "access.update", "role_permissions", null, null, {
@@ -3808,7 +3874,6 @@ async function getOrCreateConversationId(ctx: Ctx, peerUserId: string) {
   const { data: existing } = await ctx.supabase
     .from("staff_conversations")
     .select("id")
-    .eq("clinic_id", CLINIC_ID)
     .eq("user_low", userLow)
     .eq("user_high", userHigh)
     .maybeSingle();
@@ -3816,7 +3881,7 @@ async function getOrCreateConversationId(ctx: Ctx, peerUserId: string) {
 
   const { data: created, error } = await ctx.supabase
     .from("staff_conversations")
-    .insert({ clinic_id: CLINIC_ID, user_low: userLow, user_high: userHigh })
+    .insert({ clinic_id: clinicIdOf(ctx), user_low: userLow, user_high: userHigh })
     .select("id")
     .single();
   if (error) {
@@ -3824,7 +3889,6 @@ async function getOrCreateConversationId(ctx: Ctx, peerUserId: string) {
     const { data: again } = await ctx.supabase
       .from("staff_conversations")
       .select("id")
-      .eq("clinic_id", CLINIC_ID)
       .eq("user_low", userLow)
       .eq("user_high", userHigh)
       .maybeSingle();
@@ -3981,7 +4045,7 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
       .from("staff_chat_messages")
       .insert({
         conversation_id: conversationId,
-        clinic_id: CLINIC_ID,
+        clinic_id: clinicIdOf(context),
         sender_id: ctx.userId,
         body,
         attachments,
@@ -4013,7 +4077,7 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
       .is("read_at", null);
     if (clearErr) throw new Error(clearErr.message);
     const { error: notifyErr } = await ctx.supabase.from("staff_notifications").insert({
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicIdOf(context),
       recipient_id: data.peerUserId,
       sender_id: ctx.userId,
       urgent: false,

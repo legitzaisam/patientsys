@@ -11,7 +11,13 @@ import { POLICY, resolveScope, type HandlerName } from "@/lib/auth/policy";
  * one of these guards is open to any authenticated user, including a patient.
  */
 
-export type Ctx = { supabase: any; userId: string; claims: Record<string, unknown> };
+export type Ctx = {
+  /** Already clinic-scoped by the session middleware; see auth/clinic-scope.server.ts. */
+  supabase: any;
+  clinicId: string | null;
+  userId: string;
+  claims: Record<string, unknown>;
+};
 
 export type Identity = Awaited<ReturnType<typeof readIdentity>>;
 
@@ -48,7 +54,7 @@ async function readIdentity(context: Ctx) {
       .maybeSingle(),
     context.supabase
       .from("patients")
-      .select("id, first_name, last_name")
+      .select("id, clinic_id, first_name, last_name")
       .eq("user_id", context.userId)
       .maybeSingle(),
     context.supabase.from("role_permissions").select("role, permission, enabled"),
@@ -91,9 +97,16 @@ async function readIdentity(context: Ctx) {
             .map((p) => p.permission),
         ),
       );
+  // Which clinic this caller belongs to: their staff profile, or the patient
+  // record their login is attached to. Every clinic-scoped query filters on it,
+  // because the service-role client makes the database's isolation policies
+  // advisory — this value is the isolation.
+  const clinicId: string | null = profile?.clinic_id ?? patient?.clinic_id ?? null;
+
   return {
     userId: context.userId,
     email: (context.claims["email"] as string) ?? "",
+    clinicId,
     roles: roleList,
     isStaff,
     /** Clinic owner — full access; customises manager / staff permissions. */

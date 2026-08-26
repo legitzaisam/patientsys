@@ -686,6 +686,20 @@ export const savePatient = createServerFn({ method: "POST" })
     return { id: created.id };
   });
 
+export const archivePatient = createServerFn({ method: "POST" })
+  .validator((data: { id: string; archived: boolean; reason?: string }) =>
+    parseInput(schemas.ArchivePatient, data),
+  )
+  .handler(async ({ data }) => {
+    const row = patientById(data.id) as Record<string, unknown> | undefined;
+    if (row) {
+      row["deleted_at"] = data.archived ? new Date().toISOString() : null;
+      row["deletion_reason"] = data.archived ? (data.reason ?? null) : null;
+      row["status"] = data.archived ? "archived" : "active";
+    }
+    return { id: data.id, archived: data.archived };
+  });
+
 /* ---------------------------------------------------------------- */
 /* catalogue, practitioners, appointments                             */
 /* ---------------------------------------------------------------- */

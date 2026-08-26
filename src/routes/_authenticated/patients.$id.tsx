@@ -8,6 +8,7 @@ import { ArrowLeft, Upload } from "lucide-react";
 import {
   addPhoto,
   addTreatment,
+  archivePatient,
   getCatalogue,
   getPatient,
   markMessagesRead,
@@ -81,6 +82,7 @@ function PatientRecord() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["patient", id] });
   const [treatmentOpen, setTreatmentOpen] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [leftId, setLeftId] = useState<string>("");
   const [rightId, setRightId] = useState<string>("");
@@ -145,6 +147,20 @@ function PatientRecord() {
       toast.success("Consent form issued - it is now in their portal");
       setDocOpen(false);
       invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const archive = useMutation({
+    mutationFn: useServerFn(archivePatient),
+    onSuccess: (res: { archived: boolean }) => {
+      toast.success(
+        res.archived
+          ? "Patient archived — their record is kept for the retention period"
+          : "Patient restored to the active list",
+      );
+      setArchiveOpen(false);
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ["patients"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -437,8 +453,69 @@ function PatientRecord() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+
+                {identity?.isOwner &&
+                  (p.deleted_at ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => archive.mutate({ data: { id, archived: false } })}
+                      disabled={archive.isPending}
+                    >
+                      Restore patient
+                    </Button>
+                  ) : (
+                    <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline">Archive</Button>
+                      </DialogTrigger>
+                      <DialogContent className="rounded-xl">
+                        <DialogHeader>
+                          <DialogTitle>Archive this patient</DialogTitle>
+                        </DialogHeader>
+                        <form
+                          id="archive-form"
+                          className="space-y-4"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const f = new FormData(e.currentTarget as HTMLFormElement);
+                            archive.mutate({
+                              data: { id, archived: true, reason: String(f.get("reason") ?? "") },
+                            });
+                          }}
+                        >
+                          <p className="text-sm text-muted-foreground">
+                            They will drop out of the patient list and the diary. Nothing is
+                            deleted: the clinical record is kept for 8 years after their last
+                            treatment, and you can restore them at any time.
+                          </p>
+                          <div className="field-stack">
+                            <Label htmlFor="reason">Reason (optional)</Label>
+                            <Input
+                              id="reason"
+                              name="reason"
+                              placeholder="Moved away, duplicate record, requested removal…"
+                              className="rounded-xl"
+                            />
+                          </div>
+                        </form>
+                        <DialogFooter>
+                          <Button type="submit" form="archive-form" disabled={archive.isPending}>
+                            Archive patient
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  ))}
               </div>
             </div>
+
+            {p.deleted_at && (
+              <div className="mt-4 rounded-xl bg-warning-bg px-4 py-3 text-sm text-warning-ink">
+                Archived on {new Date(p.deleted_at).toLocaleDateString("en-GB")}
+                {p.deletion_reason ? ` — ${p.deletion_reason}` : ""}. The record is retained and
+                read-only in the patient list until restored.
+              </div>
+            )}
 
             <div className="mt-6 grid gap-4 border-t border-edge pt-4 sm:grid-cols-3">
               <Detail label="Allergies" value={p.allergies} alert />

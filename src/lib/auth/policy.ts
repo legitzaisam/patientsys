@@ -61,6 +61,9 @@ export const POLICY = {
 
   /* Clinical record */
   savePatient: { kind: "capability", key: "patients.edit" },
+  // Owner only: archiving starts an 8-year retention clock and hides the record
+  // from every clinical view, which is not a capability worth delegating.
+  archivePatient: { kind: "owner" },
   addTreatment: { kind: "capability", key: "treatments.record" },
   reviewHistory: { kind: "capability", key: "treatments.record" },
   addPhoto: { kind: "capability", key: "photos.manage" },
