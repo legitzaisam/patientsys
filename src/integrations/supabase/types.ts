@@ -254,6 +254,90 @@ export type Database = {
         };
         Relationships: [];
       };
+      communications: {
+        Row: {
+          attempts: number;
+          body: string;
+          channel: Database["public"]["Enums"]["communication_channel"];
+          clinic_id: string;
+          created_at: string;
+          created_by: string | null;
+          error: string | null;
+          id: string;
+          patient_id: string;
+          provider: string | null;
+          provider_message_id: string | null;
+          purpose: Database["public"]["Enums"]["communication_purpose"];
+          related_entity: string | null;
+          related_id: string | null;
+          scheduled_for: string;
+          sent_at: string | null;
+          status: Database["public"]["Enums"]["communication_status"];
+          subject: string | null;
+          template_key: string | null;
+          to_address: string;
+        };
+        Insert: {
+          attempts?: number;
+          body: string;
+          channel: Database["public"]["Enums"]["communication_channel"];
+          clinic_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          error?: string | null;
+          id?: string;
+          patient_id: string;
+          provider?: string | null;
+          provider_message_id?: string | null;
+          purpose: Database["public"]["Enums"]["communication_purpose"];
+          related_entity?: string | null;
+          related_id?: string | null;
+          scheduled_for?: string;
+          sent_at?: string | null;
+          status?: Database["public"]["Enums"]["communication_status"];
+          subject?: string | null;
+          template_key?: string | null;
+          to_address: string;
+        };
+        Update: {
+          attempts?: number;
+          body?: string;
+          channel?: Database["public"]["Enums"]["communication_channel"];
+          clinic_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          error?: string | null;
+          id?: string;
+          patient_id?: string;
+          provider?: string | null;
+          provider_message_id?: string | null;
+          purpose?: Database["public"]["Enums"]["communication_purpose"];
+          related_entity?: string | null;
+          related_id?: string | null;
+          scheduled_for?: string;
+          sent_at?: string | null;
+          status?: Database["public"]["Enums"]["communication_status"];
+          subject?: string | null;
+          template_key?: string | null;
+          to_address?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "communications_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "communications_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       documents: {
         Row: {
           access_token: string;
@@ -568,17 +652,22 @@ export type Database = {
           deleted_by: string | null;
           deletion_reason: string | null;
           email: string | null;
+          email_opt_in: boolean;
           first_name: string;
           id: string;
           last_name: string;
           last_visit_at: string | null;
           legal_hold: boolean;
+          marketing_opt_in: boolean;
           medications: string | null;
           notes: string | null;
           phone: string | null;
+          reminders_opt_in: boolean;
+          sms_opt_in: boolean;
           reference: string | null;
           status: Database["public"]["Enums"]["patient_status"];
           title: string | null;
+          unsubscribed_at: string | null;
           updated_at: string;
           user_id: string | null;
         };
@@ -593,17 +682,22 @@ export type Database = {
           deleted_by?: string | null;
           deletion_reason?: string | null;
           email?: string | null;
+          email_opt_in?: boolean;
           first_name: string;
           id?: string;
           last_name: string;
           last_visit_at?: string | null;
           legal_hold?: boolean;
+          marketing_opt_in?: boolean;
           medications?: string | null;
           notes?: string | null;
           phone?: string | null;
+          reminders_opt_in?: boolean;
+          sms_opt_in?: boolean;
           reference?: string | null;
           status?: Database["public"]["Enums"]["patient_status"];
           title?: string | null;
+          unsubscribed_at?: string | null;
           updated_at?: string;
           user_id?: string | null;
         };
@@ -618,17 +712,22 @@ export type Database = {
           deleted_by?: string | null;
           deletion_reason?: string | null;
           email?: string | null;
+          email_opt_in?: boolean;
           first_name?: string;
           id?: string;
           last_name?: string;
           last_visit_at?: string | null;
           legal_hold?: boolean;
+          marketing_opt_in?: boolean;
           medications?: string | null;
           notes?: string | null;
           phone?: string | null;
+          reminders_opt_in?: boolean;
+          sms_opt_in?: boolean;
           reference?: string | null;
           status?: Database["public"]["Enums"]["patient_status"];
           title?: string | null;
+          unsubscribed_at?: string | null;
           updated_at?: string;
           user_id?: string | null;
         };
@@ -827,6 +926,7 @@ export type Database = {
         Row: {
           channel: string;
           clinic_id: string;
+          communication_id: string | null;
           contacted_by: string | null;
           created_at: string;
           id: string;
@@ -836,6 +936,7 @@ export type Database = {
         Insert: {
           channel?: string;
           clinic_id: string;
+          communication_id?: string | null;
           contacted_by?: string | null;
           created_at?: string;
           id?: string;
@@ -845,6 +946,7 @@ export type Database = {
         Update: {
           channel?: string;
           clinic_id?: string;
+          communication_id?: string | null;
           contacted_by?: string | null;
           created_at?: string;
           id?: string;
@@ -1402,6 +1504,51 @@ export type Database = {
           },
         ];
       };
+      auth_login_events: {
+        Row: {
+          created_at: string;
+          email: string;
+          id: string;
+          locked_until: string | null;
+          success: boolean;
+          surface: string;
+        };
+        Insert: {
+          created_at?: string;
+          email: string;
+          id?: string;
+          locked_until?: string | null;
+          success: boolean;
+          surface: string;
+        };
+        Update: {
+          created_at?: string;
+          email?: string;
+          id?: string;
+          locked_until?: string | null;
+          success?: boolean;
+          surface?: string;
+        };
+        Relationships: [];
+      };
+      auth_step_up: {
+        Row: {
+          confirmed_at: string;
+          expires_at: string;
+          user_id: string;
+        };
+        Insert: {
+          confirmed_at?: string;
+          expires_at: string;
+          user_id: string;
+        };
+        Update: {
+          confirmed_at?: string;
+          expires_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       user_notes: {
         Row: {
           body: string;
@@ -1452,6 +1599,18 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claim_queued_communications: {
+        Args: { _limit: number };
+        Returns: Database["public"]["Tables"]["communications"]["Row"][];
+      };
+      check_login_throttle: {
+        Args: { p_email: string; p_surface: string };
+        Returns: Json;
+      };
+      record_login_event: {
+        Args: { p_email: string; p_surface: string; p_success: boolean };
+        Returns: undefined;
+      };
       current_clinic_id: { Args: never; Returns: string };
       current_patient_id: { Args: never; Returns: string };
       erase_patient: {
@@ -1473,13 +1632,16 @@ export type Database = {
       app_role: "owner" | "practitioner" | "front_desk" | "patient" | "manager";
       appointment_status: "booked" | "attended" | "cancelled" | "no_show";
       change_request_status: "pending" | "approved" | "declined";
+      communication_channel: "email" | "sms";
+      communication_purpose: "transactional" | "reminder" | "marketing";
+      communication_status: "queued" | "sending" | "sent" | "failed" | "bounced";
       document_kind: "consent" | "treatment_plan" | "consultation" | "aftercare" | "other";
       document_status: "draft" | "sent" | "viewed" | "signed" | "expired";
       message_author: "staff" | "patient";
       patient_status: "active" | "inactive" | "archived";
       payment_status: "unpaid" | "deposit_paid" | "paid" | "refunded";
       photo_kind: "before" | "after";
-      recall_task_status: "sent" | "contacted" | "completed";
+      recall_task_status: "open" | "contacted" | "completed";
       visit_stage:
         "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
     };
@@ -1609,13 +1771,16 @@ export const Constants = {
       app_role: ["owner", "practitioner", "front_desk", "patient", "manager"],
       appointment_status: ["booked", "attended", "cancelled", "no_show"],
       change_request_status: ["pending", "approved", "declined"],
+      communication_channel: ["email", "sms"],
+      communication_purpose: ["transactional", "reminder", "marketing"],
+      communication_status: ["queued", "sending", "sent", "failed", "bounced"],
       document_kind: ["consent", "treatment_plan", "consultation", "aftercare", "other"],
       document_status: ["draft", "sent", "viewed", "signed", "expired"],
       message_author: ["staff", "patient"],
       patient_status: ["active", "inactive", "archived"],
       payment_status: ["unpaid", "deposit_paid", "paid", "refunded"],
       photo_kind: ["before", "after"],
-      recall_task_status: ["sent", "contacted", "completed"],
+      recall_task_status: ["open", "contacted", "completed"],
       visit_stage: [
         "booked",
         "arrived",

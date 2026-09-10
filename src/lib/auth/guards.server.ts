@@ -1,15 +1,6 @@
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { POLICY, resolveScope, type HandlerName } from "@/lib/auth/policy";
-
-/**
- * Authorization for every server function.
- *
- * `requireSupabaseAuth` verifies the caller's JWT and then hands the handler a
- * service-role Supabase client, which bypasses Row-Level Security. The database's
- * policies therefore enforce nothing for application traffic, and every access
- * decision has to be made here. A handler that reads or writes without calling
- * one of these guards is open to any authenticated user, including a patient.
- */
+import { MFA_REQUIRED_MESSAGE, STEP_UP_MESSAGE, STEP_UP_TTL_MS } from "@/lib/auth/constants";
 
 export type Ctx = {
   /** Already clinic-scoped by the session middleware; see auth/clinic-scope.server.ts. */
@@ -17,6 +8,7 @@ export type Ctx = {
   clinicId: string | null;
   userId: string;
   claims: Record<string, unknown>;
+  accessToken: string;
 };
 
 export type Identity = Awaited<ReturnType<typeof readIdentity>>;
@@ -102,6 +94,9 @@ async function readIdentity(context: Ctx) {
   // because the service-role client makes the database's isolation policies
   // advisory — this value is the isolation.
   const clinicId: string | null = profile?.clinic_id ?? patient?.clinic_id ?? null;
+  const aal: "aal1" | "aal2" = context.claims["aal"] === "aal2" ? "aal2" : "aal1";
+  const mfaRequired = isOwner || roleList.includes("manager");
+  const mfaEnrolled = await readMfaEnrolled(context);
 
   return {
     userId: context.userId,
@@ -118,6 +113,9 @@ async function readIdentity(context: Ctx) {
     isPatient: !isStaff,
     /** Capability keys from role_permissions (owners hold every key). */
     permissions,
+    aal,
+    mfaEnrolled,
+    mfaRequired,
     profile: profile ?? null,
     patient: patient ?? null,
     /** True when staff must set a new password before using the app (invite / reset). */
@@ -125,6 +123,30 @@ async function readIdentity(context: Ctx) {
     /** True for newly invited staff until they dismiss the welcome dialog. */
     welcomePending: await resolveAppMetaFlag(context, "welcome_pending"),
   };
+}
+
+async function readMfaEnrolled(context: Ctx): Promise<boolean> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const listed = await (
+      supabaseAdmin.auth.admin as unknown as {
+        mfa?: {
+          listFactors: (opts: { userId: string }) => Promise<{
+            data?: { totp?: Array<{ status: string }> };
+            error?: { message: string } | null;
+          }>;
+        };
+      }
+    ).mfa?.listFactors({ userId: context.userId });
+    if (listed?.data?.totp?.some((f) => f.status === "verified")) return true;
+    const user = await supabaseAdmin.auth.admin.getUserById(context.userId);
+    const factors = (user.data.user as { factors?: Array<{ factor_type?: string; status?: string }> } | undefined)
+      ?.factors;
+    if (factors?.some((f) => f.factor_type === "totp" && f.status === "verified")) return true;
+  } catch {
+    /* Auth admin APIs vary by version; fall through to the JWT. */
+  }
+  return context.claims["aal"] === "aal2";
 }
 
 /**
@@ -221,29 +243,66 @@ export async function authorize(
 ): Promise<Identity> {
   const rule = POLICY[name] as import("@/lib/auth/policy").Access;
 
+  let identity: Identity;
   switch (rule.kind) {
     case "self":
-      return loadIdentity(context);
+      identity = await loadIdentity(context);
+      break;
     case "staff":
-      return requireStaff(context);
+      identity = await requireStaff(context);
+      break;
     case "manager":
-      return requireManager(context);
+      identity = await requireManager(context);
+      break;
     case "owner":
-      return requireOwner(context);
+      identity = await requireOwner(context);
+      break;
     case "capability":
-      return requirePermission(context, rule.key);
+      identity = await requirePermission(context, rule.key);
+      break;
     case "patientSelf":
-      return requirePatientSelf(context, requirePatientId(name, resource));
+      identity = await requirePatientSelf(context, requirePatientId(name, resource));
+      break;
     case "staffOrOwnPatient": {
-      const identity = await requireStaffOrOwnPatient(context, requirePatientId(name, resource));
+      identity = await requireStaffOrOwnPatient(context, requirePatientId(name, resource));
       // The capability describes the staff side only. A patient legitimately
       // messaging their own clinic holds no capabilities and must not be gated.
       if (rule.staffKey && identity.isStaff && !can(identity, rule.staffKey)) {
         throw new Error("You do not have access to this area");
       }
-      return identity;
+      break;
+    }
+    default: {
+      const _exhaustive: never = rule;
+      throw new Error(`Unknown access rule for ${name}: ${JSON.stringify(_exhaustive)}`);
     }
   }
+
+  // Once a manager has a verified factor, every handler except getMe needs AAL2.
+  // Enrolment itself is client-side against Auth. We do not refuse people who
+  // have not enrolled yet — that would lock the clinic out if TOTP is not
+  // enabled on the project. The client gate is what pushes them to enrol.
+  if (name !== "getMe" && identity.mfaRequired && identity.mfaEnrolled && identity.aal !== "aal2") {
+    throw new Error(MFA_REQUIRED_MESSAGE);
+  }
+  return identity;
+}
+
+/** Destructive actions need a password confirmed in the last few minutes. */
+export async function requireStepUp(context: Ctx) {
+  const { data, error } = await context.supabase
+    .from("auth_step_up")
+    .select("expires_at")
+    .eq("user_id", context.userId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not confirm your identity: ${error.message}`);
+  if (!data?.expires_at || new Date(String(data.expires_at)).getTime() < Date.now()) {
+    throw new Error(STEP_UP_MESSAGE);
+  }
+}
+
+export function stepUpExpiry() {
+  return new Date(Date.now() + STEP_UP_TTL_MS).toISOString();
 }
 
 function requirePatientId(name: string, resource?: { patientId?: string | null }) {

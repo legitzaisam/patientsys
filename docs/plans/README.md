@@ -33,3 +33,6 @@ Start from [_TEMPLATE.md](_TEMPLATE.md).
 | 3 | [Capability-based RBAC](phase-03-rbac.md) | Complete |
 | 4 | [Runtime validation with zod](phase-04-validation.md) | Complete |
 | 5 | [Database hardening](phase-05-database-hardening.md) | Complete |
+| 6 | [Identity and authentication](phase-06-identity-authentication.md) | In progress |
+| 7 | [Comms schema and outbox](phase-07-comms-outbox.md) | In progress |
+| 8 | [Provider adapters](phase-08-provider-adapters.md) | Complete |

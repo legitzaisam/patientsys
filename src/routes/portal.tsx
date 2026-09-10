@@ -1,21 +1,26 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { checkEmail } from "@/lib/email";
 import { toastEmailError } from "@/lib/email-toast";
+import { getMe } from "@/lib/clinic.functions";
+import { assertLoginAllowed, recordLoginEvent } from "@/lib/auth/login-throttle";
+import { destinationFor } from "@/lib/auth/surfaces";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CalendarCheck, FileSignature, MessageCircle } from "lucide-react";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import { PasswordResetRequest } from "@/components/auth/password-reset-request";
 
 export const Route = createFileRoute("/portal")({
   ssr: false,
-  validateSearch: (search: Record<string, unknown>) => ({
-    next: typeof search.next === "string" ? search.next : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { next?: string } => {
+    return typeof search["next"] === "string" ? { next: search["next"] } : {};
+  },
   head: () => ({
     meta: [
       { title: "Patient portal sign in — Aetheria" },
@@ -44,7 +49,7 @@ const highlights = [
 
 /** Only allow same-origin relative paths (blocks open redirects). */
 function safeNextPath(next: string | undefined) {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return { to: "/dashboard" as const };
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return { to: "/my-record" as const };
   try {
     const url = new URL(next, "http://local.invalid");
     const search = Object.fromEntries(url.searchParams.entries());
@@ -53,24 +58,36 @@ function safeNextPath(next: string | undefined) {
       search: Object.keys(search).length ? search : undefined,
     };
   } catch {
-    return { to: "/dashboard" as const };
+    return { to: "/my-record" as const };
   }
 }
 
 function PortalLogin() {
   const navigate = useNavigate();
+  const fetchMe = useServerFn(getMe);
   const { next } = Route.useSearch();
   const dest = safeNextPath(next);
+  const [mode, setMode] = useState<"signin" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Signed-in users land in the view their role allows (or the payment deep link).
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ ...dest, replace: true } as any);
+    let active = true;
+    void supabase.auth.getSession().then(async ({ data }) => {
+      if (!active || !data.session) return;
+      try {
+        const identity = await fetchMe();
+        const home = destinationFor("patient", identity);
+        navigate({ ...(home === "/dashboard" ? { to: "/dashboard" } : dest), replace: true } as never);
+      } catch {
+        await supabase.auth.signOut();
+      }
     });
-  }, [navigate, next]);
+    return () => {
+      active = false;
+    };
+  }, [dest, fetchMe, navigate, next]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,29 +98,28 @@ function PortalLogin() {
     }
     setBusy(true);
     try {
+      await assertLoginAllowed(emailCheck.email, "patient");
       const { error } = await supabase.auth.signInWithPassword({
         email: emailCheck.email,
         password,
       });
-      if (error) throw error;
-      navigate({ ...dest, replace: true } as any);
+      if (error) {
+        await recordLoginEvent(emailCheck.email, "patient", false);
+        throw error;
+      }
+      const identity = await fetchMe();
+      await recordLoginEvent(emailCheck.email, "patient", true);
+      const home = destinationFor("patient", identity);
+      navigate({ ...(home === "/dashboard" ? { to: "/dashboard" } : dest), replace: true } as never);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not sign you in");
+      const message = err instanceof Error ? err.message : "Could not sign you in";
+      if (message.includes("staff") || message.includes("patient record")) {
+        await supabase.auth.signOut();
+      }
+      toast.error(message);
     } finally {
       setBusy(false);
     }
-  }
-
-  async function google() {
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      toast.error("Google sign-in failed");
-      return;
-    }
-    if (result.redirected) return;
-    navigate({ ...dest, replace: true } as any);
   }
 
   return (
@@ -135,55 +151,75 @@ function PortalLogin() {
 
       <div className="flex items-center justify-center px-6 py-16">
         <div className="glass-card w-full max-w-sm p-8">
-          <h2 className="text-[19px] font-semibold tracking-[-0.016em] text-foreground">Patient sign in</h2>
+          <h2 className="text-[19px] font-semibold tracking-[-0.016em] text-foreground">
+            {mode === "forgot" ? "Reset your password" : "Patient sign in"}
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Use the email address your clinic holds for you.
+            {mode === "forgot"
+              ? "We will email a link if this address has a portal login."
+              : "Use the email address your clinic holds for you."}
           </p>
 
-          <form onSubmit={submit} className="mt-8 space-y-4">
-            <div className="field-stack">
-              <Label htmlFor="portal-email">Email</Label>
-              <Input
-                id="portal-email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="field-stack">
-              <Label htmlFor="portal-password">Password</Label>
-              <Input
-                id="portal-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in to my record"}
-            </Button>
-          </form>
+          {mode === "forgot" ? (
+            <PasswordResetRequest
+              surface="patient"
+              defaultEmail={email}
+              onBack={() => setMode("signin")}
+            />
+          ) : (
+            <>
+              <form onSubmit={(e) => void submit(e)} className="mt-8 space-y-4">
+                <div className="field-stack">
+                  <Label htmlFor="portal-email">Email</Label>
+                  <Input
+                    id="portal-email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field-stack">
+                  <Label htmlFor="portal-password">Password</Label>
+                  <Input
+                    id="portal-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy ? "Signing in…" : "Sign in to my record"}
+                </Button>
+              </form>
 
-          <div className="my-6 flex items-center gap-3 text-xs tracking-[0.02em] text-muted-foreground">
-            <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
-          </div>
+              <button
+                type="button"
+                className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground"
+                onClick={() => setMode("forgot")}
+              >
+                Forgot password?
+              </button>
 
-          <Button variant="outline" className="w-full" onClick={google}>
-            Continue with Google
-          </Button>
+              <div className="my-6 flex items-center gap-3 text-xs tracking-[0.02em] text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+              </div>
 
-          <p className="mt-8 text-sm text-muted-foreground">
-            No account yet? Your clinic creates it when you register as a patient — contact them and
-            they'll send your invitation.
-          </p>
-          <Link to="/auth" className="mt-4 block text-sm text-accent-ink hover:underline">
-            Clinic staff sign in
-          </Link>
+              <OAuthButtons surface="patient" />
+
+              <p className="mt-8 text-sm text-muted-foreground">
+                No account yet? Your clinic creates it when you register as a patient — contact them and
+                they&apos;ll send your invitation.
+              </p>
+              <Link to="/auth" className="mt-4 block text-sm text-accent-ink hover:underline">
+                Clinic staff sign in
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -130,6 +130,7 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
         clinicId,
         userId: data.claims.sub,
         claims: data.claims,
+        accessToken: token,
       },
     });
   },

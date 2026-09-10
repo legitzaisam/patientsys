@@ -7,6 +7,7 @@ import { Clock, Check, X } from "lucide-react";
 import { getMyProfile, saveMyProfile } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
+import { SecuritySettings } from "@/components/security-settings";
 import { StaffAvatar, StaffDocuments } from "@/components/staff-files";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -220,6 +221,10 @@ function ProfilePage() {
             </div>
           </Card>
         ) : null}
+      </div>
+
+      <div className="mt-6">
+        <SecuritySettings identity={identity} />
       </div>
 
       <div className="mt-6">

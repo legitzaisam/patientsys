@@ -118,7 +118,7 @@ export function FollowUpTasks() {
 
   const contactVia = (taskId: string, channel: Channel, status: string) => {
     markChannel(taskId, channel);
-    if (status === "sent") {
+    if (status === "open") {
       update.mutate({ data: { task_id: taskId, status: "contacted" } });
     }
   };
@@ -183,7 +183,7 @@ export function FollowUpTasks() {
                     <MessageSquare className="h-3 w-3" />
                   </Link>
                 </Button>
-                {t.status === "sent" ? (
+                {t.status === "open" ? (
                   <Button
                     size="xs"
                     variant="secondary"
@@ -200,7 +200,7 @@ export function FollowUpTasks() {
                     disabled={update.isPending}
                     onClick={() => {
                       clearChannel(t.id);
-                      update.mutate({ data: { task_id: t.id, status: "sent" } });
+                      update.mutate({ data: { task_id: t.id, status: "open" } });
                     }}
                   >
                     <Check className="h-3 w-3" /> Contacted

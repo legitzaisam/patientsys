@@ -6,6 +6,7 @@ import { listRolePermissions, setRolePermission } from "@/lib/clinic.functions";
 import { PERMISSION_GROUPS, PERMISSION_META, type PermissionKey } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
 
 const ROLES = [
   { key: "manager" as const, label: "Manager" },
@@ -16,6 +17,7 @@ const ROLES = [
 /** Clinic owner customises what managers and other staff can reach. */
 export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
   const queryClient = useQueryClient();
+  const stepUp = useStepUp();
   const fetchGrants = useServerFn(listRolePermissions);
   const { data } = useQuery({ queryKey: ["role-permissions"], queryFn: () => fetchGrants() });
 
@@ -27,13 +29,16 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
       queryClient.invalidateQueries();
       toast.success("Access updated");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      if (!isStepUpRequired(e)) toast.error(e.message);
+    },
   });
 
   const grants = data?.grants;
 
   return (
     <Card className="space-y-5 p-5">
+      {stepUp.dialog}
       <div className="flex items-center gap-2">
         <ShieldCheck className="h-4 w-4 text-ink-3" />
         <div>
@@ -82,7 +87,9 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
                       checked={grants?.[role.key]?.[key] ?? false}
                       disabled={!canEdit || save.isPending || !grants}
                       onCheckedChange={(enabled) =>
-                        save.mutate({ data: { role: role.key, permission: key, enabled } })
+                        void stepUp.run(() =>
+                          save.mutateAsync({ data: { role: role.key, permission: key, enabled } }),
+                        )
                       }
                     />
                   </div>

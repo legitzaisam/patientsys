@@ -36,9 +36,14 @@ function Landing() {
       <header className="sticky top-0 z-30 border-b border-edge bg-sidebar shadow-inset-hi backdrop-blur-glass backdrop-saturate-150">
         <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
           <BrandLockup />
-          <Button asChild className="ml-auto ">
-            <Link to="/auth">Sign in</Link>
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button asChild variant="outline">
+              <Link to="/portal">Patient portal</Link>
+            </Button>
+            <Button asChild>
+              <Link to="/auth">Staff sign in</Link>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -52,9 +57,12 @@ function Landing() {
           imagery, consent and consultation forms, treatment recall and direct patient messaging —
           built around JCCP expectations and UK data protection.
         </p>
-        <div className="mt-8 flex gap-3">
+        <div className="mt-8 flex flex-wrap gap-3">
           <Button asChild size="lg">
-            <Link to="/auth">Open your clinic</Link>
+            <Link to="/auth">Staff sign in</Link>
+          </Button>
+          <Button asChild size="lg" variant="outline">
+            <Link to="/portal">Patient portal</Link>
           </Button>
         </div>
       </section>
