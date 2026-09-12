@@ -415,3 +415,63 @@ The second: numeric fields read "Value is too small" instead of "Price is too sm
 **`handle_new_user` still guesses the clinic** with `ORDER BY created_at LIMIT 1`. The invite flow overwrites it for staff, and a single-clinic deployment never notices, but a genuine second tenant would need this fixed.
 
 **`erase_patient` is genuinely destructive.** Owner-reachable only through the database, audited, and guarded three ways — but a bug there loses a medical record permanently.
+
+---
+
+## Phase 8 — Provider adapters
+
+**Date:** 10 September 2026
+**Plan:** [plans/phase-08-provider-adapters.md](plans/phase-08-provider-adapters.md)
+**Commits:** none yet (uncommitted on the same branch as Phases 6 and 7)
+
+### Why this went next
+
+Phase 7 can queue. Nothing claimed those rows, so consent reminders and recall texts in Phase 9 would still be fiction. This phase is the transport. It still does not point clinical flows at it.
+
+### Changed
+
+**Adapters.** `src/lib/comms/email.server.ts` posts to Resend; `src/lib/comms/sms.server.ts` posts to Twilio Messages. No new npm packages. Sandbox (always in demo; live when `COMMS_SANDBOX=1` or the channel key is missing) logs destination and subject, never the body, and returns `provider = sandbox`.
+
+**Dispatch.** `src/lib/comms/dispatch.server.ts` claims due rows, calls the adapter, writes `provider` / `provider_message_id` / `sent_at`, or bumps `attempts` and backs off on `scheduled_for` (`min(15 * 2^(attempts-1), 3600)`s). After 8 attempts the row is `failed`. Rows stuck in `sending` for 5 minutes are reclaimable. Shared by the HTTP drain and the staff handler.
+
+**Drain.** `POST /api/comms/drain` with `Authorization: Bearer $COMMS_DRAIN_SECRET`. 401 if the secret is missing or wrong. Uses the admin client unscoped so cron can see every clinic. `claim_queued_communications(_limit)` is `SECURITY DEFINER`, `service_role` only, and is **not** scheduled in the migration — the cron SQL stays a dashboard snippet because it needs a production URL. Staff `drainCommunications` is `comms.send`, clinic-scoped, and must not call the global RPC (that would leave another clinic's rows stuck in `sending`). Demo walks the in-memory array through the same sandbox adapters.
+
+**Webhooks.** `POST /api/comms/webhooks/resend` (Svix HMAC) and `.../twilio` (SHA1 signature). Fail closed: missing secret → 401. Delivered → `sent`; bounce/complaint/undelivered → `bounced`; Twilio failed → `failed`. Lookup by `provider_message_id`.
+
+**UI.** The outbox card shows provider, attempts and error, and a Process queue button for staff with `comms.send`. Patients on `/my-record` see the log without the button. Copy no longer says the outbox is disconnected.
+
+**Olivia fixture.** `scheduled_for` moved from tomorrow (Phase 7) to yesterday so Process queue has something due.
+
+### Verified
+
+- `check:policy` 96 handlers (was 95).
+- `check:validators` 67 (drain has no input).
+- `check:tenancy` 30 tables; raw `supabaseAdmin` count in `clinic.functions.ts` unchanged.
+- `npx tsc --noEmit` **49**.
+- `curl -X POST` `/api/comms/drain` without a secret → 401 on live and demo. Unsigned webhook POSTs → 401.
+- Demo as owner on Olivia Bennett: Process queue → toast `Processed 1`, row **sent**, provider **sandbox**. Playwright against `localhost:8082` (`DEMO=1`). No IDE browser tools.
+- `send-recall-dialog.tsx` still uses `mailto:` / `sms:`. `sendDocument` still writes a document + portal message and does not enqueue.
+
+### Deviations from the plan
+
+**Claim stamps `scheduled_for = now()`.** The plan reused `scheduled_for` for backoff and treated `sending` + old `scheduled_for` as stale. A row that was due yesterday would then be immediately reclaimable and could double-send. The lock clock is now the claim time; backoff still overwrites `scheduled_for` on failure.
+
+**Olivia's fixture is due, not tomorrow.** Phase 7 queued it for the next morning so the card showed a future send. Phase 8 C2 requires Process queue to mark it sent, so it had to be due.
+
+The HTTP-route-not-Edge-Function, no-cron-in-migration, no-new-packages, sandbox-marks-sent, and staff-drain choices were already in the micro-plan, not mid-flight improvisation.
+
+### Deferred
+
+Everything Phase 9 owns: `sendDocument`, bookings, reminder offsets, deposit chase, recall replace-mailto, staff invite mail, templates, public unsubscribe.
+
+Phase 6 leftovers (SMTP, apply `20260910000000`) and Phase 7 apply leftover (`20260911000000`). Apply `20260912000000` after those. Dashboard: Resend domain + DNS, Twilio UK sender ID, env keys, webhook URLs, then optional `pg_cron` / `pg_net`.
+
+### Residual risk
+
+**No live send has been proven.** Sandbox never talks to Resend or Twilio. A wrong from-address, an unverified domain, or a rejected UK sender ID will look fine in demo and fail in production.
+
+**The claim RPC is file-only until the pooler can apply it.** Live drain falls back to select + optimistic update, which is fine for one clinic and racy under two drains.
+
+**Sandbox `sent` means "would have sent".** Demo cannot show a bounce. Staff may treat the badge as delivery.
+
+Phase 9's precondition holds: enqueue exists, a drain exists, and demo/sandbox never leaves the building.

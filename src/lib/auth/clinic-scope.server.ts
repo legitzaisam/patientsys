@@ -1,7 +1,7 @@
 /**
  * Clinic isolation for a Supabase client.
  *
- * The database has `clinic_id` on 22 tables and, since Phase 5, a RESTRICTIVE
+ * The database has `clinic_id` on 23 tables and, since Phase 5, a RESTRICTIVE
  * policy on each one. None of that binds application traffic: every request
  * runs on the service-role client, which bypasses Row-Level Security. So the
  * isolation that actually holds today is this wrapper.
@@ -15,6 +15,7 @@ export const CLINIC_SCOPED_TABLES = [
   "appointment_notes",
   "appointments",
   "audit_log",
+  "communications",
   "documents",
   "ex_team_members",
   "medical_history_versions",
@@ -42,6 +43,8 @@ export const CLINIC_SCOPED_TABLES = [
  * their owning user, and `clinics` is the tenant itself, scoped by id.
  */
 const UNSCOPED_TABLES = new Set([
+  "auth_login_events",
+  "auth_step_up",
   "clinics",
   "staff_conversation_reads",
   "staff_documents",

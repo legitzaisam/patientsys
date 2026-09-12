@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,8 @@ import {
   ForcePasswordChangeGate,
   StaffWelcomeDialog,
 } from "@/components/force-password-change-gate";
+import { MfaGate } from "@/components/mfa-gate";
+import { IdleWatchdog } from "@/components/idle-watchdog";
 import {
   hasClearedPasswordGate,
   shouldShowWelcomeAfterGate,
@@ -92,6 +94,9 @@ function AuthenticatedLayout() {
 function IdentityGate() {
   const { data: identity, error, isError, isFetching, refetch, isLoading } = useIdentity();
   const [signingOutRevoked, setSigningOutRevoked] = useState(false);
+  const [mfaSatisfied, setMfaSatisfied] = useState(false);
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   // Revoked staff must not fall through to the patient shell — kick them out
   // as soon as identity reflects the lost staff role.
@@ -126,6 +131,12 @@ function IdentityGate() {
       }
     })();
   }, [isError, error, signingOutRevoked]);
+
+  useEffect(() => {
+    if (!identity || identity.isStaff) return;
+    if (pathname === "/my-record") return;
+    navigate({ to: "/my-record", replace: true });
+  }, [identity, navigate, pathname]);
 
   if (signingOutRevoked) {
     return (
@@ -189,25 +200,48 @@ function IdentityGate() {
 
   const needsPassword =
     Boolean(identity.mustChangePassword) && !hasClearedPasswordGate(identity.userId);
+  const needsMfa =
+    !DEMO_MODE &&
+    !needsPassword &&
+    Boolean(identity.mfaRequired) &&
+    !mfaSatisfied &&
+    (!identity.mfaEnrolled || identity.aal !== "aal2");
   // Welcome only after the invite password gate — not after later password resets.
   const showWelcome =
     Boolean(identity.isStaff) &&
     !needsPassword &&
+    !needsMfa &&
     shouldShowWelcomeAfterGate(identity.userId);
+
+  if (needsPassword) {
+    return (
+      <ForcePasswordChangeGate
+        userId={identity.userId}
+        welcomePending={Boolean(identity.welcomePending)}
+      />
+    );
+  }
+
+  if (needsMfa) {
+    return (
+      <MfaGate
+        enrolled={Boolean(identity.mfaEnrolled)}
+        onSatisfied={() => {
+          setMfaSatisfied(true);
+          void refetch();
+        }}
+      />
+    );
+  }
 
   return (
     <>
-      {needsPassword && (
-        <ForcePasswordChangeGate
-          userId={identity.userId}
-          welcomePending={Boolean(identity.welcomePending)}
-        />
-      )}
       <StaffWelcomeDialog
         open={showWelcome}
         userId={identity.userId}
         name={identity.profile?.full_name}
       />
+      <IdleWatchdog enabled={Boolean(identity.isStaff)} />
       <Outlet />
     </>
   );

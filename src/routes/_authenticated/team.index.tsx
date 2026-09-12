@@ -17,6 +17,7 @@ import {
 import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
+import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
 import { InviteStaffDialog } from "@/components/invite-staff-dialog";
 import { AccessControlSettings } from "@/components/access-control-settings";
 import { Card } from "@/components/ui/card";
@@ -87,6 +88,7 @@ function TeamPage() {
     void queryClient.invalidateQueries({ queryKey: ["team"] });
     void queryClient.invalidateQueries({ queryKey: ["ex-team"] });
   };
+  const stepUp = useStepUp();
 
   const fetchExTeam = useServerFn(listExTeamMembers);
   const { data: exTeam } = useQuery({
@@ -118,7 +120,9 @@ function TeamPage() {
   const restoreAccess = useServerFn(updateStaffMember);
   const revoke = useMutation({
     mutationFn: useServerFn(revokeStaffAccess),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      if (!isStepUpRequired(e)) toast.error(e.message);
+    },
   });
 
   const requestRevoke = (m: {
@@ -142,27 +146,24 @@ function TeamPage() {
       ...(m.registrationNumber ? { registrationNumber: m.registrationNumber } : {}),
     };
 
-    revoke.mutate(
-      { data: { userId: m.userId } },
-      {
-        onSuccess: () => {
-          invalidate();
-          toast.success(`Access revoked for ${label}`, {
-            action: {
-              label: "Undo",
-              onClick: () => {
-                void restoreAccess({ data: snapshot })
-                  .then(() => {
-                    toast.success("Access restored");
-                    invalidate();
-                  })
-                  .catch((e: Error) => toast.error(e.message));
-              },
+    void stepUp.run(() =>
+      revoke.mutateAsync({ data: { userId: m.userId } }).then(() => {
+        invalidate();
+        toast.success(`Access revoked for ${label}`, {
+          action: {
+            label: "Undo",
+            onClick: () => {
+              void restoreAccess({ data: snapshot })
+                .then(() => {
+                  toast.success("Access restored");
+                  invalidate();
+                })
+                .catch((e: Error) => toast.error(e.message));
             },
-            duration: 6000,
-          });
-        },
-      },
+          },
+          duration: 6000,
+        });
+      }),
     );
   };
 
@@ -208,6 +209,7 @@ function TeamPage() {
 
   return (
     <AppShell identity={identity}>
+      {stepUp.dialog}
       <div className="page-header">
         <div>
           <h1 className="page-title">Team &amp; access</h1>

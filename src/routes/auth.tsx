@@ -1,26 +1,35 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { checkEmail } from "@/lib/email";
 import { toastEmailError } from "@/lib/email-toast";
+import { getMe } from "@/lib/clinic.functions";
+import { assertLoginAllowed, recordLoginEvent } from "@/lib/auth/login-throttle";
+import { destinationFor } from "@/lib/auth/surfaces";
+import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BrandLockup } from "@/components/brand-mark";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import { PasswordResetRequest } from "@/components/auth/password-reset-request";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
+  validateSearch: (search: Record<string, unknown>): { idle?: "1" } => {
+    const idle = search["idle"];
+    return idle === "1" || idle === true ? { idle: "1" } : {};
+  },
   head: () => ({
     meta: [
       { title: "Sign in — Aetheria Clinic Records" },
       {
         name: "description",
-        content: "Secure sign in for clinic practitioners and patients of Aetheria.",
+        content: "Secure sign in for clinic practitioners of Aetheria.",
       },
       { property: "og:title", content: "Sign in — Aetheria Clinic Records" },
-      { property: "og:description", content: "Secure sign in for practitioners and patients." },
+      { property: "og:description", content: "Secure sign in for clinic staff." },
     ],
   }),
   component: AuthPage,
@@ -28,17 +37,32 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { idle } = Route.useSearch();
+  const fetchMe = useServerFn(getMe);
+  const [mode, setMode] = useState<"signin" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard", replace: true });
+    if (idle) toast.message("You were signed out after a period of inactivity.");
+  }, [idle]);
+
+  useEffect(() => {
+    let active = true;
+    void supabase.auth.getSession().then(async ({ data }) => {
+      if (!active || !data.session) return;
+      try {
+        const identity = await fetchMe();
+        navigate({ to: destinationFor("staff", identity), replace: true });
+      } catch {
+        await supabase.auth.signOut();
+      }
     });
-  }, [navigate]);
+    return () => {
+      active = false;
+    };
+  }, [fetchMe, navigate]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,43 +73,27 @@ function AuthPage() {
     }
     setBusy(true);
     try {
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: emailCheck.email,
-          password,
-        });
-        if (error) throw error;
-        navigate({ to: "/dashboard", replace: true });
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email: emailCheck.email,
-          password,
-          options: {
-            emailRedirectTo: window.location.origin,
-            data: { full_name: fullName },
-          },
-        });
-        if (error) throw error;
-        if (data.session) navigate({ to: "/dashboard", replace: true });
-        else toast.success("Check your email to confirm your account.");
+      await assertLoginAllowed(emailCheck.email, "staff");
+      const { error } = await supabase.auth.signInWithPassword({
+        email: emailCheck.email,
+        password,
+      });
+      if (error) {
+        await recordLoginEvent(emailCheck.email, "staff", false);
+        throw error;
       }
+      const identity = await fetchMe();
+      await recordLoginEvent(emailCheck.email, "staff", true);
+      navigate({ to: destinationFor("staff", identity), replace: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      if (message.includes("patient portal") || message.includes("staff")) {
+        await supabase.auth.signOut();
+      }
+      toast.error(message);
     } finally {
       setBusy(false);
     }
-  }
-
-  async function google() {
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      toast.error("Google sign-in failed");
-      return;
-    }
-    if (result.redirected) return;
-    navigate({ to: "/dashboard", replace: true });
   }
 
   return (
@@ -113,71 +121,74 @@ function AuthPage() {
       <div className="flex items-center justify-center px-6 py-16">
         <div className="glass-card w-full max-w-sm p-8">
           <h2 className="text-[19px] font-semibold tracking-[-0.016em] text-foreground">
-            {mode === "signin" ? "Sign in" : "Create your account"}
+            {mode === "forgot" ? "Reset your password" : "Staff sign in"}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Practitioners and patients use the same secure sign in.
+            {mode === "forgot"
+              ? "We will email a link if this address has a clinic login."
+              : "Clinic staff only. Patients use the patient portal."}
           </p>
 
-          <form onSubmit={submit} className="mt-8 space-y-4">
-            {mode === "signup" && (
-              <div className="field-stack">
-                <Label htmlFor="name">Full name</Label>
-                <Input
-                  id="name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                />
+          {mode === "forgot" ? (
+            <PasswordResetRequest
+              surface="staff"
+              defaultEmail={email}
+              onBack={() => setMode("signin")}
+            />
+          ) : (
+            <>
+              <form onSubmit={(e) => void submit(e)} className="mt-8 space-y-4">
+                <div className="field-stack">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field-stack">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy ? "Signing in…" : "Sign in"}
+                </Button>
+              </form>
+
+              <button
+                type="button"
+                className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground"
+                onClick={() => setMode("forgot")}
+              >
+                Forgot password?
+              </button>
+
+              <div className="my-6 flex items-center gap-3 text-xs tracking-[0.02em] text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
               </div>
-            )}
-            <div className="field-stack">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="field-stack">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={busy}>
-              {mode === "signin" ? "Sign in" : "Create account"}
-            </Button>
-          </form>
 
-          <div className="my-6 flex items-center gap-3 text-xs tracking-[0.02em] text-muted-foreground">
-            <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
-          </div>
+              <OAuthButtons surface="staff" />
 
-          <Button variant="outline" className="w-full" onClick={google}>
-            Continue with Google
-          </Button>
+              <p className="mt-6 text-center text-sm text-muted-foreground">
+                Need an account? Ask your clinic owner to invite you.
+              </p>
 
-          <button
-            type="button"
-            className="mt-6 w-full text-sm text-muted-foreground hover:text-foreground"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          >
-            {mode === "signin" ? "Need an account? Sign up" : "Already registered? Sign in"}
-          </button>
-
-          <Link to="/portal" className="mt-4 block text-center text-sm text-accent-ink hover:underline">
-            Are you a patient? Use the patient portal
-          </Link>
+              <Link to="/portal" className="mt-4 block text-center text-sm text-accent-ink hover:underline">
+                Are you a patient? Use the patient portal
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -32,30 +32,30 @@ import { invalidateRecallTasks, useRecallTasksLiveSync } from "@/lib/use-recall-
 import { useIdentity } from "@/lib/use-identity";
 import { cn } from "@/lib/utils";
 
-type Status = "sent" | "contacted" | "completed";
+type Status = "open" | "contacted" | "completed";
 
 const STATUS: Record<Status, { label: string }> = {
-  sent: { label: "Sent" },
+  open: { label: "Open" },
   contacted: { label: "Contacted" },
   completed: { label: "Completed" },
 };
 
 const STEPS: { key: Status; label: string; icon: typeof Send }[] = [
-  { key: "sent", label: "Sent", icon: Send },
+  { key: "open", label: "Open", icon: Send },
   { key: "contacted", label: "Contacted", icon: PhoneCall },
   { key: "completed", label: "Completed", icon: CheckCircle2 },
 ];
 
-const STATUS_ORDER: Status[] = ["sent", "contacted", "completed"];
+const STATUS_ORDER: Status[] = ["open", "contacted", "completed"];
 
 function statusRank(status: Status) {
   return STATUS_ORDER.indexOf(status);
 }
 
-/** Pressing the active step again steps back one (Sent has nowhere to undo). */
+/** Pressing the active step again steps back one (Open has nowhere to undo). */
 const PREV_STATUS: Record<Status, Status | null> = {
-  sent: null,
-  contacted: "sent",
+  open: null,
+  contacted: "open",
   completed: "contacted",
 };
 
@@ -339,7 +339,7 @@ function RetractRecallDialog({
   );
 }
 
-/** Recall tasks for a patient, with a sent → contacted → completed tracker. */
+/** Recall tasks for a patient, with an open → contacted → completed tracker. */
 export function RecallTasksPanel({ patientId }: { patientId: string }) {
   const queryClient = useQueryClient();
   const { data: identity } = useIdentity();
@@ -558,7 +558,7 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
               reassignedAt ||
               t.contacted_at ||
               t.completed_at ||
-              (t.status_by_label && status !== "sent"),
+              (t.status_by_label && status !== "open"),
           );
           const canUpdate = canUpdateGroup(group);
           const canEdit = Boolean(identity?.isManager);
@@ -595,7 +595,7 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
                           <MetaStamp at={t.completed_at} prefix="Completed" />
                         </>
                       ) : null}
-                      {t.status_by_label && status !== "sent" ? (
+                      {t.status_by_label && status !== "open" ? (
                         <>
                           <MetaSep />
                           {t.status_by_label}

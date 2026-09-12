@@ -93,7 +93,7 @@ export function StaffTaskHoverCard({
       });
     },
     onSuccess: () => {
-      toast.success("Recall task sent to the team");
+      toast.success("Recall task assigned to the team");
       void invalidateRecallTasks(queryClient);
       setOpen(false);
       setNote("");

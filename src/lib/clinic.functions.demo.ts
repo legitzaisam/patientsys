@@ -32,6 +32,7 @@ import { assertEmail } from "@/lib/email";
 // drifted from the real one, so demo mode enforced a different set of
 // capabilities than production.
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
+import { assertCanSend, nextUnsubscribedAt, prefsFromPatient } from "@/lib/comms/preferences";
 
 export { PERMISSION_KEYS, type PermissionKey };
 
@@ -54,6 +55,7 @@ const staffConversations = db.staffConversations as any[];
 const staffChatMessages = db.staffChatMessages as any[];
 const staffConversationReads = db.staffConversationReads as any[];
 const messageTemplates = db.messageTemplates as any[];
+const communications = db.communications as any[];
 const treatmentColours = db.treatmentColours as any[];
 const colourThemes = db.colourThemes as any[];
 const profileChangeRequests = db.profileChangeRequests as any[];
@@ -158,6 +160,9 @@ type Identity = {
   patient: any;
   mustChangePassword: boolean;
   welcomePending: boolean;
+  aal: "aal1" | "aal2";
+  mfaEnrolled: boolean;
+  mfaRequired: boolean;
 };
 
 function identity(): Identity {
@@ -186,6 +191,9 @@ function identity(): Identity {
     profile,
     mustChangePassword: mustChangePasswordByUser.has(account.userId),
     welcomePending: isStaff && welcomePendingByUser.has(account.userId),
+    aal: "aal2",
+    mfaEnrolled: false,
+    mfaRequired: false,
     patient: linked
       ? { id: linked.id, first_name: linked.first_name, last_name: linked.last_name }
       : null,
@@ -677,6 +685,11 @@ export const savePatient = createServerFn({ method: "POST" })
       medications: data.medications ?? null,
       conditions: data.conditions ?? null,
       notes: data.notes ?? null,
+      email_opt_in: false,
+      sms_opt_in: false,
+      reminders_opt_in: true,
+      marketing_opt_in: false,
+      unsubscribed_at: null,
       avatar_url: null,
       last_visit_at: null,
       created_at: new Date().toISOString(),
@@ -1328,6 +1341,120 @@ export const deleteMessageTemplate = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const enqueueCommunication = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      channel: "email" | "sms";
+      purpose: "transactional" | "reminder" | "marketing";
+      body: string;
+      subject?: string;
+      template_key?: string;
+      to_address?: string;
+      scheduled_for?: string;
+      related_entity?: string;
+      related_id?: string;
+    }) => parseInput(schemas.EnqueueCommunication, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
+    const patient = patientById(data.patient_id);
+    if (!patient) throw new Error("Patient not found");
+    const toAddress =
+      data.to_address?.trim() ||
+      (data.channel === "email"
+        ? String(patient.email ?? "").trim()
+        : String(patient.phone ?? "").trim());
+    const decision = assertCanSend(prefsFromPatient(patient), data.purpose, data.channel, toAddress);
+    if (!decision.ok) throw new Error(decision.reason);
+    const row = {
+      id: newId("m9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      channel: data.channel,
+      purpose: data.purpose,
+      to_address: toAddress,
+      template_key: data.template_key ?? null,
+      subject: data.subject?.trim() || null,
+      body: data.body,
+      status: "queued",
+      provider: null,
+      provider_message_id: null,
+      error: null,
+      attempts: 0,
+      scheduled_for: data.scheduled_for || new Date().toISOString(),
+      sent_at: null,
+      created_by: me.userId,
+      related_entity: data.related_entity ?? null,
+      related_id: data.related_id ?? null,
+      created_at: new Date().toISOString(),
+    };
+    communications.unshift(row);
+    return { id: row.id };
+  });
+
+export const listCommunications = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.ListCommunications, data))
+  .handler(async ({ data }) => {
+    const me = identity();
+    if (me.isStaff) {
+      if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
+    } else if (me.patient?.id !== data.patient_id) {
+      throw new Error("You can only view your own messages");
+    }
+    return sortDesc(
+      communications.filter((row) => row.patient_id === data.patient_id),
+      "created_at",
+    ).slice(0, 50);
+  });
+
+export const saveCommsPreferences = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      email_opt_in: boolean;
+      sms_opt_in: boolean;
+      reminders_opt_in: boolean;
+      marketing_opt_in: boolean;
+    }) => parseInput(schemas.SaveCommsPreferences, data),
+  )
+  .handler(async ({ data }) => {
+    const me = identity();
+    if (me.isStaff) {
+      if (!patientById(data.patient_id)) throw new Error("Patient not found");
+    } else if (me.patient?.id !== data.patient_id) {
+      throw new Error("You can only update your own preferences");
+    }
+    const row = patientById(data.patient_id);
+    if (!row) throw new Error("Patient not found");
+    const unsubscribed_at = nextUnsubscribedAt({
+      marketing_opt_in: data.marketing_opt_in,
+      reminders_opt_in: data.reminders_opt_in,
+      unsubscribed_at: row.unsubscribed_at ?? null,
+    });
+    Object.assign(row, {
+      email_opt_in: data.email_opt_in,
+      sms_opt_in: data.sms_opt_in,
+      reminders_opt_in: data.reminders_opt_in,
+      marketing_opt_in: data.marketing_opt_in,
+      unsubscribed_at,
+      updated_at: new Date().toISOString(),
+    });
+    return { ok: true as const };
+  });
+
+export const drainCommunications = createServerFn({ method: "POST" }).handler(async () => {
+  const me = requireStaff();
+  if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
+  const { drainInMemory } = await import("./comms/dispatch.server");
+  const { clinic } = await import("@/lib/demo/data");
+  return drainInMemory(
+    communications,
+    new Map([[CLINIC_ID, { name: clinic["name"] ?? null, email: clinic["email"] ?? null }]]),
+  );
+});
+
 /* ---------------------------------------------------------------- */
 /* staff notifications and directory                                  */
 /* ---------------------------------------------------------------- */
@@ -1922,6 +2049,18 @@ export const acknowledgeWelcome = createServerFn({ method: "POST" }).handler(asy
   return { ok: true, welcomePending: false as const };
 });
 
+export const confirmStepUp = createServerFn({ method: "POST" })
+  .validator((data: { password: string }) => parseInput(schemas.ConfirmStepUp, data))
+  .handler(async () => ({ ok: true as const }));
+
+export const listMySessions = createServerFn({ method: "GET" }).handler(async () => ({
+  sessions: [{ id: "current", current: true, createdAt: new Date().toISOString() }],
+}));
+
+export const revokeOtherSessions = createServerFn({ method: "POST" }).handler(async () => ({
+  ok: true as const,
+}));
+
 export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handler(async () => ({
   patients: patients
     .filter((p) => p.status !== "archived" && (!p.email || !p.phone || !p.date_of_birth))
@@ -2466,7 +2605,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
         assigned_label: r.label,
         created_by: me.userId,
         note: data.note ?? null,
-        status: "sent",
+        status: "open",
         contacted_at: null,
         contacted_by: null,
         completed_at: null,
@@ -2560,7 +2699,7 @@ export const updateRecallTask = createServerFn({ method: "POST" })
   });
 
 export const setRecallTaskStatus = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; status: "sent" | "contacted" | "completed" }) => parseInput(schemas.SetRecallTaskStatus, data))
+  .validator((data: { task_id: string; status: "open" | "contacted" | "completed" }) => parseInput(schemas.SetRecallTaskStatus, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const now = new Date().toISOString();
@@ -2581,11 +2720,11 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
 
     for (const task of group) {
       task.status = data.status;
-      task.contacted_at = data.status === "sent" ? null : now;
+      task.contacted_at = data.status === "open" ? null : now;
       task.completed_at = data.status === "completed" ? now : null;
-      task.contacted_by = data.status === "sent" ? null : me.userId;
+      task.contacted_by = data.status === "open" ? null : me.userId;
       task.completed_by = data.status === "completed" ? me.userId : null;
-      task.status_by_label = data.status === "sent" ? null : actor;
+      task.status_by_label = data.status === "open" ? null : actor;
       task.updated_at = now;
     }
     return { ok: true };

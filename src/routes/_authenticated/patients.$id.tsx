@@ -18,6 +18,7 @@ import {
 } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
+import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
 import { PatientChatPanel } from "@/components/patient-chat-panel";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
@@ -30,6 +31,9 @@ import { Badge } from "@/components/ui/badge";
 import { usePanelWidth } from "@/hooks/use-panel-width";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RecallTasksPanel } from "@/components/retention/recall-tasks-panel";
+import { CommsPreferencesCard } from "@/components/comms/comms-preferences";
+import { CommsLogCard } from "@/components/comms/comms-log";
+import { can } from "@/lib/permissions";
 import {
   Dialog,
   DialogContent,
@@ -150,6 +154,7 @@ function PatientRecord() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+  const stepUp = useStepUp();
   const archive = useMutation({
     mutationFn: useServerFn(archivePatient),
     onSuccess: (res: { archived: boolean }) => {
@@ -162,7 +167,9 @@ function PatientRecord() {
       invalidate();
       void queryClient.invalidateQueries({ queryKey: ["patients"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      if (!isStepUpRequired(e)) toast.error(e.message);
+    },
   });
   const resend = useMutation({
     mutationFn: useServerFn(resendDocument),
@@ -299,6 +306,7 @@ function PatientRecord() {
 
   return (
     <AppShell identity={identity}>
+      {stepUp.dialog}
       <Link to="/patients" className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> All patients
       </Link>
@@ -458,7 +466,9 @@ function PatientRecord() {
                   (p.deleted_at ? (
                     <Button
                       variant="outline"
-                      onClick={() => archive.mutate({ data: { id, archived: false } })}
+                      onClick={() =>
+                        void stepUp.run(() => archive.mutateAsync({ data: { id, archived: false } }))
+                      }
                       disabled={archive.isPending}
                     >
                       Restore patient
@@ -478,9 +488,11 @@ function PatientRecord() {
                           onSubmit={(e) => {
                             e.preventDefault();
                             const f = new FormData(e.currentTarget as HTMLFormElement);
-                            archive.mutate({
-                              data: { id, archived: true, reason: String(f.get("reason") ?? "") },
-                            });
+                            void stepUp.run(() =>
+                              archive.mutateAsync({
+                                data: { id, archived: true, reason: String(f.get("reason") ?? "") },
+                              }),
+                            );
                           }}
                         >
                           <p className="text-sm text-muted-foreground">
@@ -523,6 +535,18 @@ function PatientRecord() {
               <Detail label="Conditions" value={p.conditions} />
             </div>
           </Card>
+
+          <CommsPreferencesCard
+            patientId={id}
+            patient={p}
+            onSaved={() => {
+              invalidate();
+              void queryClient.invalidateQueries({ queryKey: ["communications", id] });
+            }}
+          />
+          {can(identity, "comms.send") ? (
+            <CommsLogCard patientId={id} enabled canDrain={can(identity, "comms.send")} />
+          ) : null}
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>

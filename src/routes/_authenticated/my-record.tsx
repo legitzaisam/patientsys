@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { CommsPreferencesCard } from "@/components/comms/comms-preferences";
+import { CommsLogCard } from "@/components/comms/comms-log";
 
 export const Route = createFileRoute("/_authenticated/my-record")({
   head: () => ({
@@ -188,6 +190,17 @@ function PortalPage() {
               </div>
             </form>
           </Card>
+
+          <CommsPreferencesCard
+            patientId={p.id}
+            patient={p}
+            as="patient"
+            onSaved={() => {
+              invalidate();
+              void queryClient.invalidateQueries({ queryKey: ["communications", p.id] });
+            }}
+          />
+          <CommsLogCard patientId={p.id} enabled />
 
           <Card className="p-5">
             <h2 className="section-title">My treatments</h2>

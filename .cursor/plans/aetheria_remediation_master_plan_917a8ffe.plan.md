@@ -22,13 +22,13 @@ todos:
     status: completed
   - id: phase-6
     content: "Phase 6: Identity and authentication hardening - Supabase Auth SMTP, self-service forgot password for staff and patients, migrate OAuth off the Lovable wrapper to native Supabase, add Microsoft/Azure, TOTP MFA enforced for owner/manager, optional SAML SSO, session management and idle logout, login rate limiting, close public signup, step-up auth for destructive actions"
-    status: pending
+    status: in_progress
   - id: phase-7
     content: "Phase 7: Comms schema and outbox - communications table with delivery tracking, patient opt-in/opt-out preferences, RLS, enqueueCommunication() helper, drain indexes, correct recall/outreach 'sent' semantics"
-    status: pending
+    status: in_progress
   - id: phase-8
     content: "Phase 8: Provider adapters - Resend email, Twilio SMS with UK sender ID, SPF/DKIM/DMARC on clinic domain, dispatcher with retry/backoff, pg_cron + pg_net drain, delivery/bounce webhooks, sandbox mode for dev and demo"
-    status: pending
+    status: completed
   - id: phase-9
     content: "Phase 9: Wire comms to real flows - consent document magic links + public signing route, booking confirmations, scheduled appointment reminders, deposit chasing, recall/retention sends, staff invite emails (drop plaintext passwords), template interpolation, unsubscribe handling"
     status: pending

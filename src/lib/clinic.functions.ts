@@ -19,8 +19,11 @@ import {
   reloadIdentity,
   requireOwner,
   requireStaff,
+  requireStepUp,
   scopeFor,
+  stepUpExpiry,
 } from "@/lib/auth/guards.server";
+import { verifyPassword } from "@/lib/auth/password-verify.server";
 import { clinicScoped } from "@/lib/auth/clinic-scope.server";
 
 export { PERMISSION_KEYS, type PermissionKey };
@@ -1106,6 +1109,7 @@ export const archivePatient = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const identity = await authorize(context as Ctx, "archivePatient");
+    await requireStepUp(context as Ctx);
     const supabase = (context as Ctx).supabase;
 
     const patch = data.archived
@@ -1748,6 +1752,121 @@ export const deleteMessageTemplate = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Queue an email or SMS. Phase 8 drains `communications`. This is the only
+ * application insert into that table.
+ */
+export const enqueueCommunication = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      channel: "email" | "sms";
+      purpose: "transactional" | "reminder" | "marketing";
+      body: string;
+      subject?: string;
+      template_key?: string;
+      to_address?: string;
+      scheduled_for?: string;
+      related_entity?: string;
+      related_id?: string;
+    }) => parseInput(schemas.EnqueueCommunication, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "enqueueCommunication");
+    const { enqueueCommunication: enqueue } = await import("./comms/enqueue.server");
+    const result = await enqueue(ctx.supabase, {
+      clinicId: clinicIdOf(context),
+      patientId: data.patient_id,
+      channel: data.channel,
+      purpose: data.purpose,
+      body: data.body,
+      subject: data.subject ?? null,
+      templateKey: data.template_key ?? null,
+      toAddress: data.to_address ?? null,
+      scheduledFor: data.scheduled_for ?? null,
+      relatedEntity: data.related_entity ?? null,
+      relatedId: data.related_id ?? null,
+      createdBy: ctx.userId,
+    });
+    await audit(ctx, "comms.enqueue", "communications", result.id, data.patient_id, {
+      channel: data.channel,
+      purpose: data.purpose,
+    });
+    return result;
+  });
+
+export const listCommunications = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.ListCommunications, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "listCommunications", { patientId: data.patient_id });
+    const { data: rows, error } = await ctx.supabase
+      .from("communications")
+      .select(
+        "id, channel, purpose, to_address, template_key, subject, body, status, error, attempts, provider, scheduled_for, sent_at, created_at",
+      )
+      .eq("patient_id", data.patient_id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) throw new Error(error.message);
+    return rows ?? [];
+  });
+
+export const saveCommsPreferences = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      email_opt_in: boolean;
+      sms_opt_in: boolean;
+      reminders_opt_in: boolean;
+      marketing_opt_in: boolean;
+    }) => parseInput(schemas.SaveCommsPreferences, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "saveCommsPreferences", { patientId: data.patient_id });
+    const { nextUnsubscribedAt } = await import("./comms/preferences");
+    const { data: current } = await ctx.supabase
+      .from("patients")
+      .select("unsubscribed_at")
+      .eq("id", data.patient_id)
+      .maybeSingle();
+    const unsubscribed_at = nextUnsubscribedAt({
+      marketing_opt_in: data.marketing_opt_in,
+      reminders_opt_in: data.reminders_opt_in,
+      unsubscribed_at: current?.unsubscribed_at ?? null,
+    });
+    const { error } = await ctx.supabase
+      .from("patients")
+      .update({
+        email_opt_in: data.email_opt_in,
+        sms_opt_in: data.sms_opt_in,
+        reminders_opt_in: data.reminders_opt_in,
+        marketing_opt_in: data.marketing_opt_in,
+        unsubscribed_at,
+      })
+      .eq("id", data.patient_id);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "comms.preferences", "patients", data.patient_id, data.patient_id);
+    return { ok: true as const };
+  });
+
+/** Claim due outbox rows for this clinic and hand them to the adapters. */
+export const drainCommunications = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "drainCommunications");
+    const { drainDueCommunications } = await import("./comms/dispatch.server");
+    const summary = await drainDueCommunications(ctx.supabase, { clinicId: clinicIdOf(context) });
+    await audit(ctx, "comms.drain", "communications", null, null, summary);
+    return summary;
+  });
+
 export const markMessagesRead = createServerFn({ method: "POST" })
   .validator((data: { patient_id: string }) => parseInput(schemas.MarkMessagesRead, data))
   .middleware([requireSupabaseAuth])
@@ -2128,6 +2247,7 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "revokeStaffAccess");
+    await requireStepUp(ctx);
     if (data.userId === ctx.userId) throw new Error("You cannot revoke your own access");
     const supabaseAdmin = await adminClient(context);
 
@@ -2310,6 +2430,64 @@ export const acknowledgeWelcome = createServerFn({ method: "POST" })
     return { ok: true, welcomePending: false as const };
   });
 
+/** Re-check the caller's password and open a short window for destructive actions. */
+export const confirmStepUp = createServerFn({ method: "POST" })
+  .validator((data: { password: string }) => parseInput(schemas.ConfirmStepUp, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "confirmStepUp");
+    if (!identity.email) throw new Error("Your account has no email to confirm");
+    await verifyPassword(identity.email, data.password);
+    const { error } = await ctx.supabase.from("auth_step_up").upsert({
+      user_id: ctx.userId,
+      confirmed_at: new Date().toISOString(),
+      expires_at: stepUpExpiry(),
+    });
+    if (error) throw new Error(error.message);
+    await audit(ctx, "auth.step_up", "user_roles", ctx.userId, null);
+    return { ok: true as const };
+  });
+
+export const listMySessions = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "listMySessions");
+    const iat = Number(ctx.claims["iat"] ?? 0);
+    return {
+      sessions: [
+        {
+          id: "current",
+          current: true,
+          createdAt: iat ? new Date(iat * 1000).toISOString() : new Date().toISOString(),
+        },
+      ],
+    };
+  });
+
+export const revokeOtherSessions = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "revokeOtherSessions");
+    const url = process.env["SUPABASE_URL"];
+    const key = process.env["SUPABASE_PUBLISHABLE_KEY"];
+    if (!url || !key) throw new Error("Missing Supabase configuration");
+    const res = await fetch(`${url}/auth/v1/logout?scope=others`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.accessToken}`,
+        apikey: key,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(body || "Could not sign out other devices");
+    }
+    await audit(ctx, "auth.revoke_other_sessions", "user_roles", ctx.userId, null);
+    return { ok: true as const };
+  });
 
 /** Manager-only: accounts (patients and staff) with no email address on file. */
 export const listAccountsMissingEmail = createServerFn({ method: "GET" })
@@ -2949,7 +3127,11 @@ export const getRetention = createServerFn({ method: "GET" })
     return { ...result, isManager: identity.isManager, practitioners };
   });
 
-/** Record that a lapsing patient has been contacted, so they drop off the recall list. */
+/**
+ * Record that a lapsing patient has been contacted by hand (phone, mailto,
+ * portal message). This is a contact log, not a delivery receipt — those live
+ * on `communications` once Phase 8 starts draining the outbox.
+ */
 export const logRetentionOutreach = createServerFn({ method: "POST" })
   .validator((data: { patient_id: string; channel?: string; note?: string }) => parseInput(schemas.LogRetentionOutreach, data))
   .middleware([requireSupabaseAuth])
@@ -3025,7 +3207,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
         assigned_label: r.label,
         created_by: ctx.userId,
         note: data.note ?? null,
-        status: "sent" as const,
+        status: "open" as const,
       })),
     );
     if (error) throw new Error(error.message);
@@ -3156,13 +3338,13 @@ export const updateRecallTask = createServerFn({ method: "POST" })
   });
 
 /**
- * Move a recall along its lifecycle: sent -> contacted -> completed.
+ * Move a recall along its lifecycle: open -> contacted -> completed.
  * The whole assignment group moves together, so a practitioner marking it
  * off is instantly visible to the front desk (and the other way round) and
  * the patient never gets chased twice.
  */
 export const setRecallTaskStatus = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; status: "sent" | "contacted" | "completed" }) => parseInput(schemas.SetRecallTaskStatus, data))
+  .validator((data: { task_id: string; status: "open" | "contacted" | "completed" }) => parseInput(schemas.SetRecallTaskStatus, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3196,11 +3378,11 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
 
     const patch: Record<string, unknown> = {
       status: data.status,
-      contacted_at: data.status === "sent" ? null : now,
+      contacted_at: data.status === "open" ? null : now,
       completed_at: data.status === "completed" ? now : null,
-      contacted_by: data.status === "sent" ? null : ctx.userId,
+      contacted_by: data.status === "open" ? null : ctx.userId,
       completed_by: data.status === "completed" ? ctx.userId : null,
-      status_by_label: data.status === "sent" ? null : actor,
+      status_by_label: data.status === "open" ? null : actor,
     };
     const query = ctx.supabase.from("recall_tasks").update(patch);
     const { error } = target.group_id
@@ -3701,6 +3883,7 @@ export const setRolePermission = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "setRolePermission");
+    await requireStepUp(ctx);
     if (!(PERMISSION_KEYS as readonly string[]).includes(data.permission))
       throw new Error("Unknown permission");
     const { error } = await ctx.supabase

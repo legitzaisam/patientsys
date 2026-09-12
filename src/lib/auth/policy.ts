@@ -42,6 +42,9 @@ export const POLICY = {
   getMe: { kind: "self" },
   changeOwnPassword: { kind: "self" },
   acknowledgeWelcome: { kind: "self" },
+  confirmStepUp: { kind: "self" },
+  listMySessions: { kind: "self" },
+  revokeOtherSessions: { kind: "self" },
 
   /* Dashboard and patient reads */
   getDashboard: { kind: "staff" },
@@ -78,6 +81,10 @@ export const POLICY = {
   listMessageTemplates: { kind: "staff" },
   saveMessageTemplate: { kind: "staff" },
   deleteMessageTemplate: { kind: "owner" },
+  enqueueCommunication: { kind: "capability", key: "comms.send" },
+  listCommunications: { kind: "staffOrOwnPatient", staffKey: "comms.send" },
+  saveCommsPreferences: { kind: "staffOrOwnPatient" },
+  drainCommunications: { kind: "capability", key: "comms.send" },
 
   /* Patient portal */
   getMyRecord: { kind: "self" },

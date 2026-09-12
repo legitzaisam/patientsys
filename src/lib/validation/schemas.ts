@@ -238,6 +238,8 @@ export const SetStaffPassword = z.object({ userId: id, password });
 
 export const ChangeOwnPassword = z.object({ password });
 
+export const ConfirmStepUp = z.object({ password });
+
 export const SetPatientEmail = z.object({ patientId: id, email });
 
 export const SetStaffEmail = z.object({ userId: id, email });
@@ -320,7 +322,30 @@ export const UpdateRecallTask = z.object({
 
 export const SetRecallTaskStatus = z.object({
   task_id: id,
-  status: z.enum(["sent", "contacted", "completed"]),
+  status: z.enum(["open", "contacted", "completed"]),
+});
+
+export const EnqueueCommunication = z.object({
+  patient_id: id,
+  channel: z.enum(["email", "sms"]),
+  purpose: z.enum(["transactional", "reminder", "marketing"]),
+  body: requiredText(20_000),
+  subject: optionalText(300),
+  template_key: optionalText(120),
+  to_address: optionalText(320),
+  scheduled_for: optionalDateString,
+  related_entity: optionalText(80),
+  related_id: optionalId,
+});
+
+export const ListCommunications = z.object({ patient_id: id });
+
+export const SaveCommsPreferences = z.object({
+  patient_id: id,
+  email_opt_in: z.boolean(),
+  sms_opt_in: z.boolean(),
+  reminders_opt_in: z.boolean(),
+  marketing_opt_in: z.boolean(),
 });
 
 export const DeleteRecallTask = z.object({
