@@ -1,6 +1,7 @@
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { POLICY, resolveScope, type HandlerName } from "@/lib/auth/policy";
 import { MFA_REQUIRED_MESSAGE, STEP_UP_MESSAGE, STEP_UP_TTL_MS } from "@/lib/auth/constants";
+import { emailMfaEnforceable } from "@/lib/auth/email-mfa.server";
 
 export type Ctx = {
   /** Already clinic-scoped by the session middleware; see auth/clinic-scope.server.ts. */
@@ -95,7 +96,7 @@ async function readIdentity(context: Ctx) {
   // advisory — this value is the isolation.
   const clinicId: string | null = profile?.clinic_id ?? patient?.clinic_id ?? null;
   const aal: "aal1" | "aal2" = context.claims["aal"] === "aal2" ? "aal2" : "aal1";
-  const mfaRequired = isOwner || roleList.includes("manager");
+  const mfaRequired = (isOwner || roleList.includes("manager")) && emailMfaEnforceable();
   const mfaEnrolled = await readMfaEnrolled(context);
 
   return {
