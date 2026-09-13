@@ -26,6 +26,7 @@ import {
 import { verifyPassword } from "@/lib/auth/password-verify.server";
 import { clinicScoped } from "@/lib/auth/clinic-scope.server";
 import { EMAIL_MFA_SESSION_MS, EMAIL_OTP_RESEND_MS, EMAIL_OTP_TTL_MS } from "@/lib/auth/constants";
+import { emailMfaDelivery } from "@/lib/auth/email-mfa.server";
 import { createHash, randomInt } from "node:crypto";
 
 export { PERMISSION_KEYS, type PermissionKey };
@@ -2525,9 +2526,10 @@ function loginCodeEmailBody(code: string) {
 }
 
 async function emailLoginCode(email: string, code: string): Promise<"emailed" | "preview"> {
+  const delivery = emailMfaDelivery();
   const key = process.env["RESEND_API_KEY"]?.trim();
   const from = process.env["COMMS_FROM_EMAIL"]?.trim() || "Aetheria <onboarding@resend.dev>";
-  if (key) {
+  if (delivery === "resend" && key) {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -2547,10 +2549,10 @@ async function emailLoginCode(email: string, code: string): Promise<"emailed" | 
     }
     return "emailed";
   }
-  // Built-in Supabase Auth mail is capped at 2 messages/hour on the free
-  // tier and cannot put a 6-digit code in the template. Until Resend is
-  // configured, hand the code back in development so sign-in still works.
-  if (process.env["NODE_ENV"] === "production") {
+  // Built-in Supabase Auth mail is capped at 2 messages/hour on the free tier
+  // and cannot put a 6-digit code in the template. AUTH_DEV_SHOW_OTP=1 hands
+  // the code back instead so sign-in still works while Resend is unconfigured.
+  if (delivery !== "preview") {
     throw new Error("Add RESEND_API_KEY to send sign-in codes by email.");
   }
   console.info(`[auth] login code for ${email}: ${code}`);
