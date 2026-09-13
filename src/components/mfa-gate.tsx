@@ -97,31 +97,28 @@ export function MfaGate({ email, onSatisfied }: { email?: string; onSatisfied: (
       return;
     }
     emailedForVisit.current = true;
-    let cancelled = false;
+    // No teardown flag here. The ref above already caps this at one send per
+    // visit, and a flag set by cleanup would swallow the result of a send that
+    // is still in flight when the effect is re-run, leaving the gate on
+    // "Sending…" with no code and no way to resend.
     void (async () => {
       setSending(true);
       setError(null);
       try {
         const result = await requestEmailCode();
-        if (!cancelled) {
-          const destination = result.email || email || null;
-          const preview = result.previewCode ?? null;
-          setSentTo(destination);
-          setPreviewCode(preview);
-          rememberMfaSend(destination, preview);
-        }
+        const destination = result.email || email || null;
+        const preview = result.previewCode ?? null;
+        setSentTo(destination);
+        setPreviewCode(preview);
+        rememberMfaSend(destination, preview);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not send a login code");
-        }
+        setError(err instanceof Error ? err.message : "Could not send a login code");
       } finally {
-        if (!cancelled) setSending(false);
+        setSending(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [email, requestEmailCode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function resendEmail() {
     setSending(true);
