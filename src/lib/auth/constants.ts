@@ -1,5 +1,5 @@
-/** Staff reception machines are shared; 1 hour 15 minutes idle is a practical requirement. */
-export const STAFF_IDLE_MS = (1 * 60 + 15) * 60 * 1000;
+/** Staff reception machines are shared; 15 minutes idle is a practical requirement. */
+export const STAFF_IDLE_MS = 15 * 60 * 1000;
 
 /** Step-up password confirmation stays valid for this long. */
 export const STEP_UP_TTL_MS = 5 * 60 * 1000;
