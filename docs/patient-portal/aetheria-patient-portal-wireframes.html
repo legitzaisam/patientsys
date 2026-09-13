@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aetheria Patient Portal — Navigable Wireframes v0.2</title>
+<title>Aetheria Patient Portal — Navigable Wireframes v0.4</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap">
@@ -35,6 +35,8 @@
   --sheen:rgba(255,255,255,.5);
   --bloom:rgba(200,175,105,.3);
   --bar:rgba(192,200,210,.42);
+  --blur-glass:26px;
+  --sidebar:rgba(255,255,255,.78);
 
   --accent:#eed488; --accent-hi:#faedc2; --accent-deep:#e2c46b;
   --accent-ink:#7a6220; --accent-foreground:#332d18;
@@ -42,9 +44,11 @@
   --accent-line:rgba(214,183,92,.42);
 
   --destructive:#dc6c96; --destructive-bg:rgba(250,204,226,.48); --destructive-ink:#a3456e;
+  --destructive-foreground:#fff7fb;
   --success:#4a9d75;     --success-bg:rgba(179,232,196,.55);     --success-ink:#2d6a4c;
   --consent:#b9a6e8;     --consent-bg:rgba(224,213,248,.55);     --consent-ink:#5c4a94;
   --sky:#8fc7ea;         --sky-bg:rgba(190,224,244,.5);          --sky-ink:#3d6f96;
+  --lane-4:#8fc7ea;      --lane-7:#b9a6e8;
   --aftercare:#ef9bc4;   --aftercare-ink:#8a3d66;
 
   --shadow-glass:0 1px 2px rgba(47,63,102,.06),0 8px 24px -10px rgba(47,63,102,.18),inset 0 1px 0 var(--edge-hi);
@@ -81,10 +85,30 @@ a{color:inherit;text-decoration:none}
 .stepper{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)}
 .stepper button{border:1px solid rgba(47,63,102,.14);border-radius:8px;width:28px;height:28px}
 .stepper button:disabled{opacity:.3;cursor:default}
-.main{display:grid;grid-template-columns:238px 1fr 320px;min-height:0}
-@media (max-width:1120px){.main{grid-template-columns:206px 1fr}.notes{display:none}}
+.main{display:grid;grid-template-columns:1fr 320px;min-height:0;position:relative}
+body.noannot .main,body.chrome-min .main{grid-template-columns:1fr}
+body.norail .rail,body.chrome-min .rail{display:none}
+body.noannot .notes,body.chrome-min .notes{display:none}
+body.chrome-min .wrap{grid-template-rows:1fr}
+body.chrome-min .topbar{display:none}
+@media (max-width:1120px){.main{grid-template-columns:1fr}.notes{display:none}}
 
-.rail{background:#fff;border-right:1px solid rgba(47,63,102,.1);overflow-y:auto;padding:14px 10px 40px}
+.rail{
+  position:absolute;z-index:20;inset:0 auto 0 0;width:238px;
+  background:#fff;border-right:1px solid rgba(47,63,102,.1);
+  overflow-y:auto;padding:14px 10px 40px;box-shadow:var(--shadow-popover);
+}
+.chrome-dock{
+  display:none;position:fixed;z-index:40;left:50%;bottom:16px;
+  transform:translateX(-50%);align-items:center;gap:8px;
+  padding:7px 8px 7px 12px;border-radius:14px;
+  background:rgba(255,255,255,.92);backdrop-filter:blur(18px) saturate(1.4);
+  border:1px solid rgba(47,63,102,.12);box-shadow:var(--shadow-popover);
+}
+body.chrome-min .chrome-dock{display:flex}
+.chrome-dock .dock-label{font-size:11px;font-weight:600;color:var(--ink-3);letter-spacing:.01em;white-space:nowrap}
+.chrome-dock .stepper{gap:6px}
+.chrome-dock select{height:28px;max-width:200px;border:1px solid rgba(47,63,102,.14);border-radius:8px;padding:0 8px;font:inherit;font-size:12px;color:var(--ink-2);background:#fff}
 .railgroup{margin-bottom:17px}
 .railgroup h4{margin:0 0 6px;padding:0 8px;font-size:10.5px;font-weight:600;color:var(--subtle);font-family:var(--mono)}
 .railitem{display:block;width:100%;text-align:left;padding:6px 8px;border-radius:8px;font-size:12.8px;color:var(--ink-2);line-height:1.35}
@@ -92,49 +116,210 @@ a{color:inherit;text-decoration:none}
 .railitem[aria-current="true"]{background:var(--foreground);color:#fff}
 .railitem em{display:block;font-style:normal;font-family:var(--mono);font-size:10px;opacity:.6}
 
-.stage{overflow:auto;padding:26px;display:flex;justify-content:center;align-items:flex-start}
+.stage{overflow:hidden;padding:0;display:block;min-width:0;min-height:0}
 .frame{
-  position:relative;overflow:hidden;
+  position:relative;overflow:hidden;width:100%;height:100%;
   background-color:var(--background);
   background-image:
     radial-gradient(900px 560px at 8% -10%,var(--wash-1),transparent 68%),
     radial-gradient(820px 520px at 96% 2%,var(--wash-2),transparent 66%),
     repeating-linear-gradient(0deg,var(--rule) 0px,var(--rule) 1px,transparent 1px,transparent 14px);
-  box-shadow:var(--shadow-lift);
 }
-.stage.mobile .frame{width:390px;height:812px;border-radius:32px;border:1px solid rgba(47,63,102,.18)}
-.stage.desktop .frame{width:min(1080px,100%);height:748px;border-radius:12px;border:1px solid rgba(47,63,102,.14)}
-.screen{height:100%;display:flex;flex-direction:column;overflow:hidden;position:relative}
-.scroll{flex:1;overflow-y:auto;padding:14px 16px 26px}
-.stage.desktop .scroll{padding:22px 30px 34px}
+.stage.mobile{overflow:auto;padding:26px;display:flex;justify-content:center;align-items:flex-start}
+.stage.mobile .frame{width:390px;height:812px;border-radius:32px;border:1px solid rgba(47,63,102,.18);box-shadow:var(--shadow-lift)}
+.screen{height:100%;display:flex;overflow:hidden;position:relative}
+.screen.bare{flex-direction:column}
+.scroll{flex:1;overflow-y:auto;padding:0 20px 28px}
+.stage.desktop .scroll{padding:0 26px 26px}
 
-/* ---------------- product chrome ---------------- */
-.statusbar{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:11px;color:var(--ink-3);flex:none;font-weight:500}
-.apphead{flex:none;padding:2px 16px 12px;display:flex;align-items:center;gap:9px}
-.apphead h1{margin:0;font-size:22px;font-weight:600;letter-spacing:-.016em;line-height:1.2}
-.apphead .back{font-size:20px;color:var(--ink-3);line-height:1;padding:2px 4px}
-.apphead .av{margin-left:auto;width:32px;height:32px;border-radius:50%;background:linear-gradient(140deg,var(--lane6,#faedc2),var(--accent));display:grid;place-items:center;font-size:11.5px;font-weight:600;color:var(--accent-foreground);border:1px solid var(--edge)}
-
-.tabbar{
-  flex:none;display:grid;grid-template-columns:repeat(4,1fr);
-  background:var(--glass);backdrop-filter:blur(26px) saturate(1.5);
-  border-top:1px solid var(--edge);box-shadow:var(--shadow-inset-hi);
+/* ---------------- product chrome: AppShell clone ---------------- */
+.shell{display:flex;height:100%;min-height:0;width:100%}
+.aside{
+  position:relative;flex:none;display:flex;flex-direction:column;
+  border-right:1px solid var(--edge);
+  background:var(--sidebar);
+  backdrop-filter:blur(var(--blur-glass));
+  -webkit-backdrop-filter:blur(var(--blur-glass));
+  box-shadow:inset -1px 0 0 var(--edge-hi);
 }
-.tabbar button{padding:9px 2px 15px;font-size:10.5px;color:var(--ink-3);display:flex;flex-direction:column;align-items:center;gap:4px}
-.tabbar button .ic{width:19px;height:19px;border:1.5px solid currentColor;border-radius:6px}
-.tabbar button[aria-current="true"]{color:var(--accent-ink);font-weight:600}
-.tabbar button[aria-current="true"] .ic{background:linear-gradient(140deg,var(--accent-hi),var(--accent));border-color:transparent;box-shadow:var(--shadow-bloom)}
+.shell.nav-closed .aside{display:none}
+/* ---------------------------------------------------------------
+   rem vs px: the clinic shell is built from Tailwind spacing/type
+   utilities, which are rem (--spacing: 0.25rem, text-base: 1rem).
+   Those are written as rem here so the shell tracks the browser's
+   root font size exactly as the clinic does. Only values the clinic
+   writes as arbitrary px — text-[13px], rounded-[11px], h-[30px] —
+   stay px. Hardcoding the 16px-equivalents makes the wireframe
+   diverge for anyone whose browser font size is not the default.
+   --------------------------------------------------------------- */
+.aside-inner{display:flex;flex-direction:column;gap:1.25rem;height:100%;min-height:0;padding:1.25rem 1rem}
+.aside-top{display:flex;align-items:center;gap:.25rem}
+.brand-lockup{display:flex;align-items:center;gap:.625rem;min-width:0;flex:1;padding:0 .375rem}
+.brand-mark{
+  width:30px;height:30px;border-radius:9px;flex:none;display:grid;place-items:center;
+  font-size:13px;font-weight:700;line-height:1;color:var(--accent-foreground);
+  background:linear-gradient(140deg,var(--accent-hi),var(--accent) 70%);box-shadow:var(--shadow-bloom);
+}
+/* The mark never compresses; the wordmark gives way and ellipsises.
+   Mirrors shrink-0 on BrandMark and min-w-0 truncate on BrandLockup. */
+.brand-name{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:1rem;font-weight:600;letter-spacing:-.016em;
+}
+/* Mirrors <Button size="icon"> in ui/button.tsx: pill radius, 14px glyphs
+   ([&_svg]:size-3.5 wins over the icon's own h-4 w-4 on specificity),
+   0.08 hover / 0.14 active, 200ms transition. */
+.icon-btn{
+  width:2rem;height:2rem;border-radius:999px;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--ink-3);
+  transition:background-color .2s,border-color .2s,color .2s,box-shadow .2s,filter .2s,transform .2s;
+}
+.icon-btn:hover{color:var(--foreground);background:rgba(47,63,102,.08)}
+.icon-btn:active{background:rgba(47,63,102,.14);transform:scale(.98)}
+.icon-btn svg{width:.875rem;height:.875rem;flex:none}
+.icon-btn.outline{
+  width:2.5rem;height:2.5rem;border:1px solid var(--edge);
+  background:var(--glass-2);box-shadow:var(--shadow-inset-hi);color:var(--foreground);
+}
+.icon-btn.outline:hover{border-color:var(--edge-2);background:rgba(47,63,102,.08);box-shadow:var(--shadow-lift)}
+.aside-resizer{
+  position:absolute;inset:0 0 0 auto;width:.25rem;cursor:col-resize;z-index:12;
+}
+.aside-resizer:hover,.aside-resizer:active{background:var(--accent-soft)}
+.aside-nav{
+  flex:1;min-height:0;margin-top:.25rem;overflow-y:auto;overscroll-behavior:contain;
+  display:flex;flex-direction:column;gap:1.5rem;padding-bottom:1.25rem;
+  scrollbar-width:none;-ms-overflow-style:none;
+}
+.aside-nav::-webkit-scrollbar{display:none;width:0;height:0}
+.nav-group{display:flex;flex-direction:column;gap:.25rem}
+.nav-group h5{margin:0 .375rem .5rem;padding:.25rem 0 0;font-size:.875rem;font-weight:600;letter-spacing:.02em;color:var(--ink-3)}
+.nav-item{
+  display:flex;align-items:center;gap:.625rem;width:100%;text-align:left;
+  padding:.625rem;border-radius:11px;font-size:13px;font-weight:500;color:var(--ink-2);
+  transition:background-color .15s,color .15s;
+}
+.nav-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-item:hover{background:rgba(47,63,102,.08);color:var(--foreground)}
+.nav-item:active{background:rgba(47,63,102,.12)}
+.nav-item[aria-current="true"]{
+  background:linear-gradient(96deg,var(--accent-soft),transparent 96%);
+  color:var(--foreground);font-weight:600;
+  box-shadow:inset 0 0 0 1px var(--edge),inset 0 1px 0 var(--edge-hi);
+}
+.nav-ico{
+  width:1.25rem;height:1.25rem;flex:none;display:grid;place-items:center;border-radius:6px;
+  border:1px solid var(--edge);background:var(--glass-2);color:var(--ink-2);
+}
+.nav-ico svg{width:.75rem;height:.75rem}
+.nav-item[aria-current="true"] .nav-ico{
+  border-color:transparent;color:var(--accent-foreground);
+  background:linear-gradient(140deg,var(--accent-hi),var(--accent));box-shadow:var(--shadow-bloom);
+}
+.nav-item .n{margin-left:auto;font-size:11px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink-3)}
+.nav-item[aria-current="true"] .n{color:var(--ink-2)}
 
-.dtop{flex:none;display:flex;align-items:center;gap:12px;padding:12px 24px;background:var(--glass-2);border-bottom:1px solid var(--edge);backdrop-filter:blur(26px)}
-.dtop b{font-size:15px;font-weight:700;letter-spacing:-.012em}
-.dbody{flex:1;display:grid;grid-template-columns:216px 1fr;min-height:0}
-.dnav{border-right:1px solid var(--edge);padding:16px 10px;overflow-y:auto;background:var(--glass-2);backdrop-filter:blur(26px)}
-.dnav h5{margin:15px 8px 6px;font-size:10.5px;color:var(--subtle);font-weight:600;font-family:var(--mono)}
-.dnav h5:first-child{margin-top:0}
-.dnav button{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;padding:7px 10px;border-radius:11px;font-size:13px;color:var(--ink-2)}
-.dnav button:hover{background:rgba(47,63,102,.05)}
-.dnav button[aria-current="true"]{background:linear-gradient(96deg,var(--accent-soft),transparent 96%);color:var(--foreground);font-weight:600;box-shadow:inset 0 0 0 1px var(--edge),inset 0 1px 0 var(--edge-hi)}
-.dnav .n{font-size:10.5px;background:var(--destructive);color:#fff;border-radius:9px;padding:1px 6px;font-weight:600}
+.maincol{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.canvas{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column}
+.toolbar{
+  position:sticky;top:0;z-index:12;flex:none;height:3.5rem;display:flex;align-items:center;gap:.75rem;
+  margin:0 -1.25rem;padding:0 1.25rem;pointer-events:none;
+}
+.stage.desktop .toolbar{margin:0 -26px;padding:0 26px}
+.toolbar-end{margin-left:auto;display:flex;align-items:center;gap:.5rem;height:2.5rem;pointer-events:auto}
+.tchip{
+  width:2.25rem;height:2.25rem;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;position:relative;
+  color:var(--ink-2);
+}
+.tchip:hover{background:rgba(47,63,102,.08);color:var(--foreground)}
+.tchip:active{background:rgba(47,63,102,.14)}
+.tchip svg{width:.875rem;height:.875rem}
+/* NotificationBell count (notification-bell.tsx): overhangs the chip at
+   -0.5, 1rem tall pill, text-2xs / font-medium on --destructive-foreground. */
+.tchip .dotn{
+  position:absolute;top:-.125rem;right:-.125rem;
+  display:inline-flex;align-items:center;justify-content:center;
+  height:1rem;min-width:1rem;padding:0 .25rem;border-radius:999px;
+  background:var(--destructive);color:var(--destructive-foreground);
+  font-size:.6875rem;line-height:1rem;font-weight:500;
+}
+.acct{
+  display:flex;align-items:center;gap:.5rem;height:2.5rem;max-width:220px;
+  padding:0 .625rem 0 .25rem;border-radius:999px;text-align:left;
+}
+.acct:hover{background:rgba(47,63,102,.08)}
+.acct .av{
+  width:1.75rem;height:1.75rem;border-radius:50%;flex:none;display:grid;place-items:center;
+  background:var(--accent);color:var(--accent-foreground);font-size:11px;font-weight:600;box-shadow:var(--shadow-bloom);
+}
+.acct .nm{display:block;font-size:12.5px;font-weight:600;line-height:1.2}
+.acct .rl{display:block;font-size:11px;color:var(--ink-2)}
+/* Account pill is a plain <button>, not <Button> — its chevron keeps h-4 w-4. */
+.acct .chev{width:1rem;height:1rem;color:var(--ink-3);flex:none}
+
+.canvas{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;padding:0 20px 20px}
+.stage.desktop .canvas{padding:0 26px 26px}
+.stage.mobile .canvas{padding:0 16px 16px}
+.canvas-inner{width:100%;max-width:1400px;margin:8px auto 0;flex:1}
+
+.page-header{display:flex;flex-direction:column;gap:10px;margin-bottom:20px;flex:none}
+.page-header .lead{min-width:0}
+.page-title{margin:0;font-size:22px;font-weight:600;letter-spacing:-.016em;line-height:1.2}
+.page-subtitle{margin:4px 0 0;font-size:14px;line-height:1.25;color:var(--ink-2)}
+.page-header .back{
+  width:36px;height:36px;border-radius:999px;display:grid;place-items:center;margin-bottom:4px;
+  color:var(--ink-3);font-size:20px;line-height:1;
+}
+.page-header .back:hover{background:rgba(47,63,102,.08);color:var(--foreground)}
+
+.aside-scrim{position:absolute;inset:0;background:rgba(47,63,102,.22);backdrop-filter:blur(2px);z-index:20}
+.stage.mobile .aside{
+  position:absolute;inset:0 auto 0 0;z-index:21;height:100%;
+  box-shadow:var(--shadow-popover);
+}
+.stage.mobile .shell.nav-closed .aside,
+.stage.mobile .shell.nav-closed .aside-scrim{display:none}
+
+.seg-pill{
+  display:inline-flex;align-items:center;gap:2px;height:34px;padding:2px;
+  border-radius:999px;border:1px solid var(--edge);background:var(--glass-2);box-shadow:var(--shadow-inset-hi);
+}
+.seg-pill button{
+  height:28px;padding:0 14px;border-radius:999px;font-size:12px;letter-spacing:.02em;color:var(--ink-2);
+}
+.seg-pill button:hover{background:rgba(47,63,102,.08);color:var(--foreground)}
+.seg-pill button[aria-pressed="true"]{
+  background:var(--accent-soft);font-weight:600;color:var(--foreground);
+  box-shadow:inset 0 0 0 1px var(--edge);
+}
+
+/* unauthenticated: staff /auth split */
+.auth{display:grid;height:100%;min-height:0}
+.stage.desktop .auth{grid-template-columns:1fr 1fr}
+/* Mirrors routes/portal.tsx — the PATIENT sign-in panel: pastel lane gradient,
+   navy ink, standard gold lockup. Not routes/auth.tsx, which is the gold staff
+   panel with the on-gold (glass) brand mark. */
+.auth-aside{
+  display:none;flex-direction:column;justify-content:space-between;padding:48px;
+  /* --lane-4 at 45%, --glass-2, --lane-7 at 40% — literal rgba because
+     color-mix() rounds a channel off the values Tailwind produces. */
+  background:linear-gradient(to bottom right,rgba(143,199,234,.45),var(--glass-2) 50%,rgba(185,166,232,.4) 70%);
+  border-right:1px solid var(--edge);box-shadow:var(--shadow-inset-hi);
+  color:var(--foreground);position:relative;overflow:hidden;
+}
+.stage.desktop .auth-aside{display:flex}
+.auth-brand{display:flex;align-items:center;gap:8px;flex:none}
+.auth-brand .lockup{display:flex;align-items:center;gap:10px;min-width:0}
+.auth-pill{
+  flex:none;border:1px solid var(--edge);border-radius:999px;padding:2px 8px;
+  font-size:11px;line-height:1rem;letter-spacing:.02em;color:var(--ink-2);white-space:nowrap;
+}
+.auth-aside h1{margin:0;font-size:40px;font-weight:600;letter-spacing:-.02em;line-height:1.1;max-width:28rem}
+.auth-aside p{margin:16px 0 0;font-size:14px;line-height:1.5;color:var(--ink-2);max-width:28rem}
+.auth-aside .foot{margin:0;font-size:12px;color:var(--ink-2)}
+.auth-form{display:flex;align-items:center;justify-content:center;padding:24px 20px;overflow-y:auto}
+.auth-card{width:100%;max-width:24rem;padding:24px 28px;margin:0}
 
 /* ---------------- glass primitives ---------------- */
 .card{
@@ -154,8 +339,8 @@ button.card{display:block;width:100%;text-align:left}
 button.card:hover{box-shadow:var(--shadow-lift)}
 
 h3.ct{margin:0 0 3px;font-size:15px;font-weight:600;letter-spacing:-.012em}
-.sect{margin:20px 2px 9px;font-size:12px;font-weight:600;color:var(--ink-3);letter-spacing:.01em}
-.sect:first-child{margin-top:2px}
+.sect{margin:22px 0 12px;font-size:17px;font-weight:600;letter-spacing:-.016em;line-height:1.25;color:var(--foreground)}
+.sect:first-child{margin-top:0}
 .row{display:flex;align-items:center;gap:10px}
 .row.between{justify-content:space-between}
 .row.top{align-items:flex-start}
@@ -175,7 +360,7 @@ h3.ct{margin:0 0 3px;font-size:15px;font-weight:600;letter-spacing:-.012em}
 
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;
-  height:40px;padding:0 18px;border-radius:999px;font-size:12.5px;font-weight:600;line-height:1;
+  height:36px;padding:0 14px;border-radius:999px;font-size:12.5px;font-weight:600;line-height:1;
   background:linear-gradient(140deg,var(--accent-hi),var(--accent) 75%);
   color:var(--accent-foreground);border:1px solid var(--edge);box-shadow:var(--shadow-bloom);
   transition:background-color .2s,border-color .2s,color .2s,box-shadow .2s,filter .2s,transform .2s;
@@ -194,10 +379,10 @@ h3.ct{margin:0 0 3px;font-size:15px;font-weight:600;letter-spacing:-.012em}
 .btns{display:flex;gap:8px;margin-top:12px}
 .btns .btn{flex:1;width:auto}
 
-.field{margin-bottom:13px}
-.field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px}
-.field .inp{border:1px solid var(--edge);background:var(--glass);border-radius:14px;min-height:44px;display:flex;align-items:center;padding:0 13px;color:var(--subtle);font-size:14px;box-shadow:var(--shadow-inset-hi)}
-.field .inp.tall{min-height:78px;align-items:flex-start;padding-top:12px}
+.field{margin-bottom:12px;display:flex;flex-direction:column;gap:7px}
+.field label{display:block;font-size:13px;font-weight:600}
+.field .inp{border:1px solid var(--edge);background:var(--glass-2);border-radius:11px;height:36px;display:flex;align-items:center;padding:0 12px;color:var(--subtle);font-size:13.5px;box-shadow:var(--shadow-inset-hi)}
+.field .inp.tall{height:auto;min-height:78px;align-items:flex-start;padding-top:12px}
 .field .hint{font-size:11px;color:var(--ink-3);margin-top:4px}
 .field.error .inp{border-color:rgba(220,108,150,.5);background:var(--destructive-bg)}
 .field .err{font-size:11px;color:var(--destructive-ink);margin-top:4px}
@@ -264,7 +449,7 @@ h3.ct{margin:0 0 3px;font-size:15px;font-weight:600;letter-spacing:-.012em}
 
 /* ---------------- messaging popup ---------------- */
 .fab{
-  position:absolute;right:16px;z-index:15;bottom:88px;
+  position:absolute;right:16px;z-index:15;bottom:22px;
   width:56px;height:56px;border-radius:50%;
   background:linear-gradient(to bottom right,var(--accent-hi),var(--accent) 75%);
   border:1px solid var(--edge);box-shadow:var(--shadow-bloom),var(--shadow-lift);
@@ -291,8 +476,8 @@ h3.ct{margin:0 0 3px;font-size:15px;font-weight:600;letter-spacing:-.012em}
 .chatfoot{flex:none;padding:11px 14px 14px;border-top:1px solid var(--glass-line)}
 .thread{display:flex;flex-direction:column;gap:9px}
 .bub{max-width:80%;padding:9px 13px;border-radius:16px;font-size:12.8px;line-height:1.45;box-shadow:var(--shadow-inset-hi)}
-.bub.them{background:var(--glass);border:1px solid var(--edge);border-bottom-left-radius:5px;align-self:flex-start}
-.bub.me{background:linear-gradient(to bottom right,var(--accent-hi),var(--accent) 75%);color:var(--accent-foreground);border-bottom-right-radius:5px;align-self:flex-end}
+.bub.them{background:color-mix(in srgb,var(--glass) 96%,transparent);border:1px solid var(--edge);border-bottom-left-radius:5px;align-self:flex-start}
+.bub.me{background:color-mix(in srgb,var(--accent) 34%,var(--glass));border:1px solid color-mix(in srgb,var(--accent-line) 70%,transparent);color:var(--foreground);border-bottom-right-radius:5px;align-self:flex-end}
 .bub .t{font-size:10px;opacity:.7;margin-top:4px}
 .quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
 
@@ -418,9 +603,9 @@ button.pitem:active{background:rgba(47,63,102,.14)}
 .dots i{width:5px;height:5px;border-radius:50%;background:var(--bar)}
 .dots i.on{background:var(--accent-deep);width:16px;border-radius:3px}
 
-.greet{margin-bottom:4px}
-.greet .hi{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.15}
-.greet .dt{font-size:12px;color:var(--ink-3);margin-top:3px}
+.greet{margin:0 0 20px}
+.greet .hi{font-size:22px;font-weight:600;letter-spacing:-.016em;line-height:1.2}
+.greet .dt{margin:4px 0 0;font-size:14px;line-height:1.25;color:var(--ink-2)}
 .dot-badge{width:7px;height:7px;border-radius:50%;background:var(--consent);display:inline-block;box-shadow:0 0 0 3.5px var(--consent-bg);flex:none}
 
 /* ---------------- annotations ---------------- */
@@ -438,33 +623,44 @@ button.pitem:active{background:rgba(47,63,102,.14)}
 .note.new .ref{color:var(--success-ink)}
 .legend{margin-top:20px;padding-top:14px;border-top:1px solid rgba(47,63,102,.1);font-size:11.5px;color:var(--ink-3);line-height:1.65}
 .legend b{display:block;color:var(--ink-2);margin-bottom:5px;font-size:10.5px;font-family:var(--mono)}
-body.noannot .notes{display:none}
-body.noannot .main{grid-template-columns:238px 1fr}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
-<body>
+<body class="norail noannot chrome-min">
 <div class="wrap">
   <header class="topbar">
-    <div class="brand"><b>Aetheria Patient Portal</b><span>wireframes v0.2 · brand palette</span></div>
+    <div class="brand"><b>Aetheria Patient Portal</b><span>wireframes v0.4 · full-bleed AppShell</span></div>
     <div class="spacer"></div>
+    <select id="screenjump" aria-label="Jump to screen" style="height:30px;border:1px solid rgba(47,63,102,.14);border-radius:8px;padding:0 8px;font:inherit;font-size:12.5px;color:var(--ink-2);background:#fff;max-width:220px"></select>
     <div class="stepper">
       <button id="prev" aria-label="Previous screen">&larr;</button>
       <span id="pos">1 / 1</span>
       <button id="next" aria-label="Next screen">&rarr;</button>
     </div>
     <div class="seg" role="group" aria-label="Viewport">
-      <button id="vpm" aria-pressed="true">Mobile</button>
-      <button id="vpd" aria-pressed="false">Desktop</button>
+      <button id="vpm" aria-pressed="false">Mobile</button>
+      <button id="vpd" aria-pressed="true">Desktop</button>
     </div>
+    <button class="tbtn" id="screens" aria-pressed="false">Screens</button>
     <button class="tbtn" id="chatbtn" aria-pressed="false">Messages popup</button>
-    <button class="tbtn" id="annot" aria-pressed="true">Annotations</button>
+    <button class="tbtn" id="annot" aria-pressed="false">Annotations</button>
+    <button class="tbtn" id="chromemin" title="Hide the wireframe bar and screen list">Minimise</button>
   </header>
   <div class="main">
     <nav class="rail" id="rail" aria-label="Screens"></nav>
-    <div class="stage mobile" id="stage"></div>
+    <div class="stage desktop" id="stage"></div>
     <aside class="notes" id="notes"></aside>
   </div>
+</div>
+<div class="chrome-dock" id="chromedock" role="toolbar" aria-label="Wireframe controls">
+  <span class="dock-label">Wireframes</span>
+  <div class="stepper">
+    <button id="prev2" aria-label="Previous screen">&larr;</button>
+    <span id="pos2">1 / 1</span>
+    <button id="next2" aria-label="Next screen">&rarr;</button>
+  </div>
+  <select id="screenjump2" aria-label="Jump to screen"></select>
+  <button class="tbtn" id="chromeexpand" title="Show the full wireframe bar">Tools</button>
 </div>
 <script>
 const SCREENS = {}; const ORDER = [];
@@ -474,20 +670,30 @@ function S(id, def){ SCREENS[id] = def; ORDER.push(id); }
 /* ============ ENTRY ============ */
 S('signin', {
   group:'Entry', title:'Patient sign in', route:'/portal', chrome:'bare',
-  body:`<div class="scroll" style="display:flex;flex-direction:column;justify-content:center">
-    <div style="margin-bottom:28px">
-      <div class="strong" style="font-size:21px;letter-spacing:-.02em">Aetheria</div>
-      <div class="tiny" style="margin-top:1px">Patient portal</div>
+  body:`<div class="auth">
+    <div class="auth-aside">
+      <div class="auth-brand"><span class="lockup"><span class="brand-mark">Æ</span><span class="brand-name">Aetheria</span></span><span class="auth-pill">Patient portal</span></div>
+      <div>
+        <h1>Your record, in the same product your clinic uses.</h1>
+        <p>Appointments, consent, treatment history and messages — held to the same audit trail as the clinic workspace.</p>
+      </div>
+      <p class="foot">Every sign-in is written to an immutable audit trail.</p>
     </div>
-    <h2 style="margin:0 0 6px;font-size:22px;font-weight:600;letter-spacing:-.016em">Sign in to your record</h2>
-    <p class="muted small" style="margin:0 0 22px">Use the email address your clinic holds for you.</p>
-    <div class="field"><label>Email</label><div class="inp">you@example.com</div></div>
-    <div class="field"><label>Password</label><div class="inp">••••••••••••</div></div>
-    <button class="btn" data-go="dash-b">Sign in</button>
-    <button class="btn ghost" style="margin:10px auto 0">Forgot your password?</button>
-    <div class="hr"></div>
-    <p class="tiny" style="line-height:1.55">Your clinic creates your account. No invitation email? Call the clinic on 020 7000 0000 and they will send one.</p>
-    <button class="btn sec sm" data-go="activate-dob" style="margin-top:14px;align-self:flex-start">View activation flow</button>
+    <div class="auth-form">
+      <div class="card auth-card">
+        <h2 class="page-title" style="font-size:19px">Patient sign in</h2>
+        <p class="page-subtitle">Use the email address your clinic holds for you.</p>
+        <div style="margin-top:20px">
+          <div class="field"><label>Email</label><div class="inp">you@example.com</div></div>
+          <div class="field"><label>Password</label><div class="inp">••••••••••••</div></div>
+          <button class="btn" data-go="dash-b">Sign in</button>
+          <button class="btn ghost" style="margin:8px auto 0;width:100%">Forgot password?</button>
+          <div class="hr"></div>
+          <p class="tiny" style="line-height:1.55">Your clinic creates your account. No invitation email? Call 020 7000 0000 and they will send one.</p>
+          <button class="btn sec sm" data-go="activate-dob" style="margin-top:14px">View activation flow</button>
+        </div>
+      </div>
+    </div>
   </div>`,
   notes:[
     {k:'',ref:'F-02',t:'Existing route. Keeps safeNextPath() open-redirect protection and the assertLoginAllowed throttle backed by auth_login_events.'},
@@ -498,20 +704,34 @@ S('signin', {
 
 S('activate-dob', {
   group:'Entry', title:'Activate — identity check', route:'/portal/activate', chrome:'bare',
-  body:`<div class="scroll" style="display:flex;flex-direction:column;justify-content:center">
-    <div class="steps"><i class="on"></i><i></i><i></i></div>
-    <h2 style="margin:0 0 6px;font-size:21px;font-weight:600;letter-spacing:-.016em">Confirm it's you</h2>
-    <p class="muted small" style="margin:0 0 20px">Enter your date of birth so we can match this invitation to your record.</p>
-    <div class="field"><label>Date of birth</label>
-      <div class="row" style="gap:8px">
-        <div class="inp" style="flex:1;justify-content:center">DD</div>
-        <div class="inp" style="flex:1;justify-content:center">MM</div>
-        <div class="inp" style="flex:1.4;justify-content:center">YYYY</div>
+  body:`<div class="auth">
+    <div class="auth-aside">
+      <div class="auth-brand"><span class="lockup"><span class="brand-mark">Æ</span><span class="brand-name">Aetheria</span></span><span class="auth-pill">Patient portal</span></div>
+      <div>
+        <h1>Confirm the invitation belongs to you.</h1>
+        <p>We match this link to your clinic record before a password is created.</p>
       </div>
-      <div class="hint">2 attempts remaining</div>
+      <p class="foot">This link expires 7 days after your clinic sent it and can only be used once.</p>
     </div>
-    <button class="btn" data-go="activate-set">Continue</button>
-    <div class="banner info" style="margin-top:20px">This link expires 7 days after your clinic sent it and can only be used once.</div>
+    <div class="auth-form">
+      <div class="card auth-card">
+        <div class="steps"><i class="on"></i><i></i><i></i></div>
+        <h2 class="page-title" style="font-size:19px">Confirm it's you</h2>
+        <p class="page-subtitle">Enter your date of birth so we can match this invitation to your record.</p>
+        <div style="margin-top:20px">
+          <div class="field"><label>Date of birth</label>
+            <div class="row" style="gap:8px">
+              <div class="inp" style="flex:1;justify-content:center">DD</div>
+              <div class="inp" style="flex:1;justify-content:center">MM</div>
+              <div class="inp" style="flex:1.4;justify-content:center">YYYY</div>
+            </div>
+            <div class="hint">2 attempts remaining</div>
+          </div>
+          <button class="btn" data-go="activate-set">Continue</button>
+          <div class="banner info" style="margin-top:16px">This link expires 7 days after your clinic sent it and can only be used once.</div>
+        </div>
+      </div>
+    </div>
   </div>`,
   notes:[
     {k:'',ref:'F-01 step 4',t:'Record matching. Stops a forwarded or mis-addressed invitation linking the wrong person to a clinical record.'},
@@ -522,19 +742,33 @@ S('activate-dob', {
 
 S('activate-set', {
   group:'Entry', title:'Activate — set password', route:'/portal/activate', chrome:'bare',
-  body:`<div class="scroll" style="display:flex;flex-direction:column;justify-content:center">
-    <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
-    <h2 style="margin:0 0 6px;font-size:21px;font-weight:600;letter-spacing:-.016em">Create your password</h2>
-    <p class="muted small" style="margin:0 0 20px">Aisha Bello · Ridgeway Skin Clinic</p>
-    <div class="field"><label>Password</label><div class="inp">••••••••••••••</div><div class="hint">At least 12 characters. Checked against known breached passwords.</div></div>
-    <div class="field"><label>Confirm password</label><div class="inp">••••••••••••••</div></div>
-    <div class="card" style="padding:13px">
-      <div class="row top" style="gap:10px">
-        <div style="width:19px;height:19px;border-radius:6px;background:linear-gradient(140deg,var(--accent-hi),var(--accent));border:1px solid var(--accent-line);flex:none;margin-top:1px"></div>
-        <div class="small">I accept the <span style="color:var(--accent-ink);font-weight:600">portal terms</span> and have read the <span style="color:var(--accent-ink);font-weight:600">privacy notice</span>.</div>
+  body:`<div class="auth">
+    <div class="auth-aside">
+      <div class="auth-brand"><span class="lockup"><span class="brand-mark">Æ</span><span class="brand-name">Aetheria</span></span><span class="auth-pill">Patient portal</span></div>
+      <div>
+        <h1>Create the password you will use next time.</h1>
+        <p>Aisha Bello · Ridgeway Skin Clinic</p>
+      </div>
+      <p class="foot">Acceptance is recorded with the version you agreed to, not a bare tick.</p>
+    </div>
+    <div class="auth-form">
+      <div class="card auth-card">
+        <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+        <h2 class="page-title" style="font-size:19px">Create your password</h2>
+        <p class="page-subtitle">Aisha Bello · Ridgeway Skin Clinic</p>
+        <div style="margin-top:20px">
+          <div class="field"><label>Password</label><div class="inp">••••••••••••••</div><div class="hint">At least 12 characters. Checked against known breached passwords.</div></div>
+          <div class="field"><label>Confirm password</label><div class="inp">••••••••••••••</div></div>
+          <div class="card" style="padding:13px">
+            <div class="row top" style="gap:10px">
+              <div style="width:19px;height:19px;border-radius:6px;background:linear-gradient(140deg,var(--accent-hi),var(--accent));border:1px solid var(--accent-line);flex:none;margin-top:1px"></div>
+              <div class="small">I accept the <span style="color:var(--accent-ink);font-weight:600">portal terms</span> and have read the <span style="color:var(--accent-ink);font-weight:600">privacy notice</span>.</div>
+            </div>
+          </div>
+          <button class="btn" data-go="dash-empty" style="margin-top:8px">Create account</button>
+        </div>
       </div>
     </div>
-    <button class="btn" data-go="dash-empty" style="margin-top:8px">Create account</button>
   </div>`,
   notes:[
     {k:'',ref:'F-01 step 5',t:'Acceptance recorded with version and timestamp in portal_terms_acceptances. A bare boolean is not evidence of what was agreed to.'},
@@ -677,6 +911,8 @@ S('dash-b', {
     <button class="btn sec sm" data-go="treatments">See full history</button>
     <p class="tiny" style="margin:12px 2px 0">Offers and clinic news are on. <span style="color:var(--accent-ink);font-weight:600">Change in Settings</span></p>`,
   notes:[
+    {k:'new',ref:'AppShell',t:'v0.3 chrome is the clinic shell: 238px glass sidebar, Æ brand lockup, grouped nav with 20px gold icon tiles, sticky toolbar with messages chip and account pill (name + Patient). Same tokens, same type, same buttons as /dashboard.'},
+    {k:'new',ref:'AppShell',t:'Mobile keeps that shell. Sidebar closes by default; the panel-left control opens it as a sheet. No consumer tab bar — one product, two audiences.'},
     {k:'new',ref:'Carousel',t:'A real carousel now. The arrows and dots actually slide the track — 520ms on a cubic-bezier(.22,.8,.25,1) ease-out, one slide at a time, wrapping at both ends. Click them.'},
     {k:'new',ref:'Carousel',t:'Layout follows your reference: diagonal image on the left, tinted panel on the right, price pill floating over the image, circular arrows overhanging the card edge. On mobile the diagonal rotates to horizontal, image on top and text beneath, because a side-by-side split at 390px leaves neither pane usable.'},
     {k:'new',ref:'Carousel',t:'The diagonal is a clip-path polygon rather than a masked image, so it needs no exported asset and re-cuts itself at any width.'},
@@ -826,7 +1062,12 @@ S('appointments', {
   group:'Appointments', title:'Appointments', route:'/appointments', chrome:'app', tab:'appts', fab:true,
   head:'Appointments', avatar:'AB',
   body:`
-    <div class="row" style="gap:6px;margin-bottom:13px"><span class="chip gold">Upcoming</span><span class="chip">Past</span></div>
+    <div class="row between" style="margin-bottom:16px">
+      <div class="seg-pill" role="group" aria-label="Appointment span">
+        <button aria-pressed="true">Upcoming</button>
+        <button aria-pressed="false">Past</button>
+      </div>
+    </div>
     <div class="list">
       <button class="li go" data-go="appt-detail">
         <div class="datebox"><div class="d">19</div><div class="tiny">Mar</div></div>
@@ -1059,7 +1300,7 @@ S('profile', {
     </div>`,
   notes:[
     {k:'new',ref:'Restructure',t:'New hub. Forms, Treatments, Photos and Health now live under Profile as you asked, rather than as four separate top-level destinations.'},
-    {k:'new',ref:'Restructure',t:'This drops mobile from five bottom tabs to four — Dashboard, Appointments, Profile, Settings — which is a real gain. Five tabs plus a messaging launcher was crowded at 390px.'},
+    {k:'new',ref:'AppShell',t:'Secondary destinations stay in the sidebar under You / Account, same grouping model as the clinic Reports / You blocks. Mobile opens that sidebar as a sheet — no second navigation pattern.'},
     {k:'new',ref:'Restructure',t:'Counts and status chips on the hub rows matter. Without them Profile is a menu of dead ends and the patient has to open each one to find the outstanding consent.'},
     {k:'',ref:'F-13',t:'Contact-detail edits route to staff review. A patient silently changing their own email is an account-takeover path.'},
     {k:'open',ref:'D-21 (new)',t:'Is "Profile" the right word for something mostly containing a clinical record? "My record" is the current copy and is more accurate. Profile suggests settings, which are now genuinely elsewhere.'}
@@ -1564,7 +1805,30 @@ S('health-changed', {
 /* ============ engine ============ */
 const stage=document.getElementById('stage'),rail=document.getElementById('rail'),
       notes=document.getElementById('notes'),posEl=document.getElementById('pos');
-let current=ORDER[0], viewport='mobile', chatOpen=false, carIdx=0;
+/* Sidebar geometry mirrors app-shell.tsx: SIDEBAR_DEFAULT/MIN/MAX. */
+const SIDEBAR_DEFAULT=238, SIDEBAR_MIN=180, SIDEBAR_MAX=420;
+let current=ORDER[0], viewport='desktop', chatOpen=false, carIdx=0, sidebarOpen=true, sidebarWidth=SIDEBAR_DEFAULT;
+
+function svg(inner){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+}
+const ICO={
+  dash:svg('<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>'),
+  cal:svg('<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>'),
+  user:svg('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+  file:svg('<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>'),
+  spark:svg('<path d="M9.9 14.25 11 18l1.1-3.75L16 13l-3.9-1.25L11 8l-1.1 3.75L6 13z"/><path d="M19 9 19.6 11 21.5 11.4 19.6 11.8 19 13.8 18.4 11.8 16.5 11.4 18.4 11 19 9z"/>'),
+  photo:svg('<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>'),
+  heart:svg('<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>'),
+  pay:svg('<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>'),
+  lock:svg('<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),
+  data:svg('<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/>'),
+  gear:svg('<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.7 1 1.1 1.8 1.1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
+  bell:svg('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'),
+  chevron:svg('<path d="m6 9 6 6 6-6"/>'),
+  panel:svg('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>'),
+  panelClose:svg('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>')
+};
 
 const TABS=[
   {id:'dash',    label:'Dashboard',    go:'dash-b'},
@@ -1573,10 +1837,53 @@ const TABS=[
   {id:'settings',label:'Settings',     go:'settings'}
 ];
 const DNAV=[
-  {h:'Care',        items:[{label:'Dashboard',go:'dash-b'},{label:'Appointments',go:'appointments'}]},
-  {h:'Your profile',items:[{label:'Forms',go:'forms',n:2},{label:'Treatments',go:'treatments'},{label:'Photos',go:'photos'},{label:'Health information',go:'health'}]},
-  {h:'Settings',    items:[{label:'Payments',go:'payments'},{label:'Sign-in and security',go:'security'},{label:'Your data',go:'data'}]}
+  {h:'Care', items:[
+    {label:'Dashboard', go:'dash-b', ico:'dash'},
+    {label:'Appointments', go:'appointments', ico:'cal'}
+  ]},
+  {h:'You', items:[
+    {label:'Profile', go:'profile', ico:'user'},
+    {label:'Forms', go:'forms', ico:'file', n:2},
+    {label:'Treatments', go:'treatments', ico:'spark'},
+    {label:'Photos', go:'photos', ico:'photo'},
+    {label:'Health information', go:'health', ico:'heart'}
+  ]},
+  {h:'Account', items:[
+    {label:'Settings', go:'settings', ico:'gear'},
+    {label:'Payments', go:'payments', ico:'pay'},
+    {label:'Sign-in and security', go:'security', ico:'lock'},
+    {label:'Your data', go:'data', ico:'data'}
+  ]}
 ];
+const PAGE_SUB={
+  appointments:'Upcoming visits, requests and past treatments.',
+  'appt-detail':'What is booked, what is still outstanding, and how to change it.',
+  cancel:'Confirm the fee consequence before the visit is released.',
+  reschedule:'Inside the notice window, changes go through the clinic.',
+  'book-1':'Choose a treatment. New visits start as a request.',
+  'book-2':'Pick a time. Slots inside cooling-off stay visible and disabled.',
+  'book-3':'Screening can convert the request rather than refuse it.',
+  'book-4':'Requested is not booked. Wait for the clinic to confirm.',
+  profile:'Your record at Ridgeway Skin Clinic.',
+  forms:'Consent, intake and aftercare in one place.',
+  intake:'First-time health questionnaire. You can stop and come back.',
+  consent:'Read the discussion summary, then sign.',
+  signed:'Cooling-off has started. Withdrawal is as easy as consenting.',
+  treatments:'What you have had, and when the next visit is due.',
+  'treatment-detail':'Notes, aftercare and photos for this visit.',
+  photos:'Before-and-after tiles stay blurred until you reveal them.',
+  health:'What the clinic holds, and how to tell us it changed.',
+  settings:'Account, payments and how we hold your data.',
+  payments:'Deposits and balances on your visits.',
+  security:'Password, devices and who can sign in as you.',
+  data:'Export, marketing preference and how to ask for erasure.',
+  error:'Something failed to load. The page is still your portal.',
+  'offer-detail':'Why you have this, and what it does not change.',
+  'pay-sheet':'Pay the deposit that is holding this visit.',
+  'pay-done':'Receipt for a completed payment.',
+  'profile-checkin':'Confirm the health record before this visit.',
+  'health-changed':'Send only the sections that changed.'
+};
 const tabFor = s => s.tab || 'dash';
 
 const CHAT=`<div class="chatwrap">
@@ -1608,34 +1915,66 @@ const CHAT=`<div class="chatwrap">
 
 const fabHtml = () => `<button class="fab" data-chat="1" aria-label="Messages, 1 unread"><span class="bub"></span><span class="n">1</span></button>`;
 
-function mobileChrome(s){
-  const t=tabFor(s);
-  const tabs=TABS.map(x=>`<button data-go="${x.go}" aria-current="${x.id===t}"><span class="ic"></span>${x.label}</button>`).join('');
-  const head=s.head?`<div class="apphead">${s.back?`<button class="back" data-go="${s.back}" aria-label="Back">&#8249;</button>`:''}<h1>${s.head}</h1>${s.avatar?`<span class="av">${s.avatar}</span>`:''}</div>`:'';
-  return `<div class="screen">
-    <div class="statusbar"><span>9:41</span><span>Aetheria</span></div>
-    ${head}<div class="scroll">${s.body}</div>
-    <nav class="tabbar">${tabs}</nav>
-    ${s.fab&&!chatOpen?fabHtml():''}
-    ${chatOpen?CHAT:''}
-  </div>${s.modal?`<div class="modal">${s.modal}</div>`:''}`;
-}
-function desktopChrome(s){
+function navHtml(s){
   const flat=DNAV.flatMap(g=>g.items.map(i=>i.go));
   const active=flat.includes(current)?current:(TABS.find(x=>x.id===tabFor(s))||{}).go;
-  const nav=DNAV.map(g=>`<h5>${g.h}</h5>`+g.items.map(i=>
-    `<button data-go="${i.go}" aria-current="${i.go===active}"><span>${i.label}</span>${i.n?`<span class="n">${i.n}</span>`:''}</button>`).join('')).join('');
-  return `<div class="screen">
-    <div class="dtop"><b>Aetheria</b><span class="tiny">Ridgeway Skin Clinic</span><span style="flex:1"></span><span class="chip">Aisha Bello</span></div>
-    <div class="dbody"><nav class="dnav">${nav}</nav>
-      <div class="scroll">${s.head?`<h1 style="margin:0 0 18px;font-size:26px;font-weight:600;letter-spacing:-.018em">${s.head}</h1>`:''}<div style="max-width:620px">${s.body}</div></div>
+  return DNAV.map(g=>`<div class="nav-group"><h5>${g.h}</h5>`+g.items.map(i=>
+    `<button class="nav-item" data-go="${i.go}" aria-current="${i.go===active}"><span class="nav-ico">${ICO[i.ico]}</span><span class="nav-label">${i.label}</span>${i.n?`<span class="n">${i.n}</span>`:''}</button>`
+  ).join('')+`</div>`).join('');
+}
+function pageHead(s){
+  if(!s.head) return '';
+  const sub=s.sub || PAGE_SUB[current] || '';
+  return `<header class="page-header">
+    <div class="lead">
+      ${s.back?`<button class="back" data-go="${s.back}" aria-label="Back">‹</button>`:''}
+      <h1 class="page-title">${s.head}</h1>
+      ${sub?`<p class="page-subtitle">${sub}</p>`:''}
     </div>
-    ${s.fab&&!chatOpen?fabHtml():''}
+  </header>`;
+}
+function appChrome(s){
+  const open=sidebarOpen;
+  return `<div class="screen" data-shell="appshell-v04">
+    <div class="shell ${open?'':'nav-closed'}">
+      ${open && viewport==='mobile'?`<div class="aside-scrim" data-nav="0"></div>`:''}
+      <aside class="aside" style="width:${sidebarWidth}px">
+        <div class="aside-inner">
+          <div class="aside-top">
+            <button class="brand-lockup" data-go="dash-b" aria-label="Aetheria home">
+              <span class="brand-mark">Æ</span><span class="brand-name">Aetheria</span>
+            </button>
+            <button class="icon-btn" data-nav="0" aria-label="Close sidebar">${ICO.panelClose}</button>
+          </div>
+          <nav class="aside-nav">${navHtml(s)}</nav>
+        </div>
+        ${viewport==='desktop'?`<div class="aside-resizer" data-resize="1" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0" aria-valuemin="${SIDEBAR_MIN}" aria-valuemax="${SIDEBAR_MAX}" aria-valuenow="${sidebarWidth}"></div>`:''}
+      </aside>
+      <div class="maincol">
+        <div class="canvas">
+          <div class="toolbar">
+            ${open?'':`<button class="icon-btn outline" data-nav="1" aria-label="Open sidebar" style="pointer-events:auto">${ICO.panel}</button>`}
+            <div class="toolbar-end">
+              <button class="tchip" data-chat="1" aria-label="Messages, 1 unread">${ICO.bell}<span class="dotn">1</span></button>
+              <button class="acct" data-go="profile" aria-label="Account menu">
+                <span class="av">AB</span>
+                <span><span class="nm">Aisha Bello</span><span class="rl">Patient</span></span>
+                <span class="chev">${ICO.chevron}</span>
+              </button>
+            </div>
+          </div>
+          <div class="canvas-inner">${pageHead(s)}${s.body}</div>
+        </div>
+      </div>
+    </div>
+    ${s.fab&&!chatOpen&&viewport==='mobile'?fabHtml():''}
     ${chatOpen?CHAT:''}
   </div>${s.modal?`<div class="modal">${s.modal}</div>`:''}`;
 }
+function mobileChrome(s){ return appChrome(s); }
+function desktopChrome(s){ return appChrome(s); }
 function bareChrome(s){
-  return `<div class="screen">${viewport==='mobile'?'<div class="statusbar"><span>9:41</span><span></span></div>':''}${s.body}</div>`;
+  return `<div class="screen bare">${s.body}</div>`;
 }
 
 function renderRail(){
@@ -1643,6 +1982,13 @@ function renderRail(){
   rail.innerHTML=Object.entries(g).map(([name,ids])=>
     `<div class="railgroup"><h4>${name}</h4>`+ids.map(id=>
       `<button class="railitem" data-go="${id}" aria-current="${id===current}">${SCREENS[id].title}<em>${SCREENS[id].route}</em></button>`).join('')+`</div>`).join('');
+  const opts=ORDER.map(id=>`<option value="${id}">${SCREENS[id].group} — ${SCREENS[id].title}</option>`).join('');
+  ['screenjump','screenjump2'].forEach(id=>{
+    const jump=document.getElementById(id);
+    if(!jump) return;
+    if(jump.options.length!==ORDER.length) jump.innerHTML=opts;
+    jump.value=current;
+  });
 }
 function renderNotes(s){
   notes.innerHTML=`<h3>${s.title}</h3><div class="route">${s.route}</div>`+
@@ -1651,7 +1997,7 @@ function renderNotes(s){
       <span style="color:var(--meta)">Pink</span> — spec reference.
       <span style="color:var(--destructive-ink)">Red</span> — a gap in the code today.
       <span style="color:var(--consent-ink)">Lilac</span> — an open decision I have assumed an answer to.
-      <span style="color:var(--success-ink)">Green</span> — new in v0.2 from your feedback.
+      <span style="color:var(--success-ink)">Green</span> — new in v0.3 to match the clinic AppShell.
     </div>`;
 }
 function render(id){
@@ -1661,12 +2007,47 @@ function render(id){
   const chrome = s.chrome==='bare' ? bareChrome : (viewport==='mobile'?mobileChrome:desktopChrome);
   stage.innerHTML=`<div class="frame">${chrome(s)}</div>`;
   renderRail(); renderNotes(s);
-  posEl.textContent=`${ORDER.indexOf(id)+1} / ${ORDER.length}`;
-  document.getElementById('prev').disabled=ORDER.indexOf(id)===0;
-  document.getElementById('next').disabled=ORDER.indexOf(id)===ORDER.length-1;
+  const label=`${ORDER.indexOf(id)+1} / ${ORDER.length}`;
+  const atStart=ORDER.indexOf(id)===0;
+  const atEnd=ORDER.indexOf(id)===ORDER.length-1;
+  posEl.textContent=label;
+  document.getElementById('pos2').textContent=label;
+  document.getElementById('prev').disabled=atStart;
+  document.getElementById('next').disabled=atEnd;
+  document.getElementById('prev2').disabled=atStart;
+  document.getElementById('next2').disabled=atEnd;
   document.getElementById('chatbtn').setAttribute('aria-pressed',String(chatOpen));
   carIdx=0;
   stage.scrollTop=0;
+  if(location.hash.replace('#','')!==id) history.replaceState(null,'','#'+id);
+  bindResize();
+}
+function bindResize(){
+  const handle=document.querySelector('[data-resize]');
+  const aside=document.querySelector('.aside');
+  if(!handle||!aside) return;
+  const apply=w=>{
+    sidebarWidth=Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(w)));
+    aside.style.width=sidebarWidth+'px';
+    handle.setAttribute('aria-valuenow',String(sidebarWidth));
+  };
+  apply(sidebarWidth);
+  handle.onpointerdown=e=>{
+    e.preventDefault();
+    const startX=e.clientX, startW=sidebarWidth;
+    const move=ev=>apply(startW + ev.clientX - startX);
+    const up=()=>{
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  handle.ondblclick=()=>apply(SIDEBAR_DEFAULT);
+  handle.onkeydown=e=>{
+    if(e.key==='ArrowLeft'){ e.preventDefault(); apply(sidebarWidth-16); }
+    if(e.key==='ArrowRight'){ e.preventDefault(); apply(sidebarWidth+16); }
+  };
 }
 function slideTo(i){
   const track=document.querySelector('.ctrack'); if(!track) return;
@@ -1683,18 +2064,39 @@ document.addEventListener('click',e=>{
     alert('Opens the clinic site in a new tab.\n\ntarget="_blank" rel="noopener noreferrer"\nNo patient identifiers in the URL.'); return; }
   const c=e.target.closest('[data-chat]');
   if(c){ e.preventDefault(); chatOpen = c.getAttribute('data-chat')==='1'; render(current); return; }
+  const nv=e.target.closest('[data-nav]');
+  if(nv){ e.preventDefault(); sidebarOpen = nv.getAttribute('data-nav')==='1'; render(current); return; }
   const t=e.target.closest('[data-go]');
-  if(t){ e.preventDefault(); chatOpen=false; render(t.getAttribute('data-go')); }
+  if(t){ e.preventDefault(); chatOpen=false; if(viewport==='mobile') sidebarOpen=false; render(t.getAttribute('data-go')); }
 });
-document.getElementById('prev').onclick=()=>{const i=ORDER.indexOf(current);if(i>0)render(ORDER[i-1])};
-document.getElementById('next').onclick=()=>{const i=ORDER.indexOf(current);if(i<ORDER.length-1)render(ORDER[i+1])};
+function goPrev(){const i=ORDER.indexOf(current);if(i>0)render(ORDER[i-1])}
+function goNext(){const i=ORDER.indexOf(current);if(i<ORDER.length-1)render(ORDER[i+1])}
+function setChromeMin(on){
+  document.body.classList.toggle('chrome-min',on);
+  try{localStorage.setItem('wf-chrome-min',on?'1':'0')}catch(err){}
+}
+document.getElementById('prev').onclick=goPrev;
+document.getElementById('next').onclick=goNext;
+document.getElementById('prev2').onclick=goPrev;
+document.getElementById('next2').onclick=goNext;
+document.getElementById('chromemin').onclick=()=>setChromeMin(true);
+document.getElementById('chromeexpand').onclick=()=>setChromeMin(false);
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&chatOpen){chatOpen=false;render(current);return}
+  if(e.key==='Escape'&&!document.body.classList.contains('chrome-min')){setChromeMin(true);return}
+  const typing=e.target && (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'||e.target.isContentEditable);
+  if(e.key==='[' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing){
+    e.preventDefault();
+    sidebarOpen=!sidebarOpen;
+    render(current);
+    return;
+  }
   if(e.key==='ArrowLeft')document.getElementById('prev').click();
   if(e.key==='ArrowRight')document.getElementById('next').click();
 });
 function setViewport(v){
   viewport=v; stage.className='stage '+v;
+  sidebarOpen = v==='desktop';
   document.getElementById('vpm').setAttribute('aria-pressed',v==='mobile');
   document.getElementById('vpd').setAttribute('aria-pressed',v==='desktop');
   render(current);
@@ -1707,7 +2109,29 @@ document.getElementById('annot').onclick=e=>{
   e.currentTarget.setAttribute('aria-pressed',String(!on));
   document.body.classList.toggle('noannot',on);
 };
-render(ORDER[0]);
+document.getElementById('screens').onclick=e=>{
+  const on=e.currentTarget.getAttribute('aria-pressed')==='true';
+  e.currentTarget.setAttribute('aria-pressed',String(!on));
+  document.body.classList.toggle('norail',on);
+};
+function jumpTo(e){
+  if(ORDER.includes(e.target.value)) render(e.target.value);
+}
+document.getElementById('screenjump').onchange=jumpTo;
+document.getElementById('screenjump2').onchange=jumpTo;
+try{
+  if(localStorage.getItem('wf-chrome-min')==='0') setChromeMin(false);
+}catch(err){}
+const boot=location.hash.replace('#','');
+const bootParams=new URLSearchParams(location.search);
+const bootVp=bootParams.get('vp');
+if(bootParams.get('nav')==='closed') sidebarOpen=false;
+if(bootVp==='mobile'||bootVp==='desktop') setViewport(bootVp);
+render(ORDER.includes(boot)?boot:ORDER[0]);
+window.addEventListener('hashchange',()=>{
+  const id=location.hash.replace('#','');
+  if(ORDER.includes(id)&&id!==current) render(id);
+});
 </script>
 </body>
 </html>

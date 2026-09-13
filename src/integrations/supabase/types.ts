@@ -1531,6 +1531,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      auth_email_otp: {
+        Row: {
+          attempts: number;
+          channel: string;
+          code_hash: string | null;
+          created_at: string;
+          expires_at: string;
+          user_id: string;
+          verified_until: string | null;
+        };
+        Insert: {
+          attempts?: number;
+          channel: string;
+          code_hash?: string | null;
+          created_at?: string;
+          expires_at: string;
+          user_id: string;
+          verified_until?: string | null;
+        };
+        Update: {
+          attempts?: number;
+          channel?: string;
+          code_hash?: string | null;
+          created_at?: string;
+          expires_at?: string;
+          user_id?: string;
+          verified_until?: string | null;
+        };
+        Relationships: [];
+      };
       auth_step_up: {
         Row: {
           confirmed_at: string;
@@ -1606,6 +1636,10 @@ export type Database = {
       check_login_throttle: {
         Args: { p_email: string; p_surface: string };
         Returns: Json;
+      };
+      match_reauthentication_otp: {
+        Args: { p_user_id: string; p_code: string };
+        Returns: boolean;
       };
       record_login_event: {
         Args: { p_email: string; p_surface: string; p_success: boolean };

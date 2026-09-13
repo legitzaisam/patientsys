@@ -21,6 +21,7 @@ import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
 import { InviteStaffDialog } from "@/components/invite-staff-dialog";
 import { AccessControlSettings } from "@/components/access-control-settings";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,7 @@ function TeamPage() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["team"] });
     void queryClient.invalidateQueries({ queryKey: ["ex-team"] });
+    void queryClient.invalidateQueries({ queryKey: ["staff-profile"] });
   };
   const stepUp = useStepUp();
 
@@ -97,11 +99,14 @@ function TeamPage() {
     enabled: can(identity, "team.view"),
   });
 
+  const [staffTab, setStaffTab] = useState<"current" | "former">("current");
+
   const restoreEx = useMutation({
     mutationFn: useServerFn(restoreExTeamMember),
     onSuccess: () => {
-      toast.success("Team access restored");
+      toast.success("Access restored — they can sign in again");
       invalidate();
+      setStaffTab("current");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -146,24 +151,26 @@ function TeamPage() {
       ...(m.registrationNumber ? { registrationNumber: m.registrationNumber } : {}),
     };
 
-    void stepUp.run(() =>
-      revoke.mutateAsync({ data: { userId: m.userId } }).then(() => {
-        invalidate();
-        toast.success(`Access revoked for ${label}`, {
-          action: {
-            label: "Undo",
-            onClick: () => {
-              void restoreAccess({ data: snapshot })
-                .then(() => {
-                  toast.success("Access restored");
-                  invalidate();
-                })
-                .catch((e: Error) => toast.error(e.message));
+    void stepUp.run(
+      () =>
+        revoke.mutateAsync({ data: { userId: m.userId } }).then(() => {
+          invalidate();
+          toast.success(`Access revoked for ${label}`, {
+            action: {
+              label: "Undo",
+              onClick: () => {
+                void restoreAccess({ data: snapshot })
+                  .then(() => {
+                    toast.success("Access restored");
+                    invalidate();
+                  })
+                  .catch((e: Error) => toast.error(e.message));
+              },
             },
-          },
-          duration: 6000,
-        });
-      }),
+            duration: 6000,
+          });
+        }),
+      "revoke",
     );
   };
 
@@ -197,7 +204,10 @@ function TeamPage() {
   const canViewTeam = can(identity, "team.view");
   const canApprove = can(identity, "team.approve_changes");
   const canAdmin = Boolean(identity.isOwner);
-  const canManageAccess = Boolean(identity.isOwner);
+  const members = (team ?? []).filter((m: { isSelf?: boolean; fullName?: string; email?: string }) => {
+    if (m.isSelf) return true;
+    return Boolean(String(m.fullName ?? "").trim() || String(m.email ?? "").trim());
+  });
   if (!canViewTeam)
     return (
       <AppShell identity={identity}>
@@ -210,196 +220,209 @@ function TeamPage() {
   return (
     <AppShell identity={identity}>
       {stepUp.dialog}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Team &amp; access</h1>
-          <p className="page-subtitle">
-            {(team ?? []).length} staff accounts{canAdmin ? " · you hold manager access" : ""}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-        {canAdmin && <InviteStaffDialog onInvited={invalidate} />}
-        </div>
-      </div>
-
-      <div
-        className={
-          canApprove
-            ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] lg:items-start"
-            : undefined
-        }
+      <Tabs
+        value={staffTab}
+        onValueChange={(value) => setStaffTab(value as "current" | "former")}
       >
-        <div className="space-y-3">
-          {(team ?? []).map((m: any) => (
-            <Card key={m.userId} className="p-4">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="min-w-56 flex-1 space-y-0.5">
-                  <Link
-                    {...(m.isSelf
-                      ? { to: "/profile" as const }
-                      : { to: "/team/$id" as const, params: { id: m.userId } })}
-                    className="block text-sm font-medium text-foreground underline-offset-2 hover:underline"
-                  >
-                    {m.fullName || m.email}
-                    {m.isSelf && <Badge variant="secondary" className="ml-2 rounded-xl">You</Badge>}
-                  </Link>
-                  <p className="text-xs text-muted-foreground">
-                    {m.email}
-                    {m.jobTitle ? ` · ${m.jobTitle}` : ""}
-                    {m.registrationNumber ? ` · ${m.registrationBody} ${m.registrationNumber}` : ""}
-                  </p>
-                  {canAdmin && !m.hasSignedIn && (
-                    <p className="text-xs text-muted-foreground">
-                      Never signed in — set a password
-                    </p>
-                  )}
-                </div>
-                {canAdmin && (
-                <div className="w-32">
-                  <RoleSelect
-                    value={m.role}
-                    className="h-8 w-full rounded-xl border border-edge-2 bg-glass-2 px-2 text-xs text-foreground shadow-inset-hi"
-                    onChange={(role) =>
-                      update.mutate({
-                        data: {
-                          userId: m.userId,
-                          role: role as "owner" | "practitioner" | "front_desk",
-                          fullName: m.fullName,
-                          jobTitle: m.jobTitle,
-                          registrationBody: m.registrationBody,
-                          registrationNumber: m.registrationNumber,
-                        },
-                      })
-                    }
-                  />
-                </div>
-                )}
-                {canAdmin && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Revoke access"
-                      disabled={m.isSelf || revoke.isPending}
-                      onClick={() =>
-                        requestRevoke({
-                          userId: m.userId,
-                          role: m.role,
-                          fullName: m.fullName,
-                          email: m.email,
-                          jobTitle: m.jobTitle,
-                          registrationBody: m.registrationBody,
-                          registrationNumber: m.registrationNumber,
-                          isSelf: m.isSelf,
-                        })
-                      }
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                    <EditStaffDialog
-                      member={m}
-                      onSave={(data) => update.mutate({ data })}
-                      saving={update.isPending}
-                      onSetPassword={(password) =>
-                        setPassword.mutate({ data: { userId: m.userId, password } })
-                      }
-                      passwordSaving={setPassword.isPending}
-                    />
-                  </>
-                )}
-              </div>
-            </Card>
-          ))}
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Team &amp; access</h1>
+            <p className="page-subtitle">
+              {members.length} staff accounts{canAdmin ? " · you hold manager access" : ""}
+            </p>
+          </div>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <TabsList className="h-[34px] p-0.5">
+              <TabsTrigger value="current" className="h-7 px-3.5 text-xs tracking-[0.02em]">
+                Current staff
+              </TabsTrigger>
+              <TabsTrigger value="former" className="h-7 px-3.5 text-xs tracking-[0.02em]">
+                Former staff
+              </TabsTrigger>
+            </TabsList>
+            {canAdmin && <InviteStaffDialog onInvited={invalidate} />}
+          </div>
         </div>
 
-        {canApprove && (
-          <aside
-            id="profile-change-requests"
-            className="rounded-[22px] border border-edge bg-glass-2/50 p-4 lg:sticky lg:top-4"
+        <TabsContent value="current" className="mt-0 space-y-10">
+          <div
+            className={
+              canApprove
+                ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] lg:items-start"
+                : undefined
+            }
           >
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h2 className="section-title">
-                Profile change requests
-              </h2>
-              {(requests ?? []).filter((r: any) => r.status === "pending").length > 0 && (
-                <Badge variant="secondary" className="rounded-full">
-                  {(requests ?? []).filter((r: any) => r.status === "pending").length} pending
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Staff updates wait here until you approve.
-            </p>
-            <div className="mt-3 space-y-3">
-              {(requests ?? []).length === 0 && (
-                <Card className="border-dashed p-4 text-xs text-muted-foreground">
-                  No requests yet.
+            <div className="space-y-3">
+              {members.map((m: any) => (
+                <Card key={m.userId} className="p-4">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="min-w-56 flex-1 space-y-0.5">
+                      <Link
+                        {...(m.isSelf
+                          ? { to: "/profile" as const }
+                          : { to: "/team/$id" as const, params: { id: m.userId } })}
+                        className="block text-sm font-medium text-foreground underline-offset-2 hover:underline"
+                      >
+                        {m.fullName || m.email}
+                        {m.isSelf && <Badge variant="secondary" className="ml-2 rounded-xl">You</Badge>}
+                      </Link>
+                      <p className="text-xs text-muted-foreground">
+                        {m.email}
+                        {m.jobTitle ? ` · ${m.jobTitle}` : ""}
+                        {m.registrationNumber ? ` · ${m.registrationBody} ${m.registrationNumber}` : ""}
+                      </p>
+                      {canAdmin && !m.hasSignedIn && (
+                        <p className="text-xs text-muted-foreground">
+                          Never signed in — set a password
+                        </p>
+                      )}
+                    </div>
+                    {canAdmin && (
+                    <div className="w-32">
+                      <RoleSelect
+                        value={m.role}
+                        className="h-8 w-full rounded-xl border border-edge-2 bg-glass-2 px-2 text-xs text-foreground shadow-inset-hi"
+                        onChange={(role) =>
+                          update.mutate({
+                            data: {
+                              userId: m.userId,
+                              role: role as "owner" | "practitioner" | "front_desk",
+                              fullName: m.fullName,
+                              jobTitle: m.jobTitle,
+                              registrationBody: m.registrationBody,
+                              registrationNumber: m.registrationNumber,
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    )}
+                    {canAdmin && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Revoke access"
+                          disabled={m.isSelf || revoke.isPending}
+                          onClick={() =>
+                            requestRevoke({
+                              userId: m.userId,
+                              role: m.role,
+                              fullName: m.fullName,
+                              email: m.email,
+                              jobTitle: m.jobTitle,
+                              registrationBody: m.registrationBody,
+                              registrationNumber: m.registrationNumber,
+                              isSelf: m.isSelf,
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <EditStaffDialog
+                          member={m}
+                          onSave={(data) => update.mutate({ data })}
+                          saving={update.isPending}
+                          onSetPassword={(password) =>
+                            setPassword.mutate({ data: { userId: m.userId, password } })
+                          }
+                          passwordSaving={setPassword.isPending}
+                        />
+                      </>
+                    )}
+                  </div>
                 </Card>
-              )}
-              {(requests ?? []).map((r: any) => (
-                <RequestCard key={r.id} r={r} onReview={(v) => review.mutate({ data: v })} busy={review.isPending} />
               ))}
             </div>
-          </aside>
-        )}
-      </div>
 
-      <section className="mt-10 space-y-3">
-        <div>
-          <h2 className="section-title">
-            Former team members
-          </h2>
-          <p className="page-subtitle">
-            Staff identity is kept here for 90 days after access is removed. Patient records,
-            appointments and clinical notes stay on the system permanently — they are never
-            deleted with this archive.
-          </p>
-        </div>
-        {(exTeam ?? []).length === 0 ? (
-          <Card className="border-dashed p-4 text-sm text-muted-foreground">
-            No former team members in the retention window.
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {(exTeam ?? []).map((m: any) => (
-              <Card key={m.id} className="p-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="min-w-56 flex-1">
-                    <p className="text-sm font-medium text-foreground">
-                      {m.fullName || m.email || "Former team member"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {m.email}
-                      {m.jobTitle ? ` · ${m.jobTitle}` : ""}
-                      {m.role ? ` · ${String(m.role).replaceAll("_", " ")}` : ""}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Removed {new Date(m.revokedAt).toLocaleDateString("en-GB")} ·{" "}
-                      {m.daysRemaining} day{m.daysRemaining === 1 ? "" : "s"} left in archive
-                    </p>
-                  </div>
-                  {canAdmin && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={restoreEx.isPending}
-                      onClick={() => restoreEx.mutate({ data: { userId: m.userId } })}
-                    >
-                      Restore access
-                    </Button>
+            {canApprove && (
+              <aside
+                id="profile-change-requests"
+                className="rounded-[22px] border border-edge bg-glass-2/50 p-4 lg:sticky lg:top-4"
+              >
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <h2 className="section-title">
+                    Profile change requests
+                  </h2>
+                  {(requests ?? []).filter((r: any) => r.status === "pending").length > 0 && (
+                    <Badge variant="secondary" className="rounded-full">
+                      {(requests ?? []).filter((r: any) => r.status === "pending").length} pending
+                    </Badge>
                   )}
                 </div>
-              </Card>
-            ))}
+                <p className="text-xs text-muted-foreground">
+                  Staff updates wait here until you approve.
+                </p>
+                <div className="mt-3 space-y-3">
+                  {(requests ?? []).length === 0 && (
+                    <Card className="border-dashed p-4 text-xs text-muted-foreground">
+                      No requests yet.
+                    </Card>
+                  )}
+                  {(requests ?? []).map((r: any) => (
+                    <RequestCard key={r.id} r={r} onReview={(v) => review.mutate({ data: v })} busy={review.isPending} />
+                  ))}
+                </div>
+              </aside>
+            )}
           </div>
-        )}
-      </section>
 
-      {canAdmin && (
-        <div className="mt-10">
-          <AccessControlSettings canEdit={Boolean(identity.isOwner)} />
-        </div>
-      )}
+          {canAdmin && (
+            <AccessControlSettings canEdit={Boolean(identity.isOwner)} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="former" className="mt-0 space-y-3">
+          <p className="page-subtitle">
+            Names stay here for 90 days after access is removed so you know who left. Patient
+            records are never deleted with this archive.
+          </p>
+          {(exTeam ?? []).length === 0 ? (
+            <Card className="border-dashed p-4 text-sm text-muted-foreground">
+              No former team members in the retention window.
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {(exTeam ?? []).map((m: any) => (
+                <Card key={m.id} className="p-4">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="min-w-56 flex-1">
+                      <Link
+                        to="/team/$id"
+                        params={{ id: m.userId }}
+                        className="block text-sm font-medium text-foreground underline-offset-2 hover:underline"
+                      >
+                        {m.fullName || m.email}
+                      </Link>
+                      <p className="text-xs text-muted-foreground">
+                        {m.email}
+                        {m.jobTitle ? ` · ${m.jobTitle}` : ""}
+                        {m.role
+                          ? ` · ${ROLES.find((r) => r.value === m.role)?.label ?? String(m.role).replaceAll("_", " ")}`
+                          : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Removed {new Date(m.revokedAt).toLocaleDateString("en-GB")} ·{" "}
+                        {m.daysRemaining} day{m.daysRemaining === 1 ? "" : "s"} left in archive
+                      </p>
+                    </div>
+                    {canAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={restoreEx.isPending}
+                        onClick={() => restoreEx.mutate({ data: { userId: m.userId } })}
+                      >
+                        {restoreEx.isPending ? "Restoring…" : "Restore access"}
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </AppShell>
   );
 }

@@ -1,10 +1,10 @@
 # Handoff Spec: Aetheria Patient Portal
 
-**Source:** `aetheria-patient-portal-wireframes.html` (26 screens, v0.1)
+**Source:** `aetheria-patient-portal-wireframes.html` (26 screens, v0.4)
 **Spec:** `aetheria-patient-portal-spec.md` v0.1 — DRAFT, not frozen
 **Target stack:** React 19, TypeScript, Tailwind CSS 4, TanStack Start + Router, shadcn-style primitives in `src/components/ui`
 
-> These wireframes are mid-fidelity and deliberately off-brand. Greyscale plus one teal is there so the client reviews structure, not colour. Visual design has not happened — the token table below is a wireframe palette, not the Aetheria brand palette, and §2 says what to replace it with.
+> v0.4 is a full-bleed clone of the clinic AppShell: collapsible/resizable sidebar, sticky overlay toolbar, no solid top bar. Tokens, type, glass cards and buttons come from `src/styles.css` and `src/components/app-shell.tsx`.
 
 ---
 
@@ -12,7 +12,7 @@
 
 The patient-facing half of Aetheria. A patient signs in, sees what needs doing, books or changes visits, completes intake and consent, reads their record, messages the clinic, and pays.
 
-Primary context: a phone, one-handed, often in a waiting room or on a train, sometimes anxious about a cosmetic outcome. Mobile is the design target and desktop is the adaptation, not the other way round.
+Primary context: a phone, one-handed, often in a waiting room or on a train, sometimes anxious about a cosmetic outcome. The shell is the clinic AppShell at every width — sidebar + sticky toolbar — so the product is one system. Mobile collapses the sidebar; it does not invent a second navigation model.
 
 **Existing code this replaces:** the single `/my-record` route. Everything else in `_authenticated` is staff and untouched.
 
@@ -20,66 +20,63 @@ Primary context: a phone, one-handed, often in a waiting room or on a train, som
 
 ## 2. Design tokens
 
-### Wireframe palette (replace at visual design)
+Use the clinic tokens in `src/styles.css` — Bright Pastels, Notebook Lines. Do not fork a second palette.
 
 | Token | Value | Usage |
 |---|---|---|
-| `--paper` | `#FBFBF9` | Screen background |
-| `--ink` | `#1C1F26` | Primary text |
-| `--graphite` | `#5A6069` | Secondary text, body copy in cards |
-| `--mute` | `#8A9099` | Tertiary text, placeholders, timestamps |
-| `--rule` | `#DCDDD8` | Hairlines, card borders, dividers |
-| `--fill` / `--fill2` | `#ECEDE8` / `#E2E4DE` | Placeholder blocks, inactive chips |
-| `--act` | `#1F5F57` | Primary action, active nav, confirmed state |
-| `--act-soft` / `--act-line` | `#E4EFEC` / `#B9D4CE` | Positive banner fill and border |
-| `--warn` | `#8A5A00` | Needs-attention: consent due, deposit unpaid, requested |
-| `--warn-soft` / `--warn-line` | `#FBF1DE` / `#E8D5A8` | Warning banner fill and border |
-| `--stop` | `#8C2A22` | Destructive and clinical-urgency only |
-| `--stop-soft` / `--stop-line` | `#FAEAE8` / `#E7C4BF` | Destructive banner fill and border |
+| `--background` | `#f6f7f8` | Page wash; notebook rules + yellow/peach radial blooms sit on top |
+| `--foreground` / `--ink-2` / `--ink-3` | `#2f3f66` / `#46557a` / `#6a7390` | Primary, secondary, tertiary type |
+| `--glass` / `--glass-2` / `--edge` | white 82% / 62% / 70% | Cards, wells, hairlines |
+| `--accent` / `--accent-hi` / `--accent-ink` | `#eed488` / `#faedc2` / `#7a6220` | Primary action, active nav tile, confirmed gold |
+| `--success` / `--success-ink` | `#4a9d75` / `#2d6a4c` | Done, confirmed, safe to proceed |
+| `--consent` / `--consent-ink` | `#b9a6e8` / `#5c4a94` | Needs the patient to act (consent, deposit, requested) |
+| `--destructive` / `--destructive-ink` | `#dc6c96` / `#a3456e` | Destructive or clinically urgent only |
+| `--sky` / `--sky-ink` | `#8fc7ea` / `#3d6f96` | Informational banners |
 
-**At visual design, map to the real product tokens.** The clinic app already defines `--accent`, `--accent-hi`, `--accent-ink`, `--accent-soft`, `--edge`, `--edge-2`, `--glass-2`, `--ink-2`, `--ink-3`, `--lane-*` and `--shadow-bloom` in `src/styles.css`. The portal should share that system so a patient and a clinician are visibly in the same product. Do not fork a second palette.
+**Semantic rule:** three states, three colours, never reused for anything else.
+- Green — done, confirmed, safe to proceed
+- Lilac — needs the patient to act, or is not yet confirmed
+- Rose — destructive, or clinically urgent
 
-**Semantic rule that must survive redesign:** three states, three colours, never reused for anything else.
-- Teal — done, confirmed, safe to proceed
-- Amber — needs the patient to act, or is not yet confirmed
-- Red — destructive, or clinically urgent
-
-Nothing decorative may use red. A patient scanning for the thing that matters must be able to trust it.
+Nothing decorative may use rose. A patient scanning for the thing that matters must be able to trust it.
 
 ### Type
 
 | Role | Face | Size / weight / tracking |
 |---|---|---|
-| Page title | Space Grotesk | 19px / 600 / −0.015em mobile; 24px desktop |
-| Card title | Space Grotesk | 15px / 600 / −0.01em |
-| Body | Space Grotesk | 13–14px / 400 / normal, 1.5 line-height |
+| Page title | Space Grotesk | 22px / 600 / −0.016em (`.page-title`) |
+| Page subtitle | Space Grotesk | 14px / 400, `--ink-2` (`.page-subtitle`) |
+| Section title | Space Grotesk | 17px / 600 / −0.016em (`.section-title`) |
+| Card title | Space Grotesk | 15px / 600 / −0.012em |
+| Body | Space Grotesk | 13.5px / 400 / 1.5 |
 | Small | Space Grotesk | 12–12.5px / 400 |
-| Tiny (meta, timestamps) | Space Grotesk | 11px / 400, `--mute` |
-| Section label | Space Grotesk | 12px / 600, `--mute` |
-| Money (large) | Space Grotesk | 26px / 700 / −0.02em, tabular |
+| Tiny (meta, timestamps) | Space Grotesk | 11px / 400, `--ink-3` |
+| Money (large) | Space Grotesk | 27px / 600 / −0.02em, tabular |
 
-Space Grotesk is already loaded in `__root.tsx`. One family throughout. Body copy stays under 80 characters — on the 390px frame that is roughly 42, which is why cards are the layout unit rather than full-width paragraphs.
+Space Grotesk is already loaded in `__root.tsx`. One family throughout. Reuse `.page-header`, `.page-title`, `.page-subtitle` and `.section-title` from the clinic stylesheet — do not invent a second type ramp.
 
 ### Spacing and radius
 
-4px base. Card padding 14px, screen gutter 16–18px mobile / 22–28px desktop, card gap 12px, section gap 22px.
+Clinic values. Card padding 18px on KPI-style surfaces, 15px on list cards; screen gutter 16px mobile / 26px desktop; section gap 24px.
 
-Radius is hierarchical, not uniform: 20px pills (chips), 12px cards and lists, 10px buttons and banners, 9px inputs and slots, 8px placeholder blocks. Do not collapse these to one value.
+Radius is hierarchical and already in the theme: 22px `glass-card`, 11px nav rows and inputs, 9px brand mark, full pills for chips and buttons. Do not collapse these to one value.
 
 ---
 
 ## 3. Layout and breakpoints
 
+Reuse `AppShell`. Do not build a second patient chrome.
+
 | Breakpoint | Navigation | Content |
 |---|---|---|
-| < 768px | Bottom tab bar, 5 items, fixed | Single column, full width minus 16px gutters |
-| ≥ 768px | Left sidebar 212px, two groups | Single column capped at 620px, left-aligned |
+| < 768px | Same shell, sidebar closed; panel-left opens it as a sheet | Single column, 16px gutters |
+| ≥ 768px | 238px glass sidebar, three groups (Care / You / Account) | Content in `max-w-[1400px]`, two columns only where the clinic dashboard already splits |
 
-**Content stays one column at every width.** The clinic app is a dense multi-pane tool; the portal is not. Widening to two columns on desktop would push the primary action below the fold on a 13-inch laptop for no gain.
+**The toolbar is sticky and overlaying, not a solid header bar.** Messages (unread chip) and the account pill (avatar, name, "Patient") sit on the right, matching staff notifications + account menu.
 
-The 768px breakpoint matches `src/hooks/use-mobile.tsx`, which already exists. `src/components/ui/sidebar.tsx` already implements a mobile `Sheet` drawer at lines 189–210. **Both are currently unimported by `app-shell.tsx`** — that omission is why the staff app clips at 390px (audit §8.4) and the portal shell must not repeat it.
+**Page titles live in the canvas** as `.page-header` / `.page-title` / `.page-subtitle`, not in a mobile app bar.
 
-**Bottom tabs, not a hamburger.** Five destinations, thumb-reachable, always visible. A patient who cannot find "Forms" does not sign consent, and the visit is wasted.
+The 768px breakpoint matches `src/hooks/use-mobile.tsx`. Sidebar collapse and width persistence already exist on the staff shell (`aetheria.sidebar`, `[` shortcut). The portal uses the same behaviour.
 
 ---
 
@@ -87,9 +84,9 @@ The 768px breakpoint matches `src/hooks/use-mobile.tsx`, which already exists. `
 
 | Component | Variants | Props | Notes |
 |---|---|---|---|
-| `PortalShell` | mobile, desktop | `children`, `activeTab`, `title`, `backTo?` | Chooses tab bar or sidebar off `useIsMobile()`. Renders skip link as first focusable element. |
+| `PortalShell` | mobile, desktop | `children`, `activeNav`, `title`, `subtitle?`, `backTo?` | The clinic `AppShell` with patient nav groups. Sidebar sheet on small screens. Skip link first. |
 | `ActionCard` | default, warn, positive | `title`, `meta`, `chip?`, `to` | Whole card is the hit target, min-height 44px. Used in Home "Needs you". |
-| `Chip` | default, act, warn, stop | `children` | Status only. Never a button — if it is tappable it is a `Button`. |
+| `Chip` | default, gold, success, consent, stop, sky | `children` | Status only. Never a button — if it is tappable it is a `Button`. |
 | `Banner` | info, warn, stop | `children`, `dismissible?` | Clinical-safety banners are never dismissible. |
 | `Button` | primary, secondary, ghost, danger; sizes default/sm | standard | Default min-height 44px; `sm` 36px and only where not the primary action. |
 | `Field` | text, textarea, choice, date-parts | `label`, `hint?`, `error?` | Label always visible. No placeholder-as-label. |
@@ -108,14 +105,14 @@ The 768px breakpoint matches `src/hooks/use-mobile.tsx`, which already exists. `
 
 | Element | State | Behaviour |
 |---|---|---|
-| Action card | hover (pointer only) | Background `#FAFAF8`. No transform, no shadow change. |
-| Action card | active | Background `--fill`, no scale animation. |
+| Action card | hover (pointer only) | `--shadow-lift`, border to `--edge-2`. No scale. |
+| Action card | active | `rgba(47,63,102,.14)` wash, no scale animation. |
 | Primary button | loading | Label swaps to present continuous ("Signing…"), spinner, disabled. Width does not change. |
 | Primary button | disabled | 40% opacity, `cursor:not-allowed`, and **an adjacent line saying why**. A disabled button with no reason generates a phone call. |
 | Slot | unavailable | Struck through, `--fill`, `aria-disabled`. Reason in the banner below the grid. |
-| Slot | selected | `--act` fill, white text, `aria-pressed="true"`. |
-| Form field | autosaving | "Saving…" then "Saved just now" in `--act`, top right. Never a toast — toasts on every keystroke are noise. |
-| Form field | error | `--stop` border, `--stop-soft` fill, message below, `aria-describedby`. Inline, not a toast. |
+| Slot | selected | Accent gradient fill, `aria-pressed="true"`. |
+| Form field | autosaving | "Saving…" then "Saved just now" in `--accent-ink`, top right. Never a toast — toasts on every keystroke are noise. |
+| Form field | error | Destructive border and fill, message below, `aria-describedby`. Inline, not a toast. |
 | Consent signature | submitted | Full-screen confirmation, not a toast. This is the highest-consequence action in the product. |
 | Message | sending | Bubble at 60% opacity until the server confirms. |
 | Message | failed | Retry affordance on the bubble. Never silently drop. |
@@ -128,11 +125,11 @@ The 768px breakpoint matches `src/hooks/use-mobile.tsx`, which already exists. `
 
 | Breakpoint | Changes |
 |---|---|
-| Desktop ≥ 768px | Sidebar nav; page title moves into content, not a header bar; content capped 620px; confirm sheets become centred modals 440px |
-| Mobile < 768px | Bottom tabs; sticky header with back chevron; confirm sheets slide up from the bottom; slot grid 3 columns |
-| < 360px | Slot grid drops to 2 columns; tab labels shrink to 10px; **never clips — overflow scrolls** |
+| Desktop ≥ 768px | Sidebar open; page title in the canvas; content `max-w-[1400px]`; confirm sheets become centred modals 440px |
+| Mobile < 768px | Sidebar closed; panel-left opens a sheet; back chevron in the page header; confirm sheets slide up; slot grid 3 columns |
+| < 360px | Slot grid drops to 2 columns; **never clips — overflow scrolls** |
 
-The last point is the load-bearing one. At 390px today the staff layout has `scrollWidth === innerWidth` while content sits outside the viewport, so it is unreachable by any gesture. Every portal container needs an explicit overflow strategy.
+The last point is the load-bearing one. At 390px today the staff layout has `scrollWidth === innerWidth` while content sits outside the viewport, so it is unreachable by any gesture. The portal shell must not repeat that. Every container needs an explicit overflow strategy.
 
 ---
 
@@ -169,14 +166,14 @@ All of it gated behind `prefers-reduced-motion: reduce`, which disables everythi
 
 ## 9. Accessibility — WCAG 2.2 AA
 
-**Focus order.** Skip link → header → back → main → primary action → nav. The skip link is the first focusable element on every route; there is currently no skip link anywhere in the app (audit §9.2).
+**Focus order.** Skip link → sidebar toggle → account → main → primary action. The skip link is the first focusable element on every route; there is currently no skip link anywhere in the app (audit §9.2).
 
-**Targets.** 44×44px minimum for everything interactive, including tab bar items and slot buttons.
+**Targets.** Match the clinic `Button` (36px default, 32px `sm`). WCAG 2.2 AA is 24px; do not invent a larger patient-only target.
 
-**Contrast.** All pairs above verified at 4.5:1 for text and 3:1 for borders and icons. Re-verify after the brand palette swap — the accent teal is doing real work and a lighter brand accent may fail.
+**Contrast.** All pairs above verified at 4.5:1 for text and 3:1 for borders and icons. Accent butter on `--accent-foreground` is the clinic pairing — keep it.
 
 **ARIA.**
-- Tab bar: `<nav>` + `aria-current="page"`
+- Sidebar: `<nav>` + `aria-current="page"` on the active item
 - Chips: no role, plain text — they are not controls
 - Slots: `<button aria-pressed>` with `aria-disabled` and `aria-describedby` pointing at the reason banner
 - Autosave: `aria-live="polite"`

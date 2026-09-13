@@ -1,0 +1,55 @@
+---
+description: Placement and markup for pill / segmented controls (period pickers, view switchers, filter tabs)
+alwaysApply: true
+---
+
+# Pill and segmented controls
+
+A pill control (period picker, day/week switcher, Current/Former tabs, a "Showing" select) always sits **to the right of the title and subtitle, on the same row**. Never put it above the content, and never let it fall onto its own line under the heading.
+
+## Page level
+
+Put it in `.page-header`, after the title block. `.page-header` aligns its last child to the title line, so a wrapping subtitle cannot push the pill down.
+
+```tsx
+<div className="page-header">
+  <div>
+    <h1 className="page-title">Performance</h1>
+    <p className="page-subtitle">One short line.</p>
+  </div>
+  <PeriodPicker value={period} onChange={setPeriod} />
+</div>
+```
+
+## Section level
+
+Heading and description stay in one block on the left; the control sits to its right, `items-end` so it lines up with the description and hugs the content below.
+
+```tsx
+<div className="mb-3 flex items-end justify-between gap-3">
+  <div className="min-w-0 flex-1">
+    <h2 className="section-title">Trends</h2>
+    <p className="mt-1 text-sm text-muted-foreground">By month over the selected period.</p>
+  </div>
+  <div className="shrink-0">{control}</div>
+</div>
+```
+
+`flex-1` on the text block is what keeps it on one line: it sets `flex-basis: 0`, so a long description cannot claim the whole row and push the control onto the next line, where it would sit on the left.
+
+Do not rely on `justify-between` with `flex-wrap` and no `flex-1` — that is exactly the layout that drops the control to the left.
+
+When the right side is a wide group (search plus several pills), put the group on the heading row and the description under it instead — see [at-risk-table.tsx](../../src/components/retention/at-risk-table.tsx).
+
+## Markup
+
+Reuse the existing pill; do not invent another size or active state:
+
+- Track: `flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi`
+- Segment: `h-7 cursor-pointer rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors`
+- Active: `bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]`
+- Idle: `text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]`
+
+Labels stay full words ("This month", not "Month"). If they do not fit, shorten the subtitle, never the labels.
+
+Exempt: a full-width content tab bar with no title beside it, such as the patient record tabs.

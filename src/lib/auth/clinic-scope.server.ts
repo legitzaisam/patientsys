@@ -44,6 +44,7 @@ export const CLINIC_SCOPED_TABLES = [
  */
 const UNSCOPED_TABLES = new Set([
   "auth_login_events",
+  "auth_email_otp",
   "auth_step_up",
   "clinics",
   "staff_conversation_reads",

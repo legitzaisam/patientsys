@@ -19,6 +19,16 @@ export function wrongSurfaceMessage(surface: AuthSurface) {
     : "This sign-in is for patients. Clinic staff use the staff sign-in.";
 }
 
+/** True when getMe failed because this account must not stay signed in here. */
+export function isSessionEndingIdentityError(message: string) {
+  return (
+    message.includes("clinic access has been removed") ||
+    message.includes("Patients use the patient portal") ||
+    message.includes("Clinic staff use the staff sign-in") ||
+    message.includes("No patient record is linked")
+  );
+}
+
 /**
  * After a session exists, decide whether this identity may stay on this surface.
  * Throws when the account does not belong on that surface.

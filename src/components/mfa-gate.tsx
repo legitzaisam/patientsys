@@ -1,79 +1,153 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import { EMAIL_OTP_TTL_MS } from "@/lib/auth/constants";
 import { DEMO_MODE } from "@/lib/demo/enabled";
+import { sendLoginEmailCode, verifyLoginEmailCode } from "@/lib/clinic.functions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
-/**
- * Blocks owner/manager until they have a verified TOTP factor and this session
- * is AAL2. Enrolment talks to Supabase Auth directly so it still works while
- * every other server function refuses (`getMe` excepted).
- */
-export function MfaGate({
-  enrolled,
-  onSatisfied,
+const otpSlotClass =
+  "h-11 w-10 rounded-[11px] border border-edge bg-glass-2 text-[15px] font-semibold shadow-inset-hi first:rounded-[11px] first:border-l last:rounded-[11px]";
+
+const MFA_CODE_AT_KEY = "aetheria:mfa-code-requested-at";
+const MFA_PREVIEW_KEY = "aetheria:mfa-preview-code";
+const MFA_SENT_TO_KEY = "aetheria:mfa-sent-to";
+
+function readRecentMfaSend(): { sentTo: string | null; previewCode: string | null } | null {
+  try {
+    const at = Number(sessionStorage.getItem(MFA_CODE_AT_KEY));
+    if (!Number.isFinite(at) || Date.now() - at >= EMAIL_OTP_TTL_MS) return null;
+    return {
+      sentTo: sessionStorage.getItem(MFA_SENT_TO_KEY),
+      previewCode: sessionStorage.getItem(MFA_PREVIEW_KEY),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function rememberMfaSend(sentTo: string | null, previewCode: string | null) {
+  try {
+    sessionStorage.setItem(MFA_CODE_AT_KEY, String(Date.now()));
+    if (sentTo) sessionStorage.setItem(MFA_SENT_TO_KEY, sentTo);
+    else sessionStorage.removeItem(MFA_SENT_TO_KEY);
+    if (previewCode) sessionStorage.setItem(MFA_PREVIEW_KEY, previewCode);
+    else sessionStorage.removeItem(MFA_PREVIEW_KEY);
+  } catch {
+    /* private mode / blocked storage */
+  }
+}
+
+function CodeBoxes({
+  id,
+  code,
+  onChange,
+  disabled,
 }: {
-  enrolled: boolean;
-  onSatisfied: () => void;
+  id: string;
+  code: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
 }) {
-  const [factorId, setFactorId] = useState<string | null>(null);
-  const [qr, setQr] = useState<string | null>(null);
-  const [secret, setSecret] = useState<string | null>(null);
+  return (
+    <InputOTP
+      id={id}
+      maxLength={6}
+      value={code}
+      onChange={onChange}
+      disabled={disabled}
+      containerClassName="justify-center gap-2.5"
+    >
+      <InputOTPGroup className="gap-1.5">
+        {[0, 1, 2].map((i) => (
+          <InputOTPSlot key={i} index={i} className={otpSlotClass} />
+        ))}
+      </InputOTPGroup>
+      <span aria-hidden className="h-1 w-1 rounded-full bg-ink-3" />
+      <InputOTPGroup className="gap-1.5">
+        {[3, 4, 5].map((i) => (
+          <InputOTPSlot key={i} index={i} className={otpSlotClass} />
+        ))}
+      </InputOTPGroup>
+    </InputOTP>
+  );
+}
+
+/** Blocks owner/manager until they confirm the 6-digit code emailed to them. */
+export function MfaGate({ email, onSatisfied }: { email?: string; onSatisfied: () => void }) {
+  const requestEmailCode = useServerFn(sendLoginEmailCode);
+  const checkEmailCode = useServerFn(verifyLoginEmailCode);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [previewCode, setPreviewCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const emailedForVisit = useRef(false);
 
   useEffect(() => {
-    if (DEMO_MODE) return;
+    if (DEMO_MODE || emailedForVisit.current) return;
+    const recent = readRecentMfaSend();
+    if (recent) {
+      emailedForVisit.current = true;
+      setSentTo(recent.sentTo || email || null);
+      setPreviewCode(recent.previewCode);
+      return;
+    }
+    emailedForVisit.current = true;
     let cancelled = false;
     void (async () => {
+      setSending(true);
+      setError(null);
       try {
-        if (enrolled) {
-          const { data, error: listError } = await supabase.auth.mfa.listFactors();
-          if (listError) throw listError;
-          const current = (data?.totp ?? []).find((f) => f.status === "verified");
-          if (!cancelled && current) setFactorId(current.id);
-          return;
+        const result = await requestEmailCode();
+        if (!cancelled) {
+          const destination = result.email || email || null;
+          const preview = result.previewCode ?? null;
+          setSentTo(destination);
+          setPreviewCode(preview);
+          rememberMfaSend(destination, preview);
         }
-        const { data, error: enrollError } = await supabase.auth.mfa.enroll({
-          factorType: "totp",
-          friendlyName: "Aetheria authenticator",
-        });
-        if (enrollError) throw enrollError;
-        if (cancelled) return;
-        setFactorId(data.id);
-        setQr(data.totp.qr_code);
-        setSecret(data.totp.secret);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not start two-factor setup");
+          setError(err instanceof Error ? err.message : "Could not send a login code");
         }
+      } finally {
+        if (!cancelled) setSending(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [enrolled]);
+  }, [email, requestEmailCode]);
 
-  async function verify() {
-    if (!factorId || code.length !== 6) return;
+  async function resendEmail() {
+    setSending(true);
+    setError(null);
+    try {
+      const result = await requestEmailCode();
+      const destination = result.email || email || null;
+      const preview = result.previewCode ?? null;
+      setSentTo(destination);
+      setPreviewCode(preview);
+      rememberMfaSend(destination, preview);
+      toast.success(preview ? "A new code is ready" : "A new code is on its way");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send a login code");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function verifyEmail() {
+    if (code.length !== 6) return;
     setBusy(true);
     setError(null);
     try {
-      const { error: challengeError, data: challenge } = await supabase.auth.mfa.challenge({
-        factorId,
-      });
-      if (challengeError) throw challengeError;
-      const { error: verifyError } = await supabase.auth.mfa.verify({
-        factorId,
-        challengeId: challenge.id,
-        code,
-      });
-      if (verifyError) throw verifyError;
-      await supabase.auth.refreshSession();
-      toast.success("Two-factor authentication is on");
+      await checkEmailCode({ data: { code } });
+      toast.success("Signed in");
       onSatisfied();
     } catch (err) {
       setError(err instanceof Error ? err.message : "That code was not recognised");
@@ -82,6 +156,8 @@ export function MfaGate({
       setBusy(false);
     }
   }
+
+  const destination = sentTo || email;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(20,28,48,0.45)] px-4 backdrop-blur-sm">
@@ -92,66 +168,40 @@ export function MfaGate({
         className="w-full max-w-md rounded-[22px] border border-edge-2 bg-card/95 p-5 shadow-popover"
       >
         <h2 id="mfa-title" className="text-balance section-title">
-          {enrolled ? "Confirm it is you" : "Set up two-factor authentication"}
+          Confirm it is you
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {enrolled
-            ? "Enter the six-digit code from your authenticator app to continue."
-            : "Owners and managers must use an authenticator app. Scan the code, then enter the six-digit number it shows."}
+          {sending
+            ? "Sending a 6-digit code…"
+            : previewCode
+              ? "Email sending is not configured yet, so here is your code for this sign-in."
+              : destination
+                ? `We sent a 6-digit code to ${destination}.`
+                : "We will email you a 6-digit code."}
         </p>
-
-        {!enrolled && qr && (
-          <div className="mt-4 flex flex-col items-center gap-3">
-            <img
-              src={qr}
-              alt="Authenticator QR code"
-              className="h-44 w-44 rounded-2xl border border-edge bg-white p-2"
-            />
-            {secret && (
-              <p className="break-all text-center text-2xs text-muted-foreground">
-                Or enter this key: {secret}
-              </p>
-            )}
-          </div>
+        {previewCode && (
+          <p className="mt-3 text-center font-mono text-2xl tracking-[0.28em] text-foreground">{previewCode}</p>
         )}
 
-        <div className="mt-4 space-y-2">
-          <Label htmlFor="mfa-code">Authenticator code</Label>
-          <InputOTP
-            id="mfa-code"
-            maxLength={6}
-            value={code}
-            onChange={setCode}
-            disabled={busy || !factorId}
-          >
-            <InputOTPGroup>
-              {Array.from({ length: 6 }, (_, i) => (
-                <InputOTPSlot key={i} index={i} />
-              ))}
-            </InputOTPGroup>
-          </InputOTP>
+        <div className="mt-5 flex flex-col items-center gap-2">
+          <Label htmlFor="mfa-code">Email code</Label>
+          <CodeBoxes id="mfa-code" code={code} onChange={setCode} disabled={busy} />
         </div>
 
-        {error && (
-          <p className="mt-3 text-sm text-destructive">
-            {error} If your clinic has not enabled authenticator apps yet, you can continue and set
-            this up later from your profile.
-          </p>
-        )}
+        {error && <p className="mt-3 text-center text-sm text-destructive">{error}</p>}
 
-        <div className="mt-4 flex justify-end gap-2">
-          {error && !factorId && (
-            <Button type="button" variant="outline" className="text-xs" onClick={onSatisfied}>
-              Continue for now
-            </Button>
-          )}
-          <Button
-            className="text-xs"
-            disabled={busy || code.length !== 6 || !factorId}
-            onClick={() => void verify()}
-          >
+        <div className="mt-5 flex flex-col gap-2">
+          <Button className="w-full" disabled={busy || code.length !== 6} onClick={() => void verifyEmail()}>
             {busy ? "Checking…" : "Continue"}
           </Button>
+          <button
+            type="button"
+            className="w-full text-2xs text-muted-foreground hover:text-foreground"
+            disabled={sending}
+            onClick={() => void resendEmail()}
+          >
+            {sending ? "Sending…" : "Resend code"}
+          </button>
         </div>
       </div>
     </div>

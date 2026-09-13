@@ -163,6 +163,7 @@ type Identity = {
   aal: "aal1" | "aal2";
   mfaEnrolled: boolean;
   mfaRequired: boolean;
+  emailMfaSatisfied: boolean;
 };
 
 function identity(): Identity {
@@ -194,6 +195,7 @@ function identity(): Identity {
     aal: "aal2",
     mfaEnrolled: false,
     mfaRequired: false,
+    emailMfaSatisfied: true,
     patient: linked
       ? { id: linked.id, first_name: linked.first_name, last_name: linked.last_name }
       : null,
@@ -1953,11 +1955,12 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
     const profile = profiles.find((p) => p.id === data.userId);
     clearExTeamArchiveDemo(data.userId);
     const revokedAt = new Date();
+    const email = db.staffEmails[data.userId] ?? "";
     exTeamMembers.push({
       id: newId("ex"),
       userId: data.userId,
-      email: db.staffEmails[data.userId] ?? "",
-      fullName: profile?.full_name ?? "",
+      email,
+      fullName: String(profile?.full_name ?? "").trim() || email,
       jobTitle: profile?.job_title ?? "",
       registrationBody: profile?.registration_body ?? "",
       registrationNumber: profile?.registration_number ?? "",
@@ -1979,11 +1982,14 @@ export const listExTeamMembers = createServerFn({ method: "GET" }).handler(async
   const now = Date.now();
   return exTeamMembers
     .filter((r) => !r.purgedAt && new Date(r.retainUntil).getTime() > now)
-    .map((r) => ({
+    .map((r) => {
+      const profile = profiles.find((p) => p.id === r.userId);
+      const email = r.email || db.staffEmails[r.userId] || "";
+      return {
       id: r.id,
       userId: r.userId,
-      email: r.email,
-      fullName: r.fullName,
+      email,
+      fullName: String(r.fullName ?? "").trim() || String(profile?.full_name ?? "").trim() || email,
       jobTitle: r.jobTitle,
       registrationBody: r.registrationBody,
       registrationNumber: r.registrationNumber,
@@ -1991,7 +1997,8 @@ export const listExTeamMembers = createServerFn({ method: "GET" }).handler(async
       revokedAt: r.revokedAt,
       retainUntil: r.retainUntil,
       daysRemaining: Math.max(0, Math.ceil((new Date(r.retainUntil).getTime() - now) / 86400000)),
-    }))
+    };
+    })
     .sort((a, b) => b.revokedAt.localeCompare(a.revokedAt));
 });
 
@@ -2005,10 +2012,14 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
     if (!archived) throw new Error("No former team record found (it may have expired)");
     const profile = profiles.find((p) => p.id === data.userId);
     if (profile) {
-      profile.full_name = archived.fullName;
-      profile.job_title = archived.jobTitle || null;
-      profile.registration_body = archived.registrationBody || null;
-      profile.registration_number = archived.registrationNumber || null;
+      if (String(archived.fullName ?? "").trim()) profile.full_name = archived.fullName;
+      if (String(archived.jobTitle ?? "").trim()) profile.job_title = archived.jobTitle || null;
+      if (String(archived.registrationBody ?? "").trim()) {
+        profile.registration_body = archived.registrationBody || null;
+      }
+      if (String(archived.registrationNumber ?? "").trim()) {
+        profile.registration_number = archived.registrationNumber || null;
+      }
       if (archived.commissionRate != null) profile.commission_rate = archived.commissionRate;
     }
     const existing = userRoles.find((r) => r.user_id === data.userId && r.role !== "patient");
@@ -2051,6 +2062,16 @@ export const acknowledgeWelcome = createServerFn({ method: "POST" }).handler(asy
 
 export const confirmStepUp = createServerFn({ method: "POST" })
   .validator((data: { password: string }) => parseInput(schemas.ConfirmStepUp, data))
+  .handler(async () => ({ ok: true as const }));
+
+export const sendLoginEmailCode = createServerFn({ method: "POST" }).handler(async () => {
+  const me = identity();
+  if (!me.isManager) throw new Error("Manager access required");
+  return { ok: true as const, email: me.email, sent: true as const };
+});
+
+export const verifyLoginEmailCode = createServerFn({ method: "POST" })
+  .validator((data: { code: string }) => parseInput(schemas.VerifyLoginEmailCode, data))
   .handler(async () => ({ ok: true as const }));
 
 export const listMySessions = createServerFn({ method: "GET" }).handler(async () => ({
@@ -2464,17 +2485,27 @@ export const getStaffProfile = createServerFn({ method: "GET" })
     );
     const presentCategories = [...new Set(docs.map((d) => d.category).filter(Boolean))];
     const profile = profiles.find((p) => p.id === data.userId) ?? null;
+    const archived = exTeamMembers.find(
+      (r) => r.userId === data.userId && !r.purgedAt && new Date(r.retainUntil).getTime() > Date.now(),
+    );
+    const email = archived?.email || db.staffEmails[data.userId] || "";
+    const fullName = String(archived?.fullName ?? "").trim() || String(profile?.full_name ?? "").trim() || email;
     const safeProfile = profile
       ? {
           ...profile,
+          full_name: fullName || profile.full_name,
           commission_rate: me.isManager ? profile.commission_rate : null,
         }
       : null;
 
     return {
       profile: safeProfile,
-      role: roleFor(data.userId),
-      email: db.staffEmails[data.userId] ?? "",
+      role: roleFor(data.userId) || archived?.role || "",
+      email,
+      revoked: Boolean(archived),
+      daysRemaining: archived
+        ? Math.max(0, Math.ceil((new Date(archived.retainUntil).getTime() - Date.now()) / 86400000))
+        : 0,
       documents: canViewDocuments ? docs : [],
       presentCategories,
       canViewDocuments,
@@ -2485,7 +2516,7 @@ export const getStaffProfile = createServerFn({ method: "GET" })
             "created_at",
           ).slice(0, 20)
         : [],
-      capabilities: me.isManager ? effectiveCapabilities(data.userId) : null,
+      capabilities: me.isManager && !archived ? effectiveCapabilities(data.userId) : null,
     };
   });
 

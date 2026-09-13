@@ -7,13 +7,14 @@ import { checkEmail } from "@/lib/email";
 import { toastEmailError } from "@/lib/email-toast";
 import { getMe } from "@/lib/clinic.functions";
 import { assertLoginAllowed, recordLoginEvent } from "@/lib/auth/login-throttle";
-import { destinationFor } from "@/lib/auth/surfaces";
+import { destinationFor, isSessionEndingIdentityError } from "@/lib/auth/surfaces";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { PasswordResetRequest } from "@/components/auth/password-reset-request";
+import { Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -42,6 +43,7 @@ function AuthPage() {
   const [mode, setMode] = useState<"signin" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -55,8 +57,11 @@ function AuthPage() {
       try {
         const identity = await fetchMe();
         navigate({ to: destinationFor("staff", identity), replace: true });
-      } catch {
-        await supabase.auth.signOut();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (isSessionEndingIdentityError(message)) {
+          await supabase.auth.signOut();
+        }
       }
     });
     return () => {
@@ -87,7 +92,7 @@ function AuthPage() {
       navigate({ to: destinationFor("staff", identity), replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong";
-      if (message.includes("patient portal") || message.includes("staff")) {
+      if (isSessionEndingIdentityError(message)) {
         await supabase.auth.signOut();
       }
       toast.error(message);
@@ -119,14 +124,14 @@ function AuthPage() {
       </div>
 
       <div className="flex items-center justify-center px-6 py-16">
-        <div className="glass-card w-full max-w-sm p-8">
+        <div className="glass-card w-full max-w-sm px-7 py-6">
           <h2 className="text-[19px] font-semibold tracking-[-0.016em] text-foreground">
             {mode === "forgot" ? "Reset your password" : "Staff sign in"}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {mode === "forgot"
               ? "We will email a link if this address has a clinic login."
-              : "Clinic staff only. Patients use the patient portal."}
+              : "Clinic staff only."}
           </p>
 
           {mode === "forgot" ? (
@@ -137,7 +142,7 @@ function AuthPage() {
             />
           ) : (
             <>
-              <form onSubmit={(e) => void submit(e)} className="mt-8 space-y-4">
+              <form onSubmit={(e) => void submit(e)} className="mt-5 space-y-3">
                 <div className="field-stack">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -151,15 +156,27 @@ function AuthPage() {
                 </div>
                 <div className="field-stack">
                   <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={8}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={8}
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-pressed={showPassword}
+                      onClick={() => setShowPassword((open) => !open)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={busy}>
                   {busy ? "Signing in…" : "Sign in"}
@@ -168,23 +185,22 @@ function AuthPage() {
 
               <button
                 type="button"
-                className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground"
+                className="mt-2 w-full text-2xs text-muted-foreground hover:text-foreground"
                 onClick={() => setMode("forgot")}
               >
                 Forgot password?
               </button>
 
-              <div className="my-6 flex items-center gap-3 text-xs tracking-[0.02em] text-muted-foreground">
+              <div className="my-4 flex items-center gap-3 text-xs tracking-[0.02em] text-muted-foreground">
                 <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
               </div>
 
               <OAuthButtons surface="staff" />
 
-              <p className="mt-6 text-center text-sm text-muted-foreground">
-                Need an account? Ask your clinic owner to invite you.
-              </p>
-
-              <Link to="/portal" className="mt-4 block text-center text-sm text-accent-ink hover:underline">
+              <Link
+                to="/portal"
+                className="mt-4 block text-center text-2xs text-accent-ink hover:underline"
+              >
                 Are you a patient? Use the patient portal
               </Link>
             </>

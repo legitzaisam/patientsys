@@ -61,7 +61,7 @@ function PerformancePage() {
         <div>
           <h1 className="page-title">Performance</h1>
           <p className="page-subtitle">
-            Earnings, retention and the clinic split. Practitioners only ever see their own share.
+            Earnings and collections for the clinic, then a breakdown by practitioner.
           </p>
         </div>
         <PeriodPicker value={period} onChange={setPeriod} />

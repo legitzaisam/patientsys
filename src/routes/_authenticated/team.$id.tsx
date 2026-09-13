@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
-import { getStaffProfile, updateStaffMember } from "@/lib/clinic.functions";
+import { getStaffProfile, restoreExTeamMember, updateStaffMember } from "@/lib/clinic.functions";
 import { UpdateStaffMember } from "@/lib/validation/schemas";
 import { numericText } from "@/lib/validation/primitives";
 import { can } from "@/lib/permissions";
@@ -86,6 +86,18 @@ function StaffProfilePage() {
       toast.success("Profile updated");
       queryClient.invalidateQueries({ queryKey: ["staff-profile", id] });
       queryClient.invalidateQueries({ queryKey: ["team"] });
+      queryClient.invalidateQueries({ queryKey: ["performance"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const restore = useMutation({
+    mutationFn: useServerFn(restoreExTeamMember),
+    onSuccess: () => {
+      toast.success("Access restored");
+      queryClient.invalidateQueries({ queryKey: ["staff-profile", id] });
+      queryClient.invalidateQueries({ queryKey: ["team"] });
+      queryClient.invalidateQueries({ queryKey: ["ex-team"] });
       queryClient.invalidateQueries({ queryKey: ["performance"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -172,13 +184,15 @@ function StaffProfilePage() {
     return <Navigate to="/profile" replace />;
   }
 
-  const canEdit = identity.isManager;
+  const revoked = Boolean(data?.revoked);
+  const canEdit = identity.isManager && !revoked;
   const canViewTeam = can(identity, "team.view");
-  const showChat = true;
-  const canViewDocuments = Boolean(data?.canViewDocuments);
-  const displayName = watched.fullName || data?.profile?.full_name || "Team member";
-  const asideTitle =
-    watched.jobTitle.trim() || (canEdit ? roleLabel(watched.role) : data?.email || "Team member");
+  const showChat = !revoked;
+  const canViewDocuments = Boolean(data?.canViewDocuments) && !revoked;
+  const displayName = watched.fullName || data?.profile?.full_name || data?.email || "Team member";
+  const asideTitle = revoked
+    ? "Access removed"
+    : watched.jobTitle.trim() || (canEdit ? roleLabel(watched.role) : data?.email || "Team member");
 
   return (
     <AppShell identity={identity}>
@@ -203,11 +217,35 @@ function StaffProfilePage() {
           <div>
             <h1 className="page-title">Staff profile</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {canEdit
-                ? `Review and update ${displayName}'s details.`
-                : `View ${displayName}'s details. Only managers can edit.`}
+              {revoked
+                ? `${displayName} was removed from the team. Their name stays on this profile so you know who they were.`
+                : canEdit
+                  ? `Review and update ${displayName}'s details.`
+                  : `View ${displayName}'s details. Only managers can edit.`}
             </p>
           </div>
+
+          {revoked ? (
+            <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <p className="text-sm text-muted-foreground">
+                Access removed
+                {data?.daysRemaining
+                  ? ` · ${data.daysRemaining} day${data.daysRemaining === 1 ? "" : "s"} left in the archive`
+                  : ""}
+                . Patient records they worked on stay on the system.
+              </p>
+              {identity.isOwner ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={restore.isPending}
+                  onClick={() => restore.mutate({ data: { userId: id } })}
+                >
+                  {restore.isPending ? "Restoring…" : "Restore access"}
+                </Button>
+              ) : null}
+            </Card>
+          ) : null}
 
           <Card className="overflow-hidden p-0">
             <div className="grid sm:grid-cols-[13.5rem_minmax(0,1fr)]">

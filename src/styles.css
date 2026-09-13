@@ -692,8 +692,13 @@
   @media (min-width: 640px) {
     .page-header {
       flex-direction: row;
-      align-items: flex-end;
+      align-items: flex-start;
       justify-content: space-between;
+    }
+
+    /* Sit on the title line, not the bottom of a wrapping subtitle. */
+    .page-header > :last-child:not(:only-child) {
+      align-self: flex-start;
     }
   }
 

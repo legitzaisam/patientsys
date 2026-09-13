@@ -116,6 +116,7 @@ async function readIdentity(context: Ctx) {
     aal,
     mfaEnrolled,
     mfaRequired,
+    emailMfaSatisfied: await readEmailMfaSatisfied(context),
     profile: profile ?? null,
     patient: patient ?? null,
     /** True when staff must set a new password before using the app (invite / reset). */
@@ -147,6 +148,16 @@ async function readMfaEnrolled(context: Ctx): Promise<boolean> {
     /* Auth admin APIs vary by version; fall through to the JWT. */
   }
   return context.claims["aal"] === "aal2";
+}
+
+async function readEmailMfaSatisfied(context: Ctx): Promise<boolean> {
+  const { data, error } = await context.supabase
+    .from("auth_email_otp")
+    .select("verified_until")
+    .eq("user_id", context.userId)
+    .maybeSingle();
+  if (error || !data?.verified_until) return false;
+  return new Date(String(data.verified_until)).getTime() > Date.now();
 }
 
 /**
@@ -278,11 +289,11 @@ export async function authorize(
     }
   }
 
-  // Once a manager has a verified factor, every handler except getMe needs AAL2.
-  // Enrolment itself is client-side against Auth. We do not refuse people who
-  // have not enrolled yet — that would lock the clinic out if TOTP is not
-  // enabled on the project. The client gate is what pushes them to enrol.
-  if (name !== "getMe" && identity.mfaRequired && identity.mfaEnrolled && identity.aal !== "aal2") {
+  // Owners/managers confirm with an emailed code. The send/verify handlers
+  // must stay reachable or the gate cannot complete.
+  const mfaExempt =
+    name === "getMe" || name === "sendLoginEmailCode" || name === "verifyLoginEmailCode";
+  if (!mfaExempt && identity.mfaRequired && !identity.emailMfaSatisfied) {
     throw new Error(MFA_REQUIRED_MESSAGE);
   }
   return identity;

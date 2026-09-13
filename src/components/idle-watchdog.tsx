@@ -4,9 +4,9 @@ import { DEMO_MODE } from "@/lib/demo/enabled";
 import { STAFF_IDLE_MS } from "@/lib/auth/constants";
 
 /**
- * Reception machines are shared. After STAFF_IDLE_MS with no pointer, key or
- * scroll activity, sign the staff session out. Patients are on personal devices
- * and are not timed out here.
+ * Reception machines are shared. After 1 hour 15 minutes with no pointer, key
+ * or scroll activity, sign the staff session out. Patients are on personal
+ * devices and are not timed out here.
  */
 export function IdleWatchdog({ enabled }: { enabled: boolean }) {
   const timer = useRef<number | null>(null);

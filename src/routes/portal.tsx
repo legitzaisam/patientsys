@@ -7,7 +7,7 @@ import { checkEmail } from "@/lib/email";
 import { toastEmailError } from "@/lib/email-toast";
 import { getMe } from "@/lib/clinic.functions";
 import { assertLoginAllowed, recordLoginEvent } from "@/lib/auth/login-throttle";
-import { destinationFor } from "@/lib/auth/surfaces";
+import { destinationFor, isSessionEndingIdentityError } from "@/lib/auth/surfaces";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,8 +80,11 @@ function PortalLogin() {
         const identity = await fetchMe();
         const home = destinationFor("patient", identity);
         navigate({ ...(home === "/dashboard" ? { to: "/dashboard" } : dest), replace: true } as never);
-      } catch {
-        await supabase.auth.signOut();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (isSessionEndingIdentityError(message)) {
+          await supabase.auth.signOut();
+        }
       }
     });
     return () => {
@@ -113,7 +116,7 @@ function PortalLogin() {
       navigate({ ...(home === "/dashboard" ? { to: "/dashboard" } : dest), replace: true } as never);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not sign you in";
-      if (message.includes("staff") || message.includes("patient record")) {
+      if (isSessionEndingIdentityError(message)) {
         await supabase.auth.signOut();
       }
       toast.error(message);

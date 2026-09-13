@@ -98,15 +98,14 @@ export function PerformanceTrends({ trend, practitioners }: Props) {
 
   return (
     <section className="mb-8">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <h2 className="section-title">Trends</h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             {trend?.monthly ? "By month" : "By day"} over the selected period — clinic total or a single practitioner.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs tracking-[0.02em] text-muted-foreground">Showing</span>
+        <div className="shrink-0">
           <Select value={who} onValueChange={setWho}>
             <SelectTrigger className="h-9 w-[240px]" aria-label="Choose whose trends to show">
               <SelectValue placeholder="Clinic total" />

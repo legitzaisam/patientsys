@@ -467,7 +467,10 @@ function PatientRecord() {
                     <Button
                       variant="outline"
                       onClick={() =>
-                        void stepUp.run(() => archive.mutateAsync({ data: { id, archived: false } }))
+                        void stepUp.run(
+                          () => archive.mutateAsync({ data: { id, archived: false } }),
+                          "restore",
+                        )
                       }
                       disabled={archive.isPending}
                     >
@@ -488,10 +491,12 @@ function PatientRecord() {
                           onSubmit={(e) => {
                             e.preventDefault();
                             const f = new FormData(e.currentTarget as HTMLFormElement);
-                            void stepUp.run(() =>
-                              archive.mutateAsync({
-                                data: { id, archived: true, reason: String(f.get("reason") ?? "") },
-                              }),
+                            void stepUp.run(
+                              () =>
+                                archive.mutateAsync({
+                                  data: { id, archived: true, reason: String(f.get("reason") ?? "") },
+                                }),
+                              "archive",
                             );
                           }}
                         >

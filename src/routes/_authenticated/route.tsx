@@ -10,6 +10,8 @@ import { MfaGate } from "@/components/mfa-gate";
 import { IdleWatchdog } from "@/components/idle-watchdog";
 import {
   hasClearedPasswordGate,
+  hasSatisfiedMfaGate,
+  markMfaGateSatisfied,
   shouldShowWelcomeAfterGate,
 } from "@/lib/password-gate-session";
 import { DEMO_MODE } from "@/lib/demo/enabled";
@@ -47,9 +49,11 @@ function AuthenticatedLayout() {
   useEffect(() => {
     if (DEMO_MODE) return;
     let active = true;
-    supabase.auth.getUser().then(({ data, error }) => {
+    // getSession reads local storage and survives Vite HMR; getUser() hits the
+    // network and was treating a reload blip as a missing account.
+    void supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
-      if (error || !data.user) {
+      if (!data.session) {
         // Use a hard navigation to avoid a client-side route transition that
         // triggers a hydration mismatch on /auth.
         window.location.replace("/auth");
@@ -58,12 +62,11 @@ function AuthenticatedLayout() {
       }
     });
 
-    // If the session disappears or expires while the app is open, stop
-    // rendering protected children (their server calls would 401) and send
-    // the user back to sign-in.
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Only a real sign-out should leave the app. A null session during
+    // INITIAL_SESSION or token refresh is transient and must not wipe the tab.
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (!active) return;
-      if (!session) {
+      if (event === "SIGNED_OUT") {
         setReady(false);
         window.location.replace("/auth");
       }
@@ -205,7 +208,8 @@ function IdentityGate() {
     !needsPassword &&
     Boolean(identity.mfaRequired) &&
     !mfaSatisfied &&
-    (!identity.mfaEnrolled || identity.aal !== "aal2");
+    !hasSatisfiedMfaGate(identity.userId) &&
+    !identity.emailMfaSatisfied;
   // Welcome only after the invite password gate — not after later password resets.
   const showWelcome =
     Boolean(identity.isStaff) &&
@@ -225,8 +229,9 @@ function IdentityGate() {
   if (needsMfa) {
     return (
       <MfaGate
-        enrolled={Boolean(identity.mfaEnrolled)}
+        email={identity.email}
         onSatisfied={() => {
+          markMfaGateSatisfied(identity.userId);
           setMfaSatisfied(true);
           void refetch();
         }}

@@ -45,14 +45,20 @@ export function PeriodPicker({
   onChange: (v: PeriodKey) => void;
 }) {
   return (
-    <div className="flex h-[34px] items-center rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
+    <div
+      role="tablist"
+      aria-label="Reporting period"
+      className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi"
+    >
       {OPTIONS.map((o) => (
         <button
           key={o.key}
           type="button"
+          role="tab"
+          aria-selected={value === o.key}
           onClick={() => onChange(o.key)}
           className={cn(
-            "h-7 cursor-pointer rounded-full px-3.5 text-xs transition-colors",
+            "h-7 cursor-pointer whitespace-nowrap rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors",
             value === o.key
               ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
               : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]",

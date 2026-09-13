@@ -1622,7 +1622,7 @@ function DayPlanner({
           <span aria-hidden>·</span>
           <span className="tabular-nums">{label(startMin)}–{label(endMin)}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
           <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
           <PractitionerFilter
             practitioners={practitioners}
@@ -2058,7 +2058,7 @@ function WeekView({
           <span aria-hidden>·</span>
           <span className="tabular-nums">{rows.length} booked</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
           <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
           <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
         </div>
@@ -2195,7 +2195,7 @@ function MonthView({
           <span aria-hidden>·</span>
           <span className="tabular-nums">{rows.length} booked</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
           <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
           <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
         </div>

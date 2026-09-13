@@ -42,3 +42,21 @@ export function clearWelcomeAfterGate(userId: string) {
     /* private mode / blocked storage */
   }
 }
+
+const mfaSatisfiedKey = (userId: string) => `aetheria:mfa-satisfied:${userId}`;
+
+export function hasSatisfiedMfaGate(userId: string) {
+  try {
+    return sessionStorage.getItem(mfaSatisfiedKey(userId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markMfaGateSatisfied(userId: string) {
+  try {
+    sessionStorage.setItem(mfaSatisfiedKey(userId), "1");
+  } catch {
+    /* private mode / blocked storage */
+  }
+}

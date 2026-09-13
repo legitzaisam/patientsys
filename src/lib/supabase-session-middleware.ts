@@ -8,6 +8,21 @@ import { DEMO_MODE } from "@/lib/demo/enabled";
  * atomic middleware step. Keeping refresh and attachment together prevents a
  * request from slipping through without a header during session transitions.
  */
+/** One in-flight refresh at a time — concurrent refreshSession() calls invalidate each other. */
+let refreshInFlight: Promise<Session | null> | null = null;
+
+function refreshSessionOnce(): Promise<Session | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = supabase.auth
+      .refreshSession()
+      .then(({ data }) => data.session ?? null)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
 /** Waits briefly for a session to appear (hydration / token refresh races). */
 async function waitForSession(timeoutMs = 3000): Promise<Session | null> {
   const { data } = await supabase.auth.getSession();
@@ -35,8 +50,8 @@ export const ensureSupabaseSession = createMiddleware({ type: "function" }).clie
     const expiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
 
     if (session && expiresAt - Date.now() < 60_000) {
-      const refreshed = await supabase.auth.refreshSession();
-      session = refreshed.data.session;
+      const refreshed = await refreshSessionOnce();
+      if (refreshed) session = refreshed;
     }
 
     const token = session?.access_token;

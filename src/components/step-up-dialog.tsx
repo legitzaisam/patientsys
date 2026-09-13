@@ -22,6 +22,15 @@ export function isStepUpRequired(error: unknown) {
   return message.includes(STEP_UP_MESSAGE);
 }
 
+export type StepUpKind = "permission" | "revoke" | "archive" | "restore";
+
+const STEP_UP_COPY: Record<StepUpKind, string> = {
+  permission: "This changes what that role can reach in the clinic. Re-enter your password to continue.",
+  revoke: "This removes their access to the clinic. Re-enter your password to continue.",
+  archive: "This hides the patient from the list and diary. The record is kept. Re-enter your password to continue.",
+  restore: "This puts the patient back on the list and diary. Re-enter your password to continue.",
+};
+
 /**
  * Prompts for the caller's password, records a 5-minute step-up on the server,
  * then retries the action. Used for archive, revoke, and permission changes.
@@ -30,6 +39,7 @@ export function useStepUp() {
   const queryClient = useQueryClient();
   const confirm = useServerFn(confirmStepUp);
   const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<StepUpKind>("permission");
   const [password, setPassword] = useState("");
   const pending = useRef<(() => Promise<unknown>) | null>(null);
 
@@ -49,12 +59,13 @@ export function useStepUp() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
+  async function run<T>(fn: () => Promise<T>, nextKind: StepUpKind): Promise<T | undefined> {
     try {
       return await fn();
     } catch (error) {
       if (!isStepUpRequired(error)) throw error;
       pending.current = fn;
+      setKind(nextKind);
       setOpen(true);
       return undefined;
     }
@@ -65,9 +76,7 @@ export function useStepUp() {
       <DialogContent className="rounded-[22px] border-edge-2 bg-card/95 sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Confirm it is you</DialogTitle>
-          <DialogDescription>
-            This change is destructive. Re-enter your password to continue.
-          </DialogDescription>
+          <DialogDescription>{STEP_UP_COPY[kind]}</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-3"

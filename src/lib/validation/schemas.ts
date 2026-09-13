@@ -240,6 +240,10 @@ export const ChangeOwnPassword = z.object({ password });
 
 export const ConfirmStepUp = z.object({ password });
 
+export const VerifyLoginEmailCode = z.object({
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
+
 export const SetPatientEmail = z.object({ patientId: id, email });
 
 export const SetStaffEmail = z.object({ userId: id, email });

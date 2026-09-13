@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Sparkles } from "lucide-react";
+import { Eye, EyeOff, Sparkles } from "lucide-react";
 import { acknowledgeWelcome, changeOwnPassword } from "@/lib/clinic.functions";
 import { handleOverlayKeyDown } from "@/lib/overlay-keys";
 import {
@@ -46,6 +46,8 @@ export function ForcePasswordChangeGate({
   const queryClient = useQueryClient();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const change = useMutation({
     mutationFn: useServerFn(changeOwnPassword),
@@ -92,25 +94,49 @@ export function ForcePasswordChangeGate({
         <div className="mt-4 space-y-3">
           <div className="field-stack">
             <Label htmlFor="force-pw">New password</Label>
-            <Input
-              id="force-pw"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-            />
+            <div className="relative">
+              <Input
+                id="force-pw"
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 8 characters"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((open) => !open)}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           <div className="field-stack">
             <Label htmlFor="force-pw-confirm">Confirm password</Label>
-            <Input
-              id="force-pw-confirm"
-              type="password"
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="Repeat password"
-            />
+            <div className="relative">
+              <Input
+                id="force-pw-confirm"
+                type={showConfirm ? "text" : "password"}
+                autoComplete="new-password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="Repeat password"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground"
+                aria-label={showConfirm ? "Hide password" : "Show password"}
+                aria-pressed={showConfirm}
+                onClick={() => setShowConfirm((open) => !open)}
+              >
+                {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             {mismatch && (
               <p className="text-xs text-destructive">Passwords do not match.</p>
             )}

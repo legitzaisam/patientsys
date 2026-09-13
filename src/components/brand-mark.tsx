@@ -14,7 +14,7 @@ export function BrandMark({
   return (
     <span
       className={cn(
-        "inline-grid place-items-center rounded-[9px] font-bold leading-none",
+        "inline-grid shrink-0 place-items-center rounded-[9px] font-bold leading-none",
         dim,
         variant === "gold"
           ? "bg-[linear-gradient(140deg,var(--accent-hi),var(--accent)_70%)] text-accent-foreground shadow-bloom"
@@ -46,7 +46,7 @@ export function BrandLockup({
       <BrandMark size={size} variant={variant} />
       <span
         className={cn(
-          "text-base font-semibold tracking-[-0.016em]",
+          "min-w-0 truncate text-base font-semibold tracking-[-0.016em]",
           light ? "text-accent-foreground" : "text-foreground",
         )}
       >

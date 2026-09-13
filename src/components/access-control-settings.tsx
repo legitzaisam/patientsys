@@ -87,8 +87,10 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
                       checked={grants?.[role.key]?.[key] ?? false}
                       disabled={!canEdit || save.isPending || !grants}
                       onCheckedChange={(enabled) =>
-                        void stepUp.run(() =>
-                          save.mutateAsync({ data: { role: role.key, permission: key, enabled } }),
+                        void stepUp.run(
+                          () =>
+                            save.mutateAsync({ data: { role: role.key, permission: key, enabled } }),
+                          "permission",
                         )
                       }
                     />

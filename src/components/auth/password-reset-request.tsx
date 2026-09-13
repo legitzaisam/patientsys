@@ -41,31 +41,30 @@ export function PasswordResetRequest({
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} className="mt-8 space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Enter the email on your account. We will send a reset link if it matches a login.
-      </p>
-      <div className="field-stack">
-        <Label htmlFor="reset-email">Email</Label>
-        <Input
-          id="reset-email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-      </div>
-      <Button type="submit" className="w-full" disabled={busy}>
-        {busy ? "Sending…" : "Send reset link"}
-      </Button>
+    <>
+      <form onSubmit={(e) => void submit(e)} className="mt-5 space-y-3">
+        <div className="field-stack">
+          <Label htmlFor="reset-email">Email</Label>
+          <Input
+            id="reset-email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <Button type="submit" className="w-full" disabled={busy}>
+          {busy ? "Sending…" : "Send reset link"}
+        </Button>
+      </form>
       <button
         type="button"
-        className="w-full text-sm text-muted-foreground hover:text-foreground"
+        className="mt-2 w-full text-2xs text-muted-foreground hover:text-foreground"
         onClick={onBack}
       >
         Back to sign in
       </button>
-    </form>
+    </>
   );
 }

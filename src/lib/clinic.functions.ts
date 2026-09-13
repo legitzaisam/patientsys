@@ -25,6 +25,8 @@ import {
 } from "@/lib/auth/guards.server";
 import { verifyPassword } from "@/lib/auth/password-verify.server";
 import { clinicScoped } from "@/lib/auth/clinic-scope.server";
+import { EMAIL_MFA_SESSION_MS, EMAIL_OTP_RESEND_MS, EMAIL_OTP_TTL_MS } from "@/lib/auth/constants";
+import { createHash, randomInt } from "node:crypto";
 
 export { PERMISSION_KEYS, type PermissionKey };
 
@@ -125,6 +127,22 @@ const EX_TEAM_RETAIN_DAYS = 90;
 
 function retainUntilFrom(revokedAt: Date = new Date()) {
   return new Date(revokedAt.getTime() + EX_TEAM_RETAIN_DAYS * 86400000).toISOString();
+}
+
+function daysRemainingUntil(retainUntil: string) {
+  return Math.max(0, Math.ceil((new Date(retainUntil).getTime() - Date.now()) / 86400000));
+}
+
+/** Name the manager will recognise: profile, then Auth metadata, then email. */
+function staffArchiveIdentity(opts: {
+  profileName?: string | null;
+  metaName?: string | null;
+  email?: string | null;
+}) {
+  const email = String(opts.email ?? "").trim();
+  const fullName =
+    String(opts.profileName ?? "").trim() || String(opts.metaName ?? "").trim() || email;
+  return { fullName, email };
 }
 
 /**
@@ -2263,12 +2281,18 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
     ]);
     if (!roleRow) throw new Error("That person is not on the team");
 
+    const identitySnap = staffArchiveIdentity({
+      profileName: profile?.full_name,
+      metaName: (authUser.data.user?.user_metadata as { full_name?: string } | undefined)?.full_name,
+      email: authUser.data.user?.email,
+    });
+
     await archiveExTeamMember({
       clinicId: clinicIdOf(context),
       userId: data.userId,
       role: roleRow.role as string,
-      email: authUser.data.user?.email ?? "",
-      fullName: profile?.full_name ?? "",
+      email: identitySnap.email,
+      fullName: identitySnap.fullName,
       jobTitle: profile?.job_title ?? null,
       registrationBody: profile?.registration_body ?? null,
       registrationNumber: profile?.registration_number ?? null,
@@ -2302,22 +2326,52 @@ export const listExTeamMembers = createServerFn({ method: "GET" })
       .gt("retain_until", now)
       .order("revoked_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row: any) => ({
-      id: row.id as string,
-      userId: row.user_id as string,
-      email: (row.email as string | null) ?? "",
-      fullName: (row.full_name as string) ?? "",
-      jobTitle: (row.job_title as string | null) ?? "",
-      registrationBody: (row.registration_body as string | null) ?? "",
-      registrationNumber: (row.registration_number as string | null) ?? "",
-      role: row.role as string,
-      revokedAt: row.revoked_at as string,
-      retainUntil: row.retain_until as string,
-      daysRemaining: Math.max(
-        0,
-        Math.ceil((new Date(row.retain_until as string).getTime() - Date.now()) / 86400000),
-      ),
-    }));
+    const rows = data ?? [];
+    const needsFill = rows.some(
+      (row: { full_name?: string | null; email?: string | null }) =>
+        !String(row.full_name ?? "").trim() || !String(row.email ?? "").trim(),
+    );
+    const supabaseAdmin = needsFill ? await adminClient(context) : null;
+    const userIds = rows.map((row: { user_id: string }) => row.user_id);
+    const [{ data: profiles }, users] = needsFill
+      ? await Promise.all([
+          supabaseAdmin!.from("profiles").select("id, full_name").in("id", userIds),
+          supabaseAdmin!.auth.admin.listUsers({ page: 1, perPage: 200 }),
+        ])
+      : [{ data: [] as { id: string; full_name: string | null }[] }, { data: { users: [] } }];
+    const profileName = new Map(
+      (profiles ?? []).map((p: { id: string; full_name: string | null }) => [p.id, p.full_name ?? ""]),
+    );
+    const authById = new Map(
+      (users.data?.users ?? []).map((u) => [
+        u.id,
+        {
+          email: u.email ?? "",
+          metaName: (u.user_metadata as { full_name?: string } | undefined)?.full_name ?? "",
+        },
+      ]),
+    );
+    return rows.map((row: any) => {
+      const auth = authById.get(row.user_id as string);
+      const filled = staffArchiveIdentity({
+        profileName: (row.full_name as string) || profileName.get(row.user_id as string),
+        metaName: auth?.metaName,
+        email: (row.email as string | null) || auth?.email,
+      });
+      return {
+        id: row.id as string,
+        userId: row.user_id as string,
+        email: filled.email,
+        fullName: filled.fullName,
+        jobTitle: (row.job_title as string | null) ?? "",
+        registrationBody: (row.registration_body as string | null) ?? "",
+        registrationNumber: (row.registration_number as string | null) ?? "",
+        role: row.role as string,
+        revokedAt: row.revoked_at as string,
+        retainUntil: row.retain_until as string,
+        daysRemaining: daysRemainingUntil(row.retain_until as string),
+      };
+    });
   });
 
 /** Restore a former team member within the 90-day window. */
@@ -2339,16 +2393,29 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
     if (!archived) throw new Error("No former team record found (it may have expired)");
 
     const role = archived.role as "owner" | "manager" | "practitioner" | "front_desk";
-    await supabaseAdmin
+    if (!role) throw new Error("That archive has no role to restore");
+    const { data: currentProfile } = await supabaseAdmin
       .from("profiles")
-      .update({
-        full_name: archived.full_name || "",
-        job_title: archived.job_title,
-        registration_body: archived.registration_body,
-        registration_number: archived.registration_number,
-        ...(archived.commission_rate != null ? { commission_rate: archived.commission_rate } : {}),
-      })
-      .eq("id", data.userId);
+      .select("full_name")
+      .eq("id", data.userId)
+      .maybeSingle();
+    const authUser = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    const filled = staffArchiveIdentity({
+      profileName: (archived.full_name as string) || currentProfile?.full_name,
+      metaName: (authUser.data.user?.user_metadata as { full_name?: string } | undefined)?.full_name,
+      email: (archived.email as string | null) || authUser.data.user?.email,
+    });
+    const patch: Record<string, unknown> = {};
+    if (filled.fullName) patch.full_name = filled.fullName;
+    if (String(archived.job_title ?? "").trim()) patch.job_title = archived.job_title;
+    if (String(archived.registration_body ?? "").trim()) patch.registration_body = archived.registration_body;
+    if (String(archived.registration_number ?? "").trim()) {
+      patch.registration_number = archived.registration_number;
+    }
+    if (archived.commission_rate != null) patch.commission_rate = archived.commission_rate;
+    if (Object.keys(patch).length) {
+      await supabaseAdmin.from("profiles").update(patch).eq("id", data.userId);
+    }
     await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: data.userId, role });
     await clearExTeamArchive(clinicIdOf(context), data.userId);
@@ -2446,6 +2513,132 @@ export const confirmStepUp = createServerFn({ method: "POST" })
     });
     if (error) throw new Error(error.message);
     await audit(ctx, "auth.step_up", "user_roles", ctx.userId, null);
+    return { ok: true as const };
+  });
+
+function hashLoginEmailCode(userId: string, code: string) {
+  return createHash("sha256").update(`${userId}:${code}`).digest("hex");
+}
+
+function loginCodeEmailBody(code: string) {
+  return `Your sign-in code is ${code}. It expires in 10 minutes.\n\nIf you did not try to sign in, ignore this email.`;
+}
+
+async function emailLoginCode(email: string, code: string): Promise<"emailed" | "preview"> {
+  const key = process.env["RESEND_API_KEY"]?.trim();
+  const from = process.env["COMMS_FROM_EMAIL"]?.trim() || "Aetheria <onboarding@resend.dev>";
+  if (key) {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject: "Your Aetheria sign-in code",
+        text: loginCodeEmailBody(code),
+      }),
+    });
+    const payload = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
+    if (!response.ok || !payload?.id) {
+      throw new Error(payload?.message || "Could not email a login code");
+    }
+    return "emailed";
+  }
+  // Built-in Supabase Auth mail is capped at 2 messages/hour on the free
+  // tier and cannot put a 6-digit code in the template. Until Resend is
+  // configured, hand the code back in development so sign-in still works.
+  if (process.env["NODE_ENV"] === "production") {
+    throw new Error("Add RESEND_API_KEY to send sign-in codes by email.");
+  }
+  console.info(`[auth] login code for ${email}: ${code}`);
+  return "preview";
+}
+
+export const sendLoginEmailCode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "sendLoginEmailCode");
+    if (!identity.email) throw new Error("Your account has no email to send a code to");
+    const existing = await ctx.supabase
+      .from("auth_email_otp")
+      .select("created_at")
+      .eq("user_id", ctx.userId)
+      .maybeSingle();
+    if (existing.error) throw new Error(existing.error.message);
+    if (
+      existing.data?.created_at &&
+      Date.now() - new Date(String(existing.data.created_at)).getTime() < EMAIL_OTP_RESEND_MS
+    ) {
+      throw new Error("Wait a moment before requesting another code");
+    }
+    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    const delivery = await emailLoginCode(identity.email, code);
+    const { error } = await ctx.supabase.from("auth_email_otp").upsert({
+      user_id: ctx.userId,
+      code_hash: hashLoginEmailCode(ctx.userId, code),
+      channel: "hashed",
+      expires_at: new Date(Date.now() + EMAIL_OTP_TTL_MS).toISOString(),
+      verified_until: null,
+      attempts: 0,
+      created_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    return {
+      ok: true as const,
+      email: identity.email,
+      sent: true as const,
+      previewCode: delivery === "preview" ? code : undefined,
+    };
+  });
+
+export const verifyLoginEmailCode = createServerFn({ method: "POST" })
+  .validator((data: { code: string }) => parseInput(schemas.VerifyLoginEmailCode, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "verifyLoginEmailCode");
+    const { data: row, error } = await ctx.supabase
+      .from("auth_email_otp")
+      .select("code_hash, channel, expires_at, attempts")
+      .eq("user_id", ctx.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!row || new Date(String(row.expires_at)).getTime() < Date.now()) {
+      throw new Error("That code has expired. Request a new one.");
+    }
+    if ((row.attempts ?? 0) >= 5) {
+      throw new Error("Too many attempts. Request a new code.");
+    }
+    await ctx.supabase
+      .from("auth_email_otp")
+      .update({ attempts: (row.attempts ?? 0) + 1 })
+      .eq("user_id", ctx.userId);
+
+    if (row.channel === "supabase_otp") {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: matched, error: matchError } = await supabaseAdmin.rpc("match_reauthentication_otp", {
+        p_user_id: ctx.userId,
+        p_code: data.code,
+      });
+      if (matchError) throw new Error(matchError.message);
+      if (!matched) throw new Error("That code was not recognised");
+    } else if (row.code_hash !== hashLoginEmailCode(ctx.userId, data.code)) {
+      throw new Error("That code was not recognised");
+    }
+
+    const { error: stampError } = await ctx.supabase.from("auth_email_otp").upsert({
+      user_id: ctx.userId,
+      code_hash: null,
+      channel: row.channel,
+      expires_at: row.expires_at,
+      verified_until: new Date(Date.now() + EMAIL_MFA_SESSION_MS).toISOString(),
+      attempts: 0,
+    });
+    if (stampError) throw new Error(stampError.message);
     return { ok: true as const };
   });
 
@@ -3036,40 +3229,70 @@ export const getStaffProfile = createServerFn({ method: "GET" })
     const canViewCommission = identity.isManager;
 
     const supabaseAdmin = await adminClient(context);
-    const [{ data: profile }, { data: roles }, { data: docs }, users, { data: requests }] = await Promise.all([
-      supabaseAdmin.from("profiles").select("*").eq("id", data.userId).maybeSingle(),
-      supabaseAdmin.from("user_roles").select("role").eq("user_id", data.userId),
-      supabaseAdmin
-        .from("staff_documents")
-        .select(canViewDocuments ? "*" : "category")
-        .eq("user_id", data.userId)
-        .order("created_at", { ascending: false }),
-      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
-      identity.isOwner
-        ? supabaseAdmin
-            .from("profile_change_requests")
-            .select("*")
-            .eq("user_id", data.userId)
-            .order("created_at", { ascending: false })
-            .limit(20)
-        : Promise.resolve({ data: [] as never[] }),
-    ]);
-    const email = users.data?.users?.find((u) => u.id === data.userId)?.email ?? "";
-    const role = (roles ?? []).find((r) => r.role !== "patient")?.role ?? "";
+    const now = new Date().toISOString();
+    const [{ data: profile }, { data: roles }, { data: docs }, users, { data: requests }, { data: archived }] =
+      await Promise.all([
+        supabaseAdmin.from("profiles").select("*").eq("id", data.userId).maybeSingle(),
+        supabaseAdmin.from("user_roles").select("role").eq("user_id", data.userId),
+        supabaseAdmin
+          .from("staff_documents")
+          .select(canViewDocuments ? "*" : "category")
+          .eq("user_id", data.userId)
+          .order("created_at", { ascending: false }),
+        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
+        identity.isOwner
+          ? supabaseAdmin
+              .from("profile_change_requests")
+              .select("*")
+              .eq("user_id", data.userId)
+              .order("created_at", { ascending: false })
+              .limit(20)
+          : Promise.resolve({ data: [] as never[] }),
+        supabaseAdmin
+          .from("ex_team_members")
+          .select("full_name, email, role, retain_until, revoked_at")
+          .eq("user_id", data.userId)
+          .is("purged_at", null)
+          .gt("retain_until", now)
+          .maybeSingle(),
+      ]);
+    const authUser = users.data?.users?.find((u) => u.id === data.userId);
+    const filled = staffArchiveIdentity({
+      profileName: (archived?.full_name as string | undefined) || profile?.full_name,
+      metaName: (authUser?.user_metadata as { full_name?: string } | undefined)?.full_name,
+      email: (archived?.email as string | null | undefined) || authUser?.email,
+    });
+    const role =
+      (roles ?? []).find((r) => r.role !== "patient")?.role ??
+      (archived?.role as string | undefined) ??
+      "";
     const presentCategories = [
       ...new Set((docs ?? []).map((d: { category: string }) => d.category).filter(Boolean)),
     ];
     const safeProfile = profile
       ? {
           ...profile,
+          full_name: filled.fullName || profile.full_name,
           commission_rate: canViewCommission ? profile.commission_rate : null,
         }
-      : null;
+      : filled.fullName
+        ? {
+            id: data.userId,
+            full_name: filled.fullName,
+            job_title: null,
+            registration_body: null,
+            registration_number: null,
+            avatar_url: null,
+            commission_rate: null,
+          }
+        : null;
 
     return {
       profile: safeProfile,
       role,
-      email,
+      email: filled.email,
+      revoked: Boolean(archived),
+      daysRemaining: archived?.retain_until ? daysRemainingUntil(String(archived.retain_until)) : 0,
       documents: canViewDocuments ? (docs ?? []) : [],
       presentCategories,
       canViewDocuments,
@@ -3077,7 +3300,7 @@ export const getStaffProfile = createServerFn({ method: "GET" })
       requests: identity.isOwner ? (requests ?? []) : [],
       // "What can this person actually do" — only the management tier needs it,
       // and only they can act on the answer.
-      capabilities: identity.isManager ? await effectiveCapabilities(ctx, data.userId) : null,
+      capabilities: identity.isManager && !archived ? await effectiveCapabilities(ctx, data.userId) : null,
     };
   });
 

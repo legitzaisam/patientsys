@@ -43,6 +43,8 @@ export const POLICY = {
   changeOwnPassword: { kind: "self" },
   acknowledgeWelcome: { kind: "self" },
   confirmStepUp: { kind: "self" },
+  sendLoginEmailCode: { kind: "manager" },
+  verifyLoginEmailCode: { kind: "manager" },
   listMySessions: { kind: "self" },
   revokeOtherSessions: { kind: "self" },
 
