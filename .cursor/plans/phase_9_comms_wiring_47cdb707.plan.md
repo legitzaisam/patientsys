@@ -43,19 +43,19 @@ todos:
     status: completed
   - id: 9d-reminders
     content: Add clinic reminder_offsets setting, enqueue reminder rows at booking with future scheduled_for, and cancelPendingCommunications on reschedule/cancel
-    status: in_progress
+    status: completed
   - id: 9d-unsubscribe
     content: Build HMAC unsubscribe tokens, the public /u/$token route, the email footer, and COMMS_UNSUBSCRIBE_SECRET in .env.example
-    status: pending
+    status: completed
   - id: 9d-trail
     content: Extend CommsLogCard with purpose/template/related columns, log click-to-dial attempts, add message_templates.key and seed it
-    status: pending
+    status: completed
   - id: 9d-tests
     content: Add unit tests for HMAC round-trip, offset computation and cancellation; add e2e/reminders.spec.ts and e2e/unsubscribe.spec.ts
-    status: pending
+    status: completed
   - id: docs
     content: Write docs/plans/phase-09-comms-flows.md, append WORKLOG entries for Phases 6, 7 and 9, mark Phase 9 complete in the master plan
-    status: pending
+    status: in_progress
 isProject: false
 ---
 
