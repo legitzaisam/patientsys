@@ -475,3 +475,145 @@ Phase 6 leftovers (SMTP, apply `20260910000000`) and Phase 7 apply leftover (`20
 **Sandbox `sent` means "would have sent".** Demo cannot show a bounce. Staff may treat the badge as delivery.
 
 Phase 9's precondition holds: enqueue exists, a drain exists, and demo/sandbox never leaves the building.
+
+---
+
+## Phase 6 — Identity and authentication (recovered entry)
+
+**Date:** 13 September 2026 (entry written 15 September — the phase shipped without one)
+**Plan:** [plans/phase-06-identity-authentication.md](plans/phase-06-identity-authentication.md)
+**Commits:** landed inside `fcc46e0` with Phases 7–8, then `9055aeb`, `9268b73`, `32eff48`, `3b05aa7`
+
+### Changed
+
+Self-service password reset (`/auth/reset`, `PasswordResetRequest` on both sign-in surfaces).
+Native Supabase OAuth for Google and Microsoft (`src/lib/auth/oauth.ts` replaces
+`@lovable.dev/cloud-auth-js` in the auth path; the package remains only in the unused Lovable
+integration shim). Login throttle and lockout on both surfaces (`20260910000000`, RPCs callable by
+anon, fail-open on a missing function so a half-applied migration cannot lock the clinic out).
+Email-code MFA for owner/manager (`20260913000000`, gate stands down when no code can be
+delivered, on-screen code only behind `AUTH_DEV_SHOW_OTP=1`), step-up re-auth for destructive
+actions (`auth_step_up`), a 15-minute staff idle watchdog, and surface separation so patient
+accounts cannot land on staff pages.
+
+### Verified
+
+Four follow-up fixes hardened the MFA gate after manual sweeps; the Phase 9 regression suite now
+covers sign-in-free demo access, and live auth flows remain manual-only (see residual risk).
+
+### Deferred / residual risk
+
+Supabase Auth SMTP, TOTP (email codes stand in), SAML SSO, session listing beyond the current
+session, and closing public signup remain open — the master plan keeps Phase 6 in progress. No
+automated tests cover live auth: demo mode bypasses it by design.
+
+---
+
+## Phase 7 — Comms schema and outbox (recovered entry)
+
+**Date:** 11 September 2026 (entry written 15 September — the phase shipped without one)
+**Plan:** [plans/phase-07-comms-outbox.md](plans/phase-07-comms-outbox.md)
+**Commits:** landed inside `fcc46e0` with Phases 6 and 8
+
+### Changed
+
+Migration `20260911000000`: `communications` outbox (status/purpose/channel enums, drain and
+patient indexes, staff-read RLS, clinic isolation) and PECR preference columns on `patients`
+(marketing opt-in, reminders opt-out, `unsubscribed_at`). `enqueueCommunication()` in
+`src/lib/comms/enqueue.server.ts` is the single insert path and enforces `assertCanSend`
+(transactional always goes when an address exists; reminders respect the opt-out; marketing
+needs opt-in per channel). `recall_task_status` value `sent` renamed to `open` — "sent" had meant
+"task created". `retention_outreach.communication_id` added for Phase 9. Preference and outbox
+cards on the patient record and `/my-record`.
+
+### Verified
+
+Migration applied to the remote (ledger). The Phase 9 unit suite now pins the `assertCanSend`
+truth table and the Phase 9 E2E suite exercises the preference toggles and the queue end to end.
+
+---
+
+## Phase 9 — Wire comms to real flows, behind a real regression suite
+
+**Date:** 15 September 2026
+**Plan:** [plans/phase-09-comms-flows.md](plans/phase-09-comms-flows.md)
+**Commits:** `15fa93b`, `6de007c`, `f8eabfb`, `11fe955`
+
+### Why this went next
+
+The pipe existed and nothing called it: zero clinical flows used `enqueueCommunication`, recall
+still handed off to `mailto:`, invites returned plaintext passwords, and the repo had no test
+runner at all. The suite came first so Phases 0–8 behaviour was locked before any of it moved.
+
+### Changed
+
+**Regression suite (15fa93b).** Vitest 5 units (77 tests: PECR truth table, dispatch
+claim/backoff, webhook signatures, payment-link builders, `can()`, `resolveScope`, templates,
+reminder times, unsubscribe HMAC) and a Playwright suite on demo mode (58 tests: every route for
+all four personas, RBAC redirects, booking, documents, comms drain, recall, portal signing, team,
+plus the new public routes). `npm run verify` gates the three static checks and both tiers;
+`.github/workflows/verify.yml` runs it in CI with lint non-blocking until Phase 11. The demo
+fixture clock accepts `DEMO_NOW`, tests run serially against a fresh server every run.
+
+**Consent magic links (6de007c).** `sendDocument`/`resendDocument` email a public signing link
+built from `documents.access_token` (now uniquely indexed, 14-day expiry). `/d/$token` renders
+the document with no session — unknown, malformed and expired tokens are one uniform not-found;
+already-signed is the single distinct outcome; signing writes name, IP and user agent and is
+single-use via the Phase 5 immutability trigger. `document_access_events` records every view,
+signature and rejection, and throttles by IP. Resend also writes the portal message its toast had
+always claimed.
+
+**Transactional flows (f8eabfb).** Booking confirmations, time-change notices and reschedules go
+through the outbox (portal copy kept; notices only when the time actually moved). Payment chips
+call `sendPaymentRequest` — the message is built server-side, refusals surface as the toast.
+Consent chips remind with the real signing link when the booking carries a consent form. Recall
+email/text is a real **marketing** send (PECR opt-ins enforced; the mailto: side door is gone)
+stamping `retention_outreach.communication_id`. Staff invites use `inviteUserByEmail` with a
+recovery-link fallback — no plaintext temporary passwords anywhere. `renderTemplate`/`channelsFor`
+are shared by client previews and the server.
+
+**Reminders, unsubscribe, trail (11fe955).** Bookings queue reminders at the clinic's
+`reminder_offsets` (Settings-editable, default a week and a day ahead) with future
+`scheduled_for`; the existing drain sends them — no new scheduler. Reschedule/cancel marks
+pending reminders `cancelled` (kept in the trail) and requeues. Non-transactional email carries a
+one-click unsubscribe footer (HMAC tokens, public `/u/$token`, POST-only apply). Click-to-dial
+logs a `call` row; the outbox card names what each row was about.
+
+### Verified
+
+- `npm run verify` green: `check:policy` 101 handlers, `check:validators` 71, `check:tenancy`
+  32 tables, 77 unit tests, 58 Playwright tests.
+- `npx tsc --noEmit` 59 (below the 64 at the phase's base commit).
+- Migrations `20260914000000` and `20260915000000` applied to the remote (ledger 57 applied).
+- Manual demo sweep: consent issue → queued transactional row → Process queue → sent/sandbox;
+  `/d/$token` sign then replay refused; garbage and expired tokens indistinguishable; recall email
+  to an opted-out patient refused with the PECR reason and no row queued; unauthenticated drain
+  POST still 401.
+
+### Deviations from the plan
+
+- **The pinned test clock was dropped.** DEMO_NOW pinned the fixture clock, but server handlers
+  use the real clock (reminder scheduling, drain due-ness), so pinning desynchronised them — the
+  suite computes dates instead. The `__DEMO_NOW__` define remains for screenshot work.
+- **`verify` does not gate lint.** ~2,900 pre-existing lint findings across the repo (prettier
+  drift, `no-explicit-any`) predate this phase; lint runs non-blocking in CI until Phase 11.
+- **Staff invites use `inviteUserByEmail`**, not `generateLink({ type: "invite" })`: Supabase
+  sends the mail itself, and `generateLink` is kept for the existing-account recovery fallback.
+- **`check:tenancy` allowlist bumped to 4** — the Phase 6 MFA verifier's auth-only
+  `supabaseAdmin` RPC import was never recorded.
+- **Server-side rendering of staff `message_templates` by key** was not wired: staff sends submit
+  the body they previewed, which is what the log should show. The `key` column and seeds exist.
+
+### Deferred
+
+pg_cron scheduling, SPF/DKIM/DMARC and provider dashboard steps (Phase 8's list, still open).
+Portal invitations (Phase 10). Live-Supabase auth E2E and repo lint (Phase 11).
+
+### Residual risk
+
+**No live send has still ever been proven** — sandbox has covered every test. The first real
+Resend/Twilio dispatch happens when the dashboard steps land, and bounce handling is untested
+against real providers. Reminder rows queue at booking time: a clinic that later changes
+`reminder_offsets` does not reflow already-queued reminders. The public routes are throttled and
+tokens are unguessable, but they are the first unauthenticated surfaces in the app — the
+`document_access_events` trail is the audit line if that assumption fails.

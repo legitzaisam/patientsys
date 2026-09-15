@@ -34,5 +34,6 @@ Start from [_TEMPLATE.md](_TEMPLATE.md).
 | 4 | [Runtime validation with zod](phase-04-validation.md) | Complete |
 | 5 | [Database hardening](phase-05-database-hardening.md) | Complete |
 | 6 | [Identity and authentication](phase-06-identity-authentication.md) | In progress |
-| 7 | [Comms schema and outbox](phase-07-comms-outbox.md) | In progress |
+| 7 | [Comms schema and outbox](phase-07-comms-outbox.md) | Complete |
 | 8 | [Provider adapters](phase-08-provider-adapters.md) | Complete |
+| 9 | [Wire comms to real flows](phase-09-comms-flows.md) | Complete |
