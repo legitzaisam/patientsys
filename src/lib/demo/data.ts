@@ -1,3 +1,4 @@
+import { DEMO_NOW } from "@/lib/demo/enabled";
 import { defaultDurationMinutes } from "@/lib/treatment-duration";
 
 /**
@@ -68,7 +69,7 @@ function id(prefix: string) {
   return `${prefix}0000-0000-4000-8000-${n}`.slice(0, 36);
 }
 
-const NOW = new Date();
+const NOW = DEMO_NOW ? new Date(DEMO_NOW) : new Date();
 const TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
 const DAY = 86400000;
 

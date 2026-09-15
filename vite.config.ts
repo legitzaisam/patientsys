@@ -41,6 +41,9 @@ export default defineConfig({
   vite: {
     define: {
       __DEMO_MODE__: JSON.stringify(DEMO),
+      // Pin the demo fixture clock (e.g. DEMO_NOW=2026-06-01T09:00:00Z) so
+      // Playwright assertions on diary dates are stable across days.
+      __DEMO_NOW__: JSON.stringify(process.env["DEMO_NOW"] ?? null),
     },
   },
 });

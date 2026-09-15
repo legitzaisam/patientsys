@@ -36,10 +36,11 @@ for (const [i, line] of source.split("\n").entries()) {
 
 /**
  * 2. The raw admin client is only allowed where it cannot reach a table:
- *    inside adminClient() itself, and in the two Auth-only ban helpers.
+ *    inside adminClient() itself, the two Auth-only ban helpers, and the
+ *    Phase 6 MFA verifier (match_reauthentication_otp RPC, no .from()).
  */
 const rawAdmin = [...source.matchAll(/const \{ supabaseAdmin \} = await import/g)];
-const ALLOWED_RAW_ADMIN = 3;
+const ALLOWED_RAW_ADMIN = 4;
 if (rawAdmin.length > ALLOWED_RAW_ADMIN) {
   errors.push(
     `${FUNCTIONS}  ${rawAdmin.length} raw supabaseAdmin imports, expected ${ALLOWED_RAW_ADMIN}. ` +

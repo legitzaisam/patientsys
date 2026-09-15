@@ -20,6 +20,10 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Playwright
+test-results/
+playwright-report/
+
 # Local secrets - see .env.example for the keys this project expects
 .env
 .env.*
