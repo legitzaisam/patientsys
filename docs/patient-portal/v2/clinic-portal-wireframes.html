@@ -1,0 +1,1797 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V2 Clinic Portal — Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================== deck harness ============================== */
+:root{
+  --deck-bg:#20242b; --deck-panel:#2a2f38; --deck-ink:#e8eaef; --deck-mut:#9aa1ad;
+  --deck-edge:rgba(255,255,255,.09); --deck-accent:#7fc4bd;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font:14px/1.45 Inter,system-ui,sans-serif;background:var(--deck-bg);color:var(--deck-ink);overflow:hidden}
+#stagewrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:26px 26px 66px}
+#stage{position:relative}
+.frame{position:relative;background:#fff;border-radius:12px;overflow:hidden;
+  box-shadow:0 30px 80px rgba(0,0,0,.5),0 4px 16px rgba(0,0,0,.35);transform-origin:top left}
+/* browser chrome — macOS traffic lights + centred URL pill */
+.bc-mac{height:56px;background:#f6f6f7;border-bottom:1px solid #e3e3e6;display:flex;align-items:center;padding:0 22px;gap:18px}
+.bc-mac .lights{display:flex;gap:9px}
+.bc-mac .lights i{width:14px;height:14px;border-radius:50%}
+.bc-mac .lights i:nth-child(1){background:#f2605a}.bc-mac .lights i:nth-child(2){background:#f6bd3c}.bc-mac .lights i:nth-child(3){background:#61c355}
+.bc-mac .navarr{display:flex;gap:12px;color:#a6a6ab;font-size:17px}
+.bc-mac .urlpill{flex:1;max-width:640px;margin:0 auto;height:32px;background:#e9e9eb;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;gap:7px;color:#5f6066;font-size:14px}
+.bc-mac .urlpill .lock{font-size:12px;color:#8b8b90}
+.bc-mac .bicons{display:flex;gap:15px;color:#a6a6ab;font-size:16px}
+/* browser chrome — full tab bar */
+.bc-tab{background:#dfe1e5}
+.bc-tab .tabrow{height:44px;display:flex;align-items:flex-end;padding:0 12px;gap:8px}
+.bc-tab .tab{height:36px;background:#fff;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:9px;
+  padding:0 14px;font-size:13.5px;color:#3c4043;min-width:270px}
+.bc-tab .tab .fav{width:16px;height:16px;border-radius:50%;background:var(--tab-fav,#0b5355);flex:none}
+.bc-tab .tab .x{margin-left:auto;color:#9aa0a6}
+.bc-tab .tabplus{color:#5f6368;font-size:19px;padding:0 4px 6px}
+.bc-tab .winbtns{margin-left:auto;display:flex;gap:20px;color:#5f6368;font-size:14px;padding-bottom:8px}
+.bc-tab .toolrow{height:40px;background:#fff;border-bottom:1px solid #e3e3e6;display:flex;align-items:center;gap:14px;padding:0 14px}
+.bc-tab .toolrow .arr{color:#5f6368;font-size:16px}
+.bc-tab .toolrow .url{flex:1;height:29px;background:#f1f3f4;border-radius:15px;display:flex;align-items:center;gap:8px;padding:0 14px;color:#202124;font-size:13.5px}
+.bc-tab .toolrow .url .lock{color:#5f6368;font-size:12px}
+.bc-tab .toolrow .ticons{display:flex;gap:14px;color:#5f6368;font-size:15px}
+/* screen body fills the rest of the frame */
+.sbody{position:relative;overflow:hidden}
+/* rail */
+#rail{position:fixed;left:0;top:0;bottom:0;width:308px;background:var(--deck-panel);border-right:1px solid var(--deck-edge);
+  transform:translateX(-100%);transition:transform .22s ease;z-index:40;display:flex;flex-direction:column}
+body.railopen #rail{transform:none}
+#rail header{padding:18px 20px 10px;font-weight:700;font-size:15px}
+#rail header small{display:block;color:var(--deck-mut);font-weight:500;margin-top:3px}
+#rail .items{overflow:auto;padding:4px 12px 20px;flex:1}
+#rail .vhead{margin:16px 8px 6px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--deck-accent)}
+#rail .vhead small{display:block;color:var(--deck-mut);font-weight:500;text-transform:none;letter-spacing:0;margin-top:2px}
+#rail button.item{display:block;width:100%;text-align:left;background:none;border:0;color:var(--deck-ink);
+  padding:9px 10px;border-radius:9px;cursor:pointer;font:inherit}
+#rail button.item:hover{background:rgba(255,255,255,.06)}
+#rail button.item[aria-current="true"]{background:rgba(127,196,189,.16);color:#cfeeea}
+#rail button.item em{display:block;font-style:normal;color:var(--deck-mut);font-size:12px;margin-top:1px}
+/* dock */
+#dock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:50;background:var(--deck-panel);
+  border:1px solid var(--deck-edge);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.45);
+  display:flex;align-items:center;gap:10px;padding:8px 12px;white-space:nowrap}
+#dock .lbl{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--deck-mut)}
+#dock .pills{display:flex;gap:4px;background:rgba(255,255,255,.05);border-radius:9px;padding:3px}
+#dock .pills button{border:0;background:none;color:var(--deck-mut);font:inherit;font-size:12.5px;padding:4px 10px;border-radius:7px;cursor:pointer}
+#dock .pills button[aria-pressed="true"]{background:rgba(127,196,189,.2);color:#d9f3ef}
+#dock .step{display:flex;align-items:center;gap:8px}
+#dock .step button{width:28px;height:28px;border-radius:8px;border:1px solid var(--deck-edge);background:none;color:var(--deck-ink);cursor:pointer;font-size:14px}
+#dock .step button:disabled{opacity:.35;cursor:default}
+#dock #pos{font-size:12.5px;color:var(--deck-mut);min-width:52px;text-align:center}
+#dock select{background:rgba(255,255,255,.06);color:var(--deck-ink);border:1px solid var(--deck-edge);border-radius:8px;
+  height:30px;padding:0 8px;font:inherit;font-size:13px;max-width:250px}
+#dock a.deck,#dock button.tools{border:1px solid var(--deck-edge);background:none;color:var(--deck-ink);border-radius:8px;
+  height:30px;display:inline-flex;align-items:center;padding:0 12px;font-size:13px;text-decoration:none;cursor:pointer}
+#dock a.deck:hover,#dock button.tools:hover{background:rgba(255,255,255,.06)}
+/* screen-level shared bits */
+.sbody ::-webkit-scrollbar{display:none}
+.caveat{font-family:Caveat,cursive}
+.serif{font-family:"Cormorant Garamond",serif}
+/* ========================= CLINIC PORTAL (pastel) ========================= */
+.v-pastel{--ink:#0a1c46;--slate:#44577f;--mut:#8996b7;--edge:#e9ecf1;--page:#f6f8f6;
+  --mint:#e3f6f2;--mintink:#2e7d5b;--mintdot:#9ecebd;--pink:#fdebf4;--pinkink:#c2588a;--pinkstrong:#e8afc8;
+  --blue:#ebf4fe;--blueink:#4a6fa5;--lav:#f2eefe;--lavink:#7a5fb8;--butter:#fae9be;--butterink:#6b5a1e;
+  --cream:#f5f2ed;
+  display:grid;grid-template-columns:245px 1fr;font-family:Inter,sans-serif;color:var(--ink);background:var(--page)}
+.cp-side{background:#fdfdfd;border-right:1px solid var(--edge);display:flex;flex-direction:column;padding:24px 18px 18px;overflow:hidden}
+.cp-logo{display:flex;align-items:center;gap:10px;padding:0 6px}
+.cp-logo .mark{width:30px;height:30px;border-radius:50%;background:#eef4ee;display:flex;align-items:center;justify-content:center;color:#7fae8e;font-size:16px}
+.cp-logo b{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:600}
+.cp-logo small{display:block;font-size:8px;letter-spacing:.3em;color:var(--mut)}
+.cp-group{margin-top:22px;font-size:11px;font-weight:700;letter-spacing:.02em;color:#9aa4bb;padding:0 8px}
+.cp-nav{margin-top:6px;display:flex;flex-direction:column;gap:2px}
+.cp-nav a{display:flex;align-items:center;gap:12px;padding:9.5px 12px;border-radius:10px;color:#3d4c72;font-size:14px;font-weight:500;text-decoration:none}
+.cp-nav a svg{width:17px;height:17px;stroke:#8b96ad;flex:none}
+.cp-nav a.on{background:#ebf3ee;color:#1f5c46;font-weight:600}
+.cp-nav a.on svg{stroke:#1f5c46}
+.cp-nav .n{margin-left:auto;background:#eef1f6;color:#5b6a8f;font-size:11px;font-weight:700;border-radius:9px;padding:2px 8px}
+.cp-team{display:flex;align-items:center;gap:11px;padding:7px 12px;font-size:13.5px;color:#3d4c72}
+.cp-ava{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;flex:none}
+.cp-art{margin-top:auto;border-radius:13px;overflow:hidden;position:relative;height:210px;flex:none}
+.cp-art img{width:100%;height:100%;object-fit:cover}
+.cp-art .cap{position:absolute;inset:0;padding:16px;display:flex;flex-direction:column}
+.cp-art .cap b{font-family:"Cormorant Garamond",serif;font-size:19px;font-weight:600;color:#3c4a3f;line-height:1.25}
+.cp-art .cap span{margin-top:auto;font-size:12px;color:#77826f;line-height:1.4}
+.cp-main{display:flex;flex-direction:column;overflow:hidden}
+.cp-top{height:56px;display:flex;align-items:center;gap:16px;padding:0 28px;background:transparent;flex:none}
+.cp-search{width:330px;height:38px;border:1px solid var(--edge);border-radius:11px;background:#fff;display:flex;align-items:center;gap:10px;padding:0 13px;color:#9aa4bb;font-size:13.5px}
+.cp-search .k{margin-left:auto;border:1px solid var(--edge);border-radius:5px;font-size:10.5px;padding:1px 5px;color:#9aa4bb}
+.cp-icons{margin-left:auto;display:flex;gap:16px;align-items:center;color:#5b6a8f}
+.cp-icons .w{position:relative}
+.cp-icons .w em{position:absolute;top:-6px;right:-7px;background:#e8657c;color:#fff;font-size:9px;font-weight:700;font-style:normal;
+  border-radius:8px;padding:1px 4.5px}
+.cp-me{display:flex;align-items:center;gap:10px}
+.cp-me b{font-size:13.5px;display:block}
+.cp-me small{color:var(--mut);font-size:11.5px}
+.cp-content{flex:1;overflow:hidden;padding:6px 28px 20px;display:flex;flex-direction:column;min-height:0}
+.cp-h1row{display:flex;align-items:flex-start;gap:14px;flex:none}
+.cp-h1row h1{font-family:"Cormorant Garamond",serif;font-size:34px;font-weight:700}
+.cp-h1row .sub{color:var(--slate);font-size:13.5px;margin-top:2px}
+.cp-right{margin-left:auto;display:flex;gap:10px;align-items:center}
+.cp-datepill{border:1px solid var(--edge);background:#fff;border-radius:11px;height:38px;display:flex;align-items:center;gap:9px;padding:0 14px;font-size:13px;font-weight:600;color:#3d4c72}
+.cp-seg{display:flex;background:#fff;border:1px solid var(--edge);border-radius:11px;padding:3px;height:38px}
+.cp-seg span{font-size:12.5px;font-weight:600;color:#5b6a8f;padding:6px 15px;border-radius:8px;display:flex;align-items:center}
+.cp-seg .on{background:var(--mint);color:#1f5c46}
+.cp-btn{height:38px;border-radius:11px;display:inline-flex;align-items:center;gap:8px;padding:0 16px;font-size:13px;font-weight:600;border:1px solid var(--edge);background:#fff;color:#3d4c72}
+.cp-btn.butter{background:var(--butter);border-color:#efd9a0;color:#5b4a17}
+.cp-btn.green{background:#dff3e8;border-color:#c2e4d2;color:#1f5c46}
+.cp-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px;flex:none}
+.cp-stat{background:#fff;border:1px solid var(--edge);border-radius:14px;padding:10px 14px;position:relative}
+.cp-stat .ic{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:7px}
+.cp-stat .ic svg{width:18px;height:18px}
+.cp-stat small{color:var(--slate);font-size:12px}
+.cp-stat .v{font-size:24px;font-weight:800;letter-spacing:-.01em;margin-top:1px}
+.cp-stat .chips{display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:nowrap}
+.cp-stat .chev{position:absolute;right:14px;top:14px;color:#aab3c6}
+.cp-uch{font-size:10.5px;font-weight:700;border-radius:12px;padding:2.5px 8px;white-space:nowrap}
+.cp-uch.up{background:var(--mint);color:var(--mintink)}
+.cp-uch.dn{background:var(--pink);color:var(--pinkink)}
+.cp-uch.mut{color:var(--mut);font-weight:500;background:none;padding-left:0}
+.cp-panel{background:#fff;border:1px solid var(--edge);border-radius:14px;padding:11px 15px}
+.cp-panel h3{font-size:16px;font-weight:700;display:flex;align-items:center;gap:9px}
+.cp-panel h3 svg{width:17px;height:17px;stroke:#5b6a8f}
+.cp-panel .psub{color:var(--mut);font-size:12px;margin-top:3px}
+.cp-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;border-radius:12px;padding:3px 9px}
+.cp-chip.mint{background:var(--mint);color:var(--mintink)}
+.cp-chip.pink{background:var(--pink);color:var(--pinkink)}
+.cp-chip.blue{background:var(--blue);color:var(--blueink)}
+.cp-chip.lav{background:var(--lav);color:var(--lavink)}
+.cp-chip.line{border:1px solid var(--edge);color:#5b6a8f;background:#fff;font-weight:600}
+/* overview: appointments strip */
+.cp-appts{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-top:12px}
+.cp-appt{border:1px solid var(--edge);border-left:4px solid var(--ac,#f3b04c);border-radius:12px;padding:9px 12px;background:#fff}
+.cp-appt .t{display:flex;font-size:12px;font-weight:700;color:#3d4c72}
+.cp-appt .t .st{margin-left:auto}
+.cp-appt b{display:block;font-size:14.5px;margin-top:5px}
+.cp-appt .tr{color:var(--slate);font-size:12px;margin-top:1px}
+.cp-appt .who{color:var(--mut);font-size:11.5px;margin-top:2px}
+.cp-appt .row{display:flex;gap:6px;margin-top:9px;flex-wrap:nowrap}
+/* attention + notes + tasks */
+.cp-att-row{display:grid;grid-template-columns:1.55fr 1fr;gap:12px;margin-top:12px;flex:1;min-height:0}
+.cp-attn .sec{margin-top:9px;border:1px solid var(--edge);border-radius:11px;overflow:hidden}
+.cp-attn .sec .hd{display:flex;align-items:center;gap:8px;padding:5.5px 13px;font-size:12px;font-weight:700;background:#fbfbfc}
+.cp-attn .sec .hd .n{margin-left:auto;font-size:11px;background:#eef1f6;border-radius:10px;padding:2px 9px;color:#5b6a8f}
+.cp-attn .sec .hd.red{color:#c74f63}
+.cp-attn .sec .hd.red .n{background:var(--pink);color:var(--pinkink)}
+.cp-attn .li{display:flex;align-items:center;gap:9px;padding:4.5px 13px;border-top:1px solid #f2f4f7;font-size:12px;color:#3d4c72}
+.cp-attn .li .n{margin-left:auto;font-size:11px;font-weight:700;background:#eef1f6;border-radius:10px;padding:2px 8px;color:#5b6a8f}
+.cp-attn .li .n.red{background:var(--pink);color:var(--pinkink)}
+.cp-notes .bar{display:flex;gap:12px;align-items:center;border:1px solid var(--edge);border-radius:9px;padding:7px 11px;margin-top:11px;color:#5b6a8f;font-size:12px}
+.cp-notes h5{font-size:14.5px;font-weight:700;margin-top:13px}
+.cp-notes ul{margin:8px 0 0 17px;color:#3d4c72;font-size:13px;line-height:1.75}
+.cp-notes .ft{display:flex;margin-top:14px;color:var(--mut);font-size:11.5px}
+.cp-notes .ft .ok{color:#3f9e68}
+.cp-notes .ft span:last-child{margin-left:auto}
+.cp-tasks .row{display:flex;align-items:center;gap:11px;padding:5.5px 0;border-top:1px solid #f2f4f7;font-size:12.3px}
+.cp-tasks .row:first-of-type{border-top:0}
+.cp-tasks .row b{display:block;font-size:13px}
+.cp-tasks .row small{color:var(--mut);font-size:11.5px}
+.cp-tasks .ics{margin-left:auto;display:flex;gap:10px;color:#8b96ad;align-items:center}
+.cp-tasks .mk{font-size:11.5px;font-weight:600;color:#5b6a8f;border:1px solid var(--edge);border-radius:8px;padding:4px 9px}
+/* diary */
+.cp-legend{display:flex;align-items:center;gap:18px;background:#fff;border:1px solid var(--edge);border-radius:12px;padding:10px 16px;margin-top:12px;font-size:12.5px;color:#3d4c72;flex:none}
+.cp-legend b{font-size:12.5px}
+.cp-legend .it{display:flex;align-items:center;gap:7px}
+.cp-legend .dot{width:9px;height:9px;border-radius:50%}
+.cp-diary{background:#fff;border:1px solid var(--edge);border-radius:14px;margin-top:12px;flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 18px 10px}
+.cp-diary .hd{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut);flex:none}
+.cp-diary .hd b{color:var(--ink);font-size:14px}
+.cp-diary .hd .vb{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12.5px}
+.cp-diary .hd select{border:1px solid var(--edge);border-radius:9px;height:32px;padding:0 10px;font:inherit;font-size:12.5px;color:#3d4c72;background:#fff}
+.cp-planner{flex:1;display:grid;grid-template-columns:52px 1fr 1fr 1fr;column-gap:14px;margin-top:10px;min-height:0;position:relative}
+.cp-col .cohead{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;color:#28355c;padding:5px 4px 8px;border-bottom:1px solid var(--edge);height:41px;box-sizing:border-box}
+.cp-col .cohead .n{margin-left:auto;color:var(--mut);font-weight:600;font-size:12px}
+.cp-gutter{padding-top:40px;color:#9aa4bb;font-size:10.5px;text-align:right;padding-right:6px}
+.cp-gutter div{height:52px}
+.cp-lanes{position:relative;height:calc(100% - 41px)}
+.cp-block{position:absolute;left:0;right:8px;border-radius:9px;padding:7px 10px;font-size:11px;border-left:4px solid var(--bc);background:var(--bg)}
+.cp-block .bt{display:flex;gap:6px;color:#42506e;font-weight:600;font-size:10.5px}
+.cp-block .bt .bi{margin-left:auto;display:flex;gap:5px;color:#7d88a3}
+.cp-block b{display:block;font-size:12px;margin-top:2px;color:#1d2a4d}
+.cp-block small{color:#5f6c8c;font-size:10.5px}
+.cp-quiet{flex:none;color:var(--mut);font-size:11.5px;padding:8px 4px 0;border-top:1px solid var(--edge);margin-top:8px}
+/* patients table */
+.cp-filters{display:flex;gap:8px;margin-top:12px;flex:none}
+.cp-fp{border:1px solid var(--edge);background:#fff;border-radius:18px;font-size:12.5px;font-weight:600;color:#5b6a8f;padding:7px 16px}
+.cp-fp.on{background:var(--mint);border-color:#c9e8dd;color:#1f5c46}
+.cp-table{background:#fff;border:1px solid var(--edge);border-radius:14px;margin-top:12px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.cp-table table{width:100%;border-collapse:collapse;font-size:12.8px}
+.cp-table th{text-align:left;color:#6b7894;font-weight:600;font-size:12px;padding:12px 16px;border-bottom:1px solid var(--edge);white-space:nowrap}
+.cp-table td{padding:9.5px 16px;border-bottom:1px solid #f2f4f7;color:#42506e;white-space:nowrap}
+.cp-table td b{display:block;color:var(--ink);font-size:13px;font-weight:600}
+.cp-table td small{color:var(--mut);font-size:11.5px}
+.cp-pg{display:flex;align-items:center;padding:11px 16px;color:var(--mut);font-size:12px;margin-top:auto}
+.cp-pg .pages{margin-left:auto;display:flex;gap:5px;align-items:center}
+.cp-pg .pages span{min-width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;color:#5b6a8f;font-weight:600;font-size:12px}
+.cp-pg .pages .on{background:var(--mint);color:#1f5c46}
+.cp-pg .pages .ar{border:1px solid var(--edge)}
+/* patient record */
+.cp-bc{color:#7fae8e;font-size:12.5px;margin-top:2px;flex:none}
+.cp-recgrid{display:grid;grid-template-columns:1fr 262px;gap:14px;margin-top:10px;flex:1;min-height:0;overflow:hidden}
+.cp-reccol{display:flex;flex-direction:column;gap:12px;min-height:0;overflow:hidden}
+.cp-rechead{display:flex;gap:14px;align-items:flex-start}
+.cp-rechead .gtile{width:58px;height:58px;border-radius:14px;background:var(--butter);color:#7a5f18;font-weight:800;font-size:17px;display:flex;align-items:center;justify-content:center;flex:none}
+.cp-rechead h2{font-family:"Cormorant Garamond",serif;font-size:27px;font-weight:700}
+.cp-rechead .meta{color:var(--slate);font-size:12px;margin-top:3px}
+.cp-rechead .meta2{color:var(--mut);font-size:11.5px;margin-top:2px}
+.cp-rechead .acts{margin-left:auto;display:flex;gap:8px;flex:none}
+.cp-3cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px}
+.cp-vital{border-radius:11px;padding:11px 13px;display:flex;gap:10px;align-items:center;font-size:12px}
+.cp-vital svg{width:16px;height:16px;flex:none}
+.cp-vital small{display:block;font-size:11px;opacity:.75}
+.cp-vital b{font-size:13px}
+.cp-prefrow{display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid #f2f4f7;font-size:12.8px}
+.cp-prefrow .ic{width:28px;height:28px;border-radius:8px;background:#eef6f0;display:flex;align-items:center;justify-content:center;color:#4f9c74;flex:none}
+.cp-prefrow b{display:block;font-size:13px}
+.cp-prefrow small{color:var(--mut);font-size:11.3px}
+.cp-tgl{margin-left:auto;width:38px;height:21px;border-radius:11px;background:#96c5af;position:relative;flex:none}
+.cp-tgl::after{content:"";position:absolute;right:2.5px;top:2.5px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.cp-tgl.off{background:#dfe3ea}
+.cp-tgl.off::after{right:auto;left:2.5px}
+.cp-inline-info{background:#eff5fb;border:1px solid #dbe7f5;color:#54719c;border-radius:9px;padding:9px 12px;font-size:12px;display:flex;gap:8px;margin-top:10px}
+.cp-tabs{display:flex;gap:8px}
+.cp-tab{border:1px solid var(--edge);background:#fff;border-radius:16px;font-size:12px;font-weight:600;color:#5b6a8f;padding:6px 14px;display:flex;gap:7px;align-items:center}
+.cp-tab.on{background:var(--mint);border-color:#c9e8dd;color:#1f5c46}
+.cp-tab .n{background:#d9efe6;border-radius:8px;font-size:10.5px;padding:1px 7px}
+.cp-hrow{display:flex;align-items:center;gap:10px;padding:8.5px 0;border-top:1px solid #f2f4f7;font-size:12.5px}
+.cp-hrow:first-of-type{border-top:0}
+.cp-hrow b{display:block;font-size:12.8px}
+.cp-hrow small{color:var(--mut);font-size:11.3px}
+.cp-hrow .d{margin-left:auto;color:var(--slate);font-size:12px;white-space:nowrap}
+.cp-msgs{background:#fff;border:1px solid var(--edge);border-radius:14px;display:flex;flex-direction:column;padding:14px;min-height:0}
+.cp-msgs .who{display:flex;gap:10px;align-items:center}
+.cp-msgs .who .cp-ava{width:34px;height:34px;font-size:12px}
+.cp-msgs .who b{font-size:13.5px;display:block}
+.cp-msgs .who small{color:var(--mut);font-size:11.3px}
+.cp-msgs .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--mut);font-size:11.5px;text-align:center;gap:8px}
+.cp-msgs .inp{border:1px solid var(--edge);border-radius:10px;height:38px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--mut);font-size:12.5px}
+.cp-msgs .inp .snd{margin-left:auto;color:#4f9c74}
+/* performance */
+.cp-trend{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:9px}
+.cp-chart{background:#fff;border:1px solid var(--edge);border-radius:13px;padding:10px 14px}
+.cp-chart h4{font-size:13.5px;font-weight:700}
+.cp-chart .csub{color:var(--mut);font-size:11px;margin-top:1px}
+.cp-chart .leg{position:absolute;right:14px;top:13px;display:flex;gap:11px;font-size:10.5px;color:#5b6a8f}
+.cp-chart{position:relative}
+.cp-chart .leg i{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+.cp-kpi{background:#fff;border:1px solid var(--edge);border-radius:13px;margin-top:11px}
+.cp-kpi .top{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--edge)}
+.cp-kpi .top .ic{width:36px;height:36px;border-radius:10px;background:var(--mint);color:var(--mintink);display:flex;align-items:center;justify-content:center}
+.cp-kpi .top b{font-size:13.5px;display:block}
+.cp-kpi .top small{color:var(--mut);font-size:11.5px}
+.cp-kpi table{width:100%;border-collapse:collapse;font-size:12.3px}
+.cp-kpi th{text-align:left;color:#6b7894;font-weight:600;font-size:11.5px;padding:6px 16px;border-bottom:1px solid var(--edge)}
+.cp-kpi td{padding:6px 16px;border-bottom:1px solid #f2f4f7;color:#42506e}
+.cp-kpi .out{color:#d4728f;text-decoration:underline}
+/* ===================== SKIN CLINIC (journey-led green) ===================== */
+.v-journey{--ink:#0b1f4d;--slate:#5a6787;--mut:#8a94aa;--edge:#e7eaef;--page:#f6f7f8;
+  --deep:#01565a;--teal:#2c8f8a;--mint:#ddf4e9;--mintink:#237a55;--pink:#fde4ec;--pinkink:#c25a7d;
+  --cream:#fdf4e4;--creamink:#9a7420;--blue:#e5effd;--blueink:#4a6fa5;
+  display:grid;grid-template-columns:232px 1fr;font-family:Inter,sans-serif;color:var(--ink);background:var(--page)}
+.cj-side{background:#fefefe;border-right:1px solid var(--edge);display:flex;flex-direction:column;padding:22px 16px 16px;overflow:hidden}
+.cj-logo{display:flex;align-items:center;gap:10px;padding:0 6px}
+.cj-logo .mark{width:28px;height:28px;border-radius:50%;background:#f7e8df;display:flex;align-items:center;justify-content:center;color:#d0997e;font-size:13px}
+.cj-logo b{font-family:"Cormorant Garamond",serif;font-size:23px;font-weight:600}
+.cj-logo small{display:block;font-size:8px;letter-spacing:.28em;color:var(--mut)}
+.cj-group{margin-top:20px;font-size:11px;font-weight:700;color:#2c8f8a;padding:0 8px}
+.cj-nav{margin-top:5px;display:flex;flex-direction:column;gap:2px}
+.cj-nav a{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:10px;color:#3d4c72;font-size:13.5px;font-weight:500;text-decoration:none}
+.cj-nav a svg{width:16px;height:16px;stroke:#8b96ad;flex:none}
+.cj-nav a.on{background:#e5f4f4;color:var(--deep);font-weight:600}
+.cj-nav a.on svg{stroke:var(--deep)}
+.cj-nav .n{margin-left:auto;background:#eef1f6;color:#5b6a8f;font-size:11px;font-weight:700;border-radius:9px;padding:1px 8px}
+.cj-team{display:flex;align-items:center;gap:10px;padding:6.5px 12px;font-size:13px;color:#3d4c72}
+.cj-art{margin-top:auto;border-radius:13px;overflow:hidden;position:relative;height:200px;flex:none}
+.cj-art img{width:100%;height:100%;object-fit:cover}
+.cj-art .cap{position:absolute;inset:0;padding:16px;display:flex;flex-direction:column}
+.cj-art .cap b{font-family:"Cormorant Garamond",serif;font-size:20px;font-weight:600;color:#4a4038;line-height:1.25}
+.cj-art .cap span{margin-top:auto;font-size:12px;color:#8a7c6c;line-height:1.4}
+.cj-main{display:flex;flex-direction:column;overflow:hidden}
+.cj-top{height:58px;display:flex;align-items:center;gap:15px;padding:0 26px;flex:none}
+.cj-search{width:340px;height:36px;border:1px solid var(--edge);border-radius:10px;background:#fff;display:flex;align-items:center;gap:9px;padding:0 12px;color:#9aa4bb;font-size:13px}
+.cj-script{margin-left:auto;font-family:Caveat;font-size:20px;color:#b3a893;transform:rotate(-5deg)}
+.cj-bell{position:relative;color:#5b6a8f}
+.cj-bell em{position:absolute;top:-6px;right:-7px;background:#e8657c;color:#fff;font-size:9px;font-weight:700;font-style:normal;border-radius:8px;padding:1px 4.5px}
+.cj-me{display:flex;align-items:center;gap:9px}
+.cj-me b{font-size:13px;display:block}.cj-me small{color:var(--mut);font-size:11px}
+.cj-content{flex:1;overflow:hidden;padding:4px 26px 18px;display:flex;flex-direction:column;min-height:0}
+.cj-h1row{display:flex;align-items:flex-start;gap:14px;flex:none}
+.cj-h1row h1{font-family:"Cormorant Garamond",serif;font-size:32px;font-weight:700}
+.cj-h1row .sub{color:var(--slate);font-size:13px;margin-top:2px}
+.cj-right{margin-left:auto;display:flex;gap:9px;align-items:center}
+.cj-pill{border:1px solid var(--edge);background:#fff;border-radius:10px;height:36px;display:flex;align-items:center;gap:8px;padding:0 13px;font-size:12.5px;font-weight:600;color:#3d4c72}
+.cj-cta{height:36px;border-radius:10px;background:var(--deep);color:#fff;display:inline-flex;align-items:center;gap:8px;padding:0 15px;font-size:12.5px;font-weight:600}
+.cj-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:10px;flex:none}
+.cj-stat{background:#fff;border:1px solid var(--edge);border-radius:13px;padding:10px 13px;display:flex;gap:10px}
+.cj-stat .ic{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none}
+.cj-stat .ic svg{width:18px;height:18px}
+.cj-stat small{color:var(--slate);font-size:11.5px;display:block}
+.cj-stat .v{font-size:22px;font-weight:800;margin-top:1px}
+.cj-stat .foot{color:var(--mut);font-size:10.5px;margin-top:3px}
+.cj-uch{font-size:10px;font-weight:700;border-radius:10px;padding:2px 7px;margin-left:6px;vertical-align:3px}
+.cj-uch.up{background:var(--mint);color:var(--mintink)}
+.cj-uch.dn{background:var(--pink);color:var(--pinkink)}
+.cj-uch.blue{background:var(--blue);color:var(--blueink)}
+.cj-panel{background:#fff;border:1px solid var(--edge);border-radius:13px;padding:11px 14px}
+.cj-panel h3{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.cj-panel h3 .see{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--deep)}
+.cj-panel .psub{color:var(--mut);font-size:11.5px;margin-top:2px}
+.cj-chip{display:inline-flex;align-items:center;gap:4px;font-size:9.8px;font-weight:700;border-radius:11px;padding:2.5px 7px;white-space:nowrap}
+.cj-chip.mint{background:var(--mint);color:var(--mintink)}
+.cj-chip.pink{background:var(--pink);color:var(--pinkink)}
+.cj-chip.cream{background:var(--cream);color:var(--creamink)}
+.cj-chip.blue{background:var(--blue);color:var(--blueink)}
+.cj-chip.deep{background:var(--deep);color:#fff}
+.cj-chip.slate{background:#eef0f4;color:#66708a}
+/* overview: appt cards */
+.cj-appts{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:10px}
+.cj-appt{border:1px solid var(--edge);border-radius:12px;padding:8px 10px;background:#fff}
+.cj-appt .t{display:flex;font-size:11.5px;font-weight:700;color:#3d4c72}
+.cj-appt .t .st{margin-left:auto}
+.cj-appt .who{display:flex;gap:9px;margin-top:8px}
+.cj-appt .who img{width:34px;height:34px;border-radius:50%;object-fit:cover;flex:none}
+.cj-appt .who b{font-size:13px;display:block}
+.cj-appt .who small{display:block;color:var(--slate);font-size:10.8px}
+.cj-appt .dr{color:var(--mut);font-size:10.8px;margin-top:6px}
+.cj-appt .row{display:flex;gap:5px;margin-top:8px;flex-wrap:nowrap}
+/* support queue */
+.cj-queue{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-top:10px}
+.cj-qcol{border:1px solid var(--edge);border-radius:11px;overflow:hidden}
+.cj-qcol .qh{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:700}
+.cj-qcol .qh .n{margin-left:auto;font-size:10.5px;background:rgba(255,255,255,.7);border-radius:9px;padding:1px 8px}
+.cj-qrow{display:flex;align-items:center;gap:8px;padding:5px 11px;border-top:1px solid #f2f4f7;font-size:11.5px;background:#fff}
+.cj-qrow .cj-ava{width:26px;height:26px;border-radius:50%;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.cj-qrow b{display:block;font-size:12px}
+.cj-qrow small{color:var(--mut);font-size:10.5px}
+.cj-qrow .d{margin-left:auto;color:var(--mut);font-size:10.5px;white-space:nowrap}
+/* snapshot */
+.cj-snap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-top:10px}
+.cj-scol{border:1px solid var(--edge);border-radius:11px;padding:10px 13px}
+.cj-scol .sh{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700}
+.cj-scol .sh .ic{width:26px;height:26px;border-radius:8px;background:var(--mint);color:var(--mintink);display:flex;align-items:center;justify-content:center}
+.cj-scol .sh .n{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:500}
+.cj-scol .sub2{color:var(--mut);font-size:10.5px;margin-top:1px}
+.cj-srow{display:flex;align-items:center;gap:8px;margin-top:5.5px;font-size:11.5px}
+.cj-srow img{width:24px;height:24px;border-radius:50%;object-fit:cover;flex:none}
+.cj-srow .bar{flex:1;height:6px;background:#e8edf0;border-radius:4px;overflow:hidden}
+.cj-srow .bar i{display:block;height:100%;background:var(--teal);border-radius:4px}
+.cj-srow .frac{color:var(--mut);font-size:10.5px;white-space:nowrap}
+/* notes */
+.cj-notes li{display:flex;gap:8px;font-size:11.8px;color:#3d4c72;line-height:1.45;padding:4px 0;list-style:none}
+.cj-notes li::before{content:"";width:7px;height:7px;border-radius:50%;background:#57b596;flex:none;margin-top:5px}
+/* patient journey screen */
+.cj-rechead{display:flex;gap:13px;align-items:flex-start}
+.cj-rechead .gtile{width:52px;height:52px;border-radius:13px;background:#fae9be;color:#7a5f18;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;flex:none}
+.cj-rechead h2{font-family:"Cormorant Garamond",serif;font-size:26px;font-weight:700;display:inline}
+.cj-rechead .meta{color:var(--slate);font-size:11.8px;margin-top:3px}
+.cj-tabs{display:flex;gap:26px;font-size:13px;color:#66708a;border-bottom:1px solid var(--edge);margin-top:10px;flex:none}
+.cj-tabs span{padding:8px 2px;position:relative}
+.cj-tabs .on{font-weight:700;color:var(--ink)}
+.cj-tabs .on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2.5px;background:var(--deep)}
+.cj-steps{position:relative;padding-left:30px;min-width:0}
+.cj-steps::before{content:"";position:absolute;left:11px;top:14px;bottom:14px;width:2px;background:#dfe8ea}
+.cj-step{display:flex;align-items:center;gap:9px;padding:3px 8px 3px 0;border-bottom:1px solid #f0f3f5;position:relative;font-size:12px;min-height:30px}
+.cj-step:last-child{border-bottom:0}
+.cj-step .dot{position:absolute;left:-28px;width:21px;height:21px;border-radius:50%;background:#fff;border:2px solid #cfdcdc;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#7f8ba0}
+.cj-step.done .dot,.cj-step.cur .dot{background:var(--teal);border-color:var(--teal)}
+.cj-step.done .dot svg,.cj-step.cur .dot svg{width:10px;height:10px;stroke:#fff}
+.cj-step.cur{background:var(--mint);border-radius:9px;margin-left:-10px;padding-left:10px;border-bottom:0}
+.cj-step.cond .dot{border-style:dashed}
+.cj-step b{font-weight:600;font-size:11.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.cj-step .date{margin-left:auto;color:var(--mut);font-size:10.8px;flex:none}
+.cj-month h4{font-size:13.5px;font-weight:700;line-height:1.25}
+.cj-month h4 small{display:block;color:var(--teal);font-size:11px;font-weight:700;margin-bottom:2px}
+.cj-month p{color:var(--mut);font-size:11px;line-height:1.4;margin-top:5px}
+.cj-month .prog{margin-top:8px;font-size:11px;color:#55617a;font-weight:600}
+.cj-month .bar{height:5px;background:#e8edf0;border-radius:3px;margin-top:5px;overflow:hidden;width:104px}
+.cj-month .bar i{display:block;height:100%;background:var(--teal);border-radius:3px}
+.cj-check label{display:flex;align-items:center;gap:9px;font-size:11.8px;color:#43506a;padding:3.5px 0}
+.cj-check .box{width:15px;height:15px;border:1.5px solid #c3ccd8;border-radius:4px;flex:none}
+.cj-check label.don .box{background:var(--teal);border-color:var(--teal);position:relative}
+.cj-check label.don .box::after{content:"✓";color:#fff;font-size:9.5px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.cj-btn{height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;gap:7px;font-size:12.5px;font-weight:600;border:1px solid var(--edge);color:#2e3c56;background:#fff}
+.cj-btn.deep{background:var(--deep);border-color:var(--deep);color:#fff}
+.cj-btn.deep svg{stroke:#fff}
+.cj-focus{background:#fffdf7;border:1px solid #f0e4c8}
+.cj-hrow{display:flex;align-items:center;gap:9px;padding:5px 0;border-top:1px solid #f2f4f7;font-size:11.8px}
+.cj-hrow:first-of-type{border-top:0}
+.cj-hrow .d{margin-left:auto;color:var(--mut);font-size:10.8px;white-space:nowrap}
+.cj-photos{display:flex;gap:8px;margin-top:8px}
+.cj-photos .ph{flex:1}
+.cj-photos img{width:100%;height:56px;object-fit:cover;border-radius:8px}
+.cj-photos .lb{font-size:9.8px;color:var(--mut);margin-top:3px;line-height:1.3;text-align:center}
+.cj-photos .add{flex:1;border:1.5px dashed #ccd4d6;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#9aa6ab;font-size:16px;min-height:64px}
+/* retention screen */
+.cj-funnel{display:flex;gap:14px;align-items:flex-end;margin-top:14px;padding:0 6px}
+.cj-fbar{flex:1;text-align:center}
+.cj-fbar .pct{font-size:14px;font-weight:800;margin-bottom:5px}
+.cj-fbar .bar{border-radius:8px;display:flex;align-items:flex-end;justify-content:center;color:#fff;font-size:11.5px;font-weight:700;padding-bottom:7px}
+.cj-fbar .lbl{font-size:10.8px;color:#55617a;margin-top:7px;line-height:1.3}
+.cj-fbar .lbl b{display:block;font-size:11.5px;color:var(--ink)}
+.cj-focusrow{display:flex;gap:10px;padding:8px 0;border-top:1px solid #f2f4f7;font-size:11.8px;align-items:flex-start}
+.cj-focusrow:first-of-type{border-top:0}
+.cj-focusrow .ic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none}
+.cj-focusrow b{display:block;font-size:12px}
+.cj-focusrow small{color:var(--mut);font-size:10.8px;line-height:1.4}
+.cj-focusrow .chev{margin-left:auto;color:#aab3c6}
+.cj-rtable{width:100%;border-collapse:collapse;font-size:11.8px;margin-top:8px}
+.cj-rtable th{text-align:left;color:#6b7894;font-weight:600;font-size:10.5px;padding:6px 6px;border-bottom:1px solid var(--edge);white-space:nowrap}
+.cj-rtable td{padding:6px 6px;border-bottom:1px solid #f2f4f7;color:#42506e;white-space:nowrap;font-size:11.2px}
+.cj-obar{display:grid;grid-template-columns:26px 1.15fr 46px 1fr 40px 36px;gap:8px;align-items:center;font-size:11.8px;padding:7px 0;border-top:1px solid #f2f4f7}
+.cj-obar:first-of-type{border-top:0}
+.cj-obar .bar{height:7px;background:#e8edf0;border-radius:4px;overflow:hidden}
+.cj-obar .bar i{display:block;height:100%;background:var(--teal);border-radius:4px}
+.cj-banner{margin-top:10px;background:var(--mint);border-radius:10px;padding:10px 13px;font-size:11.5px;color:#23604a;display:flex;gap:9px}
+.cj-banner b{display:block;font-size:12px;margin-bottom:2px}
+/* ================= ADVANCED SKIN HEALTH (top nav, 16:9) ================== */
+.v-advanced{--ink:#16323a;--slate:#5a6a72;--mut:#848f98;--edge:#e2e6e8;--paper:#f5f4f3;
+  --deep:#08646b;--teal:#46858c;--teal2:#359497;--mint:#d8f7ea;--mintink:#1f6b52;--amber:#f6e8cf;
+  --amberink:#8a6a22;--red:#fdeeea;--redink:#b9563f;--blue:#e3edf7;--blueink:#42688e;
+  display:flex;flex-direction:column;font-family:Inter,sans-serif;color:var(--ink);background:var(--paper)}
+.ca-nav{height:56px;background:#fdfdfd;border-bottom:1px solid var(--edge);display:flex;align-items:center;padding:0 34px;gap:38px;flex:none}
+.ca-logo{display:flex;align-items:center;gap:10px}
+.ca-logo .lf{color:#7ba889;font-size:22px;transform:rotate(-12deg)}
+.ca-logo b{font-family:"Cormorant Garamond",serif;font-size:23px;font-weight:600;letter-spacing:.2em}
+.ca-logo small{display:block;font-size:7.5px;letter-spacing:.26em;color:var(--mut)}
+.ca-links{display:flex;gap:30px;margin:0 auto;font-size:13.5px;color:#5a6a72;height:100%;align-items:center}
+.ca-links span{display:flex;align-items:center;height:100%;position:relative}
+.ca-links .on{font-weight:700;color:var(--ink)}
+.ca-links .on::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2.5px;background:var(--deep)}
+.ca-right{display:flex;align-items:center;gap:16px}
+.ca-right .ao{width:33px;height:33px;border-radius:50%;background:#e4efe9;color:#2c6b53;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.ca-bell{position:relative;color:#6b7880}
+.ca-bell em{position:absolute;top:-5px;right:-6px;background:#d4694d;color:#fff;font-size:8.5px;font-weight:700;font-style:normal;border-radius:7px;padding:1px 4px}
+.ca-body{flex:1;overflow:hidden;padding:12px 34px 16px;display:flex;flex-direction:column;min-height:0}
+.ca-headrow{display:flex;align-items:flex-start;flex:none}
+.ca-eyebrow{font-size:10px;font-weight:700;letter-spacing:.24em;color:#8fa198}
+.ca-headrow h1{font-family:"Cormorant Garamond",serif;font-size:33px;font-weight:600;margin-top:1px}
+.ca-headrow .sub{color:var(--slate);font-size:12.5px;margin-top:2px}
+.ca-script{margin-left:auto;font-family:Caveat;font-size:21px;color:#9db3a6;transform:rotate(-7deg);text-align:right;line-height:1.05}
+.ca-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:11px;flex:none}
+.ca-stat{background:#fff;border:1px solid var(--edge);border-radius:11px;padding:11px 14px;display:flex;gap:12px;align-items:center}
+.ca-stat .ic{width:34px;height:34px;border-radius:9px;background:#eef3f2;color:var(--teal);display:flex;align-items:center;justify-content:center;flex:none}
+.ca-stat .ic svg{width:17px;height:17px}
+.ca-stat .v{font-size:21px;font-weight:800}
+.ca-stat small{display:block;color:var(--slate);font-size:11px;margin-top:1px}
+.ca-stat .d{margin-left:auto;text-align:right;font-size:10px;font-weight:700}
+.ca-stat .d em{display:block;font-style:normal;color:var(--mut);font-weight:500;font-size:9.5px;margin-top:1px}
+.ca-tabs{display:flex;gap:26px;font-size:13px;color:#6b7880;border-bottom:1px solid var(--edge);margin-top:10px;flex:none}
+.ca-tabs span{padding:8px 2px;position:relative}
+.ca-tabs .on{font-weight:700;color:var(--ink)}
+.ca-tabs .on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2.5px;background:var(--deep)}
+.ca-panel{background:#fff;border:1px solid var(--edge);border-radius:12px;padding:12px 15px}
+.ca-panel h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.ca-panel h3 svg{width:15px;height:15px;stroke:#6b7880}
+.ca-panel h3 .see{margin-left:auto;font-size:11px;font-weight:600;color:var(--teal2)}
+.ca-chip{display:inline-flex;align-items:center;gap:4px;font-size:9.8px;font-weight:700;border-radius:10px;padding:2px 8px;white-space:nowrap}
+.ca-chip.mint{background:var(--mint);color:var(--mintink)}
+.ca-chip.amber{background:var(--amber);color:var(--amberink)}
+.ca-chip.red{background:var(--red);color:var(--redink)}
+.ca-chip.blue{background:var(--blue);color:var(--blueink)}
+.ca-chip.line{border:1px solid var(--edge);color:#5a6a72;background:#fff;font-weight:600}
+.ca-task{display:flex;align-items:center;gap:11px;padding:8px 4px;border-top:1px solid #f0f2f2;font-size:12px}
+.ca-task:first-of-type{border-top:0}
+.ca-task .o{width:16px;height:16px;border:1.5px solid #c3cdd2;border-radius:50%;flex:none}
+.ca-task .tile{width:30px;height:30px;border-radius:9px;background:#eef3f2;display:flex;align-items:center;justify-content:center;color:var(--teal);flex:none}
+.ca-task .tile svg{width:14px;height:14px}
+.ca-task b{display:block;font-size:12.3px}
+.ca-task small{color:var(--mut);font-size:10.8px}
+.ca-task .t{margin-left:auto;color:var(--mut);font-size:10.8px;white-space:nowrap}
+.ca-up{display:flex;gap:11px;padding:7px 0;border-top:1px solid #f0f2f2;font-size:12px;align-items:center}
+.ca-up:first-of-type{border-top:0}
+.ca-up .tm{color:var(--mut);font-size:10.8px;width:36px;flex:none}
+.ca-up b{display:block;font-size:12.3px}
+.ca-up small{color:var(--mut);font-size:10.8px}
+.ca-slider{display:grid;grid-template-columns:60px 1fr 52px;align-items:center;gap:10px;margin-top:8px;font-size:11.3px;color:#4b5a62}
+.ca-slider .lane{height:5px;background:#e6eaeb;border-radius:3px;position:relative}
+.ca-slider .lane i{position:absolute;left:0;top:0;bottom:0;background:var(--teal2);border-radius:3px}
+.ca-slider .lane u{position:absolute;top:-4.5px;width:14px;height:14px;border-radius:50%;background:#fff;border:2.5px solid var(--teal2)}
+.ca-slider .lv{text-align:right;color:var(--mut)}
+.ca-ba{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}
+.ca-ba img{width:100%;height:58px;object-fit:cover;border-radius:8px}
+.ca-ba .lb{font-size:10px;color:var(--mut);margin-top:3px;white-space:nowrap}
+.ca-adh{display:grid;grid-template-columns:74px 1fr 34px;gap:9px;align-items:center;margin-top:8px;font-size:11.3px;color:#4b5a62}
+.ca-adh .lane{height:8px;background:#e6eaeb;border-radius:4px;overflow:hidden}
+.ca-adh .lane i{display:block;height:100%;background:var(--teal2);border-radius:4px}
+.ca-adh .n{text-align:right;color:var(--mut)}
+.ca-safe{display:flex;gap:9px;padding:6px 0;border-top:1px solid #f0f2f2;font-size:11.5px;align-items:center}
+.ca-safe:first-of-type{border-top:0}
+.ca-safe .av{width:24px;height:24px;border-radius:50%;background:#eef1f2;color:#5a6a72;font-size:8.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.ca-safe small{margin-left:auto;color:var(--mut);font-size:10.3px;white-space:nowrap}
+.ca-jrney{display:grid;grid-template-columns:1fr 1fr 1fr;column-gap:30px;margin-top:8px}
+.ca-jm small{color:var(--mut);font-size:10.5px;font-weight:600}
+.ca-jm b{display:block;font-size:13px}
+.ca-track{position:relative;height:22px;margin:8px 0 4px}
+.ca-track::before{content:"";position:absolute;left:0;right:-30px;top:10px;height:2px;background:#dfe3e4}
+.ca-jrney .ca-jm:last-child .ca-track::before{right:0}
+.ca-track .pt{position:absolute;top:0;width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #ccd4d7;display:flex;align-items:center;justify-content:center}
+.ca-track .pt.done{background:var(--deep);border-color:var(--deep)}
+.ca-track .pt.done svg{width:10px;height:10px;stroke:#fff}
+.ca-track .pt.cur{border-color:#59b08f;background:#e7f5ee}
+.ca-track .pt.cur i{width:8px;height:8px;border-radius:50%;background:#3f9e77}
+.ca-jlist{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.ca-jlist div{display:flex;align-items:center;gap:7px;font-size:10.8px;color:#4b5a62;white-space:nowrap;overflow:hidden}
+.ca-jlist .av{width:20px;height:20px;border-radius:50%;background:#eef1f2;color:#5a6a72;font-size:7.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.ca-jlist .chev{margin-left:auto;color:#b7c0c5}
+/* diary */
+.ca-planner{flex:1;display:grid;grid-template-columns:44px repeat(5,1fr);column-gap:10px;margin-top:8px;min-height:0}
+.ca-col .chead{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#2b3f48;padding:5px 2px 7px;border-bottom:1px solid var(--edge);height:34px;box-sizing:border-box}
+.ca-gutter{padding-top:36px;color:#9aa5ab;font-size:9.8px;text-align:right;padding-right:5px}
+.ca-gutter div{height:50px}
+.ca-lanes{position:relative;height:calc(100% - 34px)}
+.ca-block{position:absolute;left:0;right:4px;border-radius:8px;padding:5px 8px;font-size:10px;background:var(--bg,#eef3f4);border:1px solid var(--bd,#dbe4e5);overflow:hidden}
+.ca-block b{display:block;font-size:10.8px;color:#1d3038}
+.ca-block small{color:#5f6f77;font-size:9.5px;display:block}
+.ca-block .st{margin-top:3px}
+.ca-block .dots{position:absolute;right:6px;top:5px;color:#8b979d;font-size:9px}
+.ca-lunch{position:absolute;left:0;right:4px;height:18px;background:repeating-linear-gradient(45deg,#eef1f2 0 6px,#f6f8f8 6px 12px);border-radius:5px;color:#8b979d;font-size:9px;display:flex;align-items:center;justify-content:center}
+/* patient page */
+.ca-clin-check label{display:flex;align-items:center;gap:9px;font-size:11.8px;color:#3d4c55;padding:4px 0}
+.ca-clin-check .box{width:15px;height:15px;border:1.5px solid #c3cdd2;border-radius:4px;flex:none}
+.ca-clin-check label.don .box{background:var(--teal2);border-color:var(--teal2);position:relative}
+.ca-clin-check label.don .box::after{content:"✓";color:#fff;font-size:9px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.ca-clin-check .chev{margin-left:auto;color:#b7c0c5}
+/* journey board */
+.ca-bfilters{display:flex;gap:9px;margin-top:10px;flex:none;align-items:center}
+.ca-fsel{border:1px solid var(--edge);background:#fff;border-radius:9px;height:34px;display:flex;align-items:center;gap:7px;padding:0 12px;font-size:11.8px;font-weight:600;color:#3d4c55}
+.ca-fsel small{color:var(--mut);font-weight:500;font-size:10px;display:block}
+.ca-search2{margin-left:auto;width:290px;height:34px;border:1px solid var(--edge);border-radius:9px;background:#fff;display:flex;align-items:center;gap:8px;padding:0 12px;color:#9aa5ab;font-size:11.8px}
+.ca-board{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 232px;gap:11px;margin-top:11px;flex:1;min-height:0}
+.ca-bcol{border:1px solid var(--edge);border-radius:12px;background:#fbfcfc;display:flex;flex-direction:column;min-height:0}
+.ca-bcol .bh{display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:12.3px;font-weight:700;border-bottom:1px solid var(--edge)}
+.ca-bcol .bh .ic{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.ca-bcol .bh .ic svg{width:13px;height:13px}
+.ca-bcol .bh .n{margin-left:auto;color:var(--mut);font-weight:600;font-size:11px}
+.ca-bcol .bh small{display:block;font-weight:500;color:var(--mut);font-size:9.5px}
+.ca-cards{padding:9px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.ca-card{background:#fff;border:1px solid var(--edge);border-radius:10px;padding:8px 10px;font-size:11px}
+.ca-card .r1{display:flex;align-items:center;gap:8px}
+.ca-card .av{width:24px;height:24px;border-radius:50%;background:#eef1f2;color:#5a6a72;font-size:8.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.ca-card b{font-size:11.8px;display:block}
+.ca-card small{color:var(--mut);font-size:10px;display:block}
+.ca-card .fr{margin-left:auto;color:var(--mut);font-size:10px;font-weight:600}
+.ca-card .r2{display:flex;align-items:center;gap:6px;margin-top:6px;color:#4b5a62;font-size:10.3px}
+.ca-card .r2 .chev{margin-left:auto;color:#b7c0c5}
+.ca-card .r3{margin-top:6px}
+.ca-focus2{display:flex;gap:9px;padding:6.5px 0;border-top:1px solid #f0f2f2;font-size:11.3px;align-items:flex-start}
+.ca-focus2:first-of-type{border-top:0}
+.ca-focus2 .tm{color:var(--mut);font-size:10px;width:34px;flex:none;padding-top:1px}
+.ca-focus2 b{display:block;font-size:11.5px}
+.ca-focus2 small{color:var(--mut);font-size:10px}
+.ca-focus2 .chev{margin-left:auto;color:#b7c0c5}
+/* @css */
+</style>
+</head>
+<body>
+<div id="stagewrap"><div id="stage"></div></div>
+<aside id="rail">
+  <header>V2 Clinic Portal<small>3 design directions · 12 screens</small></header>
+  <div class="items" id="railitems"></div>
+</aside>
+<div id="dock">
+  <span class="lbl">CLINIC</span>
+  <div class="pills" id="vpills"></div>
+  <div class="step">
+    <button id="prev" aria-label="Previous">&larr;</button>
+    <span id="pos">1 / 1</span>
+    <button id="next" aria-label="Next">&rarr;</button>
+  </div>
+  <select id="jump" aria-label="Jump to screen"></select>
+  <a class="deck" href="patient-portal-wireframes.html">Patient deck &rarr;</a>
+  <button class="tools" id="railbtn">Screens</button>
+</div>
+<script>
+const SCREENS={}, ORDER=[];
+const VERSIONS={
+  pastel:{label:"Clinic Portal", sub:"Sidebar · pastel · ops-first"},
+  journey:{label:"Skin Clinic", sub:"Sidebar · green · journey-led"},
+  advanced:{label:"Advanced", sub:"Top nav · 16:9 · serif"},
+};
+function S(id,def){SCREENS[id]=def;ORDER.push(id);}
+
+/* Small stroke-icon helpers shared by the screens. */
+const IC=(d,extra="")=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ${extra}><path d="${d}"/></svg>`;
+const ICONS={
+  home:IC("M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5"),
+  cal:IC("M4 5h16v16H4zM4 9.5h16M8 3v4M16 3v4"),
+  plan:IC("M4 4h16v4H4zM4 12h10v8H4zM18 12h2v8h-2"),
+  task:IC("M5 4h14v16H5zM8.5 9.5h7M8.5 13h7M8.5 16.5h4"),
+  photo:IC("M4 5h16v14H4zM8 12l2.5 3 3-4 4.5 6"),
+  msg:IC("M4 5h16v11H8l-4 4z"),
+  bill:IC("M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21zM9 8h6M9 12h6"),
+  gear:IC("M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM12 2v3M12 19v3M4.2 6.5l2.2 1.7M17.6 15.8l2.2 1.7M2 12h3M19 12h3M4.2 17.5l2.2-1.7M17.6 8.2l2.2-1.7"),
+  layers:IC("M12 3 3 8l9 5 9-5zM3 13l9 5 9-5"),
+  flag:IC("M6 3v18M6 4h11l-2.5 4L17 12H6"),
+  drop:IC("M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"),
+  check:IC("M5 12.5 10 17.5 19 7"),
+  up:IC("M12 16V5M7 9.5 12 5l5 4.5M5 19h14"),
+  clock:IC("M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4.5l3 2"),
+  bell:IC("M6 16v-5a6 6 0 0 1 12 0v5l1.6 2.4H4.4zM10.5 21a2 2 0 0 0 3 0"),
+};
+/* ---- pastel clinic shared shell ---- */
+const CP_TEAM=[["DA","#dff0e6;color:#2e7d5b","Dr Amara Osei"],["DN","#fae9be;color:#7a5f18","Dr Nadia Rahman"],
+  ["DT","#f2eefe;color:#7a5fb8","Dr Tom Whitfield"],["SM","#fdebf4;color:#c2588a","Sofia Marchetti"]];
+function cpShell(active,content){
+  const nav=(id,ic,label,n)=>`<a href="#" class="${active===id?"on":""}">${ic}${label}${n?`<span class="n">${n}</span>`:""}</a>`;
+  return `
+  <aside class="cp-side">
+    <div class="cp-logo"><span class="mark">❧</span><div><b>Aetheria</b><small>CLINIC&nbsp;PORTAL</small></div></div>
+    <div class="cp-group">Clinic</div>
+    <nav class="cp-nav">${nav("dash",ICONS.home,"Dashboard")}${nav("diary",ICONS.cal,"Diary","10")}${nav("patients",IC("M9 11a3.4 3.4 0 1 0 0-6.8A3.4 3.4 0 0 0 9 11zM3 20c.8-3.2 3-4.8 6-4.8s5.2 1.6 6 4.8M16.5 10.6a3 3 0 1 0-1.7-5.6M17 15.4c2 .5 3.4 1.9 4 4.6"),"Patients")}</nav>
+    <div class="cp-group">Reports</div>
+    <nav class="cp-nav">${nav("retention",IC("M4 17l5-5 4 3 7-8M4 20h16"),"Retention")}${nav("performance",IC("M4 18V9M9.3 18V5M14.6 18v-7M20 18V8"),"Performance")}</nav>
+    <div class="cp-group">Team</div>
+    <nav class="cp-nav">${CP_TEAM.map(t=>`<div class="cp-team"><span class="cp-ava" style="background:${t[1]}">${t[0]}</span>${t[2]}</div>`).join("")}</nav>
+    <div class="cp-art"><img src="assets/sidebar-leaf.png" alt="">
+      <div class="cap"><b>Exceptional care, healthier tomorrows.</b><span>A healthier, more confident you. Together.</span></div></div>
+  </aside>
+  <div class="cp-main">
+    <div class="cp-top">
+      <div class="cp-search">⌕ Search patients, treatments or notes…<span class="k">⌘ K</span></div>
+      <div class="cp-icons">
+        <span class="w">${ICONS.msg.replace("<svg",'<svg style="width:19px;height:19px"')}</span>
+        <span class="w">${IC("M4 6h16v12H4zM4 7l8 6 8-6").replace("<svg",'<svg style="width:19px;height:19px"')}<em>2</em></span>
+        <span class="w">${ICONS.bell.replace("<svg",'<svg style="width:19px;height:19px"')}<em>4</em></span>
+      </div>
+      <div class="cp-me"><span class="cp-ava" style="width:36px;height:36px;font-size:12px;background:#dff0e6;color:#2e7d5b">DA</span>
+        <div><b>Dr Amara Osei</b><small>Clinic Owner</small></div><span style="color:#aab3c6">▾</span></div>
+    </div>
+    <div class="cp-content">${content}</div>
+  </div>`;
+}
+const cpTri=IC("M12 4 21 19H3zM12 10v4M12 16.6v.4").replace("<svg",'<svg style="stroke:#d0685f"');
+
+S("pastel-overview",{
+  version:"pastel", title:"Clinic overview", route:"/dashboard", chrome:"none", frame:"4:3",
+  html:cpShell("dash",`
+    <div class="cp-h1row">
+      <div><h1>Clinic overview</h1><div class="sub">Live picture of today's diary, what needs attention and clinic performance.</div></div>
+      <div class="cp-right">
+        <span class="cp-datepill">${ICONS.cal.replace("<svg",'<svg style="width:15px;height:15px"')}Sunday 13 September 2026 ▾</span>
+        <span class="cp-seg"><span class="on">Day</span><span>Week</span><span>Month</span></span>
+      </div>
+    </div>
+    <div class="cp-stats">
+      <div class="cp-stat"><span class="chev">›</span><div class="ic" style="background:var(--mint);color:var(--mintink)">${IC("M9 11a3.4 3.4 0 1 0 0-6.8A3.4 3.4 0 0 0 9 11zM3 20c.8-3.2 3-4.8 6-4.8s5.2 1.6 6 4.8M16.5 10.6a3 3 0 1 0-1.7-5.6M17 15.4c2 .5 3.4 1.9 4 4.6")}</div>
+        <small>Retention rate</small><div class="v">72%</div>
+        <div class="chips"><span class="cp-uch up">↗ 31%</span><span class="cp-uch mut">vs. previous 12 months</span></div></div>
+      <div class="cp-stat"><span class="chev">›</span><div class="ic" style="background:var(--mint);color:var(--mintink)">${IC("M9 11a3.4 3.4 0 1 0 0-6.8A3.4 3.4 0 0 0 9 11zM3 20c.8-3.2 3-4.8 6-4.8s5.2 1.6 6 4.8M16.5 10.6a3 3 0 1 0-1.7-5.6M17 15.4c2 .5 3.4 1.9 4 4.6")}</div>
+        <small>Total clients</small><div class="v">633</div>
+        <div class="chips"><span class="cp-uch dn">↓ 68%</span><span class="cp-uch mut">618 active · 15 inactive</span></div></div>
+      <div class="cp-stat"><span class="chev">›</span><div class="ic" style="background:var(--blue);color:var(--blueink)">${ICONS.cal}</div>
+        <small>Treatments due</small><div class="v">1303</div>
+        <div class="chips"><span class="cp-uch dn" style="background:var(--pink)">150 due</span><span class="cp-uch dn">1153 overdue</span></div></div>
+      <div class="cp-stat"><span class="chev">›</span><div class="ic" style="background:var(--pink);color:var(--pinkink)">${IC("M4 18V9M9.3 18V5M14.6 18v-7M20 18V8")}</div>
+        <small>Revenue this month</small><div class="v">£31,925</div>
+        <div class="chips"><span class="cp-uch dn">↓ 64%</span><span class="cp-uch mut">123 treatments delivered</span></div></div>
+    </div>
+    <div class="cp-panel" style="margin-top:12px">
+      <h3>${IC("M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8v4l2.6 2").replace("<svg",'<svg style="stroke:#4f9c74"')}Sunday 13 September
+        <span style="margin-left:auto;font-size:12px;color:var(--mut);font-weight:500">4 appointments&nbsp;&nbsp;<span style="color:#3d4c72;font-weight:600">View diary →</span></span></h3>
+      <div class="cp-appts">
+        <div class="cp-appt" style="--ac:#f3b04c"><div class="t">09:00 – 09:45<span class="st cp-chip mint">✓ Complete</span></div>
+          <b>Priya Chandrasekhar</b><div class="tr">Chemical Peel</div><div class="who">#4 · Dr Nadia Rahman</div>
+          <div class="row"><span class="cp-chip line">✓ Consent</span><span class="cp-chip line">✓ Paid</span></div></div>
+        <div class="cp-appt" style="--ac:#f2d478"><div class="t">09:30 – 10:30<span class="st cp-chip mint">✓ Complete</span></div>
+          <b>Amelia Fitzgerald</b><div class="tr">Lip Filler</div><div class="who">#3 · Dr Tom Whitfield</div>
+          <div class="row"><span class="cp-chip line">✓ Consent</span><span class="cp-chip line">✓ Paid</span></div></div>
+        <div class="cp-appt" style="--ac:#ee8bb3"><div class="t">10:15 – 11:30<span class="st cp-chip pink">Aftercare</span></div>
+          <b>Grace Adeyemi</b><div class="tr">Microneedling with PRP</div><div class="who">#3 · Dr Nadia Rahman</div>
+          <div class="row"><span class="cp-chip line">✓ Consent</span><span class="cp-chip line">Deposit paid</span></div></div>
+        <div class="cp-appt" style="--ac:#8fc1f2"><div class="t">11:00 – 11:45<span class="st cp-chip blue">Scheduled</span></div>
+          <b>Leila Farouk</b><div class="tr">Lip Filler</div><div class="who">#5 · Dr Tom Whitfield</div>
+          <div class="row"><span class="cp-chip line">Consent due</span><span class="cp-chip pink">Unpaid</span></div></div>
+      </div>
+    </div>
+    <div class="cp-att-row">
+      <div style="display:flex;flex-direction:column;gap:14px;min-height:0">
+        <div class="cp-panel cp-attn" style="flex:1;overflow:hidden">
+          <h3>${cpTri}Attention needed</h3>
+          <div class="psub">Outstanding items that need action — deposits must be paid at least 3 days before the appointment.</div>
+          <div class="sec">
+            <div class="hd red">${ICONS.clock.replace("<svg",'<svg style="width:14px;height:14px;stroke:#c74f63"')}Urgent<span class="n">22</span></div>
+            <div class="li">› No show<span class="n red">1</span></div>
+            <div class="li">› Deposit due<span class="n red">14</span></div>
+            <div class="li">› Consent due<span class="n">5</span></div>
+            <div class="li">› Balance due<span class="n">2</span></div>
+          </div>
+          <div class="sec">
+            <div class="hd">${ICONS.clock.replace("<svg",'<svg style="width:14px;height:14px"')}This week<span class="n">118</span></div>
+            <div class="li">› Deposit due<span class="n red">103</span></div>
+            <div class="li">› Treatment due<span class="n">12</span></div>
+            <div class="li">› Message<span class="n">3</span></div>
+          </div>
+        </div>
+        <div class="cp-panel cp-tasks">
+          <h3>${ICONS.task}My tasks<span style="margin-left:auto;font-size:12px;font-weight:600;color:#3d4c72">View all tasks →</span></h3>
+          <div class="psub">Patients to contact and rebook by chat, phone or email.</div>
+          <div class="row"><span class="cp-ava" style="background:var(--butter);color:#7a5f18">TN</span>
+            <div><b>Theo Nakamura</b><small>Consultation only, never converted. Worth one follow-up.</small></div>
+            <div class="ics"><span style="font-size:13px">✆</span><span style="font-size:12px">✉</span><span style="font-size:12px">🗨</span> <span class="mk">Mark contacted</span><span class="cp-chip mint">Complete</span>⋮</div></div>
+          <div class="row"><span class="cp-ava" style="background:var(--lav);color:var(--lavink)">EW</span>
+            <div><b>Eleanor Whitmore</b><small>Four months since her cheek filler — worth a personal call.</small></div>
+            <div class="ics"><span style="font-size:13px">✆</span><span style="font-size:12px">✉</span><span style="font-size:12px">🗨</span> <span class="mk">Mark contacted</span><span class="cp-chip mint">Complete</span>⋮</div></div>
+          <div class="row"><span class="cp-ava" style="background:var(--pink);color:var(--pinkink)">HB</span>
+            <div><b>Harriet Blackwood</b><small>Eight months since last visit — win-back message.</small></div>
+            <div class="ics"><span style="font-size:13px">✆</span><span style="font-size:12px">✉</span><span style="font-size:12px">🗨</span> <span class="mk">Mark contacted</span><span class="cp-chip mint">Complete</span>⋮</div></div>
+        </div>
+      </div>
+      <div class="cp-panel cp-notes" style="min-height:0;display:flex;flex-direction:column">
+        <h3>${ICONS.task}My notes</h3>
+        <div class="psub">Private to you · share anytime · saves automatically.</div>
+        <div class="bar">Paragraph ▾&nbsp;&nbsp;<b>B</b>&nbsp;<i>I</i>&nbsp;<u>U</u>&nbsp;<s>S</s>&nbsp;&nbsp;☰ ☱ ☲&nbsp;&nbsp;🔗 ☺</div>
+        <h5>This week</h5>
+        <ul>
+          <li>Reorder Profhilo before Friday</li>
+          <li>Sign off Nadia's job title change</li>
+          <li>Chase the two outstanding consent forms</li>
+          <li>Look at why second-visit conversion dipped in the last cohort</li>
+        </ul>
+        <div class="ft" style="margin-top:auto"><span class="ok">✓ Saved just now</span><span>Last edited 11:24</span></div>
+      </div>
+    </div>`),
+});
+
+S("pastel-diary",{
+  version:"pastel", title:"Clinic diary", route:"/diary", chrome:"none", frame:"4:3",
+  html:cpShell("diary",`
+    <div class="cp-h1row">
+      <div><h1>Clinic diary</h1><div class="sub">Sunday 13 September 2026</div></div>
+      <div class="cp-right">
+        <span class="cp-btn" style="padding:0 10px">‹</span><span class="cp-btn">Today</span><span class="cp-btn" style="padding:0 10px">›</span>
+        <span class="cp-seg"><span class="on">Day</span><span>Week</span><span>Month</span></span>
+        <span class="cp-btn butter">⊕ New booking</span>
+      </div>
+    </div>
+    <div class="cp-legend"><b>Treatment colours</b>
+      <span class="it"><span class="dot" style="background:#aadfca"></span>Anti-Wrinkle Injections</span>
+      <span class="it"><span class="dot" style="background:#8fc1f2"></span>Cheek Filler</span>
+      <span class="it"><span class="dot" style="background:#ee8bb3"></span>Chemical Peel</span>
+      <span class="it"><span class="dot" style="background:#f2d478"></span>Lip Filler</span>
+      <span class="it"><span class="dot" style="background:#b9a6e8"></span>Microneedling with PRP</span>
+      <span class="it"><span class="dot" style="background:#4f9c74"></span>Profhilo</span></div>
+    <div class="cp-diary">
+      <div class="hd"><b>Day planner</b>· 10 booked · 09:00–18:00
+        <span class="vb">View by <select><option>All practitioners</option></select></span></div>
+      <div class="cp-planner">
+        <div class="cp-gutter">${["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00"].map(t=>`<div>${t}</div>`).join("")}</div>
+        ${[
+          ["DA","#dff0e6;color:#2e7d5b","Dr Amara Osei","3",[
+            ["11:30 – 12:00","Zara Haddad","Anti-Wrinkle Injections · #4",2.5,.75,"#aadfca","#e9f7f2","✓"],
+            ["14:00 – 15:00","Rebecca Lindqvist","Cheek Filler · #4",5,1,"#8fc1f2","#ebf4fe","◔"],
+            ["16:30 – 17:00","Hugo Berrington","Anti-Wrinkle Injections · #2",7.5,.75,"#aadfca","#e9f7f2","✓"]]],
+          ["DN","#fae9be;color:#7a5f18","Dr Nadia Rahman","4",[
+            ["09:00 – 09:45","Priya Chandrasekhar","Chemical Peel · #4",0,.85,"#ee8bb3","#fae7ee","✓"],
+            ["10:15 – 11:30","Grace Adeyemi","Microneedling with PRP · #3",1.25,1.25,"#b9a6e8","#f2eefe","◔"],
+            ["13:00 – 13:45","Nadia Petrova","Profhilo · #6",4,.85,"#4f9c74","#e2f2e9","✓"],
+            ["15:00 – 15:30","Olivia Bennett","Anti-Wrinkle Injections · #1",6,.75,"#aadfca","#e9f7f2","◔"]]],
+          ["DT","#f2eefe;color:#7a5fb8","Dr Tom Whitfield","3",[
+            ["09:30 – 10:30","Amelia Fitzgerald","Lip Filler · #3",.5,1,"#f2d478","#fcf6e6","✓"],
+            ["11:00 – 11:45","Leila Farouk","Lip Filler · #5",2,.85,"#f2d478","#fcf6e6","◔"],
+            ["15:30 – 16:15","Freya Sundqvist","Chemical Peel · #1",6.5,.85,"#ee8bb3","#fae7ee","◔"]]],
+        ].map(col=>`
+        <div class="cp-col">
+          <div class="cohead"><span class="cp-ava" style="background:${col[1]}">${col[0]}</span>${col[2]}<span class="n">${col[3]}</span></div>
+          <div class="cp-lanes">
+            ${col[4].map(b=>`<div class="cp-block" style="--bc:${b[5]};--bg:${b[6]};top:${b[3]*52}px;height:${Math.max(b[4]*52,40)}px">
+              <div class="bt">${b[0]}<span class="bi">▤ ☰ <span style="color:${b[7]==="✓"?"#3f9e68":"#8b96ad"}">${b[7]==="✓"?"✓":"◷"}</span></span></div>
+              <b>${b[1]}</b><small>${b[2]}</small></div>`).join("")}
+          </div>
+        </div>`).join("")}
+      </div>
+      <div class="cp-quiet">1 quiet hour · 17:30–18:00 · show ▾</div>
+    </div>`),
+});
+/* ---- chart builders (inline SVG, no dependencies) ---- */
+function chartPath(vals,w,h,pad,max){
+  const n=vals.length,ix=i=>pad+i*(w-2*pad)/(n-1),iy=v=>h-pad-(v/max)*(h-2*pad);
+  return vals.map((v,i)=>`${i?"L":"M"}${ix(i).toFixed(1)},${iy(v).toFixed(1)}`).join(" ");
+}
+const EARN=[1800,2600,2200,3400,3050,4100,3600,4600,4200,3300,3800,4400,3900,3200,3600,4200,4800,4100,3500,3900,3400,2900,3300,3700,3100,3500,3900,3300,2800,3200];
+const COLL=EARN.map((v,i)=>v*0.62+((i*37)%400)-200);
+const APPT=[9,14,11,17,13,19,15,10,16,12,18,14,20,11,15,17,13,19,22,14,10,16,12,18,15,21,13,17,11,15];
+const ATT=[82,75,88,70,85,78,92,74,86,80,72,84,90,78,76,88,70,82,86,74,90,80,84,72,88,76,82,86,78,84];
+const NOSH=[1,0,2,1,0,3,1,2,0,1,4,2,1,0,2,1,3,0,1,2,0,1,2,3,1,0,2,1,0,1];
+
+function svgLineChart(o){
+  const w=560,h=148,pad=36;
+  const grid=[0,1,2,3].map(i=>{const y=pad+i*(h-2*pad)/3;return `<line x1="${pad}" y1="${y}" x2="${w-pad}" y2="${y}" stroke="#eef1f4"/>`;}).join("");
+  let body="";
+  if(o.type==="line"){
+    body=(o.series||[]).map(s=>{
+      const p=chartPath(s.vals,w,h,pad,o.max);
+      const fill=s.fill?`<path d="${p} L${w-pad},${h-pad} L${pad},${h-pad} Z" fill="${s.fill}" opacity=".35"/>`:"";
+      return `${fill}<path d="${p}" fill="none" stroke="${s.c}" stroke-width="2" ${s.dash?`stroke-dasharray="5 4"`:""}/>`;
+    }).join("");
+    if(o.marker){const i=o.marker.i,n=o.series[0].vals.length;
+      const x=pad+i*(w-2*pad)/(n-1),y=h-pad-(o.series[0].vals[i]/o.max)*(h-2*pad);
+      body+=`<circle cx="${x}" cy="${y}" r="4.5" fill="#fff" stroke="${o.series[0].c}" stroke-width="2.5"/>
+      <g transform="translate(${x-44},${y-46})"><rect width="88" height="34" rx="7" fill="#fff" stroke="#e4e8ee"/>
+      <text x="44" y="14" text-anchor="middle" font-size="9" fill="#8996b7">${o.marker.l1}</text>
+      <text x="44" y="26" text-anchor="middle" font-size="10" font-weight="700" fill="#0a1c46">${o.marker.l2}</text></g>`;}
+  }else{
+    const n=o.vals.length,bw=(w-2*pad)/n*0.55;
+    body=o.vals.map((v,i)=>{const x=pad+i*(w-2*pad)/n,bh=(v/o.max)*(h-2*pad);
+      return `<rect x="${x.toFixed(1)}" y="${(h-pad-bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2.5" fill="${o.c}"/>
+        ${o.c2?`<rect x="${(x+bw+1.5).toFixed(1)}" y="${(h-pad-bh*0.72).toFixed(1)}" width="${(bw*0.7).toFixed(1)}" height="${(bh*0.72).toFixed(1)}" rx="2.5" fill="${o.c2}"/>`:""}`;
+    }).join("");
+  }
+  const ylab=(o.ylab||[]).map((t,i)=>`<text x="${pad-5}" y="${h-pad-i*(h-2*pad)/((o.ylab.length-1)||1)+3}" text-anchor="end" font-size="8.5" fill="#9aa4bb">${t}</text>`).join("");
+  const xlab=["1 Sep","5 Sep","9 Sep","13 Sep","17 Sep","21 Sep","25 Sep","30 Sep"].map((t,i)=>`<text x="${pad+i*(w-2*pad)/7}" y="${h-8}" text-anchor="middle" font-size="8.5" fill="#9aa4bb">${t}</text>`).join("");
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;display:block;margin-top:6px">${grid}${body}${ylab}${xlab}</svg>`;
+}
+
+S("pastel-patients",{
+  version:"pastel", title:"Patients", route:"/patients", chrome:"none", frame:"4:3",
+  html:cpShell("patients",`
+    <div class="cp-h1row">
+      <div><h1>Patients</h1><div class="sub">633 records</div></div>
+      <div class="cp-right">
+        <span class="cp-search" style="width:240px;height:38px">⌕ Name or reference</span>
+        <span class="cp-datepill">${ICONS.cal.replace("<svg",'<svg style="width:15px;height:15px"')}DD/MM/YYYY</span>
+        <span class="cp-btn green">⊕ New patient</span>
+      </div>
+    </div>
+    <div class="cp-filters">
+      <span class="cp-fp on">All</span><span class="cp-fp">Active</span><span class="cp-fp">Inactive</span><span class="cp-fp">Treatments due</span>
+    </div>
+    <div class="cp-table">
+      <table>
+        <tr><th>Patient ⇅</th><th>Last treatment</th><th>Next treatment</th><th>Next due ⇅</th><th>Paperwork ⇅</th><th>Status ⇅</th><th></th></tr>
+        ${[
+          ["Adeyemi, Miss Grace","16/08/1999 · AV-1263","Microneedling with PRP · 13/09/2026","Microneedling with PRP #1","23/04/2026"],
+          ["Ashbury, Mr Jonas","24/06/1987 · AV-1431","Anti-Wrinkle Injections · 01/03/2026","No upcoming treatment","29/06/2026"],
+          ["Ashcombe, Mrs Beatrice","15/06/1969 · AV-1375","Cheek Filler · 17/06/2026","No upcoming treatment","15/06/2026"],
+          ["Ashcombe, Mrs Cara","10/06/1970 · AV-1711","Microneedling with PRP · 11/05/2026","No upcoming treatment","14/05/2026"],
+          ["Ashdon, Mr Patrick","21/09/1999 · AV-1991","Lip Filler · 23/06/2026","Lip Filler #3","13/08/2025"],
+          ["Ashfield, Miss Rosa","15/06/1999 · AV-2271","Chemical Peel · 25/08/2026","No upcoming treatment","17/05/2026"],
+          ["Ashford, Mrs Esme","07/09/1974 · AV-2551","Skin Consultation · 11/07/2026","Skin Consultation #4","12/10/2026"],
+          ["Ashham, Miss Kirsty","21/11/1993 · AV-2831","Microneedling with PRP · 31/07/2026","Microneedling with PRP #5","29/10/2026"],
+          ["Ashhurst, Mrs Iris","14/07/1985 · AV-3111","Lip Filler · 02/07/2026","Lip Filler #6","11/12/2025"],
+          ["Ashley, Mr Patrick","08/02/1993 · AV-3391","Laser Hair Removal · 14/05/2026","Laser Hair Removal #1","30/07/2025"],
+          ["Ashmore, Ms Imogen","10/10/1975 · AV-3671","Anti-Wrinkle Injections · 18/08/2026","No upcoming treatment","06/07/2025"],
+          ["Ashshaw, Miss Greta","01/11/2001 · AV-5351","Microneedling with PRP · 10/08/2026","No upcoming treatment","08/11/2026"],
+        ].map(r=>`<tr><td><b>${r[0]}</b><small>${r[1]}</small></td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td>
+          <td>Complete</td><td><span class="cp-chip mint">Active</span></td><td style="color:#aab3c6">⋮</td></tr>`).join("")}
+      </table>
+      <div class="cp-pg">Showing 1–12 of 633 records
+        <div class="pages"><span class="ar">‹</span><span class="on">1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>…</span><span>53</span><span class="ar">›</span></div></div>
+    </div>`),
+});
+
+S("pastel-record",{
+  version:"pastel", title:"Patient record — Grace Adeyemi", route:"/patients/grace-adeyemi", chrome:"none", frame:"4:3",
+  html:cpShell("patients",`
+    <div class="cp-bc">← All patients</div>
+    <div class="cp-recgrid">
+      <div class="cp-reccol">
+        <div class="cp-panel">
+          <div class="cp-rechead">
+            <span class="gtile">GA</span>
+            <div><h2>Adeyemi, Miss Grace</h2>
+              <div class="meta">AV-1263 · 16/08/1999 · grace.adeyemi@example.com · 07796 358454</div>
+              <div class="meta2">5 visits · last seen 0 days ago</div></div>
+            <div class="acts"><span class="cp-btn butter" style="height:34px">${ICONS.cal.replace("<svg",'<svg style="width:14px;height:14px"')}Record treatment</span>
+              <span class="cp-btn" style="height:34px">✈ Send form</span><span class="cp-btn" style="height:34px">🗀 Archi…</span><span class="cp-btn" style="height:34px;padding:0 10px">⋯</span></div>
+          </div>
+          <div class="cp-3cards" style="margin-top:13px">
+            <div class="cp-vital" style="background:var(--pink)">${IC("M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.4-7 10-7 10z").replace("<svg",'<svg style="stroke:#c2588a"')}<div><small style="color:#c2588a">Allergies</small><b style="color:#b0446f">None known</b></div></div>
+            <div class="cp-vital" style="background:var(--blue)">${IC("M10 3h4v6h6v4h-6v8h-4v-8H4V9h6z").replace("<svg",'<svg style="stroke:#4a6fa5"')}<div><small style="color:#4a6fa5">Medication</small><b style="color:#39587f">None</b></div></div>
+            <div class="cp-vital" style="background:var(--mint)">${ICONS.task.replace("<svg",'<svg style="stroke:#2e7d5b"')}<div><small style="color:#2e7d5b">Conditions</small><b style="color:#236248">None recorded</b></div></div>
+          </div>
+        </div>
+        <div class="cp-panel">
+          <h3>${IC("M4 6h16v12H4zM4 7l8 6 8-6")}Contact preferences<span style="margin-left:auto"><span class="cp-btn" style="height:32px;font-size:12px">✎ Edit preferences</span></span></h3>
+          <div class="psub">UK marketing is opt-in. Reminders stay on unless the patient opts out. Nothing is emailed or texted from here yet.</div>
+          <div class="cp-prefrow"><span class="ic">${ICONS.bell.replace("<svg",'<svg style="width:14px;height:14px"')}</span>
+            <div><b>Appointment reminders</b><small>Visit confirmations and recall reminders by email or text.</small></div><span class="cp-tgl"></span></div>
+          <div class="cp-prefrow"><span class="ic">${IC("M4 6h16v12H4zM4 7l8 6 8-6").replace("<svg",'<svg style="width:14px;height:14px"')}</span>
+            <div><b>Marketing by email</b><small>Offers and news. Off unless they opt in.</small></div><span class="cp-tgl off"></span></div>
+          <div class="cp-prefrow"><span class="ic">${ICONS.msg.replace("<svg",'<svg style="width:14px;height:14px"')}</span>
+            <div><b>Marketing by text</b><small>Also needs the marketing switch on.</small></div><span class="cp-tgl off"></span></div>
+        </div>
+        <div class="cp-panel">
+          <h3>${ICONS.msg}Email and text<span style="margin-left:auto"><span class="cp-btn" style="height:32px;font-size:12px">Process queue</span></span></h3>
+          <div class="psub">Queued until the outbox runs. Demo and sandbox mark them sent without leaving the clinic.</div>
+          <div class="cp-inline-info">ⓘ Nothing queued. Emails and texts will appear here once the clinic starts sending them.</div>
+        </div>
+        <div class="cp-tabs">
+          <span class="cp-tab on">Treatments<span class="n">5</span></span><span class="cp-tab">Visit notes</span>
+          <span class="cp-tab">Before and after</span><span class="cp-tab">Documents</span><span class="cp-tab">History updates</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:12px;flex:1;min-height:0">
+          <div class="cp-panel" style="overflow:hidden">
+            <h3>${ICONS.task}Treatment history<span style="margin-left:auto"><span class="cp-btn" style="height:32px;font-size:12px">+ Add treatment</span></span></h3>
+            <div class="psub">Recorded treatments and follow-up dates.</div>
+            ${[["Microneedling with PRP","Full face and neck · Autologous PRP · 1.5mm depth · £295","13/09/2026"],
+               ["Microneedling with PRP","Full face · Dermapen 4 with PRP · 1.0mm depth · £295","09/09/2026"],
+               ["Microneedling with PRP","Full face · Dermapen 4 with PRP · 1.0mm depth · £295","08/09/2026"],
+               ["Microneedling with PRP","Full face and neck · Dermapen 4 with PRP · 1.5mm depth · £295","22/05/2026"],
+               ["Microneedling with PRP","Full face · Dermapen 4 with PRP · 1.5mm depth · £295","23/01/2026"]].map(r=>`
+            <div class="cp-hrow"><div><b>${r[0]}</b><small>${r[1]}</small></div><span class="d">${r[2]} ›</span></div>`).join("")}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
+            <div class="cp-panel">
+              <h3>${ICONS.cal}Upcoming appointments</h3>
+              <div class="psub">Future diary visits and what still needs chasing.</div>
+              <div style="display:flex;gap:12px;align-items:center;margin-top:10px">
+                <div style="text-align:center;background:var(--pink);border-radius:10px;padding:7px 11px;flex:none">
+                  <div style="font-size:9.5px;font-weight:700;color:var(--pinkink)">OCT</div>
+                  <div style="font-size:19px;font-weight:800;color:#b0446f">2</div>
+                  <div style="font-size:9.5px;color:var(--pinkink)">Fri</div></div>
+                <div><b style="font-size:13px">Microneedling with PRP</b>
+                  <div style="color:var(--mut);font-size:11.5px;margin-top:2px">14:30 · Dr Nadia Rahman</div>
+                  <div style="display:flex;gap:6px;margin-top:6px"><span class="cp-chip pink">Balance due</span><span class="cp-chip blue">Consent due</span></div></div>
+                <span style="margin-left:auto;color:#aab3c6">›</span></div>
+              <div style="color:#2e7d5b;font-size:12px;font-weight:600;margin-top:11px">Open diary →</div>
+            </div>
+            <div class="cp-panel">
+              <h3>${ICONS.clock}Recall tasks</h3>
+              <div class="psub">No recall tasks yet. Assign one from the Retention page by hovering a patient's practitioner.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cp-msgs">
+        <div class="who"><span class="cp-ava" style="background:var(--pink);color:var(--pinkink)">GA</span>
+          <div><b>Grace Adeyemi</b><small>Private messages with this patient</small></div></div>
+        <div class="empty">${ICONS.msg.replace("<svg",'<svg style="width:26px;height:26px;stroke:#c3ccd8"')}No messages yet. Say hello, or send a treatment reminder.</div>
+        <div class="inp">Message Grace… <span class="snd">➤</span></div>
+      </div>
+    </div>`),
+});
+
+S("pastel-performance",{
+  version:"pastel", title:"Performance", route:"/performance", chrome:"none", frame:"4:3",
+  html:cpShell("performance",`
+    <div class="cp-h1row">
+      <div><h1>Performance</h1><div class="sub">Earnings and collections for the clinic, then a breakdown by practitioner.</div></div>
+      <div class="cp-right"><span class="cp-seg"><span class="on">This month</span><span>Last month</span><span>This year</span></span></div>
+    </div>
+    <div class="cp-stats">
+      <div class="cp-stat"><div class="ic" style="background:var(--mint);color:var(--mintink)">${IC("M4 18V9M9.3 18V5M14.6 18v-7M20 18V8")}</div>
+        <small>Earned</small><div class="v">£31,925.00</div><div class="chips"><span class="cp-uch up">↗ 12%</span><span class="cp-uch mut">vs. last month</span></div></div>
+      <div class="cp-stat"><div class="ic" style="background:var(--blue);color:var(--blueink)">${ICONS.bill}</div>
+        <small>Collected</small><div class="v">£15,370.00</div><div class="chips"><span class="cp-uch up">↗ 8%</span><span class="cp-uch mut">vs. last month</span></div></div>
+      <div class="cp-stat"><div class="ic" style="background:var(--mint);color:var(--mintink)">${IC("M9 11a3.4 3.4 0 1 0 0-6.8A3.4 3.4 0 0 0 9 11zM3 20c.8-3.2 3-4.8 6-4.8s5.2 1.6 6 4.8M16.5 10.6a3 3 0 1 0-1.7-5.6M17 15.4c2 .5 3.4 1.9 4 4.6")}</div>
+        <small>To practitioners</small><div class="v">£13,642.85</div><div class="chips"><span class="cp-uch up">↗ 11%</span><span class="cp-uch mut">vs. last month</span></div></div>
+      <div class="cp-stat"><div class="ic" style="background:var(--pink);color:var(--pinkink)">${IC("M12 3a9 9 0 1 0 9 9h-9z")}</div>
+        <small>Retained by clinic</small><div class="v">£18,282.15</div><div class="chips"><span class="cp-uch up">↗ 6%</span><span class="cp-uch mut">vs. last month</span></div></div>
+    </div>
+    <div style="display:flex;align-items:flex-end;margin-top:12px">
+      <div><div style="font-size:16px;font-weight:700">Trends</div>
+        <div style="color:var(--mut);font-size:12px;margin-top:1px">By day over the selected period — clinic total or a single practitioner.</div></div>
+      <span class="cp-btn" style="margin-left:auto;height:34px;font-size:12.5px">Clinic total ▾</span>
+    </div>
+    <div class="cp-trend">
+      <div class="cp-chart"><h4>Earnings</h4><div class="csub">Treatment value earned and booking revenue collected</div>
+        <div class="leg"><span><i style="background:#e79f0a"></i>Earned</span><span><i style="background:#f3d9a0"></i>Collected</span></div>
+        ${svgLineChart({type:"line",max:6000,ylab:["£0","£1,500","£3,000","£4,500","£6,000"],series:[
+          {vals:EARN,c:"#e79f0a",fill:"#fdf3dd"},{vals:COLL,c:"#f3d9a0",dash:1}]})}</div>
+      <div class="cp-chart"><h4>Appointments</h4><div class="csub">Bookings in the diary for each day</div>
+        <div class="leg"><span><i style="background:#67adfe"></i>Scheduled</span><span><i style="background:#c2ddfd"></i>Completed</span></div>
+        ${svgLineChart({type:"bar",max:24,ylab:["0","6","12","18","24"],vals:APPT,c:"#67adfe",c2:"#c2ddfd"})}</div>
+      <div class="cp-chart"><h4>Attendance rate</h4><div class="csub">Attended as a share of settled bookings</div>
+        ${svgLineChart({type:"line",max:100,ylab:["0%","25%","50%","75%","100%"],series:[
+          {vals:ATT,c:"#2f9e68",fill:"#e2f2e9"}],marker:{i:13,l1:"14 Sep",l2:"Attendance: 78%"}})}</div>
+      <div class="cp-chart"><h4>No shows</h4><div class="csub">Bookings marked as no show</div>
+        ${svgLineChart({type:"bar",max:4,ylab:["0","1","2","3","4"],vals:NOSH,c:"#e56898"})}</div>
+    </div>
+    <div style="display:flex;align-items:flex-end;margin-top:12px">
+      <div><div style="font-size:16px;font-weight:700">Practitioner KPIs</div>
+        <div style="color:var(--mut);font-size:12px;margin-top:1px">Expand a row for cash collected, outstanding balances, and activity. Edit commission under Team.</div></div>
+    </div>
+    <div class="cp-kpi">
+      <div class="top"><span class="ic">${IC("M4 17l5-5 4 3 7-8")}</span>
+        <div><small style="color:#2e7d5b;font-weight:700">Top performer</small><b>Dr Nadia Rahman <span style="font-weight:500;color:var(--mut)">Aesthetic Practitioner</span></b>
+          <small>£12,785.00 earned · 49 treatments · 72% retention</small></div>
+        <span class="cp-btn" style="margin-left:auto;height:34px;font-size:12.5px">View profile</span></div>
+      <table>
+        <tr><th>Practitioner</th><th>Earned</th><th>Treatments</th><th>Attendance</th><th>Retention</th><th>Outstanding</th><th>Details</th></tr>
+        <tr><td><span class="cp-ava" style="background:var(--butter);color:#7a5f18;display:inline-flex;width:24px;height:24px;font-size:9.5px;margin-right:8px">DN</span><b style="display:inline">Dr Nadia Rahman</b> <small>Aesthetic Practitioner</small></td>
+          <td>£12,785.00</td><td>49</td><td>93%</td><td>72%</td><td class="out">£19,225.00</td><td style="color:#aab3c6">▾</td></tr>
+        <tr><td><span class="cp-ava" style="background:var(--lav);color:var(--lavink);display:inline-flex;width:24px;height:24px;font-size:9.5px;margin-right:8px">DT</span><b style="display:inline">Dr Tom Whitfield</b> <small>Aesthetic Doctor</small></td>
+          <td>£11,680.00</td><td>47</td><td>86%</td><td>71%</td><td class="out">£21,315.00</td><td style="color:#aab3c6">▾</td></tr>
+        <tr><td><span class="cp-ava" style="background:var(--mint);color:var(--mintink);display:inline-flex;width:24px;height:24px;font-size:9.5px;margin-right:8px">DA</span><b style="display:inline">Dr Amara Osei</b> <small>Clinic Director</small></td>
+          <td>£7,460.00</td><td>27</td><td>81%</td><td>74%</td><td class="out">£13,875.00</td><td style="color:#aab3c6">▾</td></tr>
+        <tr><td><b style="display:inline;color:#2e7d5b">Clinic total</b> <small>3 practitioners · 42.3% avg commission</small></td>
+          <td><b style="display:inline">£31,925.00</b></td><td><b style="display:inline">123</b></td><td><b style="display:inline">87%</b></td><td><b style="display:inline">72%</b></td><td class="out">£54,415.00</td><td style="color:#aab3c6">▾</td></tr>
+      </table>
+    </div>`),
+});
+/* ---- journey clinic shared shell ---- */
+function cjShell(active,content){
+  const nav=(id,ic,label)=>`<a href="#" class="${active===id?"on":""}">${ic}${label}</a>`;
+  return `
+  <aside class="cj-side">
+    <div class="cj-logo"><span class="mark">✦</span><div><b>Aetheria</b><small>SKIN&nbsp;CLINIC</small></div></div>
+    <div class="cj-group">Clinic</div>
+    <nav class="cj-nav">${nav("dash",IC("M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"),"Dashboard")}${nav("diary",ICONS.cal,"Diary")}${nav("patients",IC("M9 11a3.4 3.4 0 1 0 0-6.8A3.4 3.4 0 0 0 9 11zM3 20c.8-3.2 3-4.8 6-4.8s5.2 1.6 6 4.8M16.5 10.6a3 3 0 1 0-1.7-5.6M17 15.4c2 .5 3.4 1.9 4 4.6"),"Patients")}${nav("board",ICONS.task,"Journey board")}</nav>
+    <div class="cj-group" style="color:#9aa4bb">Reports</div>
+    <nav class="cj-nav">${nav("retention",IC("M4 17l5-5 4 3 7-8M4 20h16"),"Retention")}${nav("performance",IC("M4 18V9M9.3 18V5M14.6 18v-7M20 18V8"),"Performance")}</nav>
+    <div class="cj-group" style="color:#9aa4bb">Team</div>
+    <nav class="cj-nav">${CP_TEAM.map(t=>`<div class="cj-team"><span class="cp-ava" style="background:${t[1]}">${t[0]}</span>${t[2]}</div>`).join("")}</nav>
+    <div class="cj-art"><img src="assets/sidebar-silk.png" alt="">
+      <div class="cap"><b>Confident skin brighter futures.</b><span>Your patients' journey makes a difference.</span></div></div>
+  </aside>
+  <div class="cj-main">
+    <div class="cj-top">
+      <div class="cj-search">⌕ Search patients, appointments, or treatments…</div>
+      <div class="cj-script">Healthy skin<br>brighter tomorrows</div>
+      <span class="cj-bell">${ICONS.bell.replace("<svg",'<svg style="width:18px;height:18px"')}<em>3</em></span>
+      <div class="cj-me"><span class="cp-ava" style="width:34px;height:34px;font-size:11.5px;background:#fae9be;color:#7a5f18">DA</span>
+        <div><b>Dr Amara Osei</b><small>Clinic Owner</small></div><span style="color:#aab3c6">▾</span></div>
+    </div>
+    <div class="cj-content">${content}</div>
+  </div>`;
+}
+const CJ_ROADMAP=[
+  ["done","Consultation & Skin Assessment","5 Sep 2024","Completed"],
+  ["done","Treatment Plan Agreed","5 Sep 2024","Completed"],
+  ["done","15 Sep Microneedling Session 1","15 Sep 2024","Completed"],
+  ["done","Wait 3 Days","18 Sep 2024","Completed"],
+  ["done","Start New Skincare Routine","18 Sep 2024","Completed"],
+  ["done","Daily Skin Health Tasks","Ongoing","Completed"],
+  ["cur","Blood Test Check","22 Sep 2024","Current"],
+  ["cond","If Deficient: Start Vitamins","Conditional","Conditional"],
+  ["n","1 Week Before Session 2 Stop Active Ingredients","20 Sep 2024","Upcoming"],
+  ["n","Microneedling Session 2","27 Sep 2024","Upcoming"],
+  ["n","Continue Routine & Healthy Habits","Ongoing","Upcoming"],
+  ["n","1 Week Before Session 3 Stop Active Ingredients","18 Oct 2024","Upcoming"],
+  ["n","Microneedling Session 3","25 Oct 2024","Upcoming"],
+  ["n","Review & Results","1 Nov 2024","Upcoming"],
+];
+
+S("journey-overview",{
+  version:"journey", title:"Clinic overview", route:"clinic.aetheria.co.uk",
+  chrome:"mac", url:"https://clinic.aetheria.co.uk", frame:"4:3",
+  html:cjShell("dash",`
+    <div class="cj-h1row">
+      <div><h1>Clinic overview</h1><div class="sub">A journey-led view of today's treatments, patient progress and next actions.</div></div>
+      <div class="cj-right">
+        <span class="cj-pill">${ICONS.cal.replace("<svg",'<svg style="width:14px;height:14px"')}Fri 13 Sep 2024&nbsp;&nbsp;‹&nbsp;›</span>
+        <span class="cj-cta">＋ New appointment</span>
+      </div>
+    </div>
+    <div class="cj-stats">
+      <div class="cj-stat"><span class="ic" style="background:var(--mint);color:var(--mintink)">${ICONS.layers}</span>
+        <div><small>Active skin plans</small><div class="v">457<span class="cj-uch up">↗ 12%</span></div><div class="foot">Patients on a treatment journey</div></div></div>
+      <div class="cj-stat"><span class="ic" style="background:var(--blue);color:var(--blueink)">${ICONS.cal}</span>
+        <div><small>Milestones due today</small><div class="v">18<span class="cj-uch blue">6 treatments</span></div><div class="foot">12 tasks &amp; follow-ups</div></div></div>
+      <div class="cj-stat"><span class="ic" style="background:var(--cream);color:var(--creamink)">${IC("M9 11a3.4 3.4 0 1 0 0-6.8A3.4 3.4 0 0 0 9 11zM3 20c.8-3.2 3-4.8 6-4.8s5.2 1.6 6 4.8M16.5 10.6a3 3 0 1 0-1.7-5.6M17 15.4c2 .5 3.4 1.9 4 4.6")}</span>
+        <div><small>Patients needing support</small><div class="v">22<span class="cj-uch dn">↑ 4</span></div><div class="foot">Require clinic attention</div></div></div>
+      <div class="cj-stat"><span class="ic" style="background:var(--mint);color:var(--mintink)">${IC("M4 18V9M9.3 18V5M14.6 18v-7M20 18V8")}</span>
+        <div><small>Revenue this month</small><div class="v">£31,925<span class="cj-uch up">↗ 14%</span></div><div class="foot">123 treatments delivered</div></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 252px;gap:11px;margin-top:10px;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:10px;min-height:0">
+        <div class="cj-panel">
+          <h3>Today's journey appointments<span class="see">View full diary →</span></h3>
+          <div class="psub">A focused view of today's patients and their treatment journey.</div>
+          <div class="cj-appts">
+            <div class="cj-appt"><div class="t">09:00 – 09:45<span class="st cj-chip mint">Ready</span></div>
+              <div class="who"><img src="assets/avatar-priya.png" alt=""><div><b>Priya Chandrasekhar</b><small>Session 2 of 3<br>Chemical Peel</small></div></div>
+              <div class="dr">⚕ Dr Nadia Rahman</div>
+              <div class="row"><span class="cj-chip mint">Consent done</span><span class="cj-chip slate">Actives stopped</span></div></div>
+            <div class="cj-appt"><div class="t">10:15 – 11:00<span class="st cj-chip pink">Blood test pending</span></div>
+              <div class="who"><img src="assets/avatar-grace.png" alt=""><div><b>Grace Adeyemi</b><small>Session 3 of 6<br>Microneedling with PRP</small></div></div>
+              <div class="dr">⚕ Dr Tom Whitfield</div>
+              <div class="row"><span class="cj-chip mint">Consent done</span><span class="cj-chip pink">Blood test pending</span></div></div>
+            <div class="cj-appt"><div class="t">11:00 – 11:45<span class="st cj-chip mint">Ready</span></div>
+              <div class="who"><img src="assets/avatar-leila.png" alt=""><div><b>Leila Farouk</b><small>Session 1 of 3<br>Lip Filler</small></div></div>
+              <div class="dr">⚕ Dr Amara Osei</div>
+              <div class="row"><span class="cj-chip mint">Consent done</span><span class="cj-chip cream">Aftercare due</span></div></div>
+            <div class="cj-appt"><div class="t">14:00 – 14:45<span class="st cj-chip mint">Ready</span></div>
+              <div class="who"><img src="assets/avatar-theo.png" alt=""><div><b>Theo Nakamura</b><small>Session 2 of 4<br>Anti-Wrinkle Injections</small></div></div>
+              <div class="dr">⚕ Dr Nadia Rahman</div>
+              <div class="row"><span class="cj-chip mint">Consent done</span><span class="cj-chip slate">Actives stopped</span></div></div>
+          </div>
+        </div>
+        <div class="cj-panel">
+          <h3>Journey support queue<span class="see">View all tasks →</span></h3>
+          <div class="psub">Patients that need attention to keep their journey on track.</div>
+          <div class="cj-queue">
+            <div class="cj-qcol"><div class="qh" style="background:var(--pink);color:#b0446f">⚠ Urgent<span class="n">4</span></div>
+              ${[["GA","#fde4ec;color:#c25a7d","Grace Adeyemi","Blood test results missing"],
+                 ["LF","#e5effd;color:#4a6fa5","Leila Farouk","Consent form outstanding"],
+                 ["RP","#fde4ec;color:#c25a7d","Rebecca Lindqvist","Adverse reaction follow-up"],
+                 ["HB","#fdf4e4;color:#9a7420","Hugo Berrington","Review photos overdue"]].map((r,i)=>`
+              <div class="cj-qrow"><span class="cj-ava" style="background:${r[1]}">${r[0]}</span>
+                <div><b>${r[2]}</b><small>${r[3]}</small></div><span class="d">${i===3?"1 day":"Today"}</span></div>`).join("")}
+            </div>
+            <div class="cj-qcol"><div class="qh" style="background:var(--cream);color:#9a7420">◔ Today<span class="n">6</span></div>
+              ${[["ON","Olivia Bennett","Start skincare routine"],["ZM","Zara Haddad","Stop active ingredients before Session 2"],
+                 ["FC","Freya Sundqvist","Aftercare follow-up due"],["TN","Theo Nakamura","Send pre-treatment advice"]].map(r=>`
+              <div class="cj-qrow"><span class="cj-ava" style="background:#eef0f4;color:#66708a">${r[0]}</span>
+                <div><b>${r[1]}</b><small>${r[2]}</small></div><span class="d">Today</span></div>`).join("")}
+            </div>
+            <div class="cj-qcol"><div class="qh" style="background:var(--blue);color:#4a6fa5">▤ This week<span class="n">8</span></div>
+              ${[["NP","Nadia Petrova","Book next session","Mon 16 Sep"],["EC","Eleanor Whitmore","Check in · 4 week review","Tue 17 Sep"],
+                 ["DM","Daniel Kowalski","Review results photos","Wed 18 Sep"],["AC","Amelia Fitzgerald","Update treatment plan","Thu 19 Sep"]].map(r=>`
+              <div class="cj-qrow"><span class="cj-ava" style="background:#eef0f4;color:#66708a">${r[0]}</span>
+                <div><b>${r[1]}</b><small>${r[2]}</small></div><span class="d">${r[3]}</span></div>`).join("")}
+            </div>
+          </div>
+        </div>
+        <div class="cj-panel" style="flex:1;min-height:0;overflow:hidden">
+          <h3>Journey board snapshot<span class="see">View journey board →</span></h3>
+          <div class="psub">A live view of your patients across the treatment journey.</div>
+          <div class="cj-snap">
+            <div class="cj-scol"><div class="sh"><span class="ic">${ICONS.layers.replace("<svg",'<svg style="width:13px;height:13px"')}</span>Foundation<span class="n">132 patients</span></div>
+              <div class="sub2">Assess, plan and prepare</div>
+              ${[["assets/avatar-leila.png","Maya Patel",33,"1 of 3"],["assets/avatar-theo.png","James O'Connor",33,"1 of 3"],["assets/avatar-alex.png","Sophie Chen",66,"2 of 3"]].map(r=>`
+              <div class="cj-srow"><img src="${r[0]}" alt="">${r[1]}<span class="bar"><i style="width:${r[2]}%"></i></span><span class="frac">${r[3]} ›</span></div>`).join("")}
+            </div>
+            <div class="cj-scol"><div class="sh"><span class="ic">${ICONS.layers.replace("<svg",'<svg style="width:13px;height:13px"')}</span>Build &amp; Support<span class="n">201 patients</span></div>
+              <div class="sub2">Continue treatment and monitor progress</div>
+              ${[["assets/avatar-grace.png","Grace Adeyemi",50,"3 of 6"],["assets/avatar-theo.png","Theo Nakamura",50,"2 of 4"],["assets/avatar-priya.png","Nadia Petrova",50,"2 of 4"]].map(r=>`
+              <div class="cj-srow"><img src="${r[0]}" alt="">${r[1]}<span class="bar"><i style="width:${r[2]}%"></i></span><span class="frac">${r[3]} ›</span></div>`).join("")}
+            </div>
+            <div class="cj-scol"><div class="sh"><span class="ic">${ICONS.check.replace("<svg",'<svg style="width:13px;height:13px"')}</span>Results &amp; Confidence<span class="n">124 patients</span></div>
+              <div class="sub2">Complete your treatment and maintain results</div>
+              ${[["assets/avatar-leila.png","Leila Farouk",100,"3 of 3"],["assets/avatar-theo.png","Daniel Kowalski",100,"3 of 3"],["assets/avatar-emma.png","Eleanor Whitmore",100,"3 of 3"]].map(r=>`
+              <div class="cj-srow"><img src="${r[0]}" alt="">${r[1]}<span class="bar"><i style="width:${r[2]}%"></i></span><span class="frac">${r[3]} ›</span></div>`).join("")}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cj-panel cj-notes" style="min-height:0;display:flex;flex-direction:column">
+        <h3>${ICONS.task.replace("<svg",'<svg style="width:15px;height:15px;stroke:#5b6a8f"')}Clinic notes<span style="margin-left:auto;color:#aab3c6">⋯</span></h3>
+        <div class="psub">Team reminders and key focus areas.</div>
+        <ul style="margin-top:8px;padding:0">
+          <li>Follow up all outstanding blood test results.</li>
+          <li>Check patients are stopping actives 3 days before treatment.</li>
+          <li>Send aftercare messages to yesterday's patients.</li>
+          <li>Review before &amp; after photos for September cohort.</li>
+          <li>Prepare stock for next week's microneedling sessions.</li>
+          <li>Team meeting at 4pm in treatment room 1.</li>
+        </ul>
+      </div>
+    </div>`),
+});
+
+S("journey-patient",{
+  version:"journey", title:"Patient — Skin Journey", route:"clinic.aetheria.co.uk/patients",
+  chrome:"mac", url:"https://clinic.aetheria.co.uk", frame:"4:3",
+  html:cjShell("patients",`
+    <div style="color:var(--teal);font-size:12px;flex:none">← All patients</div>
+    <div class="cj-rechead" style="margin-top:6px;flex:none">
+      <span class="gtile">GA</span>
+      <div><h2>Grace Adeyemi</h2> <span class="cj-chip mint" style="vertical-align:6px">Active patient</span>
+        <div class="meta">ID: AV-1263 &nbsp;|&nbsp; 16 Aug 1999 (25 yrs) &nbsp;|&nbsp; grace.adeyemi@example.com &nbsp;|&nbsp; 07796 358454</div>
+        <div class="meta"><b style="font-weight:600">Practitioner:</b> Dr Nadia Rahman &nbsp;|&nbsp; <b style="font-weight:600">Journey:</b> 3-Month Microneedling Plan</div></div>
+      <span class="cj-pill" style="margin-left:auto">More actions ▾</span>
+    </div>
+    <div class="cj-stats" style="margin-top:10px">
+      <div class="cj-stat"><span class="ic" style="background:var(--mint);color:var(--mintink)">${ICONS.layers}</span>
+        <div><small>Current phase</small><div class="v" style="font-size:15px;margin-top:3px">Build &amp; Support</div><div class="foot">Month 2 of 3</div></div><span style="margin-left:auto;color:#aab3c6">›</span></div>
+      <div class="cj-stat">
+        <svg width="52" height="52" viewBox="0 0 52 52" style="flex:none">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="#e6ecee" stroke-width="6"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="#0b635c" stroke-width="6" stroke-linecap="round" stroke-dasharray="43 57" pathLength="100" transform="rotate(-90 26 26)"/>
+          <text x="26" y="30" text-anchor="middle" font-size="11.5" font-weight="800" fill="#0b1f4d">43%</text></svg>
+        <div><small>Plan progress</small><div class="v" style="font-size:15px;margin-top:3px">6 of 14 milestones</div></div><span style="margin-left:auto;color:#aab3c6">›</span></div>
+      <div class="cj-stat"><span class="ic" style="background:var(--blue);color:var(--blueink)">${ICONS.cal}</span>
+        <div><small>Next appointment</small><div class="v" style="font-size:15px;margin-top:3px">Microneedling Session 2</div><div class="foot">Tue 27 Sep 2024, 10:00am</div></div></div>
+      <div class="cj-stat"><span class="ic" style="background:#f8ebe7;color:#d0685f">${ICONS.drop}</span>
+        <div><small>Blood test status</small><div class="v" style="font-size:15px;margin-top:3px">In progress</div><div class="foot">Due 22 Sep 2024</div></div></div>
+    </div>
+    <div class="cj-tabs"><span>Overview</span><span class="on">Skin Journey</span><span>Treatments</span><span>Before &amp; After</span><span>Documents</span><span>Messages</span></div>
+    <div style="display:grid;grid-template-columns:1fr 300px;gap:12px;margin-top:10px;flex:1;min-height:0;overflow:hidden">
+      <div style="display:flex;flex-direction:column;gap:10px;min-height:0">
+        <div class="cj-panel" style="flex:1;min-height:0;overflow:hidden">
+          <h3>Plan roadmap<span class="see"><span class="cj-pill" style="height:30px;font-size:11.5px">${ICONS.cal.replace("<svg",'<svg style="width:13px;height:13px"')} View as calendar</span></span></h3>
+          <div class="psub">A step-by-step guide to Grace's treatment, care and results. This mirrors the patient portal.</div>
+          <div style="display:grid;grid-template-columns:140px minmax(0,1fr);column-gap:16px;margin-top:8px">
+            <div>
+              <div class="cj-month" style="border-top:3px solid var(--teal);padding-top:8px">
+                <h4><small>Month 1</small>Foundation</h4><p>Assess, plan and prepare your skin for the best results.</p>
+                <div class="prog">5 of 5 complete</div><div class="bar"><i style="width:100%"></i></div></div>
+              <div class="cj-month" style="margin-top:30px">
+                <h4><small>Month 2</small>Build &amp; Support</h4><p>Continue treatment, support skin health and monitor progress.</p>
+                <div class="prog">1 of 5 complete</div><div class="bar"><i style="width:20%"></i></div></div>
+              <div class="cj-month" style="margin-top:36px">
+                <h4><small>Month 3</small>Results &amp; Confidence</h4><p>Complete your treatment plan and review your results.</p>
+                <div class="prog">0 of 4 complete</div><div class="bar"><i style="width:0"></i></div></div>
+            </div>
+            <div class="cj-steps">
+              ${CJ_ROADMAP.map((r,i)=>{
+                const cls=r[0]==="done"?"done":r[0]==="cur"?"cur":r[0]==="cond"?"cond":"";
+                const chip=r[3]==="Completed"?"mint":r[3]==="Current"?"deep":r[3]==="Conditional"?"slate":"blue";
+                const dot=r[0]==="done"||r[0]==="cur"?ICONS.check:(i+1);
+                return `<div class="cj-step ${cls}"><span class="dot">${dot}</span><b>${r[1]}</b><span class="date">${r[2]}</span><span class="cj-chip ${chip}" style="min-width:72px;justify-content:center">${r[3]}</span></div>`;
+              }).join("")}
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:10px;flex:none">
+          <div class="cj-panel"><h3 style="font-size:12.5px">Treatment history<span class="see" style="font-size:10px">4 treatments</span></h3>
+            <div class="cj-hrow"><span>Microneedling with PRP</span><span class="d">15 Sep 2024 <span class="cj-chip mint">Completed</span></span></div>
+            <div class="cj-hrow"><span>Consultation &amp; Skin Assessment</span><span class="d">5 Sep 2024 <span class="cj-chip mint">Completed</span></span></div>
+            <div class="cj-hrow"><span>Patch Test</span><span class="d">3 Sep 2024 <span class="cj-chip mint">Completed</span></span></div>
+            <div style="color:var(--teal);font-size:11px;font-weight:600;margin-top:7px">View full history →</div></div>
+          <div class="cj-panel"><h3 style="font-size:12.5px">Upcoming appointments<span class="see" style="font-size:10px">2 appointments</span></h3>
+            <div class="cj-hrow"><div><b style="font-size:11.8px">Microneedling Session 2</b><br><small style="color:var(--mut);font-size:10.5px">Tue 27 Sep 2024, 10:00am</small></div><span class="d"><span class="cj-chip blue">Confirmed</span></span></div>
+            <div class="cj-hrow"><div><b style="font-size:11.8px">Microneedling Session 3</b><br><small style="color:var(--mut);font-size:10.5px">Fri 25 Oct 2024, 10:00am</small></div><span class="d"><span class="cj-chip slate">Scheduled</span></span></div>
+            <div style="color:var(--teal);font-size:11px;font-weight:600;margin-top:7px">View all appointments →</div></div>
+          <div class="cj-panel"><h3 style="font-size:12.5px">Recent photos<span class="see" style="font-size:10px">View all photos →</span></h3>
+            <div class="cj-photos">
+              <div class="ph"><img src="assets/skin-before-2.png" alt=""><div class="lb">5 Sep 2024<br>Baseline</div></div>
+              <div class="ph"><img src="assets/skin-progress-2.png" alt=""><div class="lb">15 Sep 2024<br>After Session 1</div></div>
+              <div class="ph"><img src="assets/skin-after-2.png" alt=""><div class="lb">18 Sep 2024<br>Progress</div></div>
+              <div class="add">＋<span style="font-size:9px;margin-top:2px">Add photos</span></div>
+            </div></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;min-height:0;overflow:hidden">
+        <div class="cj-panel cj-check">
+          <h3 style="font-size:13.5px">⚙ Clinician action panel</h3>
+          <div class="psub">Support Grace's journey with timely actions.</div>
+          <div style="margin-top:6px">
+            <label><span class="box"></span>Check blood test result (GP or private)</label>
+            <label><span class="box"></span>Review skincare routine adherence</label>
+            <label><span class="box"></span>Confirm stop actives before Session 2</label>
+            <label><span class="box"></span>Upload latest photos</label>
+            <label><span class="box"></span>Send pre-appointment message</label>
+            <label><span class="box"></span>Add clinical note</label>
+            <label><span class="box"></span>Mark this stage as reviewed</label>
+          </div>
+          <div class="cj-btn deep" style="margin-top:9px">${ICONS.up.replace("<svg",'<svg style="width:14px;height:14px"')}Upload Result</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+            <div class="cj-btn" style="font-size:11.5px">💬 Send Message</div>
+            <div class="cj-btn" style="font-size:11.5px">⏰ Assign Reminder</div>
+          </div>
+        </div>
+        <div class="cj-panel cj-focus cj-check">
+          <h3 style="font-size:13px">☀ Today's focus<span class="see" style="color:var(--mut);font-size:10.5px">3 tasks</span></h3>
+          <label><span class="box"></span>Review blood test result</label>
+          <label class="don"><span class="box"></span>Prepare for Session 2 (stop actives)</label>
+          <label><span class="box"></span>Send appointment reminder</label>
+          <label><span class="box"></span>Check skincare routine progress</label>
+        </div>
+        <div class="cj-panel" style="flex:1">
+          <h3 style="font-size:13px">Plan notes<span class="see">✎ Edit</span></h3>
+          <p style="font-size:11.8px;line-height:1.55;color:#42506e;margin-top:7px">Grace is responding well to treatment. Skin texture improving and no adverse reactions. Keep monitoring vitamin D and B12 levels. Encourage consistent home care routine.</p>
+          <div style="color:var(--mut);font-size:10.5px;margin-top:9px">Last updated 18 Sep 2024 by Dr Nadia Rahman</div>
+        </div>
+      </div>
+    </div>`),
+});
+
+S("journey-retention",{
+  version:"journey", title:"Retention & outcomes", route:"clinic.aetheria.co.uk/retention",
+  chrome:"mac", url:"https://clinic.aetheria.co.uk", frame:"4:3",
+  html:cjShell("retention",`
+    <div class="cj-h1row">
+      <div><h1>Retention &amp; outcomes</h1><div class="sub">See who is progressing, who is dropping off, and where to intervene.</div></div>
+      <div class="cj-right">
+        <span class="cj-pill">${ICONS.cal.replace("<svg",'<svg style="width:14px;height:14px"')}Last 12 months&nbsp;&nbsp;‹&nbsp;›</span>
+        <span class="cj-pill">⇩ Export report</span>
+      </div>
+    </div>
+    <div class="cj-stats">
+      <div class="cj-stat"><span class="ic" style="background:var(--mint);color:var(--mintink)">${IC("M9 11a3.4 3.4 0 1 0 0-6.8A3.4 3.4 0 0 0 9 11zM3 20c.8-3.2 3-4.8 6-4.8s5.2 1.6 6 4.8M16.5 10.6a3 3 0 1 0-1.7-5.6M17 15.4c2 .5 3.4 1.9 4 4.6")}</span>
+        <div><small>Journey completion rate</small><div class="v">72%<span class="cj-uch up">↗ 12%</span></div><div class="foot">457 of 633 patients completed a plan</div></div></div>
+      <div class="cj-stat"><span class="ic" style="background:var(--blue);color:var(--blueink)">${ICONS.cal}</span>
+        <div><small>Repeat booking rate</small><div class="v">68%<span class="cj-uch up">↗ 8%</span></div><div class="foot">513 patients booked a second plan</div></div></div>
+      <div class="cj-stat"><span class="ic" style="background:var(--pink);color:var(--pinkink)">${IC("M12 4 21 19H3zM12 10v4M12 16.6v.4")}</span>
+        <div><small>Plans at risk</small><div class="v">24<span class="cj-uch dn">↑ 29%</span></div><div class="foot">Patients overdue or missing next step</div></div></div>
+      <div class="cj-stat"><span class="ic" style="background:var(--mint);color:var(--mintink)">${ICONS.photo}</span>
+        <div><small>Before &amp; after reviews collected</small><div class="v">62%<span class="cj-uch up">↗ 18%</span></div><div class="foot">389 of 633 completed plans</div></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:12px;margin-top:12px;flex:none">
+      <div class="cj-panel">
+        <h3>Patient journey progression<span class="see"><span class="cj-pill" style="height:30px;font-size:11.5px">All treatment plans ▾</span></span></h3>
+        <div class="psub">From first consultation to completed plan. Shows where patients drop off.</div>
+        <div class="cj-funnel">
+          ${[["100%",633,150,"#1c7979","1","Consultation & skin assessment"],
+             ["86%",545,128,"#4ca7a9","2","Plan started (treatment 1)"],
+             ["68%",429,101,"#71c1bb","3","Mid-plan (on track)"],
+             ["58%",367,86,"#92bfbf","4","Plan completed"],
+             ["48%",304,71,"#b9dcd9","5","Continued care (maintenance)"]].map(f=>`
+          <div class="cj-fbar"><div class="pct">${f[0]}</div>
+            <div class="bar" style="height:${f[2]}px;background:${f[3]}">${f[1]}</div>
+            <div class="lbl"><b>${f[4]}</b>${f[5]}</div></div>`).join("")}
+        </div>
+      </div>
+      <div class="cj-panel">
+        <h3>💡 Where to focus</h3>
+        <div class="psub">Insights based on your clinic's patient journey data.</div>
+        <div style="margin-top:6px">
+          <div class="cj-focusrow"><span class="ic" style="background:var(--pink);color:var(--pinkink)">${ICONS.clock.replace("<svg",'<svg style="width:14px;height:14px"')}</span>
+            <div><b>24 patients are at risk</b><small>Haven't booked their next step. Send a recall message to keep them on track.</small></div><span class="chev">›</span></div>
+          <div class="cj-focusrow"><span class="ic" style="background:var(--cream);color:var(--creamink)">${ICONS.clock.replace("<svg",'<svg style="width:14px;height:14px"')}</span>
+            <div><b>Biggest drop-off after treatment 1</b><small>14% of patients don't return for treatment 2. Consider a follow-up message at 7 days.</small></div><span class="chev">›</span></div>
+          <div class="cj-focusrow"><span class="ic" style="background:var(--blue);color:var(--blueink)">${ICONS.photo.replace("<svg",'<svg style="width:14px;height:14px"')}</span>
+            <div><b>Before &amp; after reviews can improve</b><small>38% of completed plans are missing photos. Ask at the final appointment.</small></div><span class="chev">›</span></div>
+          <div class="cj-focusrow"><span class="ic" style="background:var(--mint);color:var(--mintink)">${IC("M4 17l5-5 4 3 7-8").replace("<svg",'<svg style="width:14px;height:14px"')}</span>
+            <div><b>Maintenance drives long-term value</b><small>Patients who enter maintenance have 3.2x higher lifetime value. Promote continued care.</small></div><span class="chev">›</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:12px;margin-top:12px;flex:1;min-height:0">
+      <div class="cj-panel" style="overflow:hidden">
+        <h3>Patients at risk<span class="see">View all at-risk patients →</span></h3>
+        <div class="psub">Patients who may be dropping off, so you can take action early.</div>
+        <table class="cj-rtable">
+          <tr><th>Patient</th><th>Current phase</th><th>Last visit</th><th>Next step</th><th>Risk reason</th><th>Action</th></tr>
+          ${[["OL","Olivia Bennett","blue","Treatment 1 of 3","22 Aug 2024","Book treatment 2","No booking (14 days)","Send reminder"],
+             ["ZP","Zara Haddad","mint","Mid-plan","5 Sep 2024","Treatment 3","Overdue (10 days)","Contact patient"],
+             ["FC","Freya Sundqvist","blue","Treatment 2 of 4","12 Aug 2024","Book treatment 3","No booking (21 days)","Send reminder"],
+             ["TN","Theo Nakamura","slate","Consultation","3 Sep 2024","Start plan","No booking (10 days)","Send message"],
+             ["AC","Amelia Fitzgerald","mint","Mid-plan","18 Aug 2024","Treatment 3","Overdue (12 days)","Contact patient"]].map(r=>`
+          <tr><td><span class="cp-ava" style="display:inline-flex;width:22px;height:22px;font-size:8.5px;background:#eef0f4;color:#66708a;margin-right:7px">${r[0]}</span><b style="display:inline;font-size:11.8px">${r[1]}</b></td>
+            <td><span class="cj-chip ${r[2]}">${r[3]}</span></td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td>
+            <td><span class="cj-pill" style="height:24px;font-size:9.8px;display:inline-flex;padding:0 8px">${r[7]}</span> <span style="color:#aab3c6">⋯</span></td></tr>`).join("")}
+        </table>
+        <div style="display:flex;color:var(--mut);font-size:11px;margin-top:8px">Showing 5 of 24 at-risk patients<span style="margin-left:auto;color:var(--teal);font-weight:600">View all at-risk patients →</span></div>
+      </div>
+      <div class="cj-panel" style="overflow:hidden">
+        <h3>Outcomes by plan type</h3>
+        <div class="psub">Completion rate and key results for each treatment plan.</div>
+        <div class="cj-obar" style="border-top:0;color:#6b7894;font-size:10.5px;font-weight:600"><span></span><span>Plan type</span><span>Completion rate</span><span></span><span>Avg. visits</span><span>Reviews</span></div>
+        ${[["❋","Microneedling",78,"3.4","68%"],["△","Chemical Peels",71,"3.1","59%"],["◎","Acne Program",64,"4.2","51%"],["✿","Skin Reset",76,"3.6","66%"]].map(r=>`
+        <div class="cj-obar"><span style="color:var(--teal)">${r[0]}</span><b style="font-size:11.8px">${r[1]}</b><span style="font-weight:700">${r[2]}%</span>
+          <span class="bar"><i style="width:${r[2]}%"></i></span><span>${r[3]}</span><span>${r[4]}</span></div>`).join("")}
+        <div class="cj-banner">${IC("M4 18V9M9.3 18V5M14.6 18v-7M20 18V8").replace("<svg",'<svg style="width:16px;height:16px;stroke:#237a55;flex:none"')}
+          <div><b>Microneedling has the highest completion rate</b>Patients on microneedling plans are 22% more likely to complete their journey than the clinic average.</div></div>
+      </div>
+    </div>`),
+});
+/* ---- advanced shell ---- */
+function caShell(active,content){
+  return `
+  <div class="ca-nav">
+    <div class="ca-logo"><span class="lf">❧</span><div><b>AETHERIA</b><small>ADVANCED SKIN HEALTH</small></div></div>
+    <div class="ca-links">${["Overview","Diary","Patients","Journey Board","Reports","Messages"].map(l=>`<span class="${l===active?"on":""}">${l}</span>`).join("")}</div>
+    <div class="ca-right"><span class="ca-bell">${ICONS.bell.replace("<svg",'<svg style="width:17px;height:17px"')}<em>3</em></span>
+      <span class="ao">AO</span><b style="font-size:13px">Dr Amara Osei</b><span style="color:#9aa5ab">▾</span></div>
+  </div>
+  <div class="ca-body">${content}</div>`;
+}
+const caStat=(v,l,d,dc,em)=>`<div class="ca-stat"><span class="ic">${ICONS.layers}</span>
+  <div><span class="v">${v}</span><small>${l}</small></div>
+  <div class="d" style="color:${dc}">${d}<em>${em}</em></div></div>`;
+
+S("advanced-overview",{
+  version:"advanced", title:"Clinic Overview", route:"clinic.aetheria.com/overview",
+  chrome:"tab", url:"https://clinic.aetheria.com/overview", tabTitle:"Clinic Overview – Aetheria", fav:"#08646b", frame:"16:9",
+  html:caShell("Overview",`
+    <div class="ca-headrow">
+      <div><div class="ca-eyebrow">CLINIC</div><h1>Clinic Overview</h1>
+        <div class="sub">A journey-led view of today's patients, milestones and next actions.</div></div>
+      <div class="ca-script">Healthier<br>Skin Brighter<br>Tomorrows</div>
+    </div>
+    <div class="ca-stats">
+      ${caStat("124","Active skin plans","▲ +12%","#2e8a63","vs. last month")}
+      ${caStat("18","Milestones due","▲ +3","#b9563f","vs. last week")}
+      ${caStat("7","Patients needing support","▼ −29%","#2e8a63","vs. last week")}
+      ${caStat("£42,680","Revenue this month","▲ +18%","#2e8a63","vs. last month")}
+    </div>
+    <div class="ca-tabs"><span class="on">Today</span><span>Preparation</span><span>Recovery</span><span>Outcomes</span></div>
+    <div style="display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:12px;margin-top:11px;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:11px;min-height:0">
+        <div class="ca-panel">
+          <h3>☀ Today / Next Actions<span class="see" style="color:var(--mut)">5 tasks</span></h3>
+          ${[["Review B12 blood test result","Sophie Lane · Check results and add note","Today, 09:00",ICONS.task],
+             ["Send skincare reminder","George Patel · Post-treatment day 3","Today, 10:00",ICONS.msg],
+             ["Check stop-actives status","Hannah Brooks · Microneedling (tomorrow)","Today, 11:00",IC("M9 14l6-6M8 16a4 4 0 0 1 0-6l2-2M16 8a4 4 0 0 1 0 6l-2 2")],
+             ["Confirm consent","Lily Chen · Profhilo (tomorrow)","Today, 11:30",ICONS.task],
+             ["Review aftercare photo","Daniel Carter · Day 7 check-in","Today, 14:00",ICONS.photo]].map(r=>`
+          <div class="ca-task"><span class="o"></span><span class="tile">${r[3].replace("<svg",'<svg style="width:13px;height:13px"')}</span>
+            <div><b>${r[0]}</b><small>${r[1]}</small></div><span class="t">${r[2]} ›</span></div>`).join("")}
+        </div>
+        <div class="ca-panel" style="flex:1;min-height:0;overflow:hidden">
+          <h3>${IC("M4 18V9M9.3 18V5M14.6 18v-7M20 18V8")}Active Treatment Journeys<span class="see">View full journey board →</span></h3>
+          <div class="ca-jrney">
+            ${[["Month 1","Foundation",[["SL","Sophie Lane","Acne Programme"],["GP","George Patel","B12 Programme"],["MA","Maya Ali","Pigmentation Plan"]],
+                `<span class="pt done" style="left:0">${ICONS.check}</span><span class="pt done" style="left:44%">${ICONS.check}</span><span class="pt done" style="left:88%">${ICONS.check}</span>`],
+               ["Month 2","Build & Support",[["JW","James Wilson","Microneedling"],["PS","Priya Shah","Skin Rejuvenation Plan"],["DC","Daniel Carter","Rosacea Management"]],
+                `<span class="pt cur" style="left:0"><i></i></span><span class="pt" style="left:44%"></span><span class="pt" style="left:88%"></span>`],
+               ["Month 3","Results & Confidence",[["CG","Charlotte Green","Profhilo"],["EM","Ethan Morris","Acne Programme"],["OP","Olivia Park","Anti-Ageing Plan"]],
+                `<span class="pt" style="left:0"></span><span class="pt" style="left:44%"></span><span class="pt" style="left:88%"></span>`]].map(m=>`
+            <div class="ca-jm"><small>${m[0]}</small><b>${m[1]}</b>
+              <div class="ca-track">${m[3]}</div>
+              <div class="ca-jlist">${m[2].map(p=>`<div><span class="av">${p[0]}</span><span style="flex:none">${p[1]}</span><span style="color:var(--mut);overflow:hidden;text-overflow:ellipsis">${p[2]}</span><span class="chev" style="flex:none">›</span></div>`).join("")}</div>
+            </div>`).join("")}
+          </div>
+        </div>
+      </div>
+      <div class="ca-panel" style="min-height:0;overflow:hidden">
+        <h3>${ICONS.cal}Upcoming<span class="see">See all</span></h3>
+        ${[["09:30","Emma Reed","Consultation · Acne Programme"],["10:00","James Wilson","Microneedling Session 2"],
+           ["11:30","Priya Shah","Skin Plan Review"],["13:00","Charlotte Green","Profhilo Treatment"],
+           ["14:30","Oliver Grant","Follow-up · B12 Programme"]].map(r=>`
+        <div class="ca-up"><span class="tm">${r[0]}</span><div><b>${r[1]}</b><small>${r[2]}</small></div><span style="margin-left:auto;color:#b7c0c5">›</span></div>`).join("")}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:11px;min-height:0;overflow:hidden">
+        <div class="ca-panel">
+          <h3>♡ Recovery Watchlist<span class="see">See all</span></h3>
+          <div class="ca-slider"><span>Redness</span><span class="lane"><i style="width:52%"></i><u style="left:calc(52% - 7px)"></u></span><span class="lv">Moderate</span></div>
+          <div class="ca-slider"><span>Sensitivity</span><span class="lane"><i style="width:30%"></i><u style="left:calc(30% - 7px)"></u></span><span class="lv">Mild</span></div>
+          <div class="ca-slider"><span>Dryness</span><span class="lane"><i style="width:26%"></i><u style="left:calc(26% - 7px)"></u></span><span class="lv">Mild</span></div>
+        </div>
+        <div class="ca-panel">
+          <h3>${ICONS.photo}Before &amp; After (Recent)<span class="see">See all</span></h3>
+          <div class="ca-ba">
+            <div><img src="assets/skin-before-1.png" alt=""><div class="lb"><b>Sophie Lane</b> · Acne Programme · 6 weeks</div></div>
+            <div><img src="assets/skin-after-2.png" alt=""><div class="lb"><b>James Wilson</b> · Microneedling · 8 weeks</div></div>
+          </div>
+        </div>
+        <div class="ca-panel">
+          <h3>${ICONS.drop}Routine adherence<span class="see" style="color:var(--mut)">This week</span></h3>
+          <div class="ca-adh"><span>☀ AM routine</span><span class="lane"><i style="width:82%"></i></span><span class="n">82%</span></div>
+          <div class="ca-adh"><span>☾ PM routine</span><span class="lane"><i style="width:64%"></i></span><span class="n">64%</span></div>
+        </div>
+        <div class="ca-panel" style="flex:1">
+          <h3>🛡 Safe to Proceed?<span class="see" style="color:var(--mut)">3 requiring review</span></h3>
+          ${[["HB","Hannah Brooks","Stop-actives confirmation pending"],["LC","Lily Chen","Consent form incomplete"],
+             ["DP","Daniel Carter","Reports increased sensitivity"]].map(r=>`
+          <div class="ca-safe"><span class="av">${r[0]}</span><b style="font-size:11.5px">${r[1]}</b><small>${r[2]} ›</small></div>`).join("")}
+        </div>
+      </div>
+    </div>`),
+});
+
+S("advanced-diary",{
+  version:"advanced", title:"Clinic Diary", route:"clinic.aetheria.com/diary",
+  chrome:"tab", url:"https://clinic.aetheria.com/diary", tabTitle:"Clinic Diary – Aetheria", fav:"#08646b", frame:"16:9",
+  html:caShell("Diary",`
+    <div class="ca-headrow">
+      <div><div class="ca-eyebrow">CLINIC</div><h1>Clinic Diary</h1>
+        <div class="sub">Today's visits, preparation steps and real-time treatment flow.</div></div>
+      <div class="ca-script">Healthier<br>Skin Brighter<br>Tomorrows</div>
+    </div>
+    <div class="ca-stats">
+      ${caStat("18","Visits today","▲ +12%","#2e8a63","vs. last week")}
+      ${caStat("6","Pre-treatment tasks due","▲ +2","#b9563f","vs. yesterday")}
+      ${caStat("4","Aftercare follow-ups","▼ −33%","#2e8a63","vs. last week")}
+      ${caStat("3","Patients needing review","▲ +1","#b9563f","vs. yesterday")}
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;margin-top:10px;flex:none">
+      <span class="ca-fsel" style="padding:0 9px">‹</span><span class="ca-fsel" style="padding:0 9px">›</span>
+      <span class="ca-fsel">${ICONS.cal.replace("<svg",'<svg style="width:13px;height:13px"')}Mon, 20 Oct 2025 ▾</span>
+      <div style="margin-left:auto;display:flex;background:#eceff0;border-radius:9px;padding:3px">
+        <span style="background:var(--deep);color:#fff;border-radius:7px;font-size:11.8px;font-weight:600;padding:5px 16px">Day</span>
+        <span style="font-size:11.8px;font-weight:600;color:#5a6a72;padding:5px 16px">Week</span>
+        <span style="font-size:11.8px;font-weight:600;color:#5a6a72;padding:5px 16px">Month</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 296px;gap:12px;flex:1;min-height:0;margin-top:9px">
+      <div style="display:flex;flex-direction:column;min-height:0">
+        <div class="ca-panel" style="flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 13px">
+          <div class="ca-planner">
+            <div class="ca-gutter">${["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00"].map(t=>`<div>${t}</div>`).join("")}</div>
+            ${[
+              ["SL","Sophie Lane",[["Grace Adeyemi","Acne Programme · Session 2",0,.75,"mint","Ready"],["Lily Chen","Acne Programme · Session 3",1.25,.75,"mint","Bloods received"],["Priya Shah","Acne Programme · Session 1",2.5,.9,"mint","Ready"],["Noah Patel","Acne Programme · Session 2",5,.75,"mint","Ready"],["Chloe Martin","Acne Programme · Session 1",6.5,.9,"blue","Aftercare due"]]],
+              ["JW","James Wilson",[["Daniel Carter","Skin Plan Review · Session 2",.5,.75,"amber","Consent pending"],["Olivia Park","Microneedling · Session 3",2.5,.9,"blue","Aftercare due"],["Isla Turner","Microneedling · Session 1",5,.75,"amber","Bloods pending"]]],
+              ["PS","Priya Shah",[["Hannah Brooks","Skin Plan Review",0,.75,"blue","Follow-up"],["Maya Ali","Skin Plan Review",1,.75,"mint","Ready"],["Lucas Bennett","Skin Plan Review",5,.75,"mint","Ready"],["Amelia Scott","Skin Plan Review",6.5,.9,"mint","Ready"]]],
+              ["CG","Charlotte Green",[["Sophie Lane","Profhilo · Session 1",.5,.9,"mint","Ready"],["Ethan Morris","Profhilo · Session 2",3,.9,"mint","Ready"],["Ryan Clarke","Profhilo · Session 1",6.6,.9,"amber","Consent pending"]]],
+              ["OP","Oliver Grant",[["James Wilson","B12 Programme · Session 1",1,.9,"amber","Stop actives pending"],["Grace Adeyemi","B12 Programme · Session 2",5,.75,"mint","Ready"]]],
+            ].map(col=>`
+            <div class="ca-col">
+              <div class="chead"><span class="av" style="width:22px;height:22px;border-radius:50%;background:#e4efe9;color:#2c6b53;font-size:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">${col[0]}</span>${col[1]}</div>
+              <div class="ca-lanes">
+                ${col[2].map(b=>`<div class="ca-block" style="top:${b[2]*50}px;min-height:${Math.max(b[3]*50,44)}px">
+                  <span class="dots">⋮</span><small>${(9+Math.floor(b[2]))<10?"0":""}${9+Math.floor(b[2])}:${b[2]%1?String(Math.round(b[2]%1*60)).padStart(2,"0"):"00"} – …</small>
+                  <b>${b[0]}</b><small>${b[1]}</small><div class="st"><span class="ca-chip ${b[4]}">● ${b[5]}</span></div></div>`).join("")}
+                <div class="ca-lunch" style="top:${4*50}px">Lunch break</div>
+              </div>
+            </div>`).join("")}
+          </div>
+        </div>
+        <div class="ca-panel" style="margin-top:10px;flex:none;padding:9px 13px">
+          <h3 style="font-size:12.5px">⏰ Aftercare follow-ups due<span class="see">View all follow-ups →</span></h3>
+          <div style="display:flex;gap:9px;margin-top:7px">
+            ${[["CM","Chloe Martin","Acne Programme · Session 1 · 2 days ago"],["OP","Olivia Park","Microneedling · Session 3 · 3 days ago"],
+               ["HB","Hannah Brooks","Skin Plan Review · 1 week ago"],["MA","Maya Ali","Skin Plan Review · 1 week ago"],
+               ["RC","Ryan Clarke","Profhilo · 1 week ago"]].map(r=>`
+            <div style="flex:1;border:1px solid var(--edge);border-radius:9px;padding:6px 9px;display:flex;gap:7px;align-items:center;font-size:10px">
+              <span class="av" style="width:20px;height:20px;border-radius:50%;background:#eef1f2;color:#5a6a72;font-size:7.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none">${r[0]}</span>
+              <div style="min-width:0"><b style="font-size:10.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r[1]}</b>
+              <small style="color:var(--mut);font-size:9px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r[2]}</small></div>
+              <span style="margin-left:auto;color:#b7c0c5">›</span></div>`).join("")}
+          </div>
+        </div>
+      </div>
+      <div class="ca-panel ca-clin-check" style="min-height:0;overflow:hidden;display:flex;flex-direction:column">
+        <div style="display:flex;gap:9px;align-items:flex-start">
+          <span class="av" style="width:34px;height:34px;border-radius:50%;background:#e4efe9;color:#2c6b53;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none">GA</span>
+          <div><b style="font-size:14px">Grace Adeyemi</b>
+            <div style="color:var(--slate);font-size:11px;margin-top:1px">09:00 – 09:45 <span style="color:#2e8a63;font-weight:600">(in 10 mins)</span></div>
+            <div style="color:var(--mut);font-size:10.5px">Acne Programme · Session 2</div></div>
+          <span style="margin-left:auto;color:#9aa5ab">✕</span></div>
+        <div class="ca-tabs" style="margin-top:8px;gap:16px"><span class="on" style="font-size:11.5px">Visit Prep</span><span style="font-size:11.5px">Patient Details</span><span style="font-size:11.5px">Treatment Plan</span></div>
+        <div style="display:flex;gap:11px;align-items:center;margin-top:10px">
+          <svg width="52" height="52" viewBox="0 0 52 52"><circle cx="26" cy="26" r="21" fill="none" stroke="#e4eaea" stroke-width="6"/>
+            <circle cx="26" cy="26" r="21" fill="none" stroke="#359497" stroke-width="6" stroke-linecap="round" stroke-dasharray="33 67" pathLength="100" transform="rotate(-90 26 26)"/>
+            <text x="26" y="30" text-anchor="middle" font-size="11" font-weight="800" fill="#16323a">2/6</text></svg>
+          <div><b style="font-size:12.5px">Acne Programme</b>
+            <small style="display:block;color:var(--mut);font-size:10.5px">Session 2 of 6 · Active phase</small></div>
+          <span class="ca-fsel" style="margin-left:auto;height:28px;font-size:10.5px">View plan →</span></div>
+        <div style="display:flex;margin-top:11px;font-size:12px;font-weight:700">Preparation checklist<span style="margin-left:auto;color:var(--mut);font-weight:500;font-size:10.5px">4 of 5 complete</span></div>
+        <label class="don"><span class="box"></span><div style="flex:1"><b style="font-size:11.5px;display:block">Consent form completed</b></div><small style="color:var(--mut);font-size:10px">12 Oct 2025</small></label>
+        <label class="don"><span class="box"></span><div style="flex:1"><b style="font-size:11.5px;display:block">Stop actives (5 days)</b></div><small style="color:var(--mut);font-size:10px">Confirmed</small></label>
+        <label class="don"><span class="box"></span><div style="flex:1"><b style="font-size:11.5px;display:block">B12 blood test result</b></div><small style="color:var(--mut);font-size:10px">Received 18 Oct</small></label>
+        <label><span class="box"></span><div style="flex:1"><b style="font-size:11.5px;display:block">Treatment area photos</b></div><small style="color:var(--teal2);font-size:10px;font-weight:600">Take now</small></label>
+        <label><span class="box"></span><div style="flex:1"><b style="font-size:11.5px;display:block">Prepare treatment room</b></div><small style="color:var(--mut);font-size:10px">In progress</small></label>
+        <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:8px;margin-top:10px">
+          <span class="ca-fsel" style="height:34px;justify-content:center;font-size:11px">💬 Message patient</span>
+          <span class="ca-fsel" style="height:34px;justify-content:center;font-size:11px;background:var(--deep);color:#fff;border-color:var(--deep)">✎ Record treatment</span></div>
+        <div style="margin-top:10px;background:#f2f7f5;border:1px solid #dcebe4;border-radius:9px;padding:8px 10px;font-size:10.5px;color:#48635a;line-height:1.45">
+          ⓘ Patient has sensitive skin. Use gentle protocol and check comfort throughout treatment.</div>
+      </div>
+    </div>`),
+});
+
+S("advanced-patient",{
+  version:"advanced", title:"Patient — Grace Adeyemi", route:"clinic.aetheria.com/patients/grace-adeyemi",
+  chrome:"tab", url:"https://clinic.aetheria.com/patients/grace-adeyemi", tabTitle:"Patient – Grace Adeyemi | Aetheria", fav:"#08646b", frame:"16:9",
+  html:caShell("Patients",`
+    <div style="color:var(--mut);font-size:11px;flex:none">Patients &nbsp;›&nbsp; <span style="color:var(--ink)">Grace Adeyemi</span></div>
+    <div class="ca-headrow" style="margin-top:4px">
+      <div style="display:flex;gap:12px;align-items:center">
+        <span style="width:46px;height:46px;border-radius:50%;background:#e4efe9;color:#2c6b53;font-size:14px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">GA</span>
+        <div><h1 style="font-size:28px;display:inline">Grace Adeyemi</h1> <span class="ca-chip mint" style="vertical-align:5px">● Active patient</span>
+          <div class="sub">Patient ID PA-10483 &nbsp;|&nbsp; 12 Mar 1992 (33 years) &nbsp;|&nbsp; <b style="font-weight:600">Clinician</b> Dr Amara Osei</div></div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        <div style="font-size:10px;color:var(--mut)">Journey Plan</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600">3-Month Microneedling Plan</div>
+        <div style="font-size:10.5px;color:var(--slate)">Smoother texture. Brighter tone. A stronger, healthier you.</div></div>
+      <div class="ca-script" style="margin-left:22px">Healthier<br>Skin Brighter<br>Tomorrows</div>
+    </div>
+    <div class="ca-stats" style="margin-top:9px">
+      <div class="ca-stat"><span class="ic">${ICONS.layers}</span><div><small>Current phase</small><span class="v" style="font-size:14.5px">Build &amp; Support</span><small>Month 2 of 3</small></div></div>
+      <div class="ca-stat">
+        <svg width="46" height="46" viewBox="0 0 46 46" style="flex:none"><circle cx="23" cy="23" r="18" fill="none" stroke="#e4eaea" stroke-width="5.5"/>
+          <circle cx="23" cy="23" r="18" fill="none" stroke="#359497" stroke-width="5.5" stroke-linecap="round" stroke-dasharray="43 57" pathLength="100" transform="rotate(-90 23 23)"/>
+          <text x="23" y="27" text-anchor="middle" font-size="10.5" font-weight="800" fill="#16323a">43%</text></svg>
+        <div><small>Plan completion</small><span class="v" style="font-size:14.5px">5 of 12 milestones</span></div></div>
+      <div class="ca-stat"><span class="ic">${ICONS.cal}</span><div><small>Next visit</small><span class="v" style="font-size:14.5px">20 Oct 2025</span><small>Microneedling Session 2</small></div></div>
+      <div class="ca-stat"><span class="ic">${ICONS.drop}</span><div><small>Blood test status</small><span class="v" style="font-size:14.5px;color:#2e8a63">✓ Result received</span><small>Normal B12 level</small></div></div>
+    </div>
+    <div class="ca-tabs"><span>Overview</span><span class="on">Journey</span><span>Treatments</span><span>Before &amp; After</span><span>Documents</span><span>Messages</span></div>
+    <div style="display:grid;grid-template-columns:1fr 286px;gap:12px;margin-top:10px;flex:1;min-height:0;overflow:hidden">
+      <div style="display:flex;flex-direction:column;gap:10px;min-height:0">
+        <div class="ca-panel" style="flex:1;min-height:0;overflow:hidden">
+          <h3>✂ Plan Roadmap<span style="color:var(--mut);font-weight:500;font-size:10.5px">&nbsp;3 months · 12 milestones</span><span class="see">View patient plan ⧉</span></h3>
+          <div class="ca-jrney" style="margin-top:10px">
+            ${[["Month 1","Foundation",
+                `<span class="pt done" style="left:0">${ICONS.check}</span><span class="pt done" style="left:44%">${ICONS.check}</span><span class="pt done" style="left:88%">${ICONS.check}</span>`,
+                [["don","Consultation","12 Sep 2025","Completed","mint"],["don","Skin prep & baseline photos","12 Sep 2025","Completed","mint"],
+                 ["don","Microneedling Session 1","15 Sep 2025","Completed","mint"],["don","Wait 3 days","18 Sep 2025","Completed","mint"],
+                 ["don","Start skincare routine","18 Sep 2025","Completed","mint"]]],
+               ["Month 2","Build & Support",
+                `<span class="pt cur" style="left:0"><i></i></span><span class="pt" style="left:44%"></span><span class="pt" style="left:88%"></span>`,
+                [["don","B12 test & review result","25 Sep 2025","Completed","mint"],["not","Start B12 supplement (if deficient)","25 Sep 2025","Not required","line"],
+                 ["cur","Stop actives (5 days)","15 Oct 2025","Current","mint"],["","Microneedling Session 2","20 Oct 2025","Upcoming","line"],
+                 ["","Continue skincare routine","20 Oct 2025","Upcoming","line"]]],
+               ["Month 3","Results & Confidence",
+                `<span class="pt" style="left:0"></span><span class="pt" style="left:44%"></span><span class="pt" style="left:88%"></span>`,
+                [["","Microneedling Session 3","10 Nov 2025","Upcoming","line"],["","Final comparison","17 Nov 2025","Upcoming","line"],
+                 ["","Maintenance plan","17 Nov 2025","Upcoming","line"],["","Celebrate progress ✨","","Upcoming","line"]]]].map(m=>`
+            <div class="ca-jm"><small>${m[0]}</small><b>${m[1]}</b>
+              <div class="ca-track">${m[2]}</div>
+              <div style="display:flex;flex-direction:column;gap:2px;margin-top:6px">
+                ${m[3].map(r=>`<div style="display:flex;align-items:center;gap:7px;font-size:10.8px;color:#4b5a62;padding:2.5px 0">
+                  <span style="width:13px;height:13px;border-radius:50%;flex:none;${r[0]==="don"?"background:#359497":r[0]==="cur"?"border:2px solid #359497;background:#e2f2ef":"border:1.4px solid #ccd4d7"};position:relative">${r[0]==="don"?'<span style="position:absolute;inset:0;color:#fff;font-size:8px;display:flex;align-items:center;justify-content:center">✓</span>':""}</span>
+                  <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r[1]}</span>
+                  <span style="color:var(--mut);font-size:9.5px;white-space:nowrap">${r[2]}</span>
+                  <span class="ca-chip ${r[4]}" style="min-width:64px;justify-content:center;font-size:8.8px">${r[3]}</span></div>`).join("")}
+              </div>
+            </div>`).join("")}
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1.15fr;gap:10px;flex:none">
+          <div class="ca-panel" style="padding:10px 12px"><h3 style="font-size:12px">Treatment history<span class="see" style="font-size:9.5px">View all</span></h3>
+            ${[["15 Sep 2025","Microneedling Session 1","mint","Completed"],["12 Sep 2025","Consultation","mint","Completed"],["—","B12 blood test","mint","✓ Result received"]].map(r=>`
+            <div class="ca-up"><span class="tm" style="width:56px">${r[0]}</span><b style="font-size:11px">${r[1]}</b><span class="ca-chip ${r[2]}" style="margin-left:auto">${r[3]}</span></div>`).join("")}
+          </div>
+          <div class="ca-panel" style="padding:10px 12px"><h3 style="font-size:12px">Upcoming appointments<span class="see" style="font-size:9.5px">See all</span></h3>
+            ${[["20 Oct 2025","10:00","Microneedling Session 2"],["10 Nov 2025","10:00","Microneedling Session 3"]].map(r=>`
+            <div class="ca-up">${ICONS.cal.replace("<svg",'<svg style="width:13px;height:13px;stroke:#6b7880;flex:none"')}<div><b style="font-size:11px">${r[0]}</b><small>${r[1]}</small></div><span style="margin-left:auto;font-size:10.5px;color:#4b5a62">${r[2]}</span></div>`).join("")}
+          </div>
+          <div class="ca-panel" style="padding:10px 12px"><h3 style="font-size:12px">Recent photos<span class="see" style="font-size:9.5px">View all</span></h3>
+            <div style="display:flex;gap:8px;margin-top:7px">
+              <div style="flex:1"><img src="assets/skin-before-2.png" style="width:100%;height:52px;object-fit:cover;border-radius:7px" alt=""><div style="font-size:9px;color:var(--mut);margin-top:2px;text-align:center">Baseline · 12 Sep 2025</div></div>
+              <div style="flex:1"><img src="assets/skin-progress-2.png" style="width:100%;height:52px;object-fit:cover;border-radius:7px" alt=""><div style="font-size:9px;color:var(--mut);margin-top:2px;text-align:center">After Session 1 · 15 Sep 2025</div></div>
+              <div style="flex:.6;border:1.4px dashed #ccd4d7;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#9aa5ab;font-size:13px;min-height:52px">＋<span style="font-size:8px">Add photos</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;min-height:0;overflow:hidden">
+        <div class="ca-panel ca-clin-check">
+          <h3 style="font-size:12.5px">⚙ Clinician Action Panel<span class="see" style="font-size:9.5px">View all tasks</span></h3>
+          <label class="don"><span class="box"></span>Review B12 blood test result<span class="chev">›</span></label>
+          <label class="don"><span class="box"></span>Confirm stop-actives advice given<span class="chev">›</span></label>
+          <label><span class="box"></span>Upload progress photos (Month 2)<span class="chev">›</span></label>
+          <label><span class="box"></span>Send appointment reminder for 20 Oct<span class="chev">›</span></label>
+          <label><span class="box"></span>Mark stage as reviewed<span class="chev">›</span></label>
+        </div>
+        <div class="ca-panel" style="background:#fffdf6;border-color:#efe5c8">
+          <h3 style="font-size:12.5px">☀ Today's focus<span class="see" style="color:var(--mut);font-size:9.5px">15 Oct 2025</span></h3>
+          <p style="font-size:11.3px;line-height:1.5;color:#4b5a62;margin-top:6px">Grace is stopping active skincare products today ahead of her next microneedling session.<br><br>Check in on adherence and any skin concerns.</p>
+        </div>
+        <div class="ca-panel" style="flex:1">
+          <h3 style="font-size:12.5px">Clinician notes<span class="see" style="font-size:9.5px">Add note</span></h3>
+          <div style="background:#f4f6f6;border-radius:8px;padding:8px 10px;font-size:11px;color:#4b5a62;line-height:1.5;margin-top:7px">Grace is responding well to treatment. Skin tone brighter and texture improved. No adverse reactions. Continue as planned.</div>
+          <div style="color:var(--mut);font-size:9.5px;margin-top:6px">Dr Amara Osei &nbsp;·&nbsp; 15 Oct 2025, 09:12</div>
+        </div>
+      </div>
+    </div>`),
+});
+
+S("advanced-board",{
+  version:"advanced", title:"Journey Board", route:"clinic.aetheria.com/journey-board",
+  chrome:"tab", url:"https://clinic.aetheria.com/journey-board", tabTitle:"Journey Board – Aetheria", fav:"#08646b", frame:"16:9",
+  html:caShell("Journey Board",`
+    <div class="ca-headrow">
+      <div><div class="ca-eyebrow">CLINIC</div><h1>Journey Board</h1>
+        <div class="sub">Track every active skin plan by phase, readiness and next milestone.</div></div>
+      <div class="ca-script">Healthier<br>Skin Brighter<br>Tomorrows</div>
+    </div>
+    <div class="ca-stats">
+      ${caStat("124","Active skin plans","▲ +12%","#2e8a63","vs. last month")}
+      ${caStat("18","Milestones due today","▲ +3","#b9563f","vs. last week")}
+      ${caStat("9","Blood tests pending","▼ −25%","#2e8a63","vs. last week")}
+      ${caStat("16","Reviews due","▲ +8","#b9563f","vs. last week")}
+    </div>
+    <div class="ca-bfilters">
+      <div><small style="color:var(--mut);font-size:9.5px;font-weight:600">Treatment type</small><span class="ca-fsel" style="margin-top:2px">All treatments ▾</span></div>
+      <div><small style="color:var(--mut);font-size:9.5px;font-weight:600">Phase</small><span class="ca-fsel" style="margin-top:2px">All phases ▾</span></div>
+      <div><small style="color:var(--mut);font-size:9.5px;font-weight:600">Practitioner</small><span class="ca-fsel" style="margin-top:2px">All practitioners ▾</span></div>
+      <div><small style="color:var(--mut);font-size:9.5px;font-weight:600">Date range</small><span class="ca-fsel" style="margin-top:2px">This week ▾</span></div>
+      <div style="display:flex;align-items:center;gap:7px;margin-top:12px"><span style="width:30px;height:17px;border-radius:9px;background:#d5dbde;position:relative;display:inline-block"><span style="position:absolute;left:2px;top:2px;width:13px;height:13px;border-radius:50%;background:#fff"></span></span><span style="font-size:11px;color:#5a6a72">At risk only</span></div>
+      <div class="ca-search2">⌕ Search patients by name or plan…</div>
+    </div>
+    <div class="ca-board">
+      ${[
+        ["Consultation & Prep","28","New patients and pre-treatment preparation.","#f6e8cf;color:#8a6a22",IC("M9 11a3.4 3.4 0 1 0 0-6.8A3.4 3.4 0 0 0 9 11zM3 20c.8-3.2 3-4.8 6-4.8s5.2 1.6 6 4.8"),[
+          ["SL","Sophie Lane","Acne Programme","1/7","Send skincare routine","Today",["amber","Consent pending"]],
+          ["JW","James Wilson","Pigmentation Plan","1/6","Upload baseline photos","Today",["mint","On track"]],
+          ["HC","Hannah Brooks","Rosacea Management","1/6","Book blood test","Tomorrow",["red","Blood test pending"]],
+          ["MA","Maya Ali","Anti-Ageing Plan","1/6","Complete medical history","21 Oct",["mint","On track"]]]],
+        ["Foundation","32","Active treatments and early progress.","#e3edf7;color:#42688e",ICONS.layers,[
+          ["CG","Charlotte Green","Skin Rebalance","2/8","Start actives (PM)","Today",["mint","On track"]],
+          ["RP","Ryan Patel","Acne Programme","3/8","Check in on tolerance","Today",["amber","Stop actives soon"]],
+          ["EM","Emma Morris","Pigmentation Plan","2/8","Microneedling prep","Tomorrow",["mint","On track"]],
+          ["DC","Daniel Carter","Skin Rejuvenation","2/8","Review skincare routine","22 Oct",["mint","On track"]]]],
+        ["Build & Support","36","Ongoing treatment and clinic support.","#d8f7ea;color:#1f6b52",ICONS.drop,[
+          ["JW","James Wilson","Microneedling","4/8","Session 2","Today, 11:00",["mint","On track"]],
+          ["PS","Priya Shah","Skin Plan Review","4/8","Blood test review","Today",["red","Blood test pending"]],
+          ["OL","Oliver Grant","B12 Programme","3/6","Follow up call","Tomorrow",["mint","On track"]],
+          ["LH","Lily Chen","Rosacea Management","4/8","Adjust actives","22 Oct",["mint","On track"]]]],
+        ["Results & Review","28","Assess results and plan next steps.","#e2f2e4;color:#2e7a4f",IC("M4 18V9M9.3 18V5M14.6 18v-7M20 18V8"),[
+          ["SP","Sophie Park","Acne Programme","6/6","Results review","",["mint","Results review"]],
+          ["NG","Nathan Gray","Skin Rejuvenation","6/6","Final comparison","Tomorrow",["mint","On track"]],
+          ["EC","Ella Cooper","Pigmentation Plan","5/6","Maintenance plan","23 Oct",["mint","On track"]],
+          ["SM","Sam Miller","Anti-Ageing Plan","6/6","Discharge & next steps","24 Oct",["mint","On track"]]]],
+      ].map(col=>`
+      <div class="ca-bcol">
+        <div class="bh"><span class="ic" style="background:${col[3]}">${col[4].replace("<svg",'<svg style="width:13px;height:13px"')}</span>
+          <div>${col[0]}<small>${col[2]}</small></div><span class="n">${col[1]}</span></div>
+        <div class="ca-cards">
+          ${col[5].map(c=>`<div class="ca-card">
+            <div class="r1"><span class="av">${c[0]}</span><div><b>${c[1]}</b><small>${c[2]}</small></div><span class="fr">${c[3]}</span></div>
+            <div class="r2">${ICONS.task.replace("<svg",'<svg style="width:11px;height:11px;stroke:#8b979d;flex:none"')} ${c[4]}${c[5]?` · <span style="color:var(--mut)">${c[5]}</span>`:""}<span class="chev">›</span></div>
+            <div class="r3"><span class="ca-chip ${c[6][0]}">● ${c[6][1]}</span></div>
+          </div>`).join("")}
+        </div>
+      </div>`).join("")}
+      <div style="display:flex;flex-direction:column;gap:10px;min-height:0;overflow:hidden">
+        <div class="ca-panel" style="padding:10px 12px">
+          <h3 style="font-size:12px">☀ Focus Today<span class="see" style="font-size:9.5px">See all (18)</span></h3>
+          <div class="psub" style="color:var(--mut);font-size:9.5px">High priority actions across the clinic.</div>
+          ${[["09:30","Sophie Lane","Check results and add note"],["10:00","James Wilson","Microneedling Session 2"],
+             ["11:00","Priya Shah","Skin Plan Review"],["13:00","Charlotte Green","Profhilo Treatment"],
+             ["14:00","Sophie Park","Results review"]].map(r=>`
+          <div class="ca-focus2"><span class="tm">${r[0]}</span><div><b>${r[1]}</b><small>${r[2]}</small></div><span class="chev">›</span></div>`).join("")}
+        </div>
+        <div class="ca-panel" style="padding:10px 12px;flex:1">
+          <h3 style="font-size:12px">⚠ Patients at Risk<span class="see" style="font-size:9.5px">See all (7)</span></h3>
+          <div class="psub" style="color:var(--mut);font-size:9.5px">Patients that need attention.</div>
+          ${[["HB","Hannah Brooks","Blood test overdue by 3 days","#b9563f"],["RP","Ryan Patel","Reports increased sensitivity","#8a6a22"],
+             ["LC","Lily Chen","Missed last appointment","#5a6a72"]].map(r=>`
+          <div class="ca-focus2"><span class="av" style="width:22px;height:22px;border-radius:50%;background:#f6ebe7;color:#a06048;font-size:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none">${r[0]}</span>
+            <div><b>${r[1]}</b><small style="color:${r[3]}">${r[2]}</small></div><span class="chev">›</span></div>`).join("")}
+        </div>
+      </div>
+    </div>`),
+});
+/* @screens */
+</script>
+<script>
+/* ------------------------------ deck engine ------------------------------ */
+const stage=document.getElementById("stage"), railItems=document.getElementById("railitems"),
+      pills=document.getElementById("vpills"), jump=document.getElementById("jump"),
+      posEl=document.getElementById("pos");
+let current=null;
+
+function frameSize(s){return s.frame==="16:9"?{w:1672,h:941}:{w:1448,h:1086};}
+
+function browserChrome(s){
+  if(s.chrome==="mac")return `<div class="bc-mac"><div class="lights"><i></i><i></i><i></i></div>
+    <div class="navarr">&#8249;&nbsp;&nbsp;&#8250;</div>
+    <div class="urlpill"><span class="lock">&#128274;</span>${s.url||""}</div>
+    <div class="bicons">&#8679;&nbsp;&nbsp;+&nbsp;&nbsp;&#9881;&nbsp;&nbsp;&#10064;</div></div>`;
+  if(s.chrome==="tab")return `<div class="bc-tab" style="--tab-fav:${s.fav||"#0b5355"}">
+    <div class="tabrow"><div class="tab"><span class="fav"></span>${s.tabTitle||s.title}<span class="x">&times;</span></div>
+    <span class="tabplus">+</span><div class="winbtns"><span>&#8211;</span><span>&#9633;</span><span>&times;</span></div></div>
+    <div class="toolrow"><span class="arr">&larr;</span><span class="arr">&rarr;</span><span class="arr">&#8635;</span>
+    <div class="url"><span class="lock">&#128274;</span>${s.url||""}</div>
+    <div class="ticons"><span>&#9734;</span><span>&#8942;</span></div></div></div>`;
+  return "";
+}
+
+function fit(){
+  const f=stage.querySelector(".frame"); if(!f)return;
+  const s=SCREENS[current], sz=frameSize(s);
+  const availW=innerWidth-52, availH=innerHeight-92;
+  const k=Math.min(availW/sz.w, availH/sz.h, 1);
+  f.style.transform=`scale(${k})`;
+  stage.style.width=(sz.w*k)+"px"; stage.style.height=(sz.h*k)+"px";
+}
+
+function render(id){
+  if(!SCREENS[id])return;
+  current=id;
+  const s=SCREENS[id], sz=frameSize(s);
+  const chromeH=s.chrome==="mac"?56:s.chrome==="tab"?84:0;
+  stage.innerHTML=`<div class="frame" style="width:${sz.w}px;height:${sz.h}px">
+    ${browserChrome(s)}
+    <div class="sbody v-${s.version}" style="height:${sz.h-chromeH}px">${s.html}</div></div>`;
+  fit();
+  const i=ORDER.indexOf(id);
+  posEl.textContent=`${i+1} / ${ORDER.length}`;
+  document.getElementById("prev").disabled=i===0;
+  document.getElementById("next").disabled=i===ORDER.length-1;
+  jump.value=id;
+  document.querySelectorAll("#railitems .item").forEach(b=>b.setAttribute("aria-current",b.dataset.go===id));
+  document.querySelectorAll("#vpills button").forEach(b=>b.setAttribute("aria-pressed",String(SCREENS[id].version===b.dataset.v)));
+  history.replaceState(null,"","#"+id);
+  document.title=`${VERSIONS[s.version].label} — ${s.title} · V2 Clinic Portal`;
+}
+
+function buildNav(){
+  const byV={};
+  ORDER.forEach(id=>{(byV[SCREENS[id].version]=byV[SCREENS[id].version]||[]).push(id);});
+  railItems.innerHTML=Object.entries(byV).map(([v,ids])=>`
+    <div class="vhead">${VERSIONS[v].label}<small>${VERSIONS[v].sub}</small></div>`+
+    ids.map(id=>`<button class="item" data-go="${id}">${SCREENS[id].title}<em>${SCREENS[id].route}</em></button>`).join("")
+  ).join("");
+  railItems.addEventListener("click",e=>{const b=e.target.closest("[data-go]");if(b)render(b.dataset.go);});
+  pills.innerHTML=Object.entries(byV).map(([v])=>`<button data-v="${v}">${VERSIONS[v].label}</button>`).join("");
+  pills.addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(b)render(byV[b.dataset.v][0]);});
+  jump.innerHTML=ORDER.map(id=>`<option value="${id}">${VERSIONS[SCREENS[id].version].label} — ${SCREENS[id].title}</option>`).join("");
+  jump.addEventListener("change",()=>render(jump.value));
+}
+
+document.getElementById("prev").onclick=()=>{const i=ORDER.indexOf(current);if(i>0)render(ORDER[i-1]);};
+document.getElementById("next").onclick=()=>{const i=ORDER.indexOf(current);if(i<ORDER.length-1)render(ORDER[i+1]);};
+document.getElementById("railbtn").onclick=()=>document.body.classList.toggle("railopen");
+addEventListener("keydown",e=>{
+  if(e.key==="ArrowLeft")document.getElementById("prev").click();
+  if(e.key==="ArrowRight")document.getElementById("next").click();
+  if(e.key==="Escape")document.body.classList.remove("railopen");
+});
+addEventListener("resize",fit);
+buildNav();
+render(location.hash&&SCREENS[location.hash.slice(1)]?location.hash.slice(1):ORDER[0]);
+</script>
+</body>
+</html>

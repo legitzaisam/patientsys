@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V2 Patient Portal — Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================== deck harness ============================== */
+:root{
+  --deck-bg:#20242b; --deck-panel:#2a2f38; --deck-ink:#e8eaef; --deck-mut:#9aa1ad;
+  --deck-edge:rgba(255,255,255,.09); --deck-accent:#7fc4bd;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font:14px/1.45 Inter,system-ui,sans-serif;background:var(--deck-bg);color:var(--deck-ink);overflow:hidden}
+#stagewrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:26px 26px 66px}
+#stage{position:relative}
+.frame{position:relative;background:#fff;border-radius:12px;overflow:hidden;
+  box-shadow:0 30px 80px rgba(0,0,0,.5),0 4px 16px rgba(0,0,0,.35);transform-origin:top left}
+/* browser chrome — macOS traffic lights + centred URL pill */
+.bc-mac{height:56px;background:#f6f6f7;border-bottom:1px solid #e3e3e6;display:flex;align-items:center;padding:0 22px;gap:18px}
+.bc-mac .lights{display:flex;gap:9px}
+.bc-mac .lights i{width:14px;height:14px;border-radius:50%}
+.bc-mac .lights i:nth-child(1){background:#f2605a}.bc-mac .lights i:nth-child(2){background:#f6bd3c}.bc-mac .lights i:nth-child(3){background:#61c355}
+.bc-mac .navarr{display:flex;gap:12px;color:#a6a6ab;font-size:17px}
+.bc-mac .urlpill{flex:1;max-width:640px;margin:0 auto;height:32px;background:#e9e9eb;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;gap:7px;color:#5f6066;font-size:14px}
+.bc-mac .urlpill .lock{font-size:12px;color:#8b8b90}
+.bc-mac .bicons{display:flex;gap:15px;color:#a6a6ab;font-size:16px}
+/* browser chrome — full tab bar */
+.bc-tab{background:#dfe1e5}
+.bc-tab .tabrow{height:44px;display:flex;align-items:flex-end;padding:0 12px;gap:8px}
+.bc-tab .tab{height:36px;background:#fff;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:9px;
+  padding:0 14px;font-size:13.5px;color:#3c4043;min-width:270px}
+.bc-tab .tab .fav{width:16px;height:16px;border-radius:50%;background:var(--tab-fav,#0b5355);flex:none}
+.bc-tab .tab .x{margin-left:auto;color:#9aa0a6}
+.bc-tab .tabplus{color:#5f6368;font-size:19px;padding:0 4px 6px}
+.bc-tab .winbtns{margin-left:auto;display:flex;gap:20px;color:#5f6368;font-size:14px;padding-bottom:8px}
+.bc-tab .toolrow{height:40px;background:#fff;border-bottom:1px solid #e3e3e6;display:flex;align-items:center;gap:14px;padding:0 14px}
+.bc-tab .toolrow .arr{color:#5f6368;font-size:16px}
+.bc-tab .toolrow .url{flex:1;height:29px;background:#f1f3f4;border-radius:15px;display:flex;align-items:center;gap:8px;padding:0 14px;color:#202124;font-size:13.5px}
+.bc-tab .toolrow .url .lock{color:#5f6368;font-size:12px}
+.bc-tab .toolrow .ticons{display:flex;gap:14px;color:#5f6368;font-size:15px}
+/* screen body fills the rest of the frame */
+.sbody{position:relative;overflow:hidden}
+/* rail */
+#rail{position:fixed;left:0;top:0;bottom:0;width:308px;background:var(--deck-panel);border-right:1px solid var(--deck-edge);
+  transform:translateX(-100%);transition:transform .22s ease;z-index:40;display:flex;flex-direction:column}
+body.railopen #rail{transform:none}
+#rail header{padding:18px 20px 10px;font-weight:700;font-size:15px}
+#rail header small{display:block;color:var(--deck-mut);font-weight:500;margin-top:3px}
+#rail .items{overflow:auto;padding:4px 12px 20px;flex:1}
+#rail .vhead{margin:16px 8px 6px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--deck-accent)}
+#rail .vhead small{display:block;color:var(--deck-mut);font-weight:500;text-transform:none;letter-spacing:0;margin-top:2px}
+#rail button.item{display:block;width:100%;text-align:left;background:none;border:0;color:var(--deck-ink);
+  padding:9px 10px;border-radius:9px;cursor:pointer;font:inherit}
+#rail button.item:hover{background:rgba(255,255,255,.06)}
+#rail button.item[aria-current="true"]{background:rgba(127,196,189,.16);color:#cfeeea}
+#rail button.item em{display:block;font-style:normal;color:var(--deck-mut);font-size:12px;margin-top:1px}
+/* dock */
+#dock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:50;background:var(--deck-panel);
+  border:1px solid var(--deck-edge);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.45);
+  display:flex;align-items:center;gap:10px;padding:8px 12px;white-space:nowrap}
+#dock .lbl{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--deck-mut)}
+#dock .pills{display:flex;gap:4px;background:rgba(255,255,255,.05);border-radius:9px;padding:3px}
+#dock .pills button{border:0;background:none;color:var(--deck-mut);font:inherit;font-size:12.5px;padding:4px 10px;border-radius:7px;cursor:pointer}
+#dock .pills button[aria-pressed="true"]{background:rgba(127,196,189,.2);color:#d9f3ef}
+#dock .step{display:flex;align-items:center;gap:8px}
+#dock .step button{width:28px;height:28px;border-radius:8px;border:1px solid var(--deck-edge);background:none;color:var(--deck-ink);cursor:pointer;font-size:14px}
+#dock .step button:disabled{opacity:.35;cursor:default}
+#dock #pos{font-size:12.5px;color:var(--deck-mut);min-width:52px;text-align:center}
+#dock select{background:rgba(255,255,255,.06);color:var(--deck-ink);border:1px solid var(--deck-edge);border-radius:8px;
+  height:30px;padding:0 8px;font:inherit;font-size:13px;max-width:250px}
+#dock a.deck,#dock button.tools{border:1px solid var(--deck-edge);background:none;color:var(--deck-ink);border-radius:8px;
+  height:30px;display:inline-flex;align-items:center;padding:0 12px;font-size:13px;text-decoration:none;cursor:pointer}
+#dock a.deck:hover,#dock button.tools:hover{background:rgba(255,255,255,.06)}
+/* screen-level shared bits */
+.sbody ::-webkit-scrollbar{display:none}
+.caveat{font-family:Caveat,cursive}
+.serif{font-family:"Cormorant Garamond",serif}
+/* ============================== LUMINA =================================== */
+.v-lumina{--ink:#0e1c33;--mut:#7d879b;--deep:#0b5355;--teal:#0b635c;--tint:#e4f3f3;--tint2:#ddf4f4;
+  --edge:#e7eaee;--page:#fbfcfc;--mint:#dcf1eb;--mintink:#17715c;--upc:#eaf2fd;--upcink:#5474a8;
+  --cream:#f9f3eb;--blush:#f8ebe7;
+  display:grid;grid-template-columns:245px 1fr;font-family:Inter,sans-serif;color:var(--ink);background:var(--page)}
+.lum-side{background:#fcfdfe;border-right:1px solid var(--edge);display:flex;flex-direction:column;padding:30px 22px 24px}
+.lum-logo{font-family:"Cormorant Garamond",serif;font-weight:600;font-size:30px;letter-spacing:.24em;margin-left:6px}
+.lum-logo small{display:block;font-family:Inter;font-size:9.5px;letter-spacing:.34em;color:var(--mut);margin-top:2px}
+.lum-nav{margin-top:36px;display:flex;flex-direction:column;gap:6px}
+.lum-nav a{display:flex;align-items:center;gap:13px;padding:12px 14px;border-radius:11px;color:#43506a;
+  font-size:15.5px;font-weight:500;text-decoration:none}
+.lum-nav a svg{width:19px;height:19px;stroke:#8b96ab;flex:none}
+.lum-nav a.on{background:var(--tint);color:var(--deep);font-weight:600}
+.lum-nav a.on svg{stroke:var(--deep)}
+.lum-nav .badge{margin-left:auto;background:#e35d6a;color:#fff;font-size:11px;font-weight:700;border-radius:50%;
+  width:20px;height:20px;display:flex;align-items:center;justify-content:center}
+.lum-art{margin-top:auto;border-radius:14px;overflow:hidden;position:relative;height:270px}
+.lum-art img{width:100%;height:100%;object-fit:cover}
+.lum-art .cap{position:absolute;inset:auto 0 0 0;padding:18px;font-size:15px}
+.lum-art .cap b{display:block;font-size:17px;line-height:1.3;margin-bottom:26px;color:#3d3428}
+.lum-art .cap span{color:#6c604e;font-size:13.5px;line-height:1.45}
+.lum-main{display:flex;flex-direction:column;overflow:hidden}
+.lum-top{display:flex;align-items:center;gap:20px;padding:16px 34px;border-bottom:1px solid var(--edge);background:#fcfdfe}
+.lum-top h2{font-size:25px;font-weight:700}
+.lum-top p{color:var(--mut);font-size:14.5px;margin-top:3px}
+.lum-top .script{margin-left:auto;font-family:Caveat;font-size:24px;color:#a89d8c;transform:rotate(-4deg);line-height:1}
+.lum-top .bell{position:relative;color:#5d6880;font-size:19px;margin:0 6px}
+.lum-user{display:flex;align-items:center;gap:11px}
+.lum-user img{width:42px;height:42px;border-radius:50%;object-fit:cover}
+.lum-user b{font-size:14.5px;display:block}
+.lum-user small{color:var(--mut);font-size:12.5px}
+.lum-band{display:flex;align-items:center;gap:34px;padding:18px 34px 14px;background:#fcfdfe}
+.lum-band h1{font-size:37px;font-weight:800;letter-spacing:-.01em}
+.lum-band .sub{color:#55617a;font-size:15.5px;margin-top:6px}
+.lum-band .sub b{color:var(--ink)}
+.lum-ring{display:flex;align-items:center;gap:16px;margin-left:auto}
+.lum-ring .meta b{font-size:14.5px;display:block}
+.lum-ring .meta span{color:var(--mut);font-size:13px}
+.lum-ring .bar{width:170px;height:7px;background:#e8edf0;border-radius:4px;margin-top:8px;overflow:hidden}
+.lum-ring .bar i{display:block;height:100%;width:43%;background:var(--teal);border-radius:4px}
+.lum-quote{border-left:1px solid var(--edge);padding-left:26px;margin-left:6px;max-width:200px}
+.lum-quote .q{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:19px;color:#3c4a63}
+.lum-quote .a{color:var(--mut);font-size:12.5px;margin-top:5px;text-align:right}
+.lum-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;padding:2px 34px 16px;background:#fcfdfe;border-bottom:1px solid var(--edge)}
+.lum-card{border:1px solid var(--edge);border-radius:13px;background:#fff;padding:13px 16px;display:flex;align-items:center;gap:14px}
+.lum-card .tile{width:46px;height:46px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
+.lum-card .tile svg{width:22px;height:22px}
+.lum-card small{display:block;color:var(--mut);font-size:12.5px;margin-bottom:3px}
+.lum-card b{font-size:16px;display:block}
+.lum-card em{font-style:normal;color:var(--mut);font-size:13px;display:block;margin-top:2px}
+.lum-card .chev{margin-left:auto;color:#aab3c2;font-size:19px}
+.lum-body{flex:1;display:grid;grid-template-columns:1fr 448px;gap:20px;padding:18px 34px 20px;overflow:hidden;background:var(--page)}
+.lum-road{border:1px solid var(--edge);border-radius:15px;background:#fff;padding:18px 22px;overflow:hidden;display:flex;flex-direction:column}
+.lum-road-head{display:flex;align-items:flex-start}
+.lum-road-head h3{font-size:19.5px;font-weight:700}
+.lum-road-head p{color:var(--mut);font-size:13.5px;margin-top:4px}
+.lum-road-head .cal{margin-left:auto;border:1px solid var(--edge);border-radius:10px;height:38px;display:flex;align-items:center;
+  gap:9px;padding:0 15px;font-size:13.5px;font-weight:600;color:#42506b}
+.lum-road-grid{margin-top:12px;display:grid;grid-template-columns:158px minmax(0,1fr);column-gap:18px;row-gap:0;flex:1}
+.lum-month{padding:14px 0 0}
+.lum-month h4{font-size:15.5px;font-weight:700;line-height:1.3}
+.lum-month h4 small{display:block;color:var(--teal);font-size:12px;font-weight:700;letter-spacing:.02em;margin-bottom:3px}
+.lum-month p{color:var(--mut);font-size:12.5px;line-height:1.45;margin-top:7px}
+.lum-month .prog{margin-top:12px;font-size:12px;color:#55617a;font-weight:600}
+.lum-month .bar{height:6px;background:#e8edf0;border-radius:4px;margin-top:6px;overflow:hidden;width:118px}
+.lum-month .bar i{display:block;height:100%;background:var(--teal);border-radius:4px}
+.lum-steps{position:relative;padding-left:32px;min-width:0}
+.lum-steps::before{content:"";position:absolute;left:12px;top:16px;bottom:16px;width:2px;background:#dfe8ea}
+.lum-step{display:flex;align-items:center;gap:10px;padding:6px 10px 6px 0;border-bottom:1px solid #f0f3f5;position:relative;font-size:13px;min-height:41px}
+.lum-step:last-child{border-bottom:0}
+.lum-step .dot{position:absolute;left:-30px;width:24px;height:24px;border-radius:50%;background:#fff;
+  border:2px solid #cfdcdc;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#7f8ba0}
+.lum-step.done .dot{background:var(--teal);border-color:var(--teal)}
+.lum-step.done .dot svg{width:12px;height:12px;stroke:#fff}
+.lum-step.cur{background:var(--mint);border-radius:10px;margin-left:-12px;padding-left:12px;border-bottom:0}
+.lum-step.cur .dot{left:-18px;background:var(--teal);border-color:var(--teal)}
+.lum-step.cur .dot svg{width:12px;height:12px;stroke:#fff}
+.lum-step.cond .dot{border-style:dashed}
+.lum-step b{font-weight:600;font-size:12.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.lum-step .date{margin-left:auto;color:var(--mut);font-size:11.8px;flex:none}
+.lum-chip{flex:none;font-size:11px;font-weight:600;border-radius:20px;padding:3.5px 10px;min-width:82px;text-align:center}
+.lum-chip.done{background:var(--mint);color:var(--mintink)}
+.lum-chip.cur{background:var(--teal);color:#fff}
+.lum-chip.cond{background:#eef0f4;color:#66708a}
+.lum-chip.upc{background:var(--upc);color:var(--upcink)}
+.lum-drawer{display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.lum-detail{border:1px solid var(--edge);border-radius:15px;background:#fff;padding:19px 22px;position:relative}
+.lum-detail .x{position:absolute;right:18px;top:16px;color:#aab3c2;font-size:18px}
+.lum-detail .tile{width:42px;height:42px;border-radius:11px;background:var(--blush);display:flex;align-items:center;justify-content:center;margin-bottom:9px}
+.lum-detail .tile svg{width:22px;height:22px;stroke:#d0685f}
+.lum-detail h3{font-size:21px;font-weight:800;display:inline}
+.lum-detail .cchip{display:inline-block;vertical-align:3px;margin-left:9px;background:var(--mint);color:var(--mintink);
+  font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px}
+.lum-detail .cchip i{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--mintink);margin-right:5px}
+.lum-detail .desc{color:#55617a;font-size:13px;line-height:1.45;margin-top:6px}
+.lum-mini{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:12px}
+.lum-mini div{background:#f6f8f9;border-radius:10px;padding:9px 12px;display:flex;gap:9px;align-items:center}
+.lum-mini svg{width:17px;height:17px;stroke:#66708a;flex:none}
+.lum-mini small{display:block;color:var(--mut);font-size:11.5px}
+.lum-mini b{font-size:13.5px}
+.lum-check h5{font-size:13.5px;font-weight:700;margin:13px 0 2px;display:flex}
+.lum-check h5 span{margin-left:auto;color:var(--mut);font-weight:500;font-size:12px}
+.lum-check label{display:flex;align-items:center;gap:10px;font-size:13px;color:#43506a;padding:5px 0}
+.lum-check .box{width:17px;height:17px;border:1.5px solid #c3ccd8;border-radius:5px;flex:none}
+.lum-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:11px}
+.lum-btn{height:39px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;
+  font-size:13.5px;font-weight:600;border:1px solid var(--edge);color:#2e3c56;background:#fff}
+.lum-btn svg{width:16px;height:16px}
+.lum-btn.deep{background:var(--deep);border-color:var(--deep);color:#fff}
+.lum-btn.deep svg{stroke:#fff}
+.lum-btn.wide{grid-column:1/-1;border-color:#cddbdb;color:var(--deep)}
+.lum-note{margin-top:11px;background:var(--cream);border:1px solid #eee3cd;border-radius:10px;color:#7a6740;
+  font-size:12.5px;line-height:1.5;padding:11px 13px;display:flex;gap:9px}
+.lum-focus{border:1px solid var(--edge);border-radius:15px;background:#fff;padding:15px 22px}
+.lum-focus h4{font-size:15.5px;font-weight:700;display:flex;align-items:center;gap:9px}
+.lum-focus h4 .sun{color:#e2a93b;font-size:17px}
+.lum-focus h4 span{margin-left:auto;color:var(--mut);font-size:12px;font-weight:500}
+.lum-focus label{display:flex;align-items:center;gap:11px;padding:5.5px 0;font-size:13.2px;color:#43506a}
+.lum-focus .box{width:17px;height:17px;border:1.5px solid #c3ccd8;border-radius:5px;flex:none}
+.lum-focus label.done{color:#9aa4b5;text-decoration:line-through}
+.lum-focus label.done .box{background:var(--teal);border-color:var(--teal);position:relative}
+.lum-focus label.done .box::after{content:"✓";color:#fff;font-size:11px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+/* ============================== VIVARA =================================== */
+.v-vivara{--ink:#111a2b;--mut:#8b8f99;--deep:#18555c;--teal:#2f8f83;--paper:#faf9f6;--band:#fcfbfa;
+  --card:#fdfdfd;--edge:#e8e3dc;--mint:#e2f1ec;
+  font-family:Inter,sans-serif;color:var(--ink);background:var(--paper);display:flex;flex-direction:column}
+.viv-nav{height:58px;background:#fcfbf9;border-bottom:1px solid var(--edge);display:flex;align-items:center;padding:0 36px;gap:40px}
+.viv-logo{display:flex;align-items:center;gap:11px}
+.viv-logo .leaf{color:var(--deep);font-size:24px;transform:rotate(-14deg)}
+.viv-logo b{font-family:"Cormorant Garamond",serif;font-size:27px;font-weight:700;letter-spacing:.14em}
+.viv-logo small{display:block;font-size:8.5px;letter-spacing:.18em;color:var(--mut);font-weight:600}
+.viv-links{display:flex;gap:34px;margin:0 auto;font-size:15px;color:#454e60;height:100%;align-items:center}
+.viv-links span{display:flex;align-items:center;height:100%;position:relative}
+.viv-links .on{font-weight:700;color:var(--ink)}
+.viv-links .on::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--deep)}
+.viv-right{display:flex;align-items:center;gap:18px}
+.viv-right .em{width:36px;height:36px;border-radius:50%;background:var(--deep);color:#fff;font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.viv-band{background:var(--band);border-bottom:1px solid var(--edge);padding:15px 36px 0}
+.viv-band-row{display:flex;align-items:center;gap:18px}
+.viv-eyebrow{font-size:11px;font-weight:700;letter-spacing:.18em;color:#9b948a}
+.viv-band h1{font-family:"Cormorant Garamond",serif;font-size:34px;font-weight:600;letter-spacing:-.005em;margin-top:2px;white-space:nowrap}
+.viv-band .sub{color:#5d6577;font-size:14.5px;margin-top:4px}
+.viv-meta{display:flex;align-items:center;gap:0;margin-left:auto;flex:none}
+.viv-meta .cell{display:flex;align-items:center;gap:11px;padding:0 18px;border-left:1px solid var(--edge)}
+.viv-meta .tile{width:44px;height:44px;border-radius:50%;background:#f6ece7;color:#c07b62;display:flex;align-items:center;justify-content:center}
+.viv-meta .tile.sq{border-radius:11px;background:#eef4f3;color:var(--deep)}
+.viv-meta small{display:block;color:var(--mut);font-size:11.5px;white-space:nowrap}
+.viv-meta b{font-size:14px;white-space:nowrap}
+.viv-meta em{font-style:normal;display:block;color:var(--mut);font-size:11.5px;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.viv-script{font-family:Caveat;font-size:26px;color:#b0a99d;transform:rotate(-8deg);line-height:1.05;padding:0 10px}
+.viv-tabs{display:flex;gap:34px;margin-top:10px;font-size:14px;color:#6b7284}
+.viv-tabs span{padding:10px 2px;position:relative}
+.viv-tabs .on{font-weight:700;color:var(--ink)}
+.viv-tabs .on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--deep)}
+.viv-grid{flex:1;display:grid;grid-template-columns:1fr 368px 368px;grid-template-rows:minmax(0,1fr) auto;gap:14px;padding:14px 36px 16px;overflow:hidden}
+.viv-card{background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:10px 15px}
+.viv-h{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:700}
+.viv-h svg{width:18px;height:18px;stroke:#b08d4f}
+.viv-h .see{margin-left:auto;font-size:12.5px;color:var(--teal);font-weight:600}
+.viv-today{grid-row:1}
+.viv-today .day{margin-left:auto;color:var(--mut);font-size:12.5px;font-weight:500}
+.viv-big{display:flex;gap:15px;margin-top:14px}
+.viv-big .tile{width:52px;height:52px;border-radius:50%;background:#efece7;display:flex;align-items:center;justify-content:center;flex:none}
+.viv-big .tile svg{width:23px;height:23px;stroke:#6d645b}
+.viv-big h4{font-size:17px;font-weight:700}
+.viv-big p{color:#5d6577;font-size:13.5px;line-height:1.5;margin-top:5px;max-width:560px}
+.viv-big .btns{display:flex;align-items:center;gap:20px;margin-top:14px}
+.viv-btn{height:42px;border-radius:9px;background:var(--deep);color:#fff;display:inline-flex;align-items:center;gap:9px;
+  padding:0 20px;font-size:13.5px;font-weight:600}
+.viv-btn svg{width:16px;height:16px;stroke:#fff}
+.viv-link{color:var(--ink);font-size:13.5px;font-weight:600;border-bottom:1.5px solid #c9c2b8;padding-bottom:2px}
+.viv-row{display:flex;align-items:center;gap:14px;padding:13px 4px;border-top:1px solid #f0ece6;margin-top:10px}
+.viv-row .ck{width:22px;height:22px;border:1.5px solid #c9ccd4;border-radius:50%;flex:none}
+.viv-row .tile{width:40px;height:40px;border-radius:50%;background:#f2f0ec;display:flex;align-items:center;justify-content:center;flex:none}
+.viv-row .tile svg{width:18px;height:18px;stroke:#7b8296}
+.viv-row b{font-size:14.5px;display:block}
+.viv-row small{color:var(--mut);font-size:12.5px}
+.viv-row .chev{margin-left:auto;color:#b3b8c2}
+.viv-journey{grid-column:1/-1;grid-row:2}
+.viv-jgrid{display:grid;grid-template-columns:1fr 1fr 1fr;margin-top:7px;column-gap:36px}
+.viv-jm small{color:var(--mut);font-size:11px;font-weight:600}
+.viv-jm b{display:block;font-size:14px;margin-top:0}
+.viv-track{position:relative;height:22px;margin:7px 0 3px}
+.viv-track::before{content:"";position:absolute;left:0;right:-36px;top:12px;height:2.5px;background:#e3ded6}
+.viv-jgrid .viv-jm:last-child .viv-track::before{right:0}
+.viv-track .pt{position:absolute;top:1px;width:21px;height:21px;border-radius:50%;background:#fff;border:2px solid #d4cfc6;display:flex;align-items:center;justify-content:center}
+.viv-track .pt.done{background:var(--deep);border-color:var(--deep)}
+.viv-track .pt.done svg{width:11px;height:11px;stroke:#fff}
+.viv-track .pt.cur{border-color:#5eb99a;background:#e7f5ee}
+.viv-track .pt.cur i{width:9px;height:9px;border-radius:50%;background:#3f9e77}
+.viv-jlist{margin-top:6px}
+.viv-jlist div{display:flex;align-items:center;gap:8px;font-size:11.6px;color:#4b5468;padding:2px 0}
+.viv-jlist .c{width:15px;height:15px;border-radius:50%;flex:none;border:1.4px solid #ccd0d8}
+.viv-jlist .c.on{background:var(--teal);border-color:var(--teal);position:relative}
+.viv-jlist .c.on::after{content:"✓";position:absolute;inset:0;color:#fff;font-size:9.5px;display:flex;align-items:center;justify-content:center}
+.viv-up-item{display:flex;gap:12px;padding:10px 12px;border:1px solid #f0ece6;background:#fbfaf8;border-radius:11px;margin-top:9px}
+.viv-up-item .tile{width:40px;height:40px;border-radius:50%;background:#f3efe9;display:flex;align-items:center;justify-content:center;flex:none}
+.viv-up-item .tile svg{width:18px;height:18px;stroke:#8a7a5c}
+.viv-up-item b{font-size:13.3px;display:block}
+.viv-up-item small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
+.viv-up-item p{color:#6b7284;font-size:11.5px;line-height:1.4;margin-top:4px}
+.viv-up-item .chev{margin-left:auto;color:#b3b8c2;flex:none}
+.viv-slider{display:grid;grid-template-columns:62px 1fr 56px;align-items:center;gap:10px;margin-top:8px;font-size:11.8px;color:#4b5468}
+.viv-slider .lane{height:5px;background:#e8e4dd;border-radius:3px;position:relative}
+.viv-slider .lane i{position:absolute;left:0;top:0;bottom:0;background:var(--teal);border-radius:3px}
+.viv-slider .lane u{position:absolute;top:-5.5px;width:16px;height:16px;border-radius:50%;background:#fff;border:2.5px solid var(--teal)}
+.viv-slider .lv{text-align:right;color:var(--mut)}
+.viv-ba{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px;position:relative}
+.viv-ba img{width:100%;height:58px;object-fit:cover;border-radius:9px}
+.viv-ba .lb{font-size:10.5px;color:var(--mut);margin-top:3px;line-height:1.25;white-space:nowrap}
+.viv-ba .lb b{color:#4b5468;font-weight:600}
+.viv-ba .handle{position:absolute;left:50%;top:21px;transform:translateX(-50%);width:26px;height:26px;border-radius:50%;
+  background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;font-size:10px;color:#555;letter-spacing:1px}
+.viv-adh{display:grid;grid-template-columns:78px 1fr 28px;gap:9px;align-items:center;margin-top:8px;font-size:11.8px;color:#4b5468}
+.viv-adh .lane{height:9px;background:#eee9e2;border-radius:5px;overflow:hidden}
+.viv-adh .lane i{display:block;height:100%;background:var(--teal);border-radius:5px}
+.viv-adh .n{text-align:right;color:var(--mut)}
+.viv-safe p{color:#5d6577;font-size:11.8px;line-height:1.4;margin-top:6px}
+.viv-safe .chk{margin-top:7px;height:31px;border:1px solid var(--edge);border-radius:10px;background:#faf8f5;
+  display:flex;align-items:center;gap:10px;padding:0 15px;font-size:13.5px;font-weight:600;color:#3c4658}
+.viv-safe .chk .chev{margin-left:auto;color:#b3b8c2}
+.viv-colr{display:flex;flex-direction:column;gap:8px;overflow:hidden}
+/* ============================== RADIANT ================================== */
+.v-radiant{--ink:#22303a;--mut:#8b958f;--deep:#245d63;--sage:#6d7f6a;--page:#fcfdfc;--edge:#e6e9e4;
+  --mint:#e5eff0;--cream:#f7efe2;
+  display:grid;grid-template-columns:212px 1fr;font-family:Inter,sans-serif;color:var(--ink);background:var(--page)}
+.rad-side{background:#fafafa;border-right:1px solid var(--edge);display:flex;flex-direction:column;padding:18px 14px 14px}
+.rad-logo{display:flex;align-items:center;gap:9px;padding:0 8px}
+.rad-logo .lf{color:var(--sage);font-size:20px}
+.rad-logo b{font-family:"Cormorant Garamond",serif;font-size:20px;font-weight:700}
+.rad-logo small{display:block;font-size:7.5px;letter-spacing:.22em;color:var(--mut)}
+.rad-nav{margin-top:22px;display:flex;flex-direction:column;gap:3px}
+.rad-nav a{display:flex;align-items:center;gap:11px;padding:9.5px 12px;border-radius:9px;color:#4d5a55;font-size:13.2px;font-weight:500;text-decoration:none;border:1px solid transparent}
+.rad-nav a svg{width:16px;height:16px;stroke:#93a09a;flex:none}
+.rad-nav a.on{background:#fff;border-color:var(--edge);box-shadow:0 1px 3px rgba(40,60,50,.06);color:var(--ink);font-weight:600}
+.rad-bloom{margin-top:auto;border:1px solid var(--edge);background:#fff;border-radius:12px;padding:14px;
+  font-family:"Cormorant Garamond",serif;font-style:italic;font-size:15.5px;line-height:1.45;color:#57675f}
+.rad-foot{padding:14px 8px 0;color:#9aa69f;font-size:11px}
+.rad-main{display:flex;flex-direction:column;overflow:hidden}
+.rad-top{height:52px;display:flex;align-items:center;gap:26px;padding:0 26px;border-bottom:1px solid var(--edge);background:#fff}
+.rad-top .tl{display:flex;gap:24px;font-size:13px;color:#5b6862}
+.rad-top .tl .on{font-weight:700;color:var(--ink);border-bottom:2px solid var(--deep);padding:15px 0}
+.rad-top .search{margin-left:auto;width:190px;height:30px;border:1px solid var(--edge);border-radius:16px;background:#fbfcfb;
+  display:flex;align-items:center;gap:8px;padding:0 12px;color:#a2aca6;font-size:12.5px}
+.rad-top .hi{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600}
+.rad-top .hi img{width:30px;height:30px;border-radius:50%;object-fit:cover}
+.rad-head{display:flex;align-items:flex-end;gap:18px;padding:16px 26px 12px}
+.rad-head .eb{font-size:10px;font-weight:700;letter-spacing:.2em;color:#a3ab9e}
+.rad-head h1{font-family:"Cormorant Garamond",serif;font-size:34px;font-weight:600;margin-top:3px;white-space:nowrap}
+.rad-head .sub{color:#75817a;font-size:13px;margin-top:3px}
+.rad-toggle{margin-left:auto;display:flex;gap:8px;align-items:center;flex:none}
+.rad-toggle .grp{display:flex;background:#eef1ec;border-radius:18px;padding:3px}
+.rad-toggle .grp span{font-size:12px;font-weight:600;padding:6px 14px;border-radius:15px;color:#5b6862}
+.rad-toggle .grp .on{background:var(--deep);color:#fff}
+.rad-toggle .ghost{border:1px solid var(--edge);border-radius:16px;background:#fff;font-size:12px;font-weight:600;
+  color:#4d5a55;padding:7px 14px}
+.rad-garden{margin:2px 26px 0;border-radius:16px;overflow:hidden;position:relative;height:262px;flex:none}
+.rad-garden img{width:100%;height:100%;object-fit:cover}
+.rad-garden .q1{position:absolute;left:26px;top:16px;font-family:Caveat;font-size:22px;color:#5d6a52;transform:rotate(-6deg);line-height:1}
+.rad-garden .q2{position:absolute;right:150px;top:14px;font-family:"Cormorant Garamond",serif;font-style:italic;font-size:14px;color:#6a755f;max-width:190px;text-align:center}
+.rad-phase{position:absolute;top:44px;font-size:11px;letter-spacing:.06em;color:#4c5a48;text-align:center;max-width:180px}
+.rad-phase b{display:block;font-size:13px;letter-spacing:.12em;margin-bottom:3px;color:#3c4a3a}
+.rad-sign{position:absolute;right:16px;top:74px;background:rgba(200,178,142,.9);border:2px solid #b09a72;border-radius:8px;
+  padding:9px 12px;font-family:"Cormorant Garamond",serif;font-size:14.5px;line-height:1.3;color:#4d3f28;text-align:center;
+  box-shadow:0 4px 10px rgba(60,45,20,.28)}
+.rad-mstones{position:absolute;left:0;right:0;bottom:44px;display:flex;gap:11px;justify-content:center;padding:0 20px}
+.rad-ms{background:rgba(238,246,240,.94);border-radius:11px;padding:9px 13px;font-size:11.5px;line-height:1.3;
+  min-width:120px;box-shadow:0 3px 9px rgba(30,50,40,.18)}
+.rad-ms b{display:block;font-size:12px;color:#274036}
+.rad-ms small{color:#6d7f74;font-size:10.5px}
+.rad-ms .ck{display:inline-flex;width:15px;height:15px;border-radius:50%;background:#2f7d5f;color:#fff;font-size:9px;
+  align-items:center;justify-content:center;margin-bottom:4px}
+.rad-ms.due{background:rgba(250,243,226,.96)}
+.rad-ms.due .ck{background:#c8973f}
+.rad-ms.lock{background:rgba(233,233,225,.88);color:#7d8378}
+.rad-ms.lock b{color:#6b7268}
+.rad-ms.lock .ck{background:#a9ad9f}
+.rad-garden .cap{position:absolute;left:0;right:0;bottom:14px;text-align:center;font-family:"Cormorant Garamond",serif;
+  font-style:italic;font-size:15px;color:#54614e}
+.rad-mid{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:14px;padding:13px 26px 0}
+.rad-card{background:#fff;border:1px solid var(--edge);border-radius:13px;padding:13px 15px}
+.rad-card h4{font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+.rad-card h4 svg{width:15px;height:15px;stroke:#7d9187}
+.rad-card h4 .r{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:500}
+.rad-task{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:9px;margin-top:5px;font-size:12px}
+.rad-task svg{width:14px;height:14px;stroke:#7d9187;flex:none}
+.rad-task b{display:block;font-size:12.3px}
+.rad-task small{color:var(--mut);font-size:10.8px}
+.rad-task .o{margin-left:auto;width:15px;height:15px;border:1.4px solid #c4ccc6;border-radius:50%;flex:none}
+.rad-task.hl{background:#e9f3ec}
+.rad-task.hl .o{background:#2f7d5f;border-color:#2f7d5f;position:relative}
+.rad-task.hl .o::after{content:"✓";position:absolute;inset:0;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center}
+.rad-mark{margin-top:9px;height:34px;border-radius:9px;background:var(--deep);color:#fff;display:flex;align-items:center;
+  justify-content:center;gap:8px;font-size:12.5px;font-weight:600}
+.rad-rings{display:flex;justify-content:space-around;margin-top:10px}
+.rad-ring{text-align:center;width:104px}
+.rad-ring .lb{font-size:11.3px;font-weight:600;margin-top:5px}
+.rad-ring small{color:var(--mut);font-size:10.3px;display:block;margin-top:1px}
+.rad-quote{margin-top:10px;background:#f3f7f2;border-radius:9px;padding:9px 12px;text-align:center;
+  font-family:"Cormorant Garamond",serif;font-style:italic;font-size:13.5px;color:#5c6b60}
+.rad-prep{display:flex;align-items:center;gap:9px;padding:7px 10px;border:1px solid #eee7db;border-radius:9px;margin-top:6px;font-size:12px;color:#4d5a55}
+.rad-prep.hl{background:#fdf3e4;border-color:#f0e0c2;color:#7a5c26;font-weight:600}
+.rad-prep .o{width:13px;height:13px;border:1.4px solid #c4ccc6;border-radius:50%;flex:none}
+.rad-prep.hl .o{border-color:#cfa254}
+.rad-preplink{margin-top:9px;font-size:12px;font-weight:600;color:var(--deep);text-decoration:underline}
+.rad-bot{display:grid;grid-template-columns:1.15fr 1fr 1.35fr 1fr 1.1fr;gap:12px;padding:12px 26px 14px;flex:1;min-height:0}
+.rad-bot .rad-card{padding:11px 13px;overflow:hidden}
+.rad-cal{width:100%;border-collapse:collapse;margin-top:7px;font-size:9.8px;text-align:center;color:#5b6862}
+.rad-cal th{color:#a3aba4;font-weight:600;padding:2px 0;font-size:9px}
+.rad-cal td{padding:3.2px 0;border-radius:50%}
+.rad-cal .sel{background:var(--deep);color:#fff;font-weight:700}
+.rad-photos{display:flex;gap:8px;margin-top:8px}
+.rad-photos .ph{width:31%}
+.rad-photos img{width:100%;height:64px;object-fit:cover;border-radius:8px}
+.rad-photos .lb{font-size:9.8px;color:var(--mut);margin-top:4px;line-height:1.3}
+.rad-photos .add{width:31%;height:64px;border:1.5px dashed #ccd4cd;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#9aa69f;font-size:19px}
+.rad-msg{display:flex;gap:10px;margin-top:9px}
+.rad-msg img{width:34px;height:34px;border-radius:50%;object-fit:cover;flex:none}
+.rad-msg b{font-size:12px;display:block}
+.rad-msg small{color:var(--mut);font-size:10.5px}
+.rad-msg p{font-size:11.3px;line-height:1.45;color:#4d5a55;margin-top:5px}
+.rad-rout{display:flex;align-items:center;gap:9px;font-size:11.8px;color:#42504a;padding:5px 0;border-bottom:1px solid #f1f4f0}
+.rad-rout:last-child{border-bottom:0}
+.rad-rout .ic{width:22px;height:22px;border-radius:7px;background:#eef3ee;display:flex;align-items:center;justify-content:center;font-size:11px;flex:none}
+.rad-rout small{display:block;color:var(--mut);font-size:9.8px}
+.rad-not{display:flex;align-items:center;gap:8px;font-size:11.5px;color:#42504a;padding:5.5px 0}
+.rad-not .tg{margin-left:auto;width:30px;height:17px;border-radius:9px;background:#2f7d5f;position:relative;flex:none}
+.rad-not .tg::after{content:"";position:absolute;right:2px;top:2px;width:13px;height:13px;border-radius:50%;background:#fff}
+.rad-not .tg.off{background:#cfd6d0}
+.rad-not .tg.off::after{right:auto;left:2px}
+/* @css */
+</style>
+</head>
+<body>
+<div id="stagewrap"><div id="stage"></div></div>
+<aside id="rail">
+  <header>V2 Patient Portal<small>3 design directions · 3 screens</small></header>
+  <div class="items" id="railitems"></div>
+</aside>
+<div id="dock">
+  <span class="lbl">PATIENT</span>
+  <div class="pills" id="vpills"></div>
+  <div class="step">
+    <button id="prev" aria-label="Previous">&larr;</button>
+    <span id="pos">1 / 1</span>
+    <button id="next" aria-label="Next">&rarr;</button>
+  </div>
+  <select id="jump" aria-label="Jump to screen"></select>
+  <a class="deck" href="clinic-portal-wireframes.html">Clinic deck &rarr;</a>
+  <button class="tools" id="railbtn">Screens</button>
+</div>
+<script>
+const SCREENS={}, ORDER=[];
+const VERSIONS={
+  lumina:{label:"Lumina", sub:"Sidebar · deep green · roadmap + drawer"},
+  vivara:{label:"Vivara", sub:"Top nav · tabs · today-first"},
+  radiant:{label:"Radiant", sub:"Glow Garden journey view"},
+};
+function S(id,def){SCREENS[id]=def;ORDER.push(id);}
+
+/* Small stroke-icon helpers shared by the screens. */
+const IC=(d,extra="")=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ${extra}><path d="${d}"/></svg>`;
+const ICONS={
+  home:IC("M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5"),
+  cal:IC("M4 5h16v16H4zM4 9.5h16M8 3v4M16 3v4"),
+  plan:IC("M4 4h16v4H4zM4 12h10v8H4zM18 12h2v8h-2"),
+  task:IC("M5 4h14v16H5zM8.5 9.5h7M8.5 13h7M8.5 16.5h4"),
+  photo:IC("M4 5h16v14H4zM8 12l2.5 3 3-4 4.5 6"),
+  msg:IC("M4 5h16v11H8l-4 4z"),
+  bill:IC("M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21zM9 8h6M9 12h6"),
+  gear:IC("M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM12 2v3M12 19v3M4.2 6.5l2.2 1.7M17.6 15.8l2.2 1.7M2 12h3M19 12h3M4.2 17.5l2.2-1.7M17.6 8.2l2.2-1.7"),
+  layers:IC("M12 3 3 8l9 5 9-5zM3 13l9 5 9-5"),
+  flag:IC("M6 3v18M6 4h11l-2.5 4L17 12H6"),
+  drop:IC("M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"),
+  check:IC("M5 12.5 10 17.5 19 7"),
+  up:IC("M12 16V5M7 9.5 12 5l5 4.5M5 19h14"),
+  clock:IC("M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v4.5l3 2"),
+  bell:IC("M6 16v-5a6 6 0 0 1 12 0v5l1.6 2.4H4.4zM10.5 21a2 2 0 0 0 3 0"),
+};
+S("lumina",{
+  version:"lumina", title:"Skin Plan & Journey", route:"portal.lumina-skinclinic.co.uk",
+  chrome:"mac", url:"https://portal.lumina-skinclinic.co.uk", frame:"4:3",
+  html:`
+    <aside class="lum-side">
+      <div class="lum-logo">LUMINA<small>SKIN&nbsp;CLINIC</small></div>
+      <nav class="lum-nav">
+        <a href="#lumina">${ICONS.home}Dashboard</a>
+        <a href="#lumina">${ICONS.cal}Appointments</a>
+        <a href="#lumina" class="on">${ICONS.plan}Skin Plan &amp; Journey</a>
+        <a href="#lumina">${ICONS.task}Tasks</a>
+        <a href="#lumina">${ICONS.photo}Photos</a>
+        <a href="#lumina">${ICONS.msg}Messages<span class="badge">2</span></a>
+        <a href="#lumina">${ICONS.bill}Billing</a>
+        <a href="#lumina">${ICONS.gear}Settings</a>
+      </nav>
+      <div class="lum-art"><img src="assets/sidebar-lumina.png" alt="">
+        <div class="cap"><b>Healthy skin.<br>Brighter tomorrows.</b><span>Expert care.<br>Real progress.</span></div></div>
+    </aside>
+    <div class="lum-main">
+      <div class="lum-top">
+        <div><h2>Patient Portal</h2><p>Your skin journey, our support. Real progress, together.</p></div>
+        <div class="script">Confident skin<br>brighter you</div>
+        <div class="bell">${ICONS.bell.replace("<svg",'<svg style="width:21px;height:21px"')}</div>
+        <div class="lum-user"><img src="assets/avatar-emma.png" alt="">
+          <div><b>Emma Carter</b><small>Patient</small></div><span style="color:#aab3c2">▾</span></div>
+      </div>
+      <div class="lum-band">
+        <div><h1>3-Month Microneedling Plan</h1>
+          <div class="sub">Smoother texture. Brighter tone. <b>A calmer, healthier you.</b></div></div>
+        <div class="lum-ring">
+          <svg width="88" height="88" viewBox="0 0 88 88">
+            <circle cx="44" cy="44" r="37" fill="none" stroke="#e6ecee" stroke-width="9"/>
+            <circle cx="44" cy="44" r="37" fill="none" stroke="#0b635c" stroke-width="9" stroke-linecap="round"
+              stroke-dasharray="100 133" stroke-dashoffset="0" transform="rotate(-90 44 44)" pathLength="233"/>
+            <text x="44" y="50" text-anchor="middle" font-size="19" font-weight="800" fill="#0e1c33">43%</text>
+          </svg>
+          <div class="meta"><b>Plan progress</b><span>6 of 14 milestones complete</span><div class="bar"><i></i></div></div>
+        </div>
+        <div class="lum-quote"><div class="q">“Progress,<br>not perfection.”</div><div class="a">— Dr. A. Reeves</div></div>
+      </div>
+      <div class="lum-cards">
+        <div class="lum-card"><div class="tile" style="background:var(--tint2);color:var(--deep)">${ICONS.layers}</div>
+          <div><small>Current phase</small><b>Build &amp; Support</b><em>Month 2 of 3</em></div><span class="chev">›</span></div>
+        <div class="lum-card"><div class="tile" style="background:#e7f0fb;color:#4a76b8">${ICONS.cal}</div>
+          <div><small>Next appointment</small><b>Microneedling Session 2 <span style="color:var(--teal)">in 12 days</span></b><em>Tue 27 Sep 2024, 10:00am</em></div><span class="chev">›</span></div>
+        <div class="lum-card"><div class="tile" style="background:var(--cream);color:#b98a3a">${ICONS.flag}</div>
+          <div><small>Plan completion</small><b>6 of 14 milestones complete</b><em>You're 43% of the way there</em></div><span class="chev">›</span></div>
+      </div>
+      <div class="lum-body">
+        <section class="lum-road">
+          <div class="lum-road-head">
+            <div><h3>Your plan roadmap</h3><p>A step-by-step guide to your treatment, care and results.</p></div>
+            <div class="cal">${ICONS.cal.replace("<svg",'<svg style="width:16px;height:16px"')} View as calendar</div>
+          </div>
+          <div class="lum-road-grid">
+            <div>
+              <div class="lum-month" style="border-top:3px solid var(--teal);padding-top:12px;margin-top:4px">
+                <h4><small>Month 1</small>Foundation</h4>
+                <p>Assess, plan and prepare your skin for the best results.</p>
+                <div class="prog">5 of 5 complete</div><div class="bar"><i style="width:100%"></i></div></div>
+              <div class="lum-month" style="margin-top:46px">
+                <h4><small>Month 2</small>Build &amp; Support</h4>
+                <p>Continue treatment, support skin health and monitor progress.</p>
+                <div class="prog">1 of 5 complete</div><div class="bar"><i style="width:20%"></i></div></div>
+              <div class="lum-month" style="margin-top:56px">
+                <h4><small>Month 3</small>Results &amp; Confidence</h4>
+                <p>Complete your treatment plan and review your results.</p>
+                <div class="prog">0 of 4 complete</div><div class="bar"><i style="width:0"></i></div></div>
+            </div>
+            <div class="lum-steps">
+              ${[
+                ["done","Consultation & Skin Assessment","5 Sep 2024","Completed"],
+                ["done","Treatment Plan Agreed","5 Sep 2024","Completed"],
+                ["done","15 Sep Microneedling Session 1","15 Sep 2024","Completed"],
+                ["done","Wait 3 Days","18 Sep 2024","Completed"],
+                ["done","Start New Skincare Routine","18 Sep 2024","Completed"],
+                ["done","Daily Skin Health Tasks","Ongoing","Completed"],
+                ["cur","Blood Test Check","22 Sep 2024","Current"],
+                ["cond","If Deficient: Start Vitamins","Conditional","Conditional"],
+                ["n9","1 Week Before Session 2 Stop Active Ingredients","20 Sep 2024","Upcoming"],
+                ["n10","Microneedling Session 2","27 Sep 2024","Upcoming"],
+                ["n11","Continue Routine & Healthy Habits","Ongoing","Upcoming"],
+                ["n12","1 Week Before Session 3 Stop Active Ingredients","18 Oct 2024","Upcoming"],
+                ["n13","Microneedling Session 3","25 Oct 2024","Upcoming"],
+                ["n14","Review & Results","1 Nov 2024","Upcoming"],
+              ].map((r,i)=>{
+                const cls=r[0]==="done"?"done":r[0]==="cur"?"cur":r[0]==="cond"?"cond":"";
+                const chip=r[3]==="Completed"?"done":r[3]==="Current"?"cur":r[3]==="Conditional"?"cond":"upc";
+                const dot=r[0]==="done"||r[0]==="cur"?ICONS.check:(i+1);
+                return `<div class="lum-step ${cls}"><span class="dot">${dot}</span><b>${r[1]}</b><span class="date">${r[2]}</span><span class="lum-chip ${chip}">${r[3]}</span></div>`;
+              }).join("")}
+            </div>
+          </div>
+        </section>
+        <aside class="lum-drawer">
+          <div class="lum-detail">
+            <span class="x">×</span>
+            <div class="tile">${ICONS.drop}</div>
+            <div><h3>Blood Test Check</h3><span class="cchip"><i></i>Current</span></div>
+            <p class="desc">Check key nutrient levels to support your skin health and treatment results.</p>
+            <div class="lum-mini">
+              <div>${ICONS.cal}<div><small>Due date</small><b>22 Sep 2024</b></div></div>
+              <div>${ICONS.clock}<div><small>Status</small><b>In progress</b></div></div>
+            </div>
+            <div class="lum-check">
+              <h5>Checklist <span>0 of 3 complete</span></h5>
+              <label><span class="box"></span>Book your blood test (GP or private)</label>
+              <label><span class="box"></span>Upload your results</label>
+              <label><span class="box"></span>Clinic to review and confirm next steps</label>
+            </div>
+            <div class="lum-btns">
+              <div class="lum-btn deep">${ICONS.up}Upload Result</div>
+              <div class="lum-btn">${ICONS.msg.replace("<svg",'<svg style="width:16px;height:16px"')}Message Clinic</div>
+              <div class="lum-btn wide">${ICONS.check.replace("<svg",'<svg style="width:15px;height:15px"')}Mark Complete</div>
+            </div>
+            <div class="lum-note"><span style="font-size:14px">ⓘ</span>If vitamin B12 is low, your plan will unlock supplement guidance.</div>
+          </div>
+          <div class="lum-focus">
+            <h4><span class="sun">☀</span>Today's focus<span>4 tasks</span></h4>
+            <label><span class="box"></span>Drink 2L water</label>
+            <label class="done"><span class="box"></span>Follow AM/PM routine</label>
+            <label><span class="box"></span>Book blood test</label>
+            <label><span class="box"></span>Log any irritation</label>
+          </div>
+        </aside>
+      </div>
+    </div>`,
+});
+S("vivara",{
+  version:"vivara", title:"Skin Plan & Journey — Overview", route:"my.vivarahealth.com/skin-plan",
+  chrome:"tab", url:"https://my.vivarahealth.com/skin-plan", tabTitle:"Skin Plan & Journey – Vivara",
+  fav:"#18555c", frame:"4:3",
+  html:`
+    <div class="viv-nav">
+      <div class="viv-logo"><span class="leaf">❧</span><div><b>VIVARA</b><small>SKIN HEALTH FOR WHAT'S NEXT</small></div></div>
+      <div class="viv-links"><span>Care ▾</span><span class="on">Skin Plan &amp; Journey</span><span>Resources</span><span>Book</span><span>Messages</span></div>
+      <div class="viv-right"><span style="color:#6b7284">${ICONS.bell.replace("<svg",'<svg style="width:20px;height:20px"')}</span>
+        <span class="em">EM</span><b style="font-size:14px">Emma Carter</b><span style="color:#9aa0ac">▾</span></div>
+    </div>
+    <div class="viv-band">
+      <div class="viv-band-row">
+        <div><div class="viv-eyebrow">YOUR PLAN</div><h1>3-Month Microneedling Plan</h1>
+          <div class="sub">Smoother texture. Brighter tone. A stronger, healthier you.</div></div>
+        <div class="viv-meta">
+          <div class="cell" style="border-left:0">
+            <svg width="72" height="72" viewBox="0 0 72 72">
+              <circle cx="36" cy="36" r="30" fill="none" stroke="#e8e3db" stroke-width="7"/>
+              <circle cx="36" cy="36" r="30" fill="none" stroke="#18555c" stroke-width="7" stroke-linecap="round"
+                stroke-dasharray="81 107" transform="rotate(-90 36 36)" pathLength="188"/>
+              <text x="36" y="41" text-anchor="middle" font-size="15.5" font-weight="800" fill="#111a2b">43%</text>
+            </svg>
+            <div><b>Plan completion</b><em>5 of 12 milestones</em></div>
+          </div>
+          <div class="cell"><div class="tile">${IC("M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 20c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5")}</div>
+            <div><small>Your clinician</small><b>Layla Hassan</b><em>Dermatology Specialist</em></div></div>
+          <div class="cell"><div class="tile sq">${ICONS.cal}</div>
+            <div><small>Next visit</small><b>20 Oct 2025</b><em>Microneedling Session 2</em></div></div>
+        </div>
+        <div class="viv-script">Progress<br>looks good<br>on you.</div>
+      </div>
+      <div class="viv-tabs"><span class="on">Overview</span><span>Timeline</span><span>Today</span><span>Photos</span><span>Messages</span></div>
+    </div>
+    <div class="viv-grid">
+      <div class="viv-card viv-today">
+        <div class="viv-h">${IC("M12 4v2M12 18v2M4 12h2M18 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M17.7 6.3l-1.4 1.4M7.7 16.3l-1.4 1.4M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z")}Today / Next Action<span class="day">Day 12 of 90</span></div>
+        <div class="viv-big">
+          <div class="tile">${ICONS.task}</div>
+          <div><h4>Book or upload your B12 blood test result</h4>
+            <p>Your B12 level helps us ensure the best healing and results. Upload your result or book a test with our partner lab.</p>
+            <div class="btns"><span class="viv-btn">${ICONS.up}Upload result</span><span class="viv-link">Book a blood test →</span></div></div>
+        </div>
+        <div class="viv-row"><span class="ck"></span><span class="tile">${IC("M12 11a3.2 3.2 0 1 0 0-6.4A3.2 3.2 0 0 0 12 11zM6 19.5c1-2.9 3.2-4.3 6-4.3s5 1.4 6 4.3")}</span>
+          <div><b>Complete your daily skincare routine</b><small>AM and PM routine</small></div><span class="chev">›</span></div>
+        <div class="viv-row"><span class="ck"></span><span class="tile">${ICONS.drop}</span>
+          <div><b>Stay hydrated</b><small>Aim for 2–3 litres of water today</small></div><span class="chev">›</span></div>
+      </div>
+      <div class="viv-colr">
+        <div class="viv-card">
+          <div class="viv-h">${ICONS.cal.replace("<svg",'<svg style="stroke:#8a7a5c"')}Upcoming<span class="see">See all</span></div>
+          <div class="viv-up-item"><span class="tile">${ICONS.clock}</span>
+            <div><b>Stop actives in 5 days</b><small>15 Oct 2025</small>
+              <p>Pause retinoids, acids and exfoliants before your next session.</p></div><span class="chev">›</span></div>
+          <div class="viv-up-item"><span class="tile">${ICONS.cal}</span>
+            <div><b>Microneedling Session 2</b><small>20 Oct 2025 · 10:00 AM</small>
+              <p>📍 Vivara Skin Clinic</p></div><span class="chev">›</span></div>
+        </div>
+        <div class="viv-card">
+          <div class="viv-h">${IC("M8 7a4 4 0 0 1 8 0M8 17a4 4 0 0 0 8 0M12 7v10").replace("<svg",'<svg style="stroke:#8a7a5c"')}Conditional steps</div>
+          <div class="viv-up-item"><span class="tile">${IC("M9 14l6-6M8 16a4 4 0 0 1 0-6l2-2M16 8a4 4 0 0 1 0 6l-2 2")}</span>
+            <div><b>Start B12 supplement guidance if deficient</b>
+              <p>We'll share a personalised supplement plan once we've received your result.</p></div><span class="chev">›</span></div>
+        </div>
+      </div>
+      <div class="viv-colr">
+        <div class="viv-card">
+          <div class="viv-h">${IC("M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.4-7 10-7 10z").replace("<svg",'<svg style="stroke:#c2705f"')}Recovery Check-in</div>
+          <div style="color:var(--mut);font-size:12.5px;margin-top:4px">How are you feeling today?</div>
+          <div class="viv-slider"><span>Redness</span><span class="lane"><i style="width:30%"></i><u style="left:calc(30% - 8px)"></u></span><span class="lv">Mild</span></div>
+          <div class="viv-slider"><span>Sensitivity</span><span class="lane"><i style="width:55%"></i><u style="left:calc(55% - 8px)"></u></span><span class="lv">Moderate</span></div>
+          <div class="viv-slider"><span>Dryness</span><span class="lane"><i style="width:26%"></i><u style="left:calc(26% - 8px)"></u></span><span class="lv">Mild</span></div>
+        </div>
+        <div class="viv-card">
+          <div class="viv-h">${ICONS.photo.replace("<svg",'<svg style="stroke:#8a7a5c"')}Before &amp; After<span class="see">See all</span></div>
+          <div class="viv-ba">
+            <div><img src="assets/skin-before-1.png" alt=""><div class="lb"><b>Before</b> · 12 Sep 2025</div></div>
+            <div><img src="assets/skin-after-1.png" alt=""><div class="lb"><b>After</b> · —</div></div>
+            <div class="handle">‹›</div>
+          </div>
+        </div>
+        <div class="viv-card">
+          <div class="viv-h">${ICONS.drop.replace("<svg",'<svg style="stroke:#5a7ba6"')}Product routine adherence<span class="see">This week</span></div>
+          <div class="viv-adh"><span>☀ AM routine</span><span class="lane"><i style="width:71%"></i></span><span class="n">5/7</span></div>
+          <div class="viv-adh"><span>☾ PM routine</span><span class="lane"><i style="width:57%"></i></span><span class="n">4/7</span></div>
+        </div>
+        <div class="viv-card viv-safe">
+          <div class="viv-h">${IC("M12 3l7 3v5c0 4.4-3 8.4-7 10-4-1.6-7-5.6-7-10V6zM9 12l2.2 2.2L15.5 10").replace("<svg",'<svg style="stroke:#2f8f83"')}Safe to Proceed?</div>
+          <p><b style="color:var(--ink)">Appointment preparation</b><br>Review your pre-treatment checklist to make sure you're ready for Session 2.</p>
+          <div class="chk">${ICONS.task.replace("<svg",'<svg style="width:16px;height:16px;stroke:#3c4658"')}View checklist<span class="chev">›</span></div>
+        </div>
+      </div>
+      <div class="viv-card viv-journey">
+        <div class="viv-h">${IC("M4 18V8M9 18V5M14 18v-7M19 18V9").replace("<svg",'<svg style="stroke:#18555c"')}Your 3-Month Journey<span class="see" style="border-bottom:1px solid currentColor;padding-bottom:1px">View full timeline →</span></div>
+        <div class="viv-jgrid">
+          <div class="viv-jm"><small>Month 1</small><b>Foundation</b>
+            <div class="viv-track">
+              <span class="pt done" style="left:0">${ICONS.check}</span>
+              <span class="pt done" style="left:36%">${ICONS.check}</span>
+              <span class="pt done" style="left:72%">${ICONS.check}</span></div>
+            <div class="viv-jlist">
+              <div><span class="c on"></span>Consultation</div>
+              <div><span class="c on"></span>Skin prep &amp; baseline photos</div>
+              <div><span class="c on"></span>Microneedling Session 1</div>
+              <div><span class="c on"></span>Healing &amp; recovery</div></div></div>
+          <div class="viv-jm"><small>Month 2</small><b>Build &amp; Support</b>
+            <div class="viv-track">
+              <span class="pt cur" style="left:0"><i></i></span>
+              <span class="pt" style="left:36%"></span>
+              <span class="pt" style="left:72%"></span></div>
+            <div class="viv-jlist">
+              <div><span class="c"></span>B12 test &amp; supplement (if needed)</div>
+              <div><span class="c"></span>Microneedling Session 2</div>
+              <div><span class="c"></span>Continue skincare routine</div>
+              <div><span class="c"></span>Track progress photos</div></div></div>
+          <div class="viv-jm"><small>Month 3</small><b>Results &amp; Confidence</b>
+            <div class="viv-track">
+              <span class="pt" style="left:0"></span>
+              <span class="pt" style="left:36%"></span>
+              <span class="pt" style="left:72%"></span></div>
+            <div class="viv-jlist">
+              <div><span class="c"></span>Microneedling Session 3</div>
+              <div><span class="c"></span>Final comparison</div>
+              <div><span class="c"></span>Maintenance plan</div>
+              <div><span class="c"></span>Celebrate your progress ✨</div></div></div>
+        </div>
+      </div>
+    </div>`,
+});
+S("radiant",{
+  version:"radiant", title:"Skin Plan & Journey — Glow Garden", route:"/skin-plan",
+  chrome:"none", frame:"4:3",
+  html:`
+    <aside class="rad-side">
+      <div class="rad-logo"><span class="lf">❦</span><div><b>Radiant Health</b><small>SKIN · SCIENCE · YOU</small></div></div>
+      <nav class="rad-nav">
+        <a href="#radiant" class="on">${ICONS.home}Overview</a>
+        <a href="#radiant">${ICONS.plan}Skin Plan &amp; Journey</a>
+        <a href="#radiant">${ICONS.cal}Appointments</a>
+        <a href="#radiant">${ICONS.task}Results &amp; Labs</a>
+        <a href="#radiant">${ICONS.photo}Photos</a>
+        <a href="#radiant">${ICONS.drop}Skincare Routine</a>
+        <a href="#radiant">${ICONS.msg}Messages</a>
+        <a href="#radiant">${ICONS.bill}Billing &amp; Insurance</a>
+        <a href="#radiant">${ICONS.gear}Settings</a>
+      </nav>
+      <div class="rad-bloom">A healthier<br>brighter you<br>blooms here.</div>
+      <div class="rad-foot">Care today. A brighter tomorrow. ♡</div>
+    </aside>
+    <div class="rad-main">
+      <div class="rad-top">
+        <div class="tl"><span class="on">My Plan</span><span>Appointments</span><span>Results</span><span>Resources</span><span>Messages</span></div>
+        <div class="search">⌕ Search…</div>
+        <span style="color:#7b877f">${ICONS.bell.replace("<svg",'<svg style="width:17px;height:17px"')}</span>
+        <div class="hi"><img src="assets/avatar-alex.png" alt="">Hi, Alex <span style="color:#9aa69f">▾</span></div>
+      </div>
+      <div class="rad-head">
+        <div><div class="eb">YOUR PERSONALIZED JOURNEY</div>
+          <h1>Skin Plan &amp; Journey – Glow Garden View</h1>
+          <div class="sub">Real progress. A healthier, brighter you. ♡</div></div>
+        <div class="rad-toggle">
+          <div class="grp"><span class="on">Glow Garden View</span><span>Clinical View</span></div>
+          <span class="ghost">⛅ Hide artwork layer</span>
+        </div>
+      </div>
+      <div class="rad-garden">
+        <img src="assets/garden-hero.png" alt="">
+        <div class="q1">Progress<br>looks good<br>on you ♡</div>
+        <div class="q2">“Healthy skin is a journey,<br>not a destination.”</div>
+        <div class="rad-phase" style="left:17%"><b>1. FOUNDATION</b>Build the right conditions for healthy skin</div>
+        <div class="rad-phase" style="left:44%"><b>2. SUPPORT</b>Nourish, monitor and stay consistent</div>
+        <div class="rad-phase" style="left:70%"><b>3. RESULTS</b>See and feel your progress</div>
+        <div class="rad-sign">Brighter<br>Healthier<br>Happier<br>You</div>
+        <div class="rad-mstones">
+          <div class="rad-ms"><span class="ck">✓</span><b>Session 1 Complete</b><small>Apr 2, 2024</small></div>
+          <div class="rad-ms"><span class="ck">✓</span><b>Skincare Routine Active</b><small>Ongoing</small></div>
+          <div class="rad-ms due"><span class="ck">!</span><b>Blood Test Due</b><small>Apr 18, 2024</small></div>
+          <div class="rad-ms lock"><span class="ck">🔒</span><b>Session 2 Upcoming</b></div>
+          <div class="rad-ms lock"><span class="ck">🔒</span><b>Follow-up Assessment</b></div>
+          <div class="rad-ms lock"><span class="ck">🔒</span><b>Long-Term Glow</b></div>
+        </div>
+        <div class="cap">Small steps. Lasting radiance.</div>
+      </div>
+      <div class="rad-mid">
+        <div class="rad-card">
+          <h4>${ICONS.task}Today's garden tasks<span class="r">4 tasks</span></h4>
+          <div class="rad-task">${ICONS.drop}<div><b>Hydration</b><small>Aim for 2–3 litres today</small></div><span class="o"></span></div>
+          <div class="rad-task hl">${IC("M12 3v3M12 18v3M5 12H2M22 12h-3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z")}<div><b>Skincare routine</b><small>AM &amp; PM routine</small></div><span class="o"></span></div>
+          <div class="rad-task">${ICONS.up}<div><b>Upload lab result</b><small>Blood test due Apr 18, 2024</small></div><span class="o"></span></div>
+          <div class="rad-task">${IC("M4 19h16M7 15c1-4 2.4-6.5 5-9 2.6 2.5 4 5 5 9")}<div><b>Log recovery</b><small>How are you feeling today?</small></div><span class="o"></span></div>
+          <div class="rad-mark">${ICONS.check.replace("<svg",'<svg style="width:13px;height:13px;stroke:#fff"')}Mark day complete</div>
+        </div>
+        <div class="rad-card">
+          <h4>${IC("M4 18V8M9 18V4M14 18v-6M19 18V9")}Progress this month<span class="r">Apr 2024</span></h4>
+          <div class="rad-rings">
+            ${[["50%","Plan milestones","1 of 2 complete",50],["80%","Routine adherence","24 of 30 days",80],["0%","Lab results","0 of 1 uploaded",0]].map(r=>`
+            <div class="rad-ring">
+              <svg width="74" height="74" viewBox="0 0 74 74">
+                <circle cx="37" cy="37" r="30" fill="none" stroke="#e7ece6" stroke-width="7"/>
+                ${r[3]>0?`<circle cx="37" cy="37" r="30" fill="none" stroke="#2f7d5f" stroke-width="7" stroke-linecap="round" stroke-dasharray="${r[3]} 100" pathLength="100" transform="rotate(-90 37 37)"/>`:""}
+                <text x="37" y="42" text-anchor="middle" font-size="14.5" font-weight="800" fill="#22303a">${r[0]}</text>
+              </svg>
+              <div class="lb">${r[1]}</div><small>${r[2]}</small>
+            </div>`).join("")}
+          </div>
+          <div class="rad-quote">“Consistency today creates your tomorrow glow.” ❧</div>
+        </div>
+        <div class="rad-card">
+          <h4>${ICONS.cal}Next treatment prep<span class="r">Session 2 · May 6, 2024</span></h4>
+          <div class="rad-prep hl"><span class="o"></span>Complete blood test (due Apr 18)</div>
+          <div class="rad-prep"><span class="o"></span>Continue skincare routine</div>
+          <div class="rad-prep"><span class="o"></span>Avoid active exfoliants 3 days before</div>
+          <div class="rad-prep"><span class="o"></span>Stay hydrated</div>
+          <div class="rad-prep"><span class="o"></span>Log any skin changes</div>
+          <div class="rad-preplink">View full prep guide →</div>
+        </div>
+      </div>
+      <div class="rad-bot">
+        <div class="rad-card">
+          <h4>${ICONS.cal}Calendar<span class="r">‹ ›</span></h4>
+          <div style="font-size:10.5px;font-weight:700;margin-top:5px;color:#42504a">April 2024</div>
+          <table class="rad-cal">
+            <tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr>
+            <tr><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td></tr>
+            <tr><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td><td>13</td><td>14</td></tr>
+            <tr><td>15</td><td>16</td><td>17</td><td class="sel">18</td><td>19</td><td>20</td><td>21</td></tr>
+            <tr><td>22</td><td>23</td><td>24</td><td>25</td><td>26</td><td>27</td><td>28</td></tr>
+            <tr><td>29</td><td>30</td><td></td><td></td><td></td><td></td><td></td></tr>
+          </table>
+        </div>
+        <div class="rad-card">
+          <h4>${ICONS.photo}Progress photos<span class="r">See all →</span></h4>
+          <div class="rad-photos">
+            <div class="ph"><img src="assets/skin-before-1.png" alt=""><div class="lb">Mar 1<br>Before</div></div>
+            <div class="ph"><img src="assets/skin-progress-2.png" alt=""><div class="lb">Apr 2<br>After Session 1</div></div>
+            <div class="add">+</div>
+          </div>
+          <div style="font-size:9.5px;color:var(--mut);margin-top:4px">Add photos</div>
+        </div>
+        <div class="rad-card">
+          <h4>${ICONS.msg}Message from your practitioner<span class="r">Apr 4, 2024</span></h4>
+          <div class="rad-msg"><img src="assets/avatar-chen.png" alt="">
+            <div><b>Dr. Emily Chen</b><small>Dermatologist</small>
+              <p>Your skin is responding beautifully! Keep up with your routine, and don't forget to upload your blood test results when available. We're on track for great progress. 💚</p></div></div>
+        </div>
+        <div class="rad-card">
+          <h4>${ICONS.drop}Your skincare routine<span class="r">Manage →</span></h4>
+          <div class="rad-rout"><span class="ic">🧴</span><div>Cleanser<small>AM / PM</small></div></div>
+          <div class="rad-rout"><span class="ic">💧</span><div>Vitamin C Serum<small>AM</small></div></div>
+          <div class="rad-rout"><span class="ic">🫧</span><div>Moisturiser<small>AM / PM</small></div></div>
+          <div class="rad-rout"><span class="ic">☀️</span><div>SPF 50<small>AM</small></div></div>
+        </div>
+        <div class="rad-card">
+          <h4>${ICONS.bell}Notification settings<span class="r">Manage →</span></h4>
+          <div class="rad-not">Appointment reminders<span class="tg"></span></div>
+          <div class="rad-not">Lab result reminders<span class="tg"></span></div>
+          <div class="rad-not">Skincare routine nudges<span class="tg"></span></div>
+          <div class="rad-not">New messages<span class="tg"></span></div>
+          <div class="rad-not">Product refill alerts<span class="tg off"></span></div>
+        </div>
+      </div>
+    </div>`,
+});
+/* @screens */
+</script>
+<script>
+/* ------------------------------ deck engine ------------------------------ */
+const stage=document.getElementById("stage"), railItems=document.getElementById("railitems"),
+      pills=document.getElementById("vpills"), jump=document.getElementById("jump"),
+      posEl=document.getElementById("pos");
+let current=null;
+
+function frameSize(s){return s.frame==="16:9"?{w:1672,h:941}:{w:1448,h:1086};}
+
+function browserChrome(s){
+  if(s.chrome==="mac")return `<div class="bc-mac"><div class="lights"><i></i><i></i><i></i></div>
+    <div class="navarr">&#8249;&nbsp;&nbsp;&#8250;</div>
+    <div class="urlpill"><span class="lock">&#128274;</span>${s.url||""}</div>
+    <div class="bicons">&#8679;&nbsp;&nbsp;+&nbsp;&nbsp;&#9881;&nbsp;&nbsp;&#10064;</div></div>`;
+  if(s.chrome==="tab")return `<div class="bc-tab" style="--tab-fav:${s.fav||"#0b5355"}">
+    <div class="tabrow"><div class="tab"><span class="fav"></span>${s.tabTitle||s.title}<span class="x">&times;</span></div>
+    <span class="tabplus">+</span><div class="winbtns"><span>&#8211;</span><span>&#9633;</span><span>&times;</span></div></div>
+    <div class="toolrow"><span class="arr">&larr;</span><span class="arr">&rarr;</span><span class="arr">&#8635;</span>
+    <div class="url"><span class="lock">&#128274;</span>${s.url||""}</div>
+    <div class="ticons"><span>&#9734;</span><span>&#8942;</span></div></div></div>`;
+  return "";
+}
+
+function fit(){
+  const f=stage.querySelector(".frame"); if(!f)return;
+  const s=SCREENS[current], sz=frameSize(s);
+  const availW=innerWidth-52, availH=innerHeight-92;
+  const k=Math.min(availW/sz.w, availH/sz.h, 1);
+  f.style.transform=`scale(${k})`;
+  stage.style.width=(sz.w*k)+"px"; stage.style.height=(sz.h*k)+"px";
+}
+
+function render(id){
+  if(!SCREENS[id])return;
+  current=id;
+  const s=SCREENS[id], sz=frameSize(s);
+  const chromeH=s.chrome==="mac"?56:s.chrome==="tab"?84:0;
+  stage.innerHTML=`<div class="frame" style="width:${sz.w}px;height:${sz.h}px">
+    ${browserChrome(s)}
+    <div class="sbody v-${s.version}" style="height:${sz.h-chromeH}px">${s.html}</div></div>`;
+  fit();
+  const i=ORDER.indexOf(id);
+  posEl.textContent=`${i+1} / ${ORDER.length}`;
+  document.getElementById("prev").disabled=i===0;
+  document.getElementById("next").disabled=i===ORDER.length-1;
+  jump.value=id;
+  document.querySelectorAll("#railitems .item").forEach(b=>b.setAttribute("aria-current",b.dataset.go===id));
+  document.querySelectorAll("#vpills button").forEach(b=>b.setAttribute("aria-pressed",String(SCREENS[id].version===b.dataset.v)));
+  history.replaceState(null,"","#"+id);
+  document.title=`${VERSIONS[s.version].label} — ${s.title} · V2 Patient Portal`;
+}
+
+function buildNav(){
+  const byV={};
+  ORDER.forEach(id=>{(byV[SCREENS[id].version]=byV[SCREENS[id].version]||[]).push(id);});
+  railItems.innerHTML=Object.entries(byV).map(([v,ids])=>`
+    <div class="vhead">${VERSIONS[v].label}<small>${VERSIONS[v].sub}</small></div>`+
+    ids.map(id=>`<button class="item" data-go="${id}">${SCREENS[id].title}<em>${SCREENS[id].route}</em></button>`).join("")
+  ).join("");
+  railItems.addEventListener("click",e=>{const b=e.target.closest("[data-go]");if(b)render(b.dataset.go);});
+  pills.innerHTML=Object.entries(byV).map(([v])=>`<button data-v="${v}">${VERSIONS[v].label}</button>`).join("");
+  pills.addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(b)render(byV[b.dataset.v][0]);});
+  jump.innerHTML=ORDER.map(id=>`<option value="${id}">${VERSIONS[SCREENS[id].version].label} — ${SCREENS[id].title}</option>`).join("");
+  jump.addEventListener("change",()=>render(jump.value));
+}
+
+document.getElementById("prev").onclick=()=>{const i=ORDER.indexOf(current);if(i>0)render(ORDER[i-1]);};
+document.getElementById("next").onclick=()=>{const i=ORDER.indexOf(current);if(i<ORDER.length-1)render(ORDER[i+1]);};
+document.getElementById("railbtn").onclick=()=>document.body.classList.toggle("railopen");
+addEventListener("keydown",e=>{
+  if(e.key==="ArrowLeft")document.getElementById("prev").click();
+  if(e.key==="ArrowRight")document.getElementById("next").click();
+  if(e.key==="Escape")document.body.classList.remove("railopen");
+});
+addEventListener("resize",fit);
+buildNav();
+render(location.hash&&SCREENS[location.hash.slice(1)]?location.hash.slice(1):ORDER[0]);
+</script>
+</body>
+</html>
