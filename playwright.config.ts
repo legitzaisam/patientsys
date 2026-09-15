@@ -1,10 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
-import { DEMO_NOW } from "./e2e/fixtures";
 
 /**
  * The regression suite runs against demo mode: the fixture data layer replaces
- * Supabase, identity comes from the demo_role cookie, and the fixture clock is
- * pinned with DEMO_NOW so diary dates never drift under the assertions.
+ * Supabase and identity comes from the demo_role cookie. Everything — fixture
+ * generation, server handlers and the browser — shares the real clock, so
+ * specs compute the dates they assert instead of hardcoding them.
  *
  * Port 8091 is dedicated to tests so a normal `npm run dev` on 8080 is never
  * mistaken for the demo server.
@@ -32,7 +32,6 @@ export default defineConfig({
     timeout: 60_000,
     env: {
       DEMO: "1",
-      DEMO_NOW,
     },
   },
 });

@@ -1,8 +1,7 @@
 import { commsFromEmail, commsFromName, commsSandbox } from "./config.server";
 
 export type ProviderResult =
-  | { ok: true; provider: string; messageId: string }
-  | { ok: false; error: string };
+  { ok: true; provider: string; messageId: string } | { ok: false; error: string };
 
 export async function sendEmail(input: {
   to: string;
@@ -36,7 +35,10 @@ export async function sendEmail(input: {
       text: input.body,
     }),
   });
-  const payload = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
+  const payload = (await response.json().catch(() => null)) as {
+    id?: string;
+    message?: string;
+  } | null;
   if (!response.ok || !payload?.id) {
     return { ok: false, error: payload?.message || `Resend returned ${response.status}` };
   }

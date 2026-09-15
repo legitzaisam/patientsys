@@ -7,11 +7,14 @@ import {
 } from "./config.server";
 import { sendEmail } from "./email.server";
 import { sendSms } from "./sms.server";
+import { unsubscribeFooter } from "./unsubscribe.server";
 
 export type OutboxRow = {
   id: string;
   clinic_id: string;
+  patient_id?: string | null;
   channel: "email" | "sms";
+  purpose?: string | null;
   to_address: string;
   subject: string | null;
   body: string;
@@ -26,10 +29,17 @@ type ClinicFrom = { name: string | null; email: string | null };
 
 export async function deliverRow(row: OutboxRow, clinic?: ClinicFrom) {
   if (row.channel === "sms") return sendSms({ to: row.to_address, body: row.body });
+  // PECR: marketing and reminder email must carry a working opt-out. Appended
+  // at dispatch so the outbox row itself stays the message staff composed.
+  let body = row.body;
+  if (row.purpose && row.purpose !== "transactional" && row.patient_id) {
+    const footer = unsubscribeFooter(row.patient_id);
+    if (footer) body = `${body}\n\n${footer}`;
+  }
   return sendEmail({
     to: row.to_address,
     subject: row.subject || "Message from your clinic",
-    body: row.body,
+    body,
     fromEmail: commsFromEmail() || clinic?.email || null,
     fromName: clinic?.name ?? null,
   });
@@ -78,7 +88,11 @@ function isDue(row: Pick<OutboxRow, "status" | "scheduled_for">, now: Date) {
 }
 
 /** In-memory claim used by demo (and tests). Mutates `rows`. */
-export function claimDueInMemory<T extends OutboxRow>(rows: T[], limit = COMMS_CLAIM_LIMIT, now = new Date()) {
+export function claimDueInMemory<T extends OutboxRow>(
+  rows: T[],
+  limit = COMMS_CLAIM_LIMIT,
+  now = new Date(),
+) {
   const due = rows
     .filter((row) => isDue(row, now))
     .sort((a, b) => a.scheduled_for.localeCompare(b.scheduled_for))
@@ -116,7 +130,10 @@ async function clinicFrom(db: Db, clinicId: string): Promise<ClinicFrom> {
   return { name: data?.name ?? null, email: data?.email ?? null };
 }
 
-async function claimDueOnDb(db: Db, opts: { clinicId?: string; limit: number }): Promise<OutboxRow[]> {
+async function claimDueOnDb(
+  db: Db,
+  opts: { clinicId?: string; limit: number },
+): Promise<OutboxRow[]> {
   // The RPC claims across every clinic. Staff drain is clinic-scoped, so it
   // must not call it — that would leave another clinic's rows stuck in sending.
   if (!opts.clinicId) {
@@ -128,10 +145,14 @@ async function claimDueOnDb(db: Db, opts: { clinicId?: string; limit: number }):
 
   const now = new Date();
   const stale = new Date(now.getTime() - COMMS_STALE_SENDING_MS).toISOString();
+  const COLUMNS =
+    "id, clinic_id, patient_id, channel, purpose, to_address, subject, body, status, attempts, scheduled_for";
   let query = db
     .from("communications")
-    .select("id, clinic_id, channel, to_address, subject, body, status, attempts, scheduled_for")
-    .or(`and(status.eq.queued,scheduled_for.lte.${now.toISOString()}),and(status.eq.sending,scheduled_for.lte.${stale})`)
+    .select(COLUMNS)
+    .or(
+      `and(status.eq.queued,scheduled_for.lte.${now.toISOString()}),and(status.eq.sending,scheduled_for.lte.${stale})`,
+    )
     .order("scheduled_for", { ascending: true })
     .limit(opts.limit);
   if (opts.clinicId) query = query.eq("clinic_id", opts.clinicId);
@@ -144,7 +165,7 @@ async function claimDueOnDb(db: Db, opts: { clinicId?: string; limit: number }):
       .update({ status: "sending", scheduled_for: now.toISOString() })
       .eq("id", row.id)
       .in("status", ["queued", "sending"])
-      .select("id, clinic_id, channel, to_address, subject, body, status, attempts, scheduled_for")
+      .select(COLUMNS)
       .maybeSingle();
     if (lockError) throw new Error(lockError.message);
     if (locked) claimed.push(locked as OutboxRow);
@@ -167,7 +188,8 @@ export async function drainDueCommunications(
   const summary: DrainSummary = { claimed: claimed.length, sent: 0, failed: 0, retried: 0 };
   const clinics = new Map<string, ClinicFrom>();
   for (const row of claimed) {
-    if (!clinics.has(row.clinic_id)) clinics.set(row.clinic_id, await clinicFrom(db, row.clinic_id));
+    if (!clinics.has(row.clinic_id))
+      clinics.set(row.clinic_id, await clinicFrom(db, row.clinic_id));
     const result = await deliverRow(row, clinics.get(row.clinic_id));
     const patch = applyDelivery(row, result);
     const { error } = await db.from("communications").update(patch).eq("id", row.id);

@@ -15,7 +15,7 @@ import {
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getDashboard, updateAppointmentState } from "@/lib/clinic.functions";
+import { getDashboard, logCallAttempt, updateAppointmentState } from "@/lib/clinic.functions";
 import {
   isArrivalAlertSnoozed,
   loadArrivalAlertSnoozes,
@@ -100,6 +100,7 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
   void roles;
   const queryClient = useQueryClient();
   const fetchDashboard = useServerFn(getDashboard);
+  const logCall = useServerFn(logCallAttempt);
   const [now, setNow] = useState(() => Date.now());
   const [collapsed, setCollapsed] = useState(false);
   /** Snooze map (appointment id → until/phase); mirrored in sessionStorage for all pages. */
@@ -340,6 +341,12 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
                   <a
                     href={`tel:${a.patients.phone}`}
                     className="shrink-0 truncate text-xs text-muted-foreground hover:text-foreground hover:underline"
+                    onClick={() =>
+                      // Log the attempt so the call shows in the comms trail.
+                      void logCall({
+                        data: { patient_id: a.patient_id, phone: a.patients.phone },
+                      }).catch(() => {})
+                    }
                   >
                     {a.patients.phone}
                   </a>

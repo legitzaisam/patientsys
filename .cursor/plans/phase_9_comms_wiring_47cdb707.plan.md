@@ -25,25 +25,25 @@ todos:
     status: completed
   - id: 9c-templates
     content: Build src/lib/comms/templates.ts renderTemplate + TEMPLATE_KEYS + channelsFor, and dedupe the client-side interpolation in send-recall-dialog and message-composer
-    status: in_progress
+    status: completed
   - id: 9c-booking
     content: Enqueue booking confirmations from saveAppointment, add reschedule confirmations to rescheduleAppointment and the saveAppointment update path
-    status: pending
+    status: completed
   - id: 9c-payment
     content: Add a sendPaymentRequest handler and point both PaymentChip copies at it instead of sendMessage
-    status: pending
+    status: completed
   - id: 9c-recall
     content: "Replace the mailto:/sms: handoff in send-recall-dialog with real marketing sends and populate retention_outreach.communication_id"
-    status: pending
+    status: completed
   - id: 9c-invite
     content: "Switch inviteStaffMember to generateLink({ type: 'invite' }) and stop returning or displaying plaintext temporary passwords"
-    status: pending
+    status: completed
   - id: 9c-copy
     content: Correct bookingNotifyDescription, the six portal-only toasts, the booking-dialog copy and the chip hover text Phase 0 missed
-    status: pending
+    status: completed
   - id: 9d-reminders
     content: Add clinic reminder_offsets setting, enqueue reminder rows at booking with future scheduled_for, and cancelPendingCommunications on reschedule/cancel
-    status: pending
+    status: in_progress
   - id: 9d-unsubscribe
     content: Build HMAC unsubscribe tokens, the public /u/$token route, the email footer, and COMMS_UNSUBSCRIBE_SECRET in .env.example
     status: pending

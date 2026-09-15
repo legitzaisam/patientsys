@@ -22,9 +22,7 @@ export type PublicDocument = {
 };
 
 export type ResolveOutcome =
-  | { outcome: "ok"; document: PublicDocument }
-  | { outcome: "signed" }
-  | { outcome: "not_found" };
+  { outcome: "ok"; document: PublicDocument } | { outcome: "signed" } | { outcome: "not_found" };
 
 export type SignOutcome = { outcome: "ok" } | { outcome: "signed" } | { outcome: "not_found" };
 
@@ -44,10 +42,7 @@ export function isExpired(doc: { expires_at: string | null }, now = new Date()) 
 }
 
 /** Map a fetched row (or null) onto the public outcome. Pure, unit-tested. */
-export function classifyDocument(
-  doc: PublicDocument | null,
-  now = new Date(),
-): ResolveOutcome {
+export function classifyDocument(doc: PublicDocument | null, now = new Date()): ResolveOutcome {
   if (!doc) return { outcome: "not_found" };
   if (doc.status === "signed") return { outcome: "signed" };
   if (isExpired(doc, now)) return { outcome: "not_found" };

@@ -157,6 +157,8 @@ export const SendMessage = z.object({
 
 export const MarkMessagesRead = z.object({ patient_id: id });
 
+export const LogCallAttempt = z.object({ patient_id: id, phone: optionalText(50) });
+
 export const SendPaymentRequest = z.object({
   patient_id: id,
   appointment_id: id,
@@ -415,6 +417,8 @@ export const UpdateClinicDetails = z.object({
   address: nullableText(500),
   phone: nullableText(50),
   email: nullableEmail,
+  /** Hours before an appointment when reminders go out (max 90 days). */
+  reminder_offsets: z.array(z.number().int().min(1).max(2160)).max(6).optional(),
 });
 
 export const SetRolePermission = z.object({

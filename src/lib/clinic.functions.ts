@@ -943,6 +943,83 @@ async function notifyBookingChange(
   });
 }
 
+/**
+ * Cancel queued (never-sent) outbox rows tied to an entity — reminders
+ * superseded by a reschedule or a cancellation. Cancelled rows stay in the
+ * log, so the trail shows what would have gone out and why it did not.
+ */
+async function cancelPendingCommunications(ctx: Ctx, relatedId: string, purpose?: "reminder") {
+  let query = ctx.supabase
+    .from("communications")
+    .update({ status: "cancelled" })
+    .eq("related_id", relatedId)
+    .eq("status", "queued");
+  if (purpose) query = query.eq("purpose", purpose);
+  const { error } = await query;
+  if (error) console.error("[comms] could not cancel pending sends:", error.message);
+}
+
+/**
+ * Queue the clinic's scheduled reminders for one appointment. Offsets are
+ * clinic policy (clinics.reminder_offsets, hours before the visit); the
+ * Phase 8 drain sends each row when its scheduled_for arrives, so no extra
+ * scheduler exists. Failures never block the booking itself.
+ */
+async function queueAppointmentReminders(
+  ctx: Ctx,
+  opts: {
+    appointmentId: string;
+    patientId: string;
+    treatmentName: string;
+    startsAt: string;
+    practitionerId?: string | null;
+  },
+) {
+  try {
+    const { appointmentReminderMessage, reminderTimes } = await import("./comms/templates");
+    const [{ data: clinic }, { data: patient }, { data: practitioner }] = await Promise.all([
+      ctx.supabase
+        .from("clinics")
+        .select("reminder_offsets")
+        .eq("id", clinicIdOf(ctx))
+        .maybeSingle(),
+      ctx.supabase
+        .from("patients")
+        .select("first_name, email, phone")
+        .eq("id", opts.patientId)
+        .maybeSingle(),
+      opts.practitionerId
+        ? ctx.supabase.from("profiles").select("full_name").eq("id", opts.practitionerId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const offsets = (clinic?.reminder_offsets as number[] | null) ?? [168, 24];
+    const body = appointmentReminderMessage({
+      name: `${patient?.first_name ?? ""}`.trim() || "there",
+      treatment: opts.treatmentName,
+      when: formatWhenLondon(new Date(opts.startsAt)),
+      practitioner: (practitioner?.full_name as string) ?? null,
+    });
+    for (const scheduledFor of reminderTimes(opts.startsAt, offsets)) {
+      await enqueueOnChannels(ctx, {
+        patientId: opts.patientId,
+        purpose: "reminder",
+        subject: "Appointment reminder",
+        body,
+        templateKey: "appointment_reminder",
+        scheduledFor,
+        relatedEntity: "appointments",
+        relatedId: opts.appointmentId,
+        patient: {
+          email: (patient?.email as string) ?? null,
+          phone: (patient?.phone as string) ?? null,
+        },
+      });
+    }
+  } catch (err) {
+    console.error("[comms] reminders not queued:", err instanceof Error ? err.message : err);
+  }
+}
+
 export const saveAppointment = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -1028,6 +1105,15 @@ export const saveAppointment = createServerFn({ method: "POST" })
           startsAt: payload.starts_at,
           practitionerId: payload.practitioner_id,
         });
+        // Reminders for the old time are stale; requeue for the new one.
+        await cancelPendingCommunications(context as Ctx, data.id, "reminder");
+        await queueAppointmentReminders(context as Ctx, {
+          appointmentId: data.id,
+          patientId: data.patient_id,
+          treatmentName: data.treatment_name,
+          startsAt: payload.starts_at,
+          practitionerId: payload.practitioner_id,
+        });
       }
       return { id: data.id, notified: Boolean(timeChanged) };
     }
@@ -1102,6 +1188,13 @@ export const saveAppointment = createServerFn({ method: "POST" })
         email: (patient?.email as string) ?? null,
         phone: (patient?.phone as string) ?? null,
       },
+    });
+    await queueAppointmentReminders(context as Ctx, {
+      appointmentId: created.id as string,
+      patientId: data.patient_id,
+      treatmentName: data.treatment_name,
+      startsAt: payload.starts_at,
+      practitionerId: payload.practitioner_id,
     });
 
     // Notify the booked practitioner and clinic managers only.
@@ -1188,6 +1281,10 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
     }
     const { error } = await supabase.from("appointments").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
+    // A cancelled appointment must not remind anyone it is coming up.
+    if (patch["status"] === "cancelled") {
+      await cancelPendingCommunications(context as Ctx, data.id, "reminder");
+    }
     await audit(context as Ctx, "update", "appointment", data.id, null, {
       ...patch,
       ...(reason ? { cancel_reason: reason } : {}),
@@ -1640,6 +1737,44 @@ export const sendPaymentRequest = createServerFn({ method: "POST" })
       channel: data.channel,
     });
     return { ok: true, communication_id: communicationId };
+  });
+
+/**
+ * Record a click-to-dial attempt so phone calls appear in the comms trail
+ * alongside emails and texts. Inserted as already 'sent': the drain claims
+ * only queued rows, so a call can never reach a provider adapter.
+ */
+export const logCallAttempt = createServerFn({ method: "POST" })
+  .validator(
+    (data: { patient_id: string; phone?: string }) => parseInput(schemas.LogCallAttempt, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "logCallAttempt");
+    const { data: patient } = await ctx.supabase
+      .from("patients")
+      .select("phone")
+      .eq("id", data.patient_id)
+      .maybeSingle();
+    const to = data.phone?.trim() || String(patient?.phone ?? "").trim();
+    if (!to) throw new Error("This patient has no phone number on file");
+    const { error } = await ctx.supabase.from("communications").insert({
+      clinic_id: clinicIdOf(context),
+      patient_id: data.patient_id,
+      channel: "call",
+      purpose: "transactional",
+      to_address: to,
+      subject: null,
+      body: "Call attempt from the clinic.",
+      status: "sent",
+      provider: "phone",
+      attempts: 1,
+      sent_at: new Date().toISOString(),
+      created_by: ctx.userId,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });
 
 export const sendMessage = createServerFn({ method: "POST" })
@@ -4202,6 +4337,15 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
         startsAt,
         practitionerId: (practitionerId as string) ?? null,
       });
+      // Reminders for the old time are stale; requeue for the new one.
+      await cancelPendingCommunications(ctx, data.id, "reminder");
+      await queueAppointmentReminders(ctx, {
+        appointmentId: data.id,
+        patientId: current.patient_id as string,
+        treatmentName: (current.treatment_name as string) ?? "your treatment",
+        startsAt,
+        practitionerId: (practitionerId as string) ?? null,
+      });
     }
     await audit(ctx, "update", "appointment", data.id, null, { starts_at: start.toISOString() });
     return { ok: true };
@@ -4443,7 +4587,7 @@ export const getClinicDetails = createServerFn({ method: "GET" })
     await authorize(context as Ctx, "getClinicDetails");
     const { data } = await (context as Ctx).supabase
       .from("clinics")
-      .select("id, name, address, phone, email")
+      .select("id, name, address, phone, email, reminder_offsets")
       .eq("id", clinicIdOf(context))
       .maybeSingle();
     return data ?? null;
@@ -4451,7 +4595,15 @@ export const getClinicDetails = createServerFn({ method: "GET" })
 
 /** Manager-only: update the clinic's contact details. */
 export const updateClinicDetails = createServerFn({ method: "POST" })
-  .validator((data: { name: string; address?: string | null; phone?: string | null; email?: string | null }) => parseInput(schemas.UpdateClinicDetails, data))
+  .validator(
+    (data: {
+      name: string;
+      address?: string | null;
+      phone?: string | null;
+      email?: string | null;
+      reminder_offsets?: number[];
+    }) => parseInput(schemas.UpdateClinicDetails, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -4465,6 +4617,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
         address: data.address?.trim() || null,
         phone: data.phone?.trim() || null,
         email: assertEmail(data.email ?? "", "clinic email", true),
+        ...(data.reminder_offsets ? { reminder_offsets: data.reminder_offsets } : {}),
       })
       .eq("id", clinicIdOf(context));
     if (error) throw new Error(error.message);

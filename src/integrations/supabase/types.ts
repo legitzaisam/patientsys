@@ -232,6 +232,7 @@ export type Database = {
           id: string;
           name: string;
           phone: string | null;
+          reminder_offsets: number[];
           updated_at: string;
         };
         Insert: {
@@ -241,6 +242,7 @@ export type Database = {
           id?: string;
           name: string;
           phone?: string | null;
+          reminder_offsets?: number[];
           updated_at?: string;
         };
         Update: {
@@ -250,6 +252,7 @@ export type Database = {
           id?: string;
           name?: string;
           phone?: string | null;
+          reminder_offsets?: number[];
           updated_at?: string;
         };
         Relationships: [];
@@ -591,6 +594,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           id: string;
+          key: string | null;
           title: string;
           updated_at: string;
         };
@@ -1701,7 +1705,7 @@ export type Database = {
       app_role: "owner" | "practitioner" | "front_desk" | "patient" | "manager";
       appointment_status: "booked" | "attended" | "cancelled" | "no_show";
       change_request_status: "pending" | "approved" | "declined";
-      communication_channel: "email" | "sms";
+      communication_channel: "email" | "sms" | "call";
       communication_purpose: "transactional" | "reminder" | "marketing";
       communication_status: "queued" | "sending" | "sent" | "failed" | "bounced" | "cancelled";
       document_kind: "consent" | "treatment_plan" | "consultation" | "aftercare" | "other";
@@ -1840,9 +1844,9 @@ export const Constants = {
       app_role: ["owner", "practitioner", "front_desk", "patient", "manager"],
       appointment_status: ["booked", "attended", "cancelled", "no_show"],
       change_request_status: ["pending", "approved", "declined"],
-      communication_channel: ["email", "sms"],
+      communication_channel: ["email", "sms", "call"],
       communication_purpose: ["transactional", "reminder", "marketing"],
-      communication_status: ["queued", "sending", "sent", "failed", "bounced"],
+      communication_status: ["queued", "sending", "sent", "failed", "bounced", "cancelled"],
       document_kind: ["consent", "treatment_plan", "consultation", "aftercare", "other"],
       document_status: ["draft", "sent", "viewed", "signed", "expired"],
       message_author: ["staff", "patient"],

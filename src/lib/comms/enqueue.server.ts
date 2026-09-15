@@ -40,9 +40,16 @@ export async function enqueueCommunication(
 
   const toAddress =
     input.toAddress?.trim() ||
-    (input.channel === "email" ? String(patient.email ?? "").trim() : String(patient.phone ?? "").trim());
+    (input.channel === "email"
+      ? String(patient.email ?? "").trim()
+      : String(patient.phone ?? "").trim());
 
-  const decision = assertCanSend(prefsFromPatient(patient), input.purpose, input.channel, toAddress);
+  const decision = assertCanSend(
+    prefsFromPatient(patient),
+    input.purpose,
+    input.channel,
+    toAddress,
+  );
   if (!decision.ok) throw new Error(decision.reason);
 
   const { data, error } = await supabase

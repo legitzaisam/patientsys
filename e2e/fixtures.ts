@@ -1,12 +1,20 @@
 import { test as base } from "@playwright/test";
 
 /**
- * One pinned instant shared by the fixture data layer (via the DEMO_NOW env
- * var in playwright.config.ts) and the browser clock, so "today" agrees
- * everywhere. Local time on purpose: the demo fixtures build days in the
- * machine's timezone. 1 June 2026 is a Monday.
+ * The demo fixtures generate relative to the server's real clock, and the
+ * server handlers use the real clock too (reminder scheduling, drain, "today"
+ * ranges). Pinning only part of that stack desynchronises it, so tests run on
+ * real time and compute any date they assert. DEMO_NOW (vite define) remains
+ * available for date-frozen screenshot work outside this suite.
  */
-export const DEMO_NOW = "2026-06-01T09:00:00";
+
+/** datetime-local value for `days` from now at a fixed local time. */
+export function localDateTime(daysAhead: number, hour: number, minute: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(hour)}:${pad(minute)}`;
+}
 
 export type DemoRole = "owner" | "practitioner" | "front_desk" | "patient";
 
@@ -36,8 +44,6 @@ export const test = base.extend<Options>({
         hide();
       }
     });
-    // Keep the browser's idea of "now" on the same instant as the fixtures.
-    await page.clock.install({ time: new Date(DEMO_NOW) });
     await use(page);
   },
 });

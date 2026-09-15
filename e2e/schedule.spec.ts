@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, localDateTime, test } from "./fixtures";
 
 /**
  * The diary: booking through the dialog is the highest-traffic write in the
@@ -19,8 +19,8 @@ test.describe("booking", () => {
     await dialog.locator('select[name="patient_id"]').selectOption({ label: "Olivia Bennett" });
     await dialog.locator('select[name="practitioner_id"]').selectOption({ index: 1 });
     await dialog.locator('select[name="catalogue_id"]').selectOption({ index: 1 });
-    // Tomorrow relative to the pinned demo clock (Mon 1 Jun 2026).
-    await dialog.getByLabel("Date & time").fill("2026-06-02T14:00");
+    // Three days out at 20:15 — a slot no fixture appointment occupies.
+    await dialog.getByLabel("Date & time").fill(localDateTime(3, 20, 15));
 
     await dialog.getByRole("button", { name: "Book appointment" }).click();
 

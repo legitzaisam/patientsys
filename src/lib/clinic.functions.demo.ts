@@ -40,10 +40,12 @@ import { assertEmail } from "@/lib/email";
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { assertCanSend, nextUnsubscribedAt, prefsFromPatient } from "@/lib/comms/preferences";
 import {
+  appointmentReminderMessage,
   bookingUpdatedMessage,
   channelsFor,
   consentRequestMessage,
   publicSigningUrl,
+  reminderTimes,
 } from "@/lib/comms/templates";
 
 export { PERMISSION_KEYS, type PermissionKey };
@@ -842,6 +844,16 @@ export const saveAppointment = createServerFn({ method: "POST" })
           practitionerId: payload.practitioner_id,
           createdBy: me.userId,
         });
+        // Reminders for the old time are stale; requeue for the new one.
+        cancelPendingCommunications(data.id, "reminder");
+        queueAppointmentReminders({
+          appointmentId: data.id,
+          patientId: data.patient_id,
+          treatmentName: data.treatment_name,
+          startsAt: payload.starts_at,
+          practitionerId: payload.practitioner_id,
+          createdBy: me.userId,
+        });
       }
       return { id: data.id, notified: timeChanged };
     }
@@ -938,6 +950,14 @@ export const saveAppointment = createServerFn({ method: "POST" })
       relatedId: created.id,
       createdBy: me.userId,
     });
+    queueAppointmentReminders({
+      appointmentId: created.id,
+      patientId: data.patient_id,
+      treatmentName: data.treatment_name,
+      startsAt: payload.starts_at,
+      practitionerId: payload.practitioner_id,
+      createdBy: me.userId,
+    });
 
     return {
       id: created.id,
@@ -969,6 +989,8 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       row.status =
         data.stage === "no_show" ? "no_show" : data.stage === "booked" ? "booked" : "attended";
     }
+    // A cancelled appointment must not remind anyone it is coming up.
+    if (row.status === "cancelled") cancelPendingCommunications(data.id, "reminder");
     const reason = String(data.cancel_reason ?? "").trim().slice(0, 2000);
     if (data.status === "cancelled" && reason) {
       const prior = String(row.notes ?? "").trim();
@@ -1021,6 +1043,16 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
       patientId: row.patient_id,
       treatmentName: row.treatment_name ?? "your treatment",
       treatmentNumber: row.treatment_number ?? null,
+      startsAt,
+      practitionerId: practitionerId ?? null,
+      createdBy: identity().userId,
+    });
+    // Reminders for the old time are stale; requeue for the new one.
+    cancelPendingCommunications(data.id, "reminder");
+    queueAppointmentReminders({
+      appointmentId: data.id,
+      patientId: row.patient_id,
+      treatmentName: row.treatment_name ?? "your treatment",
       startsAt,
       practitionerId: practitionerId ?? null,
       createdBy: identity().userId,
@@ -1319,6 +1351,51 @@ function notifyBookingChange(opts: {
   });
 }
 
+/** Demo twin: cancel queued (never-sent) rows tied to an entity. */
+function cancelPendingCommunications(relatedId: string, purpose?: "reminder") {
+  for (const row of communications) {
+    if (
+      row.related_id === relatedId &&
+      row.status === "queued" &&
+      (!purpose || row.purpose === purpose)
+    ) {
+      row.status = "cancelled";
+    }
+  }
+}
+
+/** Demo twin of queueAppointmentReminders. */
+function queueAppointmentReminders(opts: {
+  appointmentId: string;
+  patientId: string;
+  treatmentName: string;
+  startsAt: string;
+  practitionerId?: string | null;
+  createdBy: string;
+}) {
+  const offsets = (db.clinic["reminder_offsets"] as number[] | undefined) ?? [168, 24];
+  const patient = patientById(opts.patientId);
+  const body = appointmentReminderMessage({
+    name: `${patient?.first_name ?? ""}`.trim() || "there",
+    treatment: opts.treatmentName,
+    when: formatWhenLondon(new Date(opts.startsAt)),
+    practitioner: opts.practitionerId ? profileName(opts.practitionerId) : null,
+  });
+  for (const scheduledFor of reminderTimes(opts.startsAt, offsets)) {
+    queueOnChannels({
+      patientId: opts.patientId,
+      purpose: "reminder",
+      subject: "Appointment reminder",
+      body,
+      templateKey: "appointment_reminder",
+      scheduledFor,
+      relatedEntity: "appointments",
+      relatedId: opts.appointmentId,
+      createdBy: opts.createdBy,
+    });
+  }
+}
+
 /** Demo twin of the production helper: send the signing link, report success. */
 function enqueueDocumentEmail(opts: {
   patientId: string;
@@ -1547,6 +1624,40 @@ export const sendPaymentRequest = createServerFn({ method: "POST" })
       created_at: new Date().toISOString(),
     });
     return { ok: true, communication_id: communicationId };
+  });
+
+export const logCallAttempt = createServerFn({ method: "POST" })
+  .validator(
+    (data: { patient_id: string; phone?: string }) => parseInput(schemas.LogCallAttempt, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const patient = patientById(data.patient_id);
+    const to = data.phone?.trim() || String(patient?.phone ?? "").trim();
+    if (!to) throw new Error("This patient has no phone number on file");
+    communications.unshift({
+      id: newId("m9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      channel: "call",
+      purpose: "transactional",
+      to_address: to,
+      template_key: null,
+      subject: null,
+      body: "Call attempt from the clinic.",
+      status: "sent",
+      provider: "phone",
+      provider_message_id: null,
+      error: null,
+      attempts: 1,
+      scheduled_for: new Date().toISOString(),
+      sent_at: new Date().toISOString(),
+      created_by: me.userId,
+      related_entity: null,
+      related_id: null,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true };
   });
 
 export const sendMessage = createServerFn({ method: "POST" })
@@ -3359,6 +3470,7 @@ export const getClinicDetails = createServerFn({ method: "GET" }).handler(async 
   address: db.clinic["address"],
   phone: db.clinic["phone"],
   email: db.clinic["email"],
+  reminder_offsets: db.clinic["reminder_offsets"] ?? [168, 24],
 }));
 
 export const updateClinicDetails = createServerFn({ method: "POST" })
@@ -3368,6 +3480,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
       address?: string | null;
       phone?: string | null;
       email?: string | null;
+      reminder_offsets?: number[];
     }) => parseInput(schemas.UpdateClinicDetails, data),
   )
   .handler(async ({ data }) => {
@@ -3378,6 +3491,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
     db.clinic["address"] = data.address?.trim() || null;
     db.clinic["phone"] = data.phone?.trim() || null;
     db.clinic["email"] = assertEmail(data.email ?? "", "clinic email", true);
+    if (data.reminder_offsets) db.clinic["reminder_offsets"] = data.reminder_offsets;
     return { ok: true };
   });
 

@@ -25,11 +25,13 @@ import { Route as AuthenticatedTeamRouteImport } from './routes/_authenticated/t
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthResetRouteImport } from './routes/auth.reset'
 import { Route as DTokenRouteImport } from './routes/d.$token'
+import { Route as UTokenRouteImport } from './routes/u.$token'
 import { Route as AuthenticatedPatientsIndexRouteImport } from './routes/_authenticated/patients.index'
 import { Route as AuthenticatedPatientsIdRouteImport } from './routes/_authenticated/patients.$id'
 import { Route as AuthenticatedTeamIndexRouteImport } from './routes/_authenticated/team.index'
 import { Route as AuthenticatedTeamIdRouteImport } from './routes/_authenticated/team.$id'
 import { Route as ApiCommsDrainRouteImport } from './routes/api.comms.drain'
+import { Route as ApiCommsUnsubscribeTokenRouteImport } from './routes/api.comms.unsubscribe.$token'
 import { Route as ApiCommsWebhooksResendRouteImport } from './routes/api.comms.webhooks.resend'
 import { Route as ApiCommsWebhooksTwilioRouteImport } from './routes/api.comms.webhooks.twilio'
 import { Route as ApiDocumentsAccessTokenRouteImport } from './routes/api.documents.access.$token'
@@ -114,6 +116,11 @@ const DTokenRoute = DTokenRouteImport.update({
   path: '/d/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UTokenRoute = UTokenRouteImport.update({
+  id: '/u/$token',
+  path: '/u/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedPatientsIndexRoute =
   AuthenticatedPatientsIndexRouteImport.update({
     id: '/patients/',
@@ -140,6 +147,12 @@ const ApiCommsDrainRoute = ApiCommsDrainRouteImport.update({
   path: '/api/comms/drain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCommsUnsubscribeTokenRoute =
+  ApiCommsUnsubscribeTokenRouteImport.update({
+    id: '/api/comms/unsubscribe/$token',
+    path: '/api/comms/unsubscribe/$token',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiCommsWebhooksResendRoute = ApiCommsWebhooksResendRouteImport.update({
   id: '/api/comms/webhooks/resend',
   path: '/api/comms/webhooks/resend',
@@ -172,11 +185,13 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/reset': typeof AuthResetRoute
   '/d/$token': typeof DTokenRoute
+  '/u/$token': typeof UTokenRoute
   '/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
   '/patients/': typeof AuthenticatedPatientsIndexRoute
   '/team/': typeof AuthenticatedTeamIndexRoute
+  '/api/comms/unsubscribe/$token': typeof ApiCommsUnsubscribeTokenRoute
   '/api/comms/webhooks/resend': typeof ApiCommsWebhooksResendRoute
   '/api/comms/webhooks/twilio': typeof ApiCommsWebhooksTwilioRoute
   '/api/documents/access/$token': typeof ApiDocumentsAccessTokenRoute
@@ -196,11 +211,13 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/reset': typeof AuthResetRoute
   '/d/$token': typeof DTokenRoute
+  '/u/$token': typeof UTokenRoute
   '/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
   '/patients': typeof AuthenticatedPatientsIndexRoute
   '/team': typeof AuthenticatedTeamIndexRoute
+  '/api/comms/unsubscribe/$token': typeof ApiCommsUnsubscribeTokenRoute
   '/api/comms/webhooks/resend': typeof ApiCommsWebhooksResendRoute
   '/api/comms/webhooks/twilio': typeof ApiCommsWebhooksTwilioRoute
   '/api/documents/access/$token': typeof ApiDocumentsAccessTokenRoute
@@ -223,11 +240,13 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/reset': typeof AuthResetRoute
   '/d/$token': typeof DTokenRoute
+  '/u/$token': typeof UTokenRoute
   '/_authenticated/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/_authenticated/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
   '/_authenticated/patients/': typeof AuthenticatedPatientsIndexRoute
   '/_authenticated/team/': typeof AuthenticatedTeamIndexRoute
+  '/api/comms/unsubscribe/$token': typeof ApiCommsUnsubscribeTokenRoute
   '/api/comms/webhooks/resend': typeof ApiCommsWebhooksResendRoute
   '/api/comms/webhooks/twilio': typeof ApiCommsWebhooksTwilioRoute
   '/api/documents/access/$token': typeof ApiDocumentsAccessTokenRoute
@@ -250,11 +269,13 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/auth/reset'
     | '/d/$token'
+    | '/u/$token'
     | '/patients/$id'
     | '/team/$id'
     | '/api/comms/drain'
     | '/patients/'
     | '/team/'
+    | '/api/comms/unsubscribe/$token'
     | '/api/comms/webhooks/resend'
     | '/api/comms/webhooks/twilio'
     | '/api/documents/access/$token'
@@ -274,11 +295,13 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/auth/reset'
     | '/d/$token'
+    | '/u/$token'
     | '/patients/$id'
     | '/team/$id'
     | '/api/comms/drain'
     | '/patients'
     | '/team'
+    | '/api/comms/unsubscribe/$token'
     | '/api/comms/webhooks/resend'
     | '/api/comms/webhooks/twilio'
     | '/api/documents/access/$token'
@@ -300,11 +323,13 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/auth/reset'
     | '/d/$token'
+    | '/u/$token'
     | '/_authenticated/patients/$id'
     | '/_authenticated/team/$id'
     | '/api/comms/drain'
     | '/_authenticated/patients/'
     | '/_authenticated/team/'
+    | '/api/comms/unsubscribe/$token'
     | '/api/comms/webhooks/resend'
     | '/api/comms/webhooks/twilio'
     | '/api/documents/access/$token'
@@ -316,7 +341,9 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   PortalRoute: typeof PortalRoute
   DTokenRoute: typeof DTokenRoute
+  UTokenRoute: typeof UTokenRoute
   ApiCommsDrainRoute: typeof ApiCommsDrainRoute
+  ApiCommsUnsubscribeTokenRoute: typeof ApiCommsUnsubscribeTokenRoute
   ApiCommsWebhooksResendRoute: typeof ApiCommsWebhooksResendRoute
   ApiCommsWebhooksTwilioRoute: typeof ApiCommsWebhooksTwilioRoute
   ApiDocumentsAccessTokenRoute: typeof ApiDocumentsAccessTokenRoute
@@ -436,6 +463,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/u/$token': {
+      id: '/u/$token'
+      path: '/u/$token'
+      fullPath: '/u/$token'
+      preLoaderRoute: typeof UTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/patients/': {
       id: '/_authenticated/patients/'
       path: '/patients'
@@ -469,6 +503,13 @@ declare module '@tanstack/react-router' {
       path: '/api/comms/drain'
       fullPath: '/api/comms/drain'
       preLoaderRoute: typeof ApiCommsDrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/comms/unsubscribe/$token': {
+      id: '/api/comms/unsubscribe/$token'
+      path: '/api/comms/unsubscribe/$token'
+      fullPath: '/api/comms/unsubscribe/$token'
+      preLoaderRoute: typeof ApiCommsUnsubscribeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/comms/webhooks/resend': {
@@ -557,7 +598,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   PortalRoute: PortalRoute,
   DTokenRoute: DTokenRoute,
+  UTokenRoute: UTokenRoute,
   ApiCommsDrainRoute: ApiCommsDrainRoute,
+  ApiCommsUnsubscribeTokenRoute: ApiCommsUnsubscribeTokenRoute,
   ApiCommsWebhooksResendRoute: ApiCommsWebhooksResendRoute,
   ApiCommsWebhooksTwilioRoute: ApiCommsWebhooksTwilioRoute,
   ApiDocumentsAccessTokenRoute: ApiDocumentsAccessTokenRoute,

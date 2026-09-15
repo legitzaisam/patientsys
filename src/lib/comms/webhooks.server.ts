@@ -13,7 +13,9 @@ export function verifyResendSignature(opts: {
   svixSignature: string;
   secret: string;
 }): boolean {
-  const key = opts.secret.startsWith("whsec_") ? Buffer.from(opts.secret.slice(6), "base64") : Buffer.from(opts.secret);
+  const key = opts.secret.startsWith("whsec_")
+    ? Buffer.from(opts.secret.slice(6), "base64")
+    : Buffer.from(opts.secret);
   const signed = `${opts.svixId}.${opts.svixTimestamp}.${opts.payload}`;
   const digest = createHmac("sha256", key).update(signed).digest("base64");
   const expected = `v1,${digest}`;

@@ -79,6 +79,8 @@ export const POLICY = {
      the capability applies to the staff side only. */
   sendMessage: { kind: "staffOrOwnPatient", staffKey: "comms.send" },
   sendPaymentRequest: { kind: "capability", key: "comms.send" },
+  /* A call log is bookkeeping about the caller's own action, not a send. */
+  logCallAttempt: { kind: "staff" },
   getUnreadMessages: { kind: "self" },
   markMessagesRead: { kind: "staffOrOwnPatient" },
   listMessageTemplates: { kind: "staff" },

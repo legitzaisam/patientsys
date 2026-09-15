@@ -17,10 +17,33 @@ type Row = {
   error: string | null;
   attempts: number;
   provider: string | null;
+  template_key: string | null;
+  related_entity: string | null;
   scheduled_for: string;
   sent_at: string | null;
   created_at: string;
 };
+
+/** What a row is about, from its template key or related record. */
+const ABOUT: Record<string, string> = {
+  consent_request: "consent form",
+  booking_confirmation: "booking confirmation",
+  booking_update: "reschedule notice",
+  appointment_reminder: "appointment reminder",
+  payment_request: "payment request",
+  payment_receipt: "receipt",
+  recall: "recall",
+};
+
+function rowTitle(row: Row) {
+  if (row.subject) return row.subject;
+  if (row.channel === "call") return "Phone call";
+  if (row.template_key && ABOUT[row.template_key]) {
+    const about = ABOUT[row.template_key]!;
+    return about.charAt(0).toUpperCase() + about.slice(1);
+  }
+  return row.channel === "sms" ? "Text message" : "Email";
+}
 
 export function CommsLogCard({
   patientId,
@@ -58,7 +81,8 @@ export function CommsLogCard({
         <div>
           <h2 className="section-title">Email and text</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Queued until the outbox runs. Demo and sandbox mark them sent without leaving the clinic.
+            Queued until the outbox runs. Demo and sandbox mark them sent without leaving the
+            clinic.
           </p>
         </div>
         {canDrain ? (
@@ -77,13 +101,17 @@ export function CommsLogCard({
           <li key={row.id} className="py-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm text-foreground">
-                  {row.subject || (row.channel === "sms" ? "Text message" : "Email")}
-                </p>
+                <p className="text-sm text-foreground">{rowTitle(row)}</p>
                 <p className="text-xs text-muted-foreground">
-                  {row.channel.toUpperCase()} · {row.purpose} · {row.to_address}
+                  {row.channel.toUpperCase()} · {row.purpose}
+                  {row.template_key && ABOUT[row.template_key]
+                    ? ` · ${ABOUT[row.template_key]}`
+                    : ""}
+                  {` · ${row.to_address}`}
                   {row.provider ? ` · ${row.provider}` : ""}
-                  {row.attempts > 0 ? ` · ${row.attempts} attempt${row.attempts === 1 ? "" : "s"}` : ""}
+                  {row.attempts > 0
+                    ? ` · ${row.attempts} attempt${row.attempts === 1 ? "" : "s"}`
+                    : ""}
                 </p>
               </div>
               <Badge variant="outline" className="rounded-xl text-2xs uppercase">

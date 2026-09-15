@@ -46,6 +46,40 @@ export function publicSigningUrl(origin: string | null | undefined, accessToken:
   return `${base}/d/${accessToken}`;
 }
 
+/**
+ * When each reminder for an appointment should be sent, given the clinic's
+ * offsets in hours. Skips times already in the past (booked inside the window)
+ * and anything at or after the appointment itself. Earliest first, de-duplicated.
+ */
+export function reminderTimes(
+  startsAt: string,
+  offsetHours: readonly number[],
+  now = new Date(),
+): string[] {
+  const start = new Date(startsAt).getTime();
+  if (Number.isNaN(start)) return [];
+  const times = offsetHours
+    .filter((hours) => Number.isFinite(hours) && hours > 0)
+    .map((hours) => new Date(start - hours * 3600000))
+    .filter((t) => t.getTime() > now.getTime() && t.getTime() < start)
+    .map((t) => t.toISOString());
+  return [...new Set(times)].sort();
+}
+
+/** Appointment reminder for email and SMS. */
+export function appointmentReminderMessage(opts: {
+  name: string;
+  treatment: string;
+  when: string;
+  practitioner?: string | null;
+}) {
+  const withWho = opts.practitioner ? ` with ${opts.practitioner}` : "";
+  return (
+    `Hi ${opts.name}, a reminder of your ${opts.treatment} appointment on ${opts.when}${withWho}. ` +
+    `If you need to reschedule, reply in your patient portal or call the clinic.`
+  );
+}
+
 /** Reschedule / booking-change notice for email, SMS and the portal thread. */
 export function bookingUpdatedMessage(opts: {
   name: string;

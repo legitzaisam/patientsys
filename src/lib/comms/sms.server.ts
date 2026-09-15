@@ -16,17 +16,14 @@ export async function sendSms(input: { to: string; body: string }): Promise<Prov
     From: from,
     Body: input.body,
   });
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body,
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-  );
+    body,
+  });
   const payload = (await response.json().catch(() => null)) as {
     sid?: string;
     message?: string;

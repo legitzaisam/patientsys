@@ -52,7 +52,9 @@ export function CommsPreferencesCard({ patientId, patient, as = "staff", onSaved
 
   return (
     <Card className="p-5">
-      <h2 className="section-title">{as === "patient" ? "How we contact you" : "Contact preferences"}</h2>
+      <h2 className="section-title">
+        {as === "patient" ? "How we contact you" : "Contact preferences"}
+      </h2>
       <p className="mt-1 text-xs text-muted-foreground">
         {as === "patient"
           ? "Reminders are on unless you turn them off. Marketing needs you to opt in."

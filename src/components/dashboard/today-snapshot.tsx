@@ -20,7 +20,13 @@ import {
 import { toast } from "sonner";
 import { clinicDayKey } from "@/lib/clinic-time";
 import { seedAppointmentNoteQueries } from "@/lib/appointment-note-cache";
-import { updateAppointmentState, sendMessage, sendPaymentRequest, resendDocument } from "@/lib/clinic.functions";
+import {
+  logCallAttempt,
+  resendDocument,
+  sendMessage,
+  sendPaymentRequest,
+  updateAppointmentState,
+} from "@/lib/clinic.functions";
 import { formatMoney } from "@/lib/payment-link";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -442,6 +448,7 @@ function TodayCard({
   showDay?: boolean;
 }) {
   const queryClient = useQueryClient();
+  const logCall = useServerFn(logCallAttempt);
   const setState = useMutation({
     mutationFn: useServerFn(updateAppointmentState),
     onSuccess: () => {
@@ -672,7 +679,16 @@ function TodayCard({
                 {(a.patients?.phone || a.patients?.email) && (
                   <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-edge pt-2 text-xs text-muted-foreground">
                     {a.patients?.phone ? (
-                      <a href={`tel:${a.patients.phone}`} className="hover:text-foreground hover:underline">
+                      <a
+                        href={`tel:${a.patients.phone}`}
+                        className="hover:text-foreground hover:underline"
+                        onClick={() =>
+                          // Log the attempt so the call shows in the comms trail.
+                          void logCall({
+                            data: { patient_id: a.patient_id, phone: a.patients.phone },
+                          }).catch(() => {})
+                        }
+                      >
                         {a.patients.phone}
                       </a>
                     ) : null}

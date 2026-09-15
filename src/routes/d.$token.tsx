@@ -69,7 +69,9 @@ function PublicDocumentPage() {
     onSuccess: () => setJustSigned(true),
   });
 
-  const data: LinkState = link.isPending ? { state: "loading" } : (link.data ?? { state: "not_found" });
+  const data: LinkState = link.isPending
+    ? { state: "loading" }
+    : (link.data ?? { state: "not_found" });
 
   return (
     <div className="flex min-h-dvh flex-col items-center bg-background px-4 py-10">
@@ -86,8 +88,8 @@ function PublicDocumentPage() {
           <Card className="p-6">
             <h1 className="text-lg font-semibold text-foreground">This link isn't available</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              The link may have expired or been replaced. Please contact the clinic and we will
-              send you a fresh one.
+              The link may have expired or been replaced. Please contact the clinic and we will send
+              you a fresh one.
             </p>
           </Card>
         )}

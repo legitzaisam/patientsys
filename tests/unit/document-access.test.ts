@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  classifyDocument,
-  isExpired,
-  type PublicDocument,
-} from "@/lib/documents/access.server";
+import { classifyDocument, isExpired, type PublicDocument } from "@/lib/documents/access.server";
 import { consentRequestMessage, publicSigningUrl } from "@/lib/comms/templates";
 
 const NOW = new Date("2026-06-01T12:00:00.000Z");
@@ -64,7 +60,12 @@ describe("signing link message", () => {
 
   it("differentiates first send from reminder in the subject only", () => {
     const first = consentRequestMessage({ name: "Olivia", title: "Consent", url: "u" });
-    const again = consentRequestMessage({ name: "Olivia", title: "Consent", url: "u", reminder: true });
+    const again = consentRequestMessage({
+      name: "Olivia",
+      title: "Consent",
+      url: "u",
+      reminder: true,
+    });
     expect(first.subject).toBe("Consent — please review and sign");
     expect(again.subject).toBe("Reminder: Consent is waiting for your signature");
     expect(first.body).toBe(again.body);

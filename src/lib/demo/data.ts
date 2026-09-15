@@ -107,6 +107,7 @@ export const clinic: Row = {
   address: "42 Marylebone High Street, London W1U 5HD",
   phone: "020 7946 0812",
   email: "hello@aetheria.clinic",
+  reminder_offsets: [168, 24],
   created_at: iso(-720),
   updated_at: iso(-14),
 };
@@ -1936,6 +1937,7 @@ export const messageTemplates: Row[] = [
   {
     id: id("m1"),
     clinic_id: CLINIC_ID,
+    key: "recall",
     title: "Recall — treatment due",
     body: "Hi {{first_name}}, it has been a little while since your last {{treatment}} with us. Would you like me to hold a slot for you this month?",
     category: "Recall",
@@ -1946,6 +1948,7 @@ export const messageTemplates: Row[] = [
   {
     id: id("m1"),
     clinic_id: CLINIC_ID,
+    key: "consent_request",
     title: "Consent reminder",
     body: "Hi {{first_name}}, your consent form is waiting in the patient portal. Signing it before your visit means we can start on time.",
     category: "Admin",
@@ -1956,6 +1959,7 @@ export const messageTemplates: Row[] = [
   {
     id: id("m1"),
     clinic_id: CLINIC_ID,
+    key: "two_week_review",
     title: "Two week review",
     body: "Hi {{first_name}}, you are two weeks post treatment. How are you finding the results? Send a photo if you would like us to take a look.",
     category: "Aftercare",
@@ -1966,6 +1970,7 @@ export const messageTemplates: Row[] = [
   {
     id: id("m1"),
     clinic_id: CLINIC_ID,
+    key: "payment_request",
     title: "Balance outstanding",
     body: "Hi {{first_name}}, there is a small balance outstanding on your last visit. You can settle it in the portal or we can take it at your next appointment.",
     category: "Payments",
