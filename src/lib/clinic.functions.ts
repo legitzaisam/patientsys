@@ -1234,6 +1234,63 @@ export const addPhoto = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Signing links stop working after this long; a resend issues a fresh window. */
+const DOCUMENT_LINK_TTL_DAYS = 14;
+
+function documentLinkExpiry(from = new Date()) {
+  return new Date(from.getTime() + DOCUMENT_LINK_TTL_DAYS * 86400000).toISOString();
+}
+
+/**
+ * Email the public signing link for a document. Returns whether the email was
+ * queued: a patient with no address (or a refused send) must not block the
+ * form reaching their portal, so failures are reported, not thrown.
+ */
+async function enqueueDocumentEmail(
+  ctx: Ctx,
+  opts: {
+    patientId: string;
+    documentId: string;
+    accessToken: string;
+    title: string;
+    origin?: string | null | undefined;
+    reminder?: boolean;
+  },
+): Promise<boolean> {
+  try {
+    const { enqueueCommunication: enqueue } = await import("./comms/enqueue.server");
+    const { consentRequestMessage, publicSigningUrl } = await import("./comms/templates");
+    const { data: patient } = await ctx.supabase
+      .from("patients")
+      .select("first_name")
+      .eq("id", opts.patientId)
+      .maybeSingle();
+    const origin = opts.origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "";
+    const message = consentRequestMessage({
+      name: String(patient?.first_name ?? "there"),
+      title: opts.title,
+      url: publicSigningUrl(origin, opts.accessToken),
+      reminder: opts.reminder ?? false,
+    });
+    await enqueue(ctx.supabase, {
+      clinicId: clinicIdOf(ctx),
+      patientId: opts.patientId,
+      channel: "email",
+      purpose: "transactional",
+      subject: message.subject,
+      body: message.body,
+      templateKey: "consent_request",
+      relatedEntity: "documents",
+      relatedId: opts.documentId,
+      createdBy: ctx.userId,
+    });
+    return true;
+  } catch (err) {
+    console.error("[comms] consent email not queued:", err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
 export const sendDocument = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -1242,6 +1299,7 @@ export const sendDocument = createServerFn({ method: "POST" })
       title: string;
       body?: string;
       treatment_id?: string;
+      app_origin?: string;
     }) => parseInput(schemas.SendDocument, data),
   )
   .middleware([requireSupabaseAuth])
@@ -1259,9 +1317,10 @@ export const sendDocument = createServerFn({ method: "POST" })
         body: data.body || null,
         status: "sent",
         sent_at: new Date().toISOString(),
+        expires_at: documentLinkExpiry(),
         created_by: context.userId,
       })
-      .select("id")
+      .select("id, access_token")
       .single();
     if (error) throw new Error(error.message);
     await supabase.from("messages").insert({
@@ -1271,22 +1330,66 @@ export const sendDocument = createServerFn({ method: "POST" })
       author_id: context.userId,
       body: `${data.title} has been sent to you. Please review and sign it in your patient portal.`,
     });
-    await audit(context as Ctx, "send", "document", created.id, data.patient_id, { title: data.title });
-    return { id: created.id as string };
+    const emailed = await enqueueDocumentEmail(context as Ctx, {
+      patientId: data.patient_id,
+      documentId: created.id as string,
+      accessToken: created.access_token as string,
+      title: data.title,
+      origin: data.app_origin,
+    });
+    await audit(context as Ctx, "send", "document", created.id, data.patient_id, {
+      title: data.title,
+      emailed,
+    });
+    return { id: created.id as string, emailed };
   });
 
 export const resendDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; patient_id: string }) => parseInput(schemas.ResendDocument, data))
+  .validator(
+    (data: { id: string; patient_id: string; app_origin?: string }) =>
+      parseInput(schemas.ResendDocument, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "resendDocument");
-    const { error } = await (context as Ctx).supabase
+    const supabase = (context as Ctx).supabase;
+    const { data: doc, error: docError } = await supabase
       .from("documents")
-      .update({ status: "sent", sent_at: new Date().toISOString() })
+      .select("id, title, status, access_token")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (docError) throw new Error(docError.message);
+    if (!doc) throw new Error("Document not found");
+    if (doc.status === "signed") throw new Error("This form has already been signed");
+
+    const { error } = await supabase
+      .from("documents")
+      .update({
+        status: "sent",
+        sent_at: new Date().toISOString(),
+        expires_at: documentLinkExpiry(),
+      })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
-    await audit(context as Ctx, "resend", "document", data.id, data.patient_id);
-    return { ok: true };
+
+    // The reminder toast has always claimed a portal message; now there is one.
+    await supabase.from("messages").insert({
+      clinic_id: clinicIdOf(context),
+      patient_id: data.patient_id,
+      author: "staff",
+      author_id: context.userId,
+      body: `Reminder: ${doc.title} is waiting for your signature in your patient portal.`,
+    });
+    const emailed = await enqueueDocumentEmail(context as Ctx, {
+      patientId: data.patient_id,
+      documentId: doc.id as string,
+      accessToken: doc.access_token as string,
+      title: doc.title as string,
+      origin: data.app_origin,
+      reminder: true,
+    });
+    await audit(context as Ctx, "resend", "document", data.id, data.patient_id, { emailed });
+    return { ok: true, emailed };
   });
 
 export const sendMessage = createServerFn({ method: "POST" })

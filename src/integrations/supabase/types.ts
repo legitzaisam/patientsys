@@ -338,6 +338,41 @@ export type Database = {
           },
         ];
       };
+      document_access_events: {
+        Row: {
+          created_at: string;
+          document_id: string | null;
+          event: string;
+          id: string;
+          ip: string | null;
+          user_agent: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          document_id?: string | null;
+          event: string;
+          id?: string;
+          ip?: string | null;
+          user_agent?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          document_id?: string | null;
+          event?: string;
+          id?: string;
+          ip?: string | null;
+          user_agent?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_access_events_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       documents: {
         Row: {
           access_token: string;
@@ -1668,7 +1703,7 @@ export type Database = {
       change_request_status: "pending" | "approved" | "declined";
       communication_channel: "email" | "sms";
       communication_purpose: "transactional" | "reminder" | "marketing";
-      communication_status: "queued" | "sending" | "sent" | "failed" | "bounced";
+      communication_status: "queued" | "sending" | "sent" | "failed" | "bounced" | "cancelled";
       document_kind: "consent" | "treatment_plan" | "consultation" | "aftercare" | "other";
       document_status: "draft" | "sent" | "viewed" | "signed" | "expired";
       message_author: "staff" | "patient";

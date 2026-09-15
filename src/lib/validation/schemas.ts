@@ -136,9 +136,10 @@ export const SendDocument = z.object({
   title: requiredText(240),
   body: optionalText(100_000),
   treatment_id: optionalId,
+  app_origin: optionalText(500),
 });
 
-export const ResendDocument = z.object({ id, patient_id: id });
+export const ResendDocument = z.object({ id, patient_id: id, app_origin: optionalText(500) });
 
 export const SignDocument = z.object({ id, signed_name: text(240) });
 

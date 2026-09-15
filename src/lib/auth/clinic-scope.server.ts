@@ -47,6 +47,7 @@ const UNSCOPED_TABLES = new Set([
   "auth_email_otp",
   "auth_step_up",
   "clinics",
+  "document_access_events",
   "staff_conversation_reads",
   "staff_documents",
   "user_notes",

@@ -1,0 +1,1713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aetheria Patient Portal — Navigable Wireframes v0.2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+/* ============================================================
+   Tokens lifted verbatim from src/styles.css — "Bright Pastels,
+   Notebook Lines". Same values, same names, so anything built
+   from these wireframes maps onto the clinic app 1:1.
+   ============================================================ */
+:root{
+  --radius:0.875rem;
+  --background:#f6f7f8;
+  --wash-1:rgba(246,228,166,.5);
+  --wash-2:rgba(244,206,190,.34);
+  --rule:rgba(41,48,57,.025);
+
+  --foreground:#2f3f66;
+  --ink-2:#46557a;
+  --ink-3:#6a7390;
+  --subtle:#7d8498;
+
+  --glass:rgba(255,255,255,.82);
+  --glass-2:rgba(255,255,255,.62);
+  --glass-line:rgba(255,255,255,.55);
+  --glass-hi:rgba(255,255,255,.9);
+  --edge:rgba(255,255,255,.7);
+  --edge-2:rgba(47,63,102,.07);
+  --edge-hi:rgba(255,255,255,.92);
+  --sheen:rgba(255,255,255,.5);
+  --bloom:rgba(200,175,105,.3);
+  --bar:rgba(192,200,210,.42);
+
+  --accent:#eed488; --accent-hi:#faedc2; --accent-deep:#e2c46b;
+  --accent-ink:#7a6220; --accent-foreground:#332d18;
+  --accent-soft:rgba(238,212,136,.3); --accent-wash:rgba(238,212,136,.14);
+  --accent-line:rgba(214,183,92,.42);
+
+  --destructive:#dc6c96; --destructive-bg:rgba(250,204,226,.48); --destructive-ink:#a3456e;
+  --success:#4a9d75;     --success-bg:rgba(179,232,196,.55);     --success-ink:#2d6a4c;
+  --consent:#b9a6e8;     --consent-bg:rgba(224,213,248,.55);     --consent-ink:#5c4a94;
+  --sky:#8fc7ea;         --sky-bg:rgba(190,224,244,.5);          --sky-ink:#3d6f96;
+  --aftercare:#ef9bc4;   --aftercare-ink:#8a3d66;
+
+  --shadow-glass:0 1px 2px rgba(47,63,102,.06),0 8px 24px -10px rgba(47,63,102,.18),inset 0 1px 0 var(--edge-hi);
+  --shadow-popover:0 2px 8px -2px rgba(47,63,102,.12),0 12px 32px -12px rgba(47,63,102,.28);
+  --shadow-bloom:0 8px 20px -10px var(--bloom),inset 0 1px 0 rgba(255,255,255,.55);
+  --shadow-lift:0 14px 36px -14px rgba(47,63,102,.3);
+  --shadow-inset-hi:inset 0 1px 0 var(--edge-hi);
+
+  --sans:"Space Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --meta:#a3456e; --meta-bg:rgba(250,204,226,.28);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{
+  font-family:var(--sans);font-size:13.5px;line-height:1.5;color:var(--foreground);
+  background:#eceef1;-webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px}
+
+/* ---------------- tool chrome (not product) ---------------- */
+.wrap{display:grid;grid-template-rows:auto 1fr;height:100%}
+.topbar{display:flex;align-items:center;gap:16px;padding:11px 20px;background:#fff;border-bottom:1px solid rgba(47,63,102,.1)}
+.brand b{font-weight:700;font-size:15px;letter-spacing:-.012em}
+.brand span{font-size:11px;color:var(--subtle);font-family:var(--mono);margin-left:9px}
+.spacer{flex:1}
+.seg{display:flex;border:1px solid rgba(47,63,102,.14);border-radius:9px;overflow:hidden}
+.seg button{padding:6px 12px;font-size:12.5px;color:var(--ink-3)}
+.seg button[aria-pressed="true"]{background:var(--foreground);color:#fff}
+.tbtn{padding:6px 12px;font-size:12.5px;border:1px solid rgba(47,63,102,.14);border-radius:9px;color:var(--ink-3)}
+.tbtn[aria-pressed="true"]{border-color:var(--meta);background:var(--meta-bg);color:var(--meta)}
+.stepper{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)}
+.stepper button{border:1px solid rgba(47,63,102,.14);border-radius:8px;width:28px;height:28px}
+.stepper button:disabled{opacity:.3;cursor:default}
+.main{display:grid;grid-template-columns:238px 1fr 320px;min-height:0}
+@media (max-width:1120px){.main{grid-template-columns:206px 1fr}.notes{display:none}}
+
+.rail{background:#fff;border-right:1px solid rgba(47,63,102,.1);overflow-y:auto;padding:14px 10px 40px}
+.railgroup{margin-bottom:17px}
+.railgroup h4{margin:0 0 6px;padding:0 8px;font-size:10.5px;font-weight:600;color:var(--subtle);font-family:var(--mono)}
+.railitem{display:block;width:100%;text-align:left;padding:6px 8px;border-radius:8px;font-size:12.8px;color:var(--ink-2);line-height:1.35}
+.railitem:hover{background:rgba(47,63,102,.05)}
+.railitem[aria-current="true"]{background:var(--foreground);color:#fff}
+.railitem em{display:block;font-style:normal;font-family:var(--mono);font-size:10px;opacity:.6}
+
+.stage{overflow:auto;padding:26px;display:flex;justify-content:center;align-items:flex-start}
+.frame{
+  position:relative;overflow:hidden;
+  background-color:var(--background);
+  background-image:
+    radial-gradient(900px 560px at 8% -10%,var(--wash-1),transparent 68%),
+    radial-gradient(820px 520px at 96% 2%,var(--wash-2),transparent 66%),
+    repeating-linear-gradient(0deg,var(--rule) 0px,var(--rule) 1px,transparent 1px,transparent 14px);
+  box-shadow:var(--shadow-lift);
+}
+.stage.mobile .frame{width:390px;height:812px;border-radius:32px;border:1px solid rgba(47,63,102,.18)}
+.stage.desktop .frame{width:min(1080px,100%);height:748px;border-radius:12px;border:1px solid rgba(47,63,102,.14)}
+.screen{height:100%;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.scroll{flex:1;overflow-y:auto;padding:14px 16px 26px}
+.stage.desktop .scroll{padding:22px 30px 34px}
+
+/* ---------------- product chrome ---------------- */
+.statusbar{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:11px;color:var(--ink-3);flex:none;font-weight:500}
+.apphead{flex:none;padding:2px 16px 12px;display:flex;align-items:center;gap:9px}
+.apphead h1{margin:0;font-size:22px;font-weight:600;letter-spacing:-.016em;line-height:1.2}
+.apphead .back{font-size:20px;color:var(--ink-3);line-height:1;padding:2px 4px}
+.apphead .av{margin-left:auto;width:32px;height:32px;border-radius:50%;background:linear-gradient(140deg,var(--lane6,#faedc2),var(--accent));display:grid;place-items:center;font-size:11.5px;font-weight:600;color:var(--accent-foreground);border:1px solid var(--edge)}
+
+.tabbar{
+  flex:none;display:grid;grid-template-columns:repeat(4,1fr);
+  background:var(--glass);backdrop-filter:blur(26px) saturate(1.5);
+  border-top:1px solid var(--edge);box-shadow:var(--shadow-inset-hi);
+}
+.tabbar button{padding:9px 2px 15px;font-size:10.5px;color:var(--ink-3);display:flex;flex-direction:column;align-items:center;gap:4px}
+.tabbar button .ic{width:19px;height:19px;border:1.5px solid currentColor;border-radius:6px}
+.tabbar button[aria-current="true"]{color:var(--accent-ink);font-weight:600}
+.tabbar button[aria-current="true"] .ic{background:linear-gradient(140deg,var(--accent-hi),var(--accent));border-color:transparent;box-shadow:var(--shadow-bloom)}
+
+.dtop{flex:none;display:flex;align-items:center;gap:12px;padding:12px 24px;background:var(--glass-2);border-bottom:1px solid var(--edge);backdrop-filter:blur(26px)}
+.dtop b{font-size:15px;font-weight:700;letter-spacing:-.012em}
+.dbody{flex:1;display:grid;grid-template-columns:216px 1fr;min-height:0}
+.dnav{border-right:1px solid var(--edge);padding:16px 10px;overflow-y:auto;background:var(--glass-2);backdrop-filter:blur(26px)}
+.dnav h5{margin:15px 8px 6px;font-size:10.5px;color:var(--subtle);font-weight:600;font-family:var(--mono)}
+.dnav h5:first-child{margin-top:0}
+.dnav button{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;padding:7px 10px;border-radius:11px;font-size:13px;color:var(--ink-2)}
+.dnav button:hover{background:rgba(47,63,102,.05)}
+.dnav button[aria-current="true"]{background:linear-gradient(96deg,var(--accent-soft),transparent 96%);color:var(--foreground);font-weight:600;box-shadow:inset 0 0 0 1px var(--edge),inset 0 1px 0 var(--edge-hi)}
+.dnav .n{font-size:10.5px;background:var(--destructive);color:#fff;border-radius:9px;padding:1px 6px;font-weight:600}
+
+/* ---------------- glass primitives ---------------- */
+.card{
+  position:relative;border-radius:22px;border:1px solid var(--edge);background:var(--glass);
+  backdrop-filter:blur(26px) saturate(1.5);box-shadow:var(--shadow-glass);
+  padding:15px;margin-bottom:11px;
+}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,var(--sheen),transparent 46%);pointer-events:none}
+.card>*{position:relative;z-index:1}
+.card.tint-consent{background:var(--consent-bg);border-color:rgba(185,166,232,.42)}
+.card.tint-success{background:var(--success-bg);border-color:rgba(74,157,117,.28)}
+.card.tint-sky{background:var(--sky-bg);border-color:rgba(143,199,234,.42)}
+.card.tint-stop{background:var(--destructive-bg);border-color:rgba(220,108,150,.32)}
+.card.tint-accent{background:linear-gradient(135deg,var(--accent-soft),var(--accent-wash));border-color:var(--accent-line)}
+.card.dashed{background:var(--glass-2);border-style:dashed;border-color:var(--edge-2);box-shadow:none}
+button.card{display:block;width:100%;text-align:left}
+button.card:hover{box-shadow:var(--shadow-lift)}
+
+h3.ct{margin:0 0 3px;font-size:15px;font-weight:600;letter-spacing:-.012em}
+.sect{margin:20px 2px 9px;font-size:12px;font-weight:600;color:var(--ink-3);letter-spacing:.01em}
+.sect:first-child{margin-top:2px}
+.row{display:flex;align-items:center;gap:10px}
+.row.between{justify-content:space-between}
+.row.top{align-items:flex-start}
+.stack{display:flex;flex-direction:column;gap:2px}
+.muted{color:var(--ink-2)}
+.small{font-size:12.5px}
+.tiny{font-size:11px;color:var(--ink-3)}
+.strong{font-weight:600}
+.hr{height:1px;background:var(--edge-2);margin:12px 0}
+
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 9px;border-radius:999px;font-weight:500;border:1px solid var(--edge);background:var(--glass-2);color:var(--ink-2)}
+.chip.ok{background:var(--success-bg);border-color:rgba(74,157,117,.3);color:var(--success-ink)}
+.chip.due{background:var(--consent-bg);border-color:rgba(185,166,232,.45);color:var(--consent-ink)}
+.chip.stop{background:var(--destructive-bg);border-color:rgba(220,108,150,.35);color:var(--destructive-ink)}
+.chip.sky{background:var(--sky-bg);border-color:rgba(143,199,234,.45);color:var(--sky-ink)}
+.chip.gold{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-ink)}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;
+  height:40px;padding:0 18px;border-radius:999px;font-size:12.5px;font-weight:600;line-height:1;
+  background:linear-gradient(140deg,var(--accent-hi),var(--accent) 75%);
+  color:var(--accent-foreground);border:1px solid var(--edge);box-shadow:var(--shadow-bloom);
+  transition:background-color .2s,border-color .2s,color .2s,box-shadow .2s,filter .2s,transform .2s;
+}
+.btn:hover{filter:brightness(1.05)}
+.btn:active{filter:brightness(.92);transform:scale(.98)}
+.btn.sec{background:var(--glass-2);color:var(--foreground);border-color:var(--edge);box-shadow:var(--shadow-inset-hi)}
+.btn.sec:hover{border-color:var(--edge-2);background:rgba(47,63,102,.08);box-shadow:var(--shadow-lift);filter:none}
+.btn.sec:active{background:rgba(47,63,102,.14)}
+.btn.ghost{background:none;border:0;box-shadow:none;color:var(--accent-ink);height:32px;width:auto;padding:0 10px}
+.btn.ghost:hover{background:rgba(47,63,102,.08);color:var(--foreground);filter:none}
+.btn.danger{background:var(--destructive);color:#fff7fb;border-color:transparent;box-shadow:0 1px 2px rgba(47,63,102,.08)}
+.btn.danger:hover{background:color-mix(in srgb,var(--destructive) 90%,#000);filter:none}
+.btn.sm{height:32px;font-size:12px;width:auto;padding:0 13px}
+.btn[disabled]{opacity:.5;cursor:not-allowed;box-shadow:none;pointer-events:none}
+.btns{display:flex;gap:8px;margin-top:12px}
+.btns .btn{flex:1;width:auto}
+
+.field{margin-bottom:13px}
+.field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px}
+.field .inp{border:1px solid var(--edge);background:var(--glass);border-radius:14px;min-height:44px;display:flex;align-items:center;padding:0 13px;color:var(--subtle);font-size:14px;box-shadow:var(--shadow-inset-hi)}
+.field .inp.tall{min-height:78px;align-items:flex-start;padding-top:12px}
+.field .hint{font-size:11px;color:var(--ink-3);margin-top:4px}
+.field.error .inp{border-color:rgba(220,108,150,.5);background:var(--destructive-bg)}
+.field .err{font-size:11px;color:var(--destructive-ink);margin-top:4px}
+
+.ph{background:var(--glass-2);border-radius:8px}
+.ph.line{height:9px;margin:7px 0}
+.ph.w60{width:60%}.ph.w80{width:80%}
+.img{
+  background:linear-gradient(135deg,rgba(255,255,255,.6),rgba(190,224,244,.35)),
+    repeating-linear-gradient(135deg,transparent,transparent 8px,rgba(47,63,102,.05) 8px,rgba(47,63,102,.05) 16px);
+  border:1px solid var(--edge);border-radius:14px;display:grid;place-items:center;color:var(--ink-3);font-size:11px;font-family:var(--mono)}
+
+.list{border-radius:22px;border:1px solid var(--edge);background:var(--glass);backdrop-filter:blur(26px) saturate(1.5);box-shadow:var(--shadow-glass);overflow:hidden;margin-bottom:11px}
+.list .li{display:flex;gap:11px;align-items:flex-start;padding:13px 15px;border-bottom:1px solid var(--glass-line);text-align:left;width:100%}
+.list .li:last-child{border-bottom:0}
+.list button.li:hover{background:var(--glass-hi)}
+.li .grow{flex:1;min-width:0}
+.li .rt{text-align:right;flex:none}
+.li .datebox{width:44px;flex:none;text-align:center}
+.li .datebox .d{font-size:17px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+
+.banner{border-radius:16px;padding:11px 14px;font-size:12.5px;line-height:1.45;margin-bottom:11px;border:1px solid var(--edge);box-shadow:var(--shadow-inset-hi)}
+.banner.info{background:var(--sky-bg);border-color:rgba(143,199,234,.45);color:var(--sky-ink)}
+.banner.due{background:var(--consent-bg);border-color:rgba(185,166,232,.45);color:var(--consent-ink)}
+.banner.stop{background:var(--destructive-bg);border-color:rgba(220,108,150,.35);color:var(--destructive-ink)}
+.banner.ok{background:var(--success-bg);border-color:rgba(74,157,117,.3);color:var(--success-ink)}
+.banner b{font-weight:600}
+
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.slot{border:1px solid var(--edge);background:var(--glass);border-radius:14px;min-height:44px;display:grid;place-items:center;font-size:13.5px;box-shadow:var(--shadow-inset-hi)}
+.slot.off{background:var(--glass-2);color:var(--subtle);text-decoration:line-through;box-shadow:none;cursor:not-allowed}
+.slot.sel{background:linear-gradient(to bottom right,var(--accent-hi),var(--accent) 75%);color:var(--accent-foreground);font-weight:600;box-shadow:var(--shadow-bloom)}
+
+.steps{display:flex;gap:5px;margin-bottom:16px}
+.steps i{flex:1;height:4px;border-radius:2px;background:var(--bar)}
+.steps i.on{background:linear-gradient(90deg,var(--accent-hi),var(--accent-deep))}
+
+.tl{position:relative;padding-left:21px}
+.tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:1.5px;background:var(--edge-2)}
+.tl .n{position:relative;margin-bottom:13px}
+.tl .n:last-child{margin-bottom:0}
+.tl .n::before{content:"";position:absolute;left:-20px;top:4px;width:11px;height:11px;border-radius:50%;background:#fff;border:1.5px solid var(--edge-2)}
+.tl .n.done::before{background:var(--success);border-color:var(--success)}
+.tl .n.now::before{background:var(--accent);border-color:var(--accent-deep);box-shadow:0 0 0 4px var(--accent-soft)}
+
+.kv{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--glass-line);font-size:13px}
+.kv:last-child{border-bottom:0}
+.kv .k{color:var(--ink-3)}
+.kv .v{font-weight:500;text-align:right}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+
+.blur{position:relative;overflow:hidden;border-radius:14px}
+.blur .cover{position:absolute;inset:0;background:rgba(255,255,255,.7);backdrop-filter:blur(8px);display:grid;place-items:center;text-align:center;font-size:11px;color:var(--ink-2);padding:8px;line-height:1.4}
+
+.modal{position:absolute;inset:0;background:rgba(47,63,102,.28);backdrop-filter:blur(3px);display:flex;align-items:flex-end;z-index:20}
+.stage.desktop .modal{align-items:center;justify-content:center}
+.sheet{background:var(--glass-hi);backdrop-filter:blur(26px) saturate(1.5);width:100%;border-radius:26px 26px 0 0;padding:18px 18px 24px;border-top:1px solid var(--edge);box-shadow:var(--shadow-popover)}
+.stage.desktop .sheet{width:450px;border-radius:22px;border:1px solid var(--edge)}
+.sheet h3{margin:0 0 8px;font-size:17px;font-weight:600;letter-spacing:-.016em}
+
+.diff{font-size:13px;line-height:1.7}
+.diff del{background:var(--destructive-bg);color:var(--destructive-ink);text-decoration:line-through;padding:1px 5px;border-radius:6px}
+.diff ins{background:var(--success-bg);color:var(--success-ink);text-decoration:none;padding:1px 5px;border-radius:6px}
+
+/* ---------------- messaging popup ---------------- */
+.fab{
+  position:absolute;right:16px;z-index:15;bottom:88px;
+  width:56px;height:56px;border-radius:50%;
+  background:linear-gradient(to bottom right,var(--accent-hi),var(--accent) 75%);
+  border:1px solid var(--edge);box-shadow:var(--shadow-bloom),var(--shadow-lift);
+  display:grid;place-items:center;color:var(--accent-foreground);
+}
+.stage.desktop .fab{bottom:22px;right:22px}
+.fab .bub{width:22px;height:18px;border:2px solid currentColor;border-radius:6px}
+.fab .n{position:absolute;top:-2px;right:-2px;min-width:20px;height:20px;border-radius:10px;background:var(--destructive);color:#fff;font-size:11px;font-weight:600;display:grid;place-items:center;border:2px solid var(--background)}
+
+.chatwrap{position:absolute;inset:0;z-index:18;display:flex;align-items:flex-end;justify-content:flex-end;pointer-events:none}
+.chatwrap .scrim{position:absolute;inset:0;background:rgba(47,63,102,.2);backdrop-filter:blur(2px);pointer-events:auto}
+.stage.desktop .chatwrap .scrim{display:none}
+.chat{
+  position:relative;pointer-events:auto;display:flex;flex-direction:column;
+  background:var(--glass-hi);backdrop-filter:blur(26px) saturate(1.5);
+  border:1px solid var(--edge);box-shadow:var(--shadow-popover);
+}
+.stage.mobile .chat{width:100%;height:78%;border-radius:26px 26px 0 0}
+.stage.desktop .chat{width:372px;height:520px;border-radius:22px;margin:0 22px 22px 0}
+.chathead{flex:none;display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--glass-line)}
+.chathead .dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
+.chathead .x{margin-left:auto;font-size:20px;color:var(--ink-3);line-height:1;padding:0 4px}
+.chatbody{flex:1;overflow-y:auto;padding:14px 16px}
+.chatfoot{flex:none;padding:11px 14px 14px;border-top:1px solid var(--glass-line)}
+.thread{display:flex;flex-direction:column;gap:9px}
+.bub{max-width:80%;padding:9px 13px;border-radius:16px;font-size:12.8px;line-height:1.45;box-shadow:var(--shadow-inset-hi)}
+.bub.them{background:var(--glass);border:1px solid var(--edge);border-bottom-left-radius:5px;align-self:flex-start}
+.bub.me{background:linear-gradient(to bottom right,var(--accent-hi),var(--accent) 75%);color:var(--accent-foreground);border-bottom-right-radius:5px;align-self:flex-end}
+.bub .t{font-size:10px;opacity:.7;margin-top:4px}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
+
+
+/* --- inset prep rows: the theme's .glass-item, not tinted boxes --- */
+.prep{margin-top:13px;border-top:1px solid var(--glass-line);padding-top:12px}
+.prep .plabel{font-size:11px;font-weight:600;color:var(--ink-3);margin-bottom:8px;letter-spacing:.01em}
+.pitem{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  border-radius:11px;border:1px solid var(--edge);background:var(--glass-2);
+  box-shadow:var(--shadow-inset-hi);padding:9px 12px;margin-bottom:6px;
+  transition:background-color .2s,border-color .2s,box-shadow .2s;
+}
+.pitem:last-child{margin-bottom:0}
+button.pitem:hover{border-color:var(--edge-2);background:rgba(47,63,102,.08);box-shadow:var(--shadow-lift)}
+button.pitem:active{background:rgba(47,63,102,.14)}
+.pitem .st{width:7px;height:7px;border-radius:50%;flex:none}
+.pitem .st.todo{background:var(--consent);box-shadow:0 0 0 3.5px var(--consent-bg)}
+.pitem .st.done{background:var(--success);box-shadow:0 0 0 3.5px var(--success-bg)}
+.pitem .pt{flex:1;min-width:0}
+.pitem .pt .a{font-size:12.5px;font-weight:600;line-height:1.3}
+.pitem .pt .b{font-size:11px;line-height:1.35;margin-top:1px;color:var(--ink-3)}
+.pitem .go-i{font-size:14px;flex:none;color:var(--ink-3)}
+
+/* --- unpaid amount: same hover vocabulary as outline buttons and nav rows --- */
+.money{
+  display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 11px;border-radius:999px;
+  border:1px solid var(--edge);background:var(--glass-2);box-shadow:var(--shadow-inset-hi);
+  color:var(--foreground);font-weight:600;font-size:12.5px;line-height:1;cursor:pointer;
+  transition:background-color .2s,border-color .2s,color .2s,box-shadow .2s;
+}
+.money .st{width:6px;height:6px;border-radius:50%;background:var(--consent);box-shadow:0 0 0 3px var(--consent-bg);flex:none}
+.money .payhint{max-width:0;overflow:hidden;white-space:nowrap;opacity:0;color:var(--ink-3);font-weight:500;transition:max-width .2s ease,opacity .2s ease}
+.money:hover,.money:focus-visible{border-color:var(--edge-2);background:rgba(47,63,102,.08);box-shadow:var(--shadow-lift)}
+.money:active{background:rgba(47,63,102,.14)}
+.money:hover .payhint,.money:focus-visible .payhint{max-width:80px;opacity:1}
+
+/* --- hero appointment card --- */
+.appt{position:relative;overflow:hidden}
+.appt .aurora{position:absolute;width:230px;height:230px;border-radius:50%;filter:blur(46px);opacity:.5;pointer-events:none;z-index:0}
+.appt .aurora.a{background:var(--accent);top:-120px;right:-70px}
+.appt .aurora.b{background:var(--sky);bottom:-140px;left:-80px;opacity:.35}
+.appt>*{position:relative;z-index:1}
+.datehero{display:flex;align-items:baseline;gap:9px}
+.datehero .dd{font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:.95;font-variant-numeric:tabular-nums}
+.datehero .mm{font-size:13px;font-weight:600;color:var(--ink-3)}
+.countdown{margin-left:auto;font-size:11px;font-weight:600;color:var(--accent-ink);background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:999px;padding:3px 10px}
+
+
+/* --- hero carousel: diagonal split, sliding track, edge arrows --- */
+.carousel{position:relative;margin-bottom:6px}
+.cframe{overflow:hidden;border-radius:22px;border:1px solid var(--edge);box-shadow:var(--shadow-glass);background:var(--glass)}
+.ctrack{display:flex;transition:transform .52s cubic-bezier(.22,.8,.25,1);will-change:transform}
+@media (prefers-reduced-motion:reduce){.ctrack{transition:none}}
+.cslide{flex:0 0 100%;min-width:100%;position:relative;height:342px;overflow:hidden}
+.cslide .cwash{position:absolute;inset:0}
+.cimg{position:absolute;top:0;left:0;width:100%;height:64%;
+  clip-path:polygon(0 0,100% 0,100% 78%,0 100%);
+  background:linear-gradient(135deg,rgba(255,255,255,.5),rgba(190,224,244,.4)),
+    repeating-linear-gradient(135deg,transparent,transparent 9px,rgba(47,63,102,.055) 9px,rgba(47,63,102,.055) 18px);
+  display:grid;place-items:center;color:var(--ink-3);font-size:11px;font-family:var(--mono)}
+.cbadge{position:absolute;top:14px;left:14px;z-index:3;display:inline-flex;align-items:baseline;gap:6px;
+  padding:7px 15px;border-radius:999px;background:var(--glass-hi);border:1px solid var(--edge);
+  box-shadow:var(--shadow-glass);backdrop-filter:blur(14px)}
+.cbadge .l{font-size:11px;color:var(--ink-3);font-weight:500}
+.cbadge .v{font-size:17px;font-weight:700;letter-spacing:-.02em;color:var(--foreground)}
+.ctext{position:absolute;left:0;right:0;bottom:0;top:60%;padding:14px 18px 18px;display:flex;flex-direction:column;justify-content:center}
+.ctext .ck{font-size:10.5px;font-weight:600;color:var(--ink-3);letter-spacing:.02em;margin-bottom:5px}
+.ctext h2{margin:0;font-size:21px;font-weight:700;letter-spacing:-.022em;line-height:1.12}
+.ctext p{margin:6px 0 0;font-size:12.5px;line-height:1.45;color:var(--ink-2)}
+.ctext .cta{margin-top:12px}
+.stage.desktop .cslide{height:272px}
+.stage.desktop .cimg{width:60%;height:100%;clip-path:polygon(0 0,100% 0,72% 100%,0 100%)}
+.stage.desktop .ctext{left:56%;right:0;top:0;bottom:0;padding:26px 30px 26px 34px}
+.stage.desktop .ctext h2{font-size:26px}
+.stage.desktop .ctext p{font-size:13.5px}
+
+.carr{position:absolute;top:50%;transform:translateY(-50%);z-index:4;width:38px;height:38px;border-radius:50%;
+  background:var(--glass-hi);border:1px solid var(--edge);box-shadow:var(--shadow-popover);backdrop-filter:blur(14px);
+  display:grid;place-items:center;font-size:17px;color:var(--foreground);
+  transition:background-color .2s,border-color .2s,box-shadow .2s}
+.carr:hover{background:rgba(47,63,102,.08);border-color:var(--edge-2);box-shadow:var(--shadow-lift)}
+.carr:active{background:rgba(47,63,102,.14)}
+.carr.l{left:-8px}.carr.r{right:-8px}
+.stage.desktop .carr{width:42px;height:42px}
+.stage.desktop .carr.l{left:-14px}.stage.desktop .carr.r{right:-14px}
+
+.cdots{display:flex;gap:6px;justify-content:center;margin-top:11px}
+.cdot{width:6px;height:6px;border-radius:50%;background:var(--bar);border:0;padding:0;transition:width .25s ease,background-color .25s ease}
+.cdot[aria-current="true"]{background:var(--accent-deep);width:20px;border-radius:3px}
+
+.cout{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border-radius:999px;
+  background:var(--glass-hi);border:1px solid var(--accent-line);color:var(--accent-ink);
+  font-size:12.5px;font-weight:600;box-shadow:var(--shadow-inset-hi);
+  transition:background-color .2s,border-color .2s,box-shadow .2s}
+.cout:hover{background:rgba(47,63,102,.08);border-color:var(--edge-2);box-shadow:var(--shadow-lift)}
+.cout:active{background:rgba(47,63,102,.14)}
+.cout .ext{font-size:11px;opacity:.75}
+
+/* --- clinic communications: three placements --- */
+.split{display:grid;gap:11px}
+.stage.desktop .split{grid-template-columns:1.4fr .9fr;align-items:start}
+.newsrail .ncard{border-radius:18px;border:1px solid var(--edge);background:var(--glass);box-shadow:var(--shadow-glass);padding:13px 14px;margin-bottom:9px;position:relative;overflow:hidden;display:block;width:100%;text-align:left;transition:box-shadow .2s,border-color .2s}
+.newsrail button.ncard:hover{border-color:var(--edge-2);box-shadow:var(--shadow-lift)}
+.ncard .tag{font-size:10px;font-weight:600;letter-spacing:.02em;color:var(--ink-3);margin-bottom:5px}
+.ncard .blob{position:absolute;width:130px;height:130px;border-radius:50%;filter:blur(38px);opacity:.5;top:-60px;right:-45px;pointer-events:none}
+
+.ribbon{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:2px 16px 6px}
+.ribbon::-webkit-scrollbar{display:none}
+.stage.desktop .ribbon{margin:0;padding:2px 0 6px}
+.rcard{flex:0 0 226px;border-radius:20px;padding:14px;border:1px solid var(--edge);background:var(--glass);box-shadow:var(--shadow-glass);position:relative;overflow:hidden;text-align:left;transition:box-shadow .2s,border-color .2s}
+.rcard:hover{border-color:var(--edge-2);box-shadow:var(--shadow-lift)}
+.rcard .blob{position:absolute;width:150px;height:150px;border-radius:50%;filter:blur(40px);opacity:.55;top:-70px;right:-55px;pointer-events:none}
+.rcard>*{position:relative;z-index:1}
+
+.marquee{position:relative;overflow:hidden;border-radius:22px;padding:17px 19px;border:1px solid var(--accent-line);
+  background:linear-gradient(118deg,var(--accent-soft) 0%,rgba(190,224,244,.42) 52%,rgba(239,155,196,.26) 100%);
+  box-shadow:var(--shadow-glass);margin-bottom:13px;display:block;width:100%;text-align:left;transition:box-shadow .2s}
+.marquee:hover{box-shadow:var(--shadow-lift)}
+.marquee .blob{position:absolute;width:210px;height:210px;border-radius:50%;background:#fff;filter:blur(48px);opacity:.55;top:-110px;right:-60px;pointer-events:none}
+.marquee>*{position:relative;z-index:1}
+.dots{display:flex;gap:5px;justify-content:center;margin-top:9px}
+.dots i{width:5px;height:5px;border-radius:50%;background:var(--bar)}
+.dots i.on{background:var(--accent-deep);width:16px;border-radius:3px}
+
+.greet{margin-bottom:4px}
+.greet .hi{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.15}
+.greet .dt{font-size:12px;color:var(--ink-3);margin-top:3px}
+.dot-badge{width:7px;height:7px;border-radius:50%;background:var(--consent);display:inline-block;box-shadow:0 0 0 3.5px var(--consent-bg);flex:none}
+
+/* ---------------- annotations ---------------- */
+.notes{background:#fff;border-left:1px solid rgba(47,63,102,.1);overflow-y:auto;padding:16px 16px 40px}
+.notes h3{margin:0 0 2px;font-size:14px;font-weight:600}
+.notes .route{font-family:var(--mono);font-size:10.5px;color:var(--meta);margin-bottom:14px}
+.note{border-left:2px solid var(--meta);padding-left:10px;margin-bottom:13px}
+.note .ref{font-family:var(--mono);font-size:10.5px;color:var(--meta);font-weight:600}
+.note p{margin:2px 0 0;font-size:12.3px;line-height:1.5;color:var(--ink-2)}
+.note.gap{border-left-color:var(--destructive)}
+.note.gap .ref{color:var(--destructive-ink)}
+.note.open{border-left-color:var(--consent)}
+.note.open .ref{color:var(--consent-ink)}
+.note.new{border-left-color:var(--success)}
+.note.new .ref{color:var(--success-ink)}
+.legend{margin-top:20px;padding-top:14px;border-top:1px solid rgba(47,63,102,.1);font-size:11.5px;color:var(--ink-3);line-height:1.65}
+.legend b{display:block;color:var(--ink-2);margin-bottom:5px;font-size:10.5px;font-family:var(--mono)}
+body.noannot .notes{display:none}
+body.noannot .main{grid-template-columns:238px 1fr}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand"><b>Aetheria Patient Portal</b><span>wireframes v0.2 · brand palette</span></div>
+    <div class="spacer"></div>
+    <div class="stepper">
+      <button id="prev" aria-label="Previous screen">&larr;</button>
+      <span id="pos">1 / 1</span>
+      <button id="next" aria-label="Next screen">&rarr;</button>
+    </div>
+    <div class="seg" role="group" aria-label="Viewport">
+      <button id="vpm" aria-pressed="true">Mobile</button>
+      <button id="vpd" aria-pressed="false">Desktop</button>
+    </div>
+    <button class="tbtn" id="chatbtn" aria-pressed="false">Messages popup</button>
+    <button class="tbtn" id="annot" aria-pressed="true">Annotations</button>
+  </header>
+  <div class="main">
+    <nav class="rail" id="rail" aria-label="Screens"></nav>
+    <div class="stage mobile" id="stage"></div>
+    <aside class="notes" id="notes"></aside>
+  </div>
+</div>
+<script>
+const SCREENS = {}; const ORDER = [];
+function S(id, def){ SCREENS[id] = def; ORDER.push(id); }
+</script>
+<script>
+/* ============ ENTRY ============ */
+S('signin', {
+  group:'Entry', title:'Patient sign in', route:'/portal', chrome:'bare',
+  body:`<div class="scroll" style="display:flex;flex-direction:column;justify-content:center">
+    <div style="margin-bottom:28px">
+      <div class="strong" style="font-size:21px;letter-spacing:-.02em">Aetheria</div>
+      <div class="tiny" style="margin-top:1px">Patient portal</div>
+    </div>
+    <h2 style="margin:0 0 6px;font-size:22px;font-weight:600;letter-spacing:-.016em">Sign in to your record</h2>
+    <p class="muted small" style="margin:0 0 22px">Use the email address your clinic holds for you.</p>
+    <div class="field"><label>Email</label><div class="inp">you@example.com</div></div>
+    <div class="field"><label>Password</label><div class="inp">••••••••••••</div></div>
+    <button class="btn" data-go="dash-b">Sign in</button>
+    <button class="btn ghost" style="margin:10px auto 0">Forgot your password?</button>
+    <div class="hr"></div>
+    <p class="tiny" style="line-height:1.55">Your clinic creates your account. No invitation email? Call the clinic on 020 7000 0000 and they will send one.</p>
+    <button class="btn sec sm" data-go="activate-dob" style="margin-top:14px;align-self:flex-start">View activation flow</button>
+  </div>`,
+  notes:[
+    {k:'',ref:'F-02',t:'Existing route. Keeps safeNextPath() open-redirect protection and the assertLoginAllowed throttle backed by auth_login_events.'},
+    {k:'',ref:'F-01',t:'Invite-only. No signup form — self-signup today produces an account with no roles and no patient link that dead-ends.'},
+    {k:'open',ref:'D-09',t:'Patient MFA still undecided. If required, a factor step lands between here and the dashboard.'}
+  ]
+});
+
+S('activate-dob', {
+  group:'Entry', title:'Activate — identity check', route:'/portal/activate', chrome:'bare',
+  body:`<div class="scroll" style="display:flex;flex-direction:column;justify-content:center">
+    <div class="steps"><i class="on"></i><i></i><i></i></div>
+    <h2 style="margin:0 0 6px;font-size:21px;font-weight:600;letter-spacing:-.016em">Confirm it's you</h2>
+    <p class="muted small" style="margin:0 0 20px">Enter your date of birth so we can match this invitation to your record.</p>
+    <div class="field"><label>Date of birth</label>
+      <div class="row" style="gap:8px">
+        <div class="inp" style="flex:1;justify-content:center">DD</div>
+        <div class="inp" style="flex:1;justify-content:center">MM</div>
+        <div class="inp" style="flex:1.4;justify-content:center">YYYY</div>
+      </div>
+      <div class="hint">2 attempts remaining</div>
+    </div>
+    <button class="btn" data-go="activate-set">Continue</button>
+    <div class="banner info" style="margin-top:20px">This link expires 7 days after your clinic sent it and can only be used once.</div>
+  </div>`,
+  notes:[
+    {k:'',ref:'F-01 step 4',t:'Record matching. Stops a forwarded or mis-addressed invitation linking the wrong person to a clinical record.'},
+    {k:'',ref:'F-01',t:'Three failures invalidate the token and notify staff. The patient sees a generic message — never a hint about how close the DOB was.'},
+    {k:'',ref:'§8',t:'validateActivationToken sits outside requireSupabaseAuth and therefore outside POLICY. Needs its own rate limiting and constant-time comparison.'}
+  ]
+});
+
+S('activate-set', {
+  group:'Entry', title:'Activate — set password', route:'/portal/activate', chrome:'bare',
+  body:`<div class="scroll" style="display:flex;flex-direction:column;justify-content:center">
+    <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+    <h2 style="margin:0 0 6px;font-size:21px;font-weight:600;letter-spacing:-.016em">Create your password</h2>
+    <p class="muted small" style="margin:0 0 20px">Aisha Bello · Ridgeway Skin Clinic</p>
+    <div class="field"><label>Password</label><div class="inp">••••••••••••••</div><div class="hint">At least 12 characters. Checked against known breached passwords.</div></div>
+    <div class="field"><label>Confirm password</label><div class="inp">••••••••••••••</div></div>
+    <div class="card" style="padding:13px">
+      <div class="row top" style="gap:10px">
+        <div style="width:19px;height:19px;border-radius:6px;background:linear-gradient(140deg,var(--accent-hi),var(--accent));border:1px solid var(--accent-line);flex:none;margin-top:1px"></div>
+        <div class="small">I accept the <span style="color:var(--accent-ink);font-weight:600">portal terms</span> and have read the <span style="color:var(--accent-ink);font-weight:600">privacy notice</span>.</div>
+      </div>
+    </div>
+    <button class="btn" data-go="dash-empty" style="margin-top:8px">Create account</button>
+  </div>`,
+  notes:[
+    {k:'',ref:'F-01 step 5',t:'Acceptance recorded with version and timestamp in portal_terms_acceptances. A bare boolean is not evidence of what was agreed to.'},
+    {k:'',ref:'§7.1',t:'patients.user_id is UNIQUE since 20260826001000. A second link attempt must fail cleanly, not 500.'}
+  ]
+});
+
+/* ============ DASHBOARD ============ */
+S('dash-a', {
+  group:'Dashboard', title:'A — Split: news beside appointment', route:'/dashboard', chrome:'app', tab:'dash', fab:true,
+  body:`
+    <div class="greet"><div class="hi">Hello Aisha</div><div class="dt">Friday 13 March</div></div>
+    <div class="split" style="margin-top:14px">
+      <div>
+        <div class="sect" style="margin-top:0">Your next appointment</div>
+        <div class="card appt">      <div class="aurora a"></div><div class="aurora b"></div>
+      <div class="row top" style="gap:14px;margin-bottom:12px">
+        <div class="datehero"><span class="dd">19</span><span class="mm">Mar</span></div>
+        <span class="countdown">in 6 days</span>
+      </div>
+      <h3 class="ct" style="font-size:17px">Lip filler · 0.5ml</h3>
+      <div class="small muted" style="margin-top:2px">2:30pm with Nadia Okonkwo · arrive 2:20pm</div>
+      <div class="row" style="gap:8px;margin-top:11px">
+        <span class="chip ok">Confirmed</span>
+        <button class="money" data-go="pay-sheet"><span class="st"></span>£50 deposit due<span class="payhint">· Pay</span></button>
+      </div>
+      <div class="prep">
+        <div class="plabel">Before this appointment</div>
+        <button class="pitem" data-go="consent">
+          <span class="st todo"></span>
+          <span class="pt"><span class="a">Sign your consent form</span><span class="b">About 2 minutes · then a 48-hour reflection period</span></span>
+          <span class="go-i">›</span>
+        </button>
+        <div class="pitem"><span class="st done"></span><span class="pt"><span class="a">Pre-care read</span><span class="b">No alcohol 24 hours before</span></span></div>
+      </div></div>
+            <div class="list" style="margin-top:11px">
+      <button class="li go" data-go="appt-detail"><div class="datebox"><div class="d">02</div><div class="tiny">Apr</div></div><div class="grow"><div class="strong small">Review · lip filler</div><div class="tiny">11:00am · Nadia Okonkwo</div></div><div class="rt"><span class="chip ok">All set</span></div></button>
+      <div class="li"><div class="datebox"><div class="d">14</div><div class="tiny">Apr</div></div><div class="grow"><div class="strong small">Skin booster</div><div class="tiny">Requested 4:00pm</div></div><div class="rt"><span class="chip due">Requested</span></div></div>
+    </div>
+      </div>
+      <div>
+        <div class="sect" style="margin-top:0">From your clinic</div>
+        <div class="newsrail"><button class="ncard" data-go="offer-detail"><span class="blob" style="background:var(--accent)"></span><div class="tag">Offer</div><div class="strong" style="font-size:13.5px;line-height:1.3;letter-spacing:-.01em">£40 off your next skin booster</div><div class="tiny" style="margin-top:4px">Because you have had three with us. No end date.</div></button><button class="ncard" data-go="offer-detail"><span class="blob" style="background:var(--sky)"></span><div class="tag">Clinic news</div><div class="strong" style="font-size:13.5px;line-height:1.3;letter-spacing:-.01em">Nadia is now taking Saturday appointments</div><div class="tiny" style="margin-top:4px">One Saturday a month from April.</div></button><button class="ncard" data-go="offer-detail"><span class="blob" style="background:var(--aftercare)"></span><div class="tag">Aftercare</div><div class="strong" style="font-size:13.5px;line-height:1.3;letter-spacing:-.01em">New guide: caring for lips in cold weather</div><div class="tiny" style="margin-top:4px">Two minutes to read.</div></button></div>
+        <p class="tiny" style="margin:2px">Shown because marketing is on. <span style="color:var(--accent-ink);font-weight:600">Turn off</span></p>
+      </div>
+    </div>
+        <div class="sect">Your treatments</div>
+    <div class="list">
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Skin booster · full face</div><div class="tiny">21 February · Nadia Okonkwo</div></div><div class="rt"><span class="chip gold">Due 23 May</span></div></button>
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Lip filler · 0.5ml</div><div class="tiny">14 November · Nadia Okonkwo</div></div><div class="rt tiny">›</div></button>
+    </div>
+    <button class="btn sec sm" data-go="treatments">See full history</button>`,
+  notes:[
+    {k:'new',ref:'Rendition A',t:'Two columns on desktop at 1.4fr / 0.9fr: appointment left, a clinic news rail right. On mobile it stacks, appointment first \u2014 switch the viewport to compare.'},
+    {k:'new',ref:'Rendition A',t:'Strongest option if clinic news is a steady stream rather than an occasional campaign. The rail holds three items without shouting and grows to five before it needs its own page.'},
+    {k:'new',ref:'Rendition A',t:'Note the mix: an offer, a scheduling update and an aftercare guide. If the rail is only ever discounts it stops being read within a fortnight.'},
+    {k:'new',ref:'Card redesign',t:'The chunky tinted boxes are gone. Prep rows now use the theme\u2019s own .glass-item \u2014 11px radius, glass-2 fill, inset highlight \u2014 which is the same inset-well treatment the clinic app already uses for list rows inside a card.'},
+    {k:'new',ref:'Card redesign',t:'Status is a 7px dot with a soft halo instead of a filled circle and a background tint. It reads at a glance and stops the card looking like a stack of alert boxes.'},
+    {k:'new',ref:'Card redesign',t:'The date is now the hero \u2014 34px tabular numerals with an "in 6 days" chip \u2014 rather than a line of body text. Two soft aurora blobs sit behind the glass so the card has depth instead of sitting flat.'},
+    {k:'new',ref:'Hover fix',t:'The deposit pill no longer turns yellow. It uses the app\u2019s own interactive vocabulary: rgba(47,63,102,.08) wash, border to --edge-2, --shadow-lift, 200ms. Identical to outline buttons, sidebar rows and glass-table rows.'},
+    {k:'new',ref:'Type and metrics',t:'Buttons now match the clinic Button component exactly \u2014 rounded-full, 12.5px semibold, 40px primary and 32px small, active scale .98, and the same six-property 200ms transition. Sizes pass WCAG 2.2 AA target size, which is 24px, not the 44px AAA figure.'},
+    {k:'open',ref:'Ordering',t:'This is the one rendition where a blocking consent and a promotion sit side by side rather than stacked. Side by side is defensible; a promotion stacked above an unsigned consent is not.'}
+  ]
+});
+
+S('dash-b', {
+  group:'Dashboard', title:'B — Hero carousel', route:'/dashboard', chrome:'app', tab:'dash', fab:true,
+  body:`
+    <div class="greet"><div class="hi">Hello Aisha</div><div class="dt">Friday 13 March</div></div>
+    <div style="margin-top:14px"><div class="carousel">
+      <div class="cframe"><div class="ctrack"><div class="cslide">
+        <div class="cwash" style="background:linear-gradient(118deg,var(--accent-soft) 0%,rgba(190,224,244,.4) 55%,rgba(239,155,196,.24) 100%)"></div>
+        <div class="cimg">lifestyle · treatment room</div>
+        <div class="cbadge"><span class='l'>now</span><span class="v">£180</span></div>
+        <div class="ctext">
+          <div class="ck">Chosen for you</div>
+          <h2>£40 off your skin booster</h2>
+          <p>Because you have had three with us. Applies whenever you next book — no end date.</p>
+          <div class="cta"><button class="btn sm" data-go="book-1" style="height:36px;padding:0 16px">Book a skin booster</button></div>
+        </div>
+      </div><div class="cslide">
+        <div class="cwash" style="background:linear-gradient(118deg,var(--accent-soft) 0%,rgba(190,224,244,.4) 55%,rgba(239,155,196,.24) 100%)"></div>
+        <div class="cimg">lifestyle · clinic exterior</div>
+        <div class="cbadge"><span class='l'>from</span><span class="v">April</span></div>
+        <div class="ctext">
+          <div class="ck">Clinic news</div>
+          <h2>Saturday appointments</h2>
+          <p>Nadia is opening one Saturday a month. Same treatments, same rooms, easier to reach.</p>
+          <div class="cta"><button class="btn sm" data-go="book-1" style="height:36px;padding:0 16px">See the dates</button></div>
+        </div>
+      </div><div class="cslide">
+        <div class="cwash" style="background:linear-gradient(118deg,var(--accent-soft) 0%,rgba(190,224,244,.4) 55%,rgba(239,155,196,.24) 100%)"></div>
+        <div class="cimg">editorial · aftercare guide</div>
+        <div class="cbadge"><span class="v">Guide</span></div>
+        <div class="ctext">
+          <div class="ck">From the clinic</div>
+          <h2>Caring for lips in cold weather</h2>
+          <p>Two minutes on keeping filler comfortable through winter, written by our nurse team.</p>
+          <div class="cta"><a class="cout" data-ext="1">Read on our site<span class="ext">↗</span></a></div>
+        </div>
+      </div></div></div>
+      <button class="carr l" data-slide="prev" aria-label="Previous">‹</button>
+      <button class="carr r" data-slide="next" aria-label="Next">›</button>
+      <div class="cdots">
+        <button class="cdot" data-slide="0" aria-current="true" aria-label="Slide 1"></button>
+        <button class="cdot" data-slide="1" aria-current="false" aria-label="Slide 2"></button>
+        <button class="cdot" data-slide="2" aria-current="false" aria-label="Slide 3"></button>
+      </div>
+    </div></div>
+    <div class="sect">Your next appointment</div>
+    <div class="card appt">      <div class="aurora a"></div><div class="aurora b"></div>
+      <div class="row top" style="gap:14px;margin-bottom:12px">
+        <div class="datehero"><span class="dd">19</span><span class="mm">Mar</span></div>
+        <span class="countdown">in 6 days</span>
+      </div>
+      <h3 class="ct" style="font-size:17px">Lip filler · 0.5ml</h3>
+      <div class="small muted" style="margin-top:2px">2:30pm with Nadia Okonkwo · arrive 2:20pm</div>
+      <div class="row" style="gap:8px;margin-top:11px">
+        <span class="chip ok">Confirmed</span>
+        <button class="money" data-go="pay-sheet"><span class="st"></span>£50 deposit due<span class="payhint">· Pay</span></button>
+      </div>
+      <div class="prep">
+        <div class="plabel">Before this appointment</div>
+        <button class="pitem" data-go="consent">
+          <span class="st todo"></span>
+          <span class="pt"><span class="a">Sign your consent form</span><span class="b">About 2 minutes · then a 48-hour reflection period</span></span>
+          <span class="go-i">›</span>
+        </button>
+        <div class="pitem"><span class="st done"></span><span class="pt"><span class="a">Pre-care read</span><span class="b">No alcohol 24 hours before</span></span></div>
+      </div></div>
+    <div class="list" style="margin-top:11px">
+      <button class="li go" data-go="appt-detail"><div class="datebox"><div class="d">02</div><div class="tiny">Apr</div></div><div class="grow"><div class="strong small">Review · lip filler</div><div class="tiny">11:00am · Nadia Okonkwo</div></div><div class="rt"><span class="chip ok">All set</span></div></button>
+      <div class="li"><div class="datebox"><div class="d">14</div><div class="tiny">Apr</div></div><div class="grow"><div class="strong small">Skin booster</div><div class="tiny">Requested 4:00pm</div></div><div class="rt"><span class="chip due">Requested</span></div></div>
+    </div>
+    <div class="sect">Your treatments</div>
+    <div class="list">
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Skin booster · full face</div><div class="tiny">21 February · Nadia Okonkwo</div></div><div class="rt"><span class="chip gold">Due 23 May</span></div></button>
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Lip filler · 0.5ml</div><div class="tiny">14 November · Nadia Okonkwo</div></div><div class="rt tiny">›</div></button>
+    </div>
+    <button class="btn sec sm" data-go="treatments">See full history</button>
+    <p class="tiny" style="margin:12px 2px 0">Offers and clinic news are on. <span style="color:var(--accent-ink);font-weight:600">Change in Settings</span></p>`,
+  notes:[
+    {k:'new',ref:'Carousel',t:'A real carousel now. The arrows and dots actually slide the track — 520ms on a cubic-bezier(.22,.8,.25,1) ease-out, one slide at a time, wrapping at both ends. Click them.'},
+    {k:'new',ref:'Carousel',t:'Layout follows your reference: diagonal image on the left, tinted panel on the right, price pill floating over the image, circular arrows overhanging the card edge. On mobile the diagonal rotates to horizontal, image on top and text beneath, because a side-by-side split at 390px leaves neither pane usable.'},
+    {k:'new',ref:'Carousel',t:'The diagonal is a clip-path polygon rather than a masked image, so it needs no exported asset and re-cuts itself at any width.'},
+    {k:'new',ref:'Outbound CTA',t:'Slide 3 uses the outbound treatment — glass pill, accent-ink text, an arrow glyph. Opens the clinic site or a marketing channel in a new tab. Visually distinct from in-app CTAs on the other two slides, so the patient knows they are leaving.'},
+    {k:'new',ref:'Outbound CTA',t:'Needs target="_blank" with rel="noopener noreferrer" — without noopener the opened page can reach back through window.opener, which is a tabnabbing route out of a signed-in clinical portal.'},
+    {k:'new',ref:'Outbound CTA',t:'No patient identifiers in the outbound URL, ever. No id, no email, no UTM carrying anything derived from the record. Campaign attribution has to come from the offer id alone.'},
+    {k:'new',ref:'Copy',t:'The reference reads "Last-minute deals". Deliberately not copied — a time-pressure frame on a cosmetic procedure is the exact tactic GMC guidance para 52 rules out. Same layout, different rhetoric: "Chosen for you", stated reason, no end date.'},
+    {k:'new',ref:'Imagery',t:'Placeholders here. Real photography needs sign-off: ASA and CAP rules apply to cosmetic advertising, before-and-after imagery must not mislead about achievable results, and images must not play on appearance insecurity.'},
+    {k:'open',ref:'Autoplay',t:'Left off. Auto-advancing carousels move content out from under people who read slowly and need a visible pause control to meet WCAG 2.2.2. If you want it, 7 seconds with pause on hover and focus, and disabled under prefers-reduced-motion.'},
+    {k:'',ref:'Accessibility',t:'Arrows and dots are real buttons with labels. Slides need aria-roledescription="slide" and a live region announcing "3 of 3" on change; the track must not trap focus, and off-screen slides need inert so tab order does not run through hidden CTAs.'}
+  ]
+});
+
+S('dash-c', {
+  group:'Dashboard', title:'C — Ribbon under greeting', route:'/dashboard', chrome:'app', tab:'dash', fab:true,
+  body:`
+    <div class="greet"><div class="hi">Hello Aisha</div><div class="dt">Friday 13 March</div></div>
+    <div style="margin-top:13px"><div class="ribbon"><button class="rcard" data-go="offer-detail"><span class="blob" style="background:var(--accent)"></span><div class="tag" style="font-size:10px;font-weight:600;color:var(--ink-3);margin-bottom:6px">Offer</div><div class="strong" style="font-size:13.5px;line-height:1.3;letter-spacing:-.01em">£40 off your next skin booster</div><div class="tiny" style="margin-top:4px">Because you have had three with us. No end date.</div></button><button class="rcard" data-go="offer-detail"><span class="blob" style="background:var(--sky)"></span><div class="tag" style="font-size:10px;font-weight:600;color:var(--ink-3);margin-bottom:6px">Clinic news</div><div class="strong" style="font-size:13.5px;line-height:1.3;letter-spacing:-.01em">Nadia is now taking Saturday appointments</div><div class="tiny" style="margin-top:4px">One Saturday a month from April.</div></button><button class="rcard" data-go="offer-detail"><span class="blob" style="background:var(--aftercare)"></span><div class="tag" style="font-size:10px;font-weight:600;color:var(--ink-3);margin-bottom:6px">Aftercare</div><div class="strong" style="font-size:13.5px;line-height:1.3;letter-spacing:-.01em">New guide: caring for lips in cold weather</div><div class="tiny" style="margin-top:4px">Two minutes to read.</div></button></div></div>
+    <div class="sect">Your next appointment</div>
+    <div class="card appt">      <div class="aurora a"></div><div class="aurora b"></div>
+      <div class="row top" style="gap:14px;margin-bottom:12px">
+        <div class="datehero"><span class="dd">19</span><span class="mm">Mar</span></div>
+        <span class="countdown">in 6 days</span>
+      </div>
+      <h3 class="ct" style="font-size:17px">Lip filler · 0.5ml</h3>
+      <div class="small muted" style="margin-top:2px">2:30pm with Nadia Okonkwo · arrive 2:20pm</div>
+      <div class="row" style="gap:8px;margin-top:11px">
+        <span class="chip ok">Confirmed</span>
+        <button class="money" data-go="pay-sheet"><span class="st"></span>£50 deposit due<span class="payhint">· Pay</span></button>
+      </div>
+      <div class="prep">
+        <div class="plabel">Before this appointment</div>
+        <button class="pitem" data-go="consent">
+          <span class="st todo"></span>
+          <span class="pt"><span class="a">Sign your consent form</span><span class="b">About 2 minutes · then a 48-hour reflection period</span></span>
+          <span class="go-i">›</span>
+        </button>
+        <div class="pitem"><span class="st done"></span><span class="pt"><span class="a">Pre-care read</span><span class="b">No alcohol 24 hours before</span></span></div>
+      </div></div>
+        <div class="list" style="margin-top:11px">
+      <button class="li go" data-go="appt-detail"><div class="datebox"><div class="d">02</div><div class="tiny">Apr</div></div><div class="grow"><div class="strong small">Review · lip filler</div><div class="tiny">11:00am · Nadia Okonkwo</div></div><div class="rt"><span class="chip ok">All set</span></div></button>
+      <div class="li"><div class="datebox"><div class="d">14</div><div class="tiny">Apr</div></div><div class="grow"><div class="strong small">Skin booster</div><div class="tiny">Requested 4:00pm</div></div><div class="rt"><span class="chip due">Requested</span></div></div>
+    </div>
+        <div class="sect">Your treatments</div>
+    <div class="list">
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Skin booster · full face</div><div class="tiny">21 February · Nadia Okonkwo</div></div><div class="rt"><span class="chip gold">Due 23 May</span></div></button>
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Lip filler · 0.5ml</div><div class="tiny">14 November · Nadia Okonkwo</div></div><div class="rt tiny">›</div></button>
+    </div>
+    <button class="btn sec sm" data-go="treatments">See full history</button>
+    <div class="card dashed" style="margin-top:13px">
+      <p class="small muted">Offers and clinic news are on. <span style="color:var(--accent-ink);font-weight:600">Change this in Settings</span></p>
+    </div>`,
+  notes:[
+    {k:'new',ref:'Rendition C',t:'A horizontally scrolling ribbon of narrow cards under the greeting. Present but peripheral \u2014 it reads as a shelf you can ignore, which a full-width banner does not.'},
+    {k:'new',ref:'Rendition C',t:'My pick of the three. It puts clinic communications high without letting them dominate, scrolls to any number of items without a redesign, and works identically on mobile and desktop.'},
+    {k:'new',ref:'Rendition C',t:'Each card carries a coloured blur blob keyed to its type \u2014 butter for offers, sky for scheduling, pink for aftercare \u2014 so the ribbon reads as varied rather than three adverts.'},
+    {k:'new',ref:'Card redesign',t:'The chunky tinted boxes are gone. Prep rows now use the theme\u2019s own .glass-item \u2014 11px radius, glass-2 fill, inset highlight \u2014 which is the same inset-well treatment the clinic app already uses for list rows inside a card.'},
+    {k:'new',ref:'Card redesign',t:'Status is a 7px dot with a soft halo instead of a filled circle and a background tint. It reads at a glance and stops the card looking like a stack of alert boxes.'},
+    {k:'new',ref:'Card redesign',t:'The date is now the hero \u2014 34px tabular numerals with an "in 6 days" chip \u2014 rather than a line of body text. Two soft aurora blobs sit behind the glass so the card has depth instead of sitting flat.'},
+    {k:'new',ref:'Hover fix',t:'The deposit pill no longer turns yellow. It uses the app\u2019s own interactive vocabulary: rgba(47,63,102,.08) wash, border to --edge-2, --shadow-lift, 200ms. Identical to outline buttons, sidebar rows and glass-table rows.'},
+    {k:'new',ref:'Type and metrics',t:'Buttons now match the clinic Button component exactly \u2014 rounded-full, 12.5px semibold, 40px primary and 32px small, active scale .98, and the same six-property 200ms transition. Sizes pass WCAG 2.2 AA target size, which is 24px, not the 44px AAA figure.'},
+    {k:'',ref:'Accessibility',t:'A horizontal scroller needs keyboard access and must not trap focus. Arrow buttons appear on desktop hover; the scroller is a listbox with roving tabindex.'}
+  ]
+});
+
+S('dashboard-chat', {
+  group:'Dashboard', title:'Dashboard + messages open', route:'/dashboard', chrome:'app', tab:'dash', fab:true, chat:true,
+  body:`
+    <div class="greet"><div class="hi">Hello Aisha</div><div class="dt">Friday 13 March</div></div>
+    <div style="margin-top:13px"><div class="ribbon">
+      <button class="rcard" data-go="offer-detail"><span class="blob" style="background:var(--accent)"></span><div class="tag" style="font-size:10px;font-weight:600;color:var(--ink-3);margin-bottom:6px">Offer</div><div class="strong" style="font-size:13.5px;line-height:1.3">£40 off your next skin booster</div></button>
+      <button class="rcard" data-go="offer-detail"><span class="blob" style="background:var(--sky)"></span><div class="tag" style="font-size:10px;font-weight:600;color:var(--ink-3);margin-bottom:6px">Clinic news</div><div class="strong" style="font-size:13.5px;line-height:1.3">Saturday appointments from April</div></button>
+    </div></div>
+    <div class="sect">Your next appointment</div>
+    <div class="card appt">
+      <div class="aurora a"></div><div class="aurora b"></div>
+      <div class="row top" style="gap:14px;margin-bottom:12px"><div class="datehero"><span class="dd">19</span><span class="mm">Mar</span></div><span class="countdown">in 6 days</span></div>
+      <h3 class="ct" style="font-size:17px">Lip filler · 0.5ml</h3>
+      <div class="small muted" style="margin-top:2px">2:30pm with Nadia Okonkwo</div>
+    </div>`,
+  notes:[
+    {k:'new',ref:'Messaging popup',t:'Messages is an overlay, not a route. It opens over whatever the patient is doing and keeps their place — no navigating away mid-booking to ask a question.'},
+    {k:'new',ref:'Messaging popup',t:'Docked bottom-right at 372x520 on desktop. On mobile it takes 78% height from the bottom with a scrim, because a small floating panel at 390px is unusable with a keyboard open.'},
+    {k:'new',ref:'Messaging popup',t:'The launcher carries the unread count, so a clinic reply surfaces wherever the patient happens to be.'},
+    {k:'new',ref:'Deep links',t:'An overlay has no URL, so /messages must still exist as a route for the new_message email link. It opens the dashboard with the popup already up.'},
+    {k:'',ref:'F-09',t:'Machinery already exists: PatientChatPanel, the realtime postgres_changes subscription filtered by patient_id, and markMessagesRead.'},
+    {k:'gap',ref:'G-17',t:'The read-receipt effect keys on data?.messages.length, so a read-state change that does not alter the count never re-runs it.'}
+  ]
+});
+
+S('dash-empty', {
+  group:'Dashboard', title:'First run', route:'/dashboard', chrome:'app', tab:'dash', fab:true,
+  body:`
+    <div class="greet"><div class="hi">Welcome, Aisha</div><div class="dt">Friday 13 March</div></div>
+    <div class="card tint-success" style="margin-top:14px">
+      <h3 class="ct" style="color:var(--success-ink)">Your record is ready</h3>
+      <p class="small" style="color:var(--success-ink);margin-top:3px">Ridgeway Skin Clinic has set up your portal. Nothing has been added yet.</p>
+    </div>
+    <div class="sect">Start here</div>
+    <button class="card go" data-go="intake"><h3 class="ct">Complete your health profile</h3><p class="small muted">About 5 minutes. You can stop and come back.</p></button>
+    <button class="card go" data-go="book-1"><h3 class="ct">Request an appointment</h3><p class="small muted">Your first visit will be a consultation.</p></button>
+    <div class="sect">Nothing here yet</div>
+    <div class="card dashed" style="text-align:center;padding:28px 16px"><p class="small muted">Your appointments, treatments and photos will appear here after your first visit.</p></div>`,
+  notes:[
+    {k:'',ref:'Principle 4',t:'Empty is designed. It names what will fill the space and offers one clear action.'},
+    {k:'new',ref:'Offers',t:'No ribbon and no banner on an empty dashboard. Discounting a treatment to someone never assessed is exactly the ill-considered-decision risk the GMC guidance addresses.'},
+    {k:'new',ref:'Change 3',t:'This is the one place the full nine-section intake appears, framed as setup rather than a chore. Returning patients never see it again.'}
+  ]
+});
+
+S('offer-detail', {
+  group:'Dashboard', title:'Offer detail', route:'/offers/:id', chrome:'app', tab:'dash', fab:true,
+  head:'Your offer', back:'dash-b',
+  body:`
+    <div class="card tint-accent">
+      <div class="chip gold" style="margin-bottom:9px">Chosen for you</div>
+      <h3 class="ct" style="font-size:19px;color:var(--accent-ink)">£40 off your next skin booster</h3>
+      <p class="small" style="color:var(--accent-ink);margin-top:6px">£180 instead of £220.</p>
+    </div>
+    <div class="card">
+      <div class="kv"><span class="k">Why you have this</span><span class="v" style="max-width:58%">You have had three skin boosters with us</span></div>
+      <div class="kv"><span class="k">Valid</span><span class="v">No end date</span></div>
+      <div class="kv"><span class="k">Applies to</span><span class="v">Skin booster, full face</span></div>
+      <div class="kv"><span class="k">Combines with</span><span class="v">Nothing else</span></div>
+    </div>
+    <div class="banner info">A discount does not change the clinical side. You will still have a consultation, still sign consent, and still have the full reflection period before treatment.</div>
+    <div class="btns"><button class="btn" data-go="book-1">Book a skin booster</button></div>
+    <div class="row" style="gap:8px;margin-top:9px">
+      <a class="cout" data-ext="1">Read more on our site<span class="ext">&#8599;</span></a>
+      <a class="cout" data-ext="1">Follow us<span class="ext">&#8599;</span></a>
+    </div>
+    <button class="btn ghost" style="margin:14px auto 0;display:flex" data-go="settings">Stop showing me offers</button>`,
+  notes:[
+    {k:'new',ref:'Offers',t:'"Why you have this" is the honesty requirement. An offer with no stated basis reads as a sales tactic; one tied to treatment history reads as recognition.'},
+    {k:'new',ref:'Offers',t:'The clinical-unchanged banner is not optional. The single biggest risk of putting discounts in a clinical portal is a patient inferring the discount buys a faster route to treatment.'},
+    {k:'new',ref:'Offers',t:'No countdown component exists anywhere in this design, by intent. If the clinic later wants seasonal campaigns, CAP guidance says the window must not put undue pressure and must not be advertised so close to closing that a new reader cannot act.'},
+    {k:'open',ref:'D-19 (new)',t:'Who authors offers, and does a clinician approve them? A front-desk user creating discounts on prescription-only injectables with no clinical sign-off is a governance problem, not a feature.'},
+    {k:'new',ref:'Outbound CTA',t:'Two outbound routes, styled apart from the in-app primary so leaving the portal is a visible choice: the clinic site and a marketing channel. Both new tab, both rel="noopener noreferrer", neither carrying a patient identifier.'},
+    {k:'open',ref:'D-22 (new)',t:'A social link is the one that needs thinking about. A patient tapping through to a clinic Instagram from inside their medical record may be seen following an aesthetics account, and follows are public. Worth a plain warning, or restricting outbound links to the clinic\u2019s own site.'},
+    {k:'open',ref:'D-20 (new)',t:'Do offers ever go out by email or SMS? In-portal display to a signed-in patient is different from electronic direct marketing, which brings PECR consent rules into play.'}
+  ]
+});
+</script>
+<script>
+/* ============ APPOINTMENTS ============ */
+S('appointments', {
+  group:'Appointments', title:'Appointments', route:'/appointments', chrome:'app', tab:'appts', fab:true,
+  head:'Appointments', avatar:'AB',
+  body:`
+    <div class="row" style="gap:6px;margin-bottom:13px"><span class="chip gold">Upcoming</span><span class="chip">Past</span></div>
+    <div class="list">
+      <button class="li go" data-go="appt-detail">
+        <div class="datebox"><div class="d">19</div><div class="tiny">Mar</div></div>
+        <div class="grow"><div class="strong small">Lip filler · 0.5ml</div><div class="tiny">2:30pm · Nadia Okonkwo</div></div>
+        <div class="rt"><span class="chip ok">Confirmed</span><div class="tiny" style="margin-top:4px;color:var(--consent-ink)">Deposit due</div></div>
+      </button>
+      <button class="li go" data-go="appt-detail">
+        <div class="datebox"><div class="d">02</div><div class="tiny">Apr</div></div>
+        <div class="grow"><div class="strong small">Review · lip filler</div><div class="tiny">11:00am · Nadia Okonkwo</div></div>
+        <div class="rt"><span class="chip ok">Confirmed</span></div>
+      </button>
+      <div class="li">
+        <div class="datebox"><div class="d">14</div><div class="tiny">Apr</div></div>
+        <div class="grow"><div class="strong small">Skin booster</div><div class="tiny">Requested 4:00pm · any practitioner</div></div>
+        <div class="rt"><span class="chip due">Requested</span></div>
+      </div>
+    </div>
+    <div class="sect">Past</div>
+    <div class="list">
+      <button class="li go" data-go="treatment-detail">
+        <div class="datebox"><div class="d">21</div><div class="tiny">Feb</div></div>
+        <div class="grow"><div class="strong small">Skin booster · full face</div><div class="tiny">Nadia Okonkwo</div></div>
+        <div class="rt"><span class="chip">Attended</span></div>
+      </button>
+      <div class="li">
+        <div class="datebox"><div class="d">08</div><div class="tiny">Jan</div></div>
+        <div class="grow"><div class="strong small">Consultation</div><div class="tiny">Nadia Okonkwo</div></div>
+        <div class="rt"><span class="chip">Attended</span></div>
+      </div>
+    </div>
+    <button class="btn" data-go="book-1">Request an appointment</button>`,
+  notes:[
+    {k:'',ref:'F-04',t:'Upcoming ascending, past descending, paginated at 20.'},
+    {k:'',ref:'F-05',t:'Requested and Confirmed are visibly different. A request must never be dressed up as a booking.'},
+    {k:'open',ref:'D-01',t:'Hybrid booking assumed: request for new patients and first-time treatments, direct book for repeats with valid consent on file.'}
+  ]
+});
+
+S('appt-detail', {
+  group:'Appointments', title:'Appointment detail', route:'/appointments/:id', chrome:'app', tab:'appts', fab:true,
+  head:'Thursday 19 March', back:'appointments',
+  body:`
+    <div class="banner due"><b>Consent needed.</b> Your treatment cannot go ahead until you sign, and there is a 48-hour reflection period afterwards. <span style="font-weight:600;text-decoration:underline">Sign now</span></div>
+    <div class="card">
+      <div class="row between top" style="margin-bottom:10px">
+        <div class="stack"><h3 class="ct" style="font-size:16px">Lip filler · 0.5ml</h3><div class="small muted">2:30pm – 3:15pm</div></div>
+        <span class="chip ok">Confirmed</span>
+      </div>
+      <div class="kv"><span class="k">Practitioner</span><span class="v">Nadia Okonkwo</span></div>
+      <div class="kv"><span class="k">Arrive by</span><span class="v">2:20pm</span></div>
+      <div class="kv"><span class="k">Where</span><span class="v">Ridgeway Skin Clinic<br><span class="tiny">14 Ridgeway, London N1</span></span></div>
+      <div class="kv"><span class="k">Price</span><span class="v">£280.00</span></div>
+      <div class="kv"><span class="k">Deposit</span><span class="v" style="color:var(--consent-ink)">£50 unpaid</span></div>
+    </div>
+    <div class="sect">Progress</div>
+    <div class="card">
+      <div class="tl">
+        <div class="n done"><div class="small strong">Booked</div><div class="tiny">6 March</div></div>
+        <div class="n now"><div class="small strong">Getting ready</div><div class="tiny">Consent and deposit outstanding</div></div>
+        <div class="n"><div class="small strong">Complete</div><div class="tiny">Aftercare will appear here</div></div>
+      </div>
+    </div>
+    <div class="sect">Before you come</div>
+    <div class="card"><p class="small muted">No alcohol for 24 hours. Stop fish oil and ibuprofen 3 days before unless prescribed. Come with a clean face if you can.</p></div>
+    <div class="btns"><button class="btn sec" data-go="reschedule">Reschedule</button><button class="btn sec">Add to calendar</button></div>
+    <button class="btn danger" data-go="cancel" style="margin-top:8px">Cancel appointment</button>
+    <p class="tiny" style="margin-top:10px;line-height:1.5">Cancel before 2:30pm on Wed 18 March and your deposit carries over. After that it is non-refundable.</p>`,
+  notes:[
+    {k:'',ref:'F-04',t:'Three-state progress, not the seven-value visit_stage enum. arrived, waiting and in_treatment would tell a patient they are being tracked in the waiting room.'},
+    {k:'open',ref:'D-04',t:'That simplification is an assumption.'},
+    {k:'',ref:'F-04',t:'Cancellation deadline is a computed date and time for this appointment, from clinics.cancellation_notice_hours — never abstract policy text.'},
+    {k:'gap',ref:'G-07',t:'The cooling-off banner is unbuildable today. treatment_catalogue.cooling_off_hours is populated on every row and read by nothing.'}
+  ]
+});
+
+S('cancel', {
+  group:'Appointments', title:'Cancel — confirm', route:'/appointments/:id', chrome:'app', tab:'appts',
+  head:'Thursday 19 March', back:'appt-detail',
+  body:`<div class="card"><h3 class="ct">Lip filler · 0.5ml</h3><p class="small muted">Thursday 19 March, 2:30pm</p></div>
+    <div class="ph line w80"></div><div class="ph line"></div><div class="ph line w60"></div>`,
+  modal:`<div class="sheet">
+      <h3>Cancel this appointment?</h3>
+      <div class="banner stop"><b>Your £50 deposit will not be refunded.</b> You are inside the 24-hour window, which closed at 2:30pm yesterday.</div>
+      <div class="field" style="margin-top:14px"><label>Why are you cancelling? Optional</label><div class="inp">Choose a reason</div></div>
+      <div class="btns"><button class="btn sec" data-go="appt-detail">Keep it</button><button class="btn danger" data-go="appointments">Cancel anyway</button></div>
+    </div>`,
+  notes:[
+    {k:'',ref:'F-04',t:'The fee consequence is stated in money before the destructive action, not behind a policy link.'},
+    {k:'',ref:'F-04',t:'Sets status = cancelled, audits, notifies the practitioner, releases the slot. The row is never deleted.'},
+    {k:'',ref:'Writing',t:'"Keep it" and "Cancel anyway" — never "Cancel / OK" on a screen where cancel is the action being confirmed.'}
+  ]
+});
+
+S('reschedule', {
+  group:'Appointments', title:'Reschedule blocked', route:'/appointments/:id/reschedule', chrome:'app', tab:'appts', fab:true,
+  head:'Reschedule', back:'appt-detail',
+  body:`
+    <div class="banner stop"><b>This one needs a conversation.</b> You are inside the 24-hour notice period, so changes go through the clinic.</div>
+    <div class="card"><h3 class="ct">Lip filler · 0.5ml</h3><p class="small muted">Thursday 19 March, 2:30pm</p></div>
+    <button class="btn" data-chat="1">Message the clinic</button>
+    <button class="btn sec" style="margin-top:8px">Call 020 7000 0000</button>
+    <div class="sect">If you were outside the window</div>
+    <div class="card dashed"><p class="small muted">You would pick a new slot here, and the cooling-off check would re-run against your signed consent. A slot inside the reflection window is refused with an explanation, not silently hidden.</p></div>`,
+  notes:[
+    {k:'new',ref:'Messaging popup',t:'"Message the clinic" opens the popup in place rather than navigating. Try it — the appointment stays behind the panel, which is the whole argument for the overlay.'},
+    {k:'',ref:'F-04',t:'Inside the notice period the action degrades to a request rather than vanishing. A greyed button with no explanation generates the phone call anyway.'},
+    {k:'',ref:'F-04',t:'Rescheduling re-runs the cooling-off check. Moving a visit earlier can pull it inside signature + cooling_off_hours.'}
+  ]
+});
+
+/* ============ BOOKING ============ */
+S('book-1', {
+  group:'Booking', title:'Book — treatment', route:'/book', chrome:'app', tab:'appts', fab:true,
+  head:'Request an appointment', back:'appointments',
+  body:`
+    <div class="steps"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+    <div class="sect">What would you like?</div>
+    <div class="list">
+      <button class="li go" data-go="book-2"><div class="grow"><div class="strong small">Lip filler</div><div class="tiny">45 min · from £280 · consent needed</div></div><div class="rt tiny">&rsaquo;</div></button>
+      <button class="li go" data-go="book-2"><div class="grow"><div class="strong small">Skin booster</div><div class="tiny">60 min · from £220 · consent needed</div></div><div class="rt"><span class="chip gold">£40 off</span></div></button>
+      <button class="li go" data-go="book-2"><div class="grow"><div class="strong small">Consultation</div><div class="tiny">30 min · free · no consent needed</div></div><div class="rt tiny">&rsaquo;</div></button>
+    </div>
+    <div class="card dashed"><p class="small muted">Not sure which you need? Book a consultation and we will talk it through.</p></div>`,
+  notes:[
+    {k:'new',ref:'Offers',t:'The offer surfaces here as a quiet price chip, not a banner. This is where it is actually useful — at the point of choosing — and it does not distort the list order.'},
+    {k:'',ref:'F-05 step 1',t:'From treatment_catalogue where active = true AND a new patient_bookable flag.'},
+    {k:'',ref:'§7.2',t:'Needs a patient_description column. The clinical description is written for practitioners.'},
+    {k:'open',ref:'D-03',t:'Which treatments are patient-bookable is a clinical-safety decision for prescription-only injectables.'}
+  ]
+});
+
+S('book-2', {
+  group:'Booking', title:'Book — when', route:'/book', chrome:'app', tab:'appts', fab:true,
+  head:'Lip filler', back:'book-1',
+  body:`
+    <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
+    <div class="field"><label>Who with?</label><div class="inp" style="color:var(--foreground)">Nadia Okonkwo · your usual practitioner</div></div>
+    <div class="sect">Thursday 19 March</div>
+    <div class="slots">
+      <div class="slot off">09:00</div><div class="slot off">09:45</div><div class="slot off">10:30</div>
+      <div class="slot off">11:15</div><div class="slot off">14:00</div><div class="slot sel">14:30</div>
+      <div class="slot">15:15</div><div class="slot">16:00</div><div class="slot">16:45</div>
+    </div>
+    <div class="banner due" style="margin-top:13px">Earlier times are unavailable because you need to sign a consent form first, and there is a <b>48-hour reflection period</b> after signing.</div>
+    <div class="sect">Friday 20 March</div>
+    <div class="slots"><div class="slot">09:00</div><div class="slot">09:45</div><div class="slot">11:15</div></div>
+    <button class="btn" data-go="book-3" style="margin-top:16px">Continue</button>
+    <p class="tiny" style="margin-top:9px">We hold your slot for 30 minutes while you finish.</p>`,
+  notes:[
+    {k:'',ref:'F-05 step 5',t:'Cooling-off slots are disabled with a stated reason, not hidden. A patient who cannot see why the morning is gone will phone.'},
+    {k:'open',ref:'D-02',t:'Availability has no source. No working-hours table, no calendar integration — getAvailableSlots cannot be built until practitioner_availability and practitioner_time_off exist.'},
+    {k:'',ref:'§7.1',t:'appointment_holds, 30-minute TTL, partial unique index on (practitioner_id, starts_at) where expires_at > now(). Two patients will race.'}
+  ]
+});
+
+S('book-3', {
+  group:'Booking', title:'Book — screening stop', route:'/book', chrome:'app', tab:'appts', fab:true,
+  head:'A few questions', back:'book-2',
+  body:`
+    <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+    <div class="field"><label>Are you pregnant or breastfeeding?</label>
+      <div class="grid2"><div class="slot">No</div><div class="slot sel">Yes</div></div></div>
+    <div class="banner stop"><b>We cannot book this online.</b> We do not offer lip filler during pregnancy or breastfeeding. Nadia will talk through what is suitable instead.</div>
+    <div class="field"><label>Anything else we should know?</label><div class="inp tall">Optional</div></div>
+    <button class="btn" data-go="book-4">Request a consultation instead</button>`,
+  notes:[
+    {k:'',ref:'F-05 step 4',t:'A hard stop converts the request rather than refusing it. A dead end sends the patient to a competitor.'},
+    {k:'',ref:'F-05 step 4',t:'The reason is stated. "You are not eligible" tells the patient nothing.'},
+    {k:'',ref:'§7.2',t:'Questions from treatment_catalogue.screening_schema, validated server-side in createBookingRequest. Never trust the client to have enforced a hard stop.'}
+  ]
+});
+
+S('book-4', {
+  group:'Booking', title:'Booking requested', route:'/book/confirm', chrome:'app', tab:'appts', fab:true,
+  head:'Requested', back:'appointments',
+  body:`
+    <div class="card tint-success" style="text-align:center;padding:28px 18px">
+      <div style="width:46px;height:46px;border-radius:50%;background:var(--success);margin:0 auto 14px;display:grid;place-items:center;color:#fff;font-size:21px">&#10003;</div>
+      <h3 class="ct" style="font-size:17px;color:var(--success-ink)">Request sent</h3>
+      <p class="small" style="color:var(--success-ink);margin-top:5px">Nadia will confirm within 1 working day. We will text and email you.</p>
+    </div>
+    <div class="card">
+      <div class="kv"><span class="k">Treatment</span><span class="v">Consultation</span></div>
+      <div class="kv"><span class="k">Preferred</span><span class="v">Thu 19 Mar, 2:30pm</span></div>
+      <div class="kv"><span class="k">With</span><span class="v">Nadia Okonkwo</span></div>
+      <div class="kv"><span class="k">Status</span><span class="v"><span class="chip due">Requested</span></span></div>
+    </div>
+    <div class="banner info">This is not a confirmed booking yet. Do not travel until you have the confirmation.</div>
+    <button class="btn sec" data-go="dash-b">Back to dashboard</button>`,
+  notes:[
+    {k:'',ref:'F-05',t:'"Requested", never "Booked". A patient who reads confirmation into a request turns up to a clinic that is not expecting them.'},
+    {k:'',ref:'§10',t:'Fires booking_requested plus a staff notification. Needs the new bookings.approve capability key.'}
+  ]
+});
+</script>
+<script>
+/* ============ PROFILE ============ */
+S('profile', {
+  group:'Profile', title:'Profile hub', route:'/profile', chrome:'app', tab:'profile', fab:true,
+  head:'Your profile', avatar:'AB',
+  body:`
+    <div class="card">
+      <div class="row" style="gap:13px">
+        <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(140deg,var(--accent-hi),var(--accent));display:grid;place-items:center;font-size:17px;font-weight:600;color:var(--accent-foreground);border:1px solid var(--edge);box-shadow:var(--shadow-bloom)">AB</div>
+        <div class="stack"><h3 class="ct" style="font-size:17px">Aisha Bello</h3><div class="tiny">Patient since January 2025 · Ridgeway Skin Clinic</div></div>
+      </div>
+      <div class="btns"><button class="btn sec sm">Edit contact details</button></div>
+    </div>
+    <div class="sect">Your record</div>
+    <div class="list">
+      <button class="li go" data-go="forms">
+        <div class="grow"><div class="strong small">Forms</div><div class="tiny">Consent, intake and aftercare</div></div>
+        <div class="rt"><span class="chip due">1 to sign</span></div>
+      </button>
+      <button class="li go" data-go="treatments">
+        <div class="grow"><div class="strong small">Treatments</div><div class="tiny">Everything you have had with us</div></div>
+        <div class="rt tiny">4 &rsaquo;</div>
+      </button>
+      <button class="li go" data-go="photos">
+        <div class="grow"><div class="strong small">Photos</div><div class="tiny">Before and after, shared by your clinic</div></div>
+        <div class="rt tiny">6 &rsaquo;</div>
+      </button>
+      <button class="li go" data-go="profile-checkin">
+        <div class="grow"><div class="row" style="gap:7px"><div class="strong small">Health information</div><span class="dot-badge"></span></div><div class="tiny">Last confirmed 8 January · worth a check</div></div>
+        <div class="rt tiny">&rsaquo;</div>
+      </button>
+    </div>
+    <div class="card dashed">
+      <p class="small muted">Changes to your name, email or phone go to the clinic to check before they are saved.</p>
+    </div>`,
+  notes:[
+    {k:'new',ref:'Restructure',t:'New hub. Forms, Treatments, Photos and Health now live under Profile as you asked, rather than as four separate top-level destinations.'},
+    {k:'new',ref:'Restructure',t:'This drops mobile from five bottom tabs to four — Dashboard, Appointments, Profile, Settings — which is a real gain. Five tabs plus a messaging launcher was crowded at 390px.'},
+    {k:'new',ref:'Restructure',t:'Counts and status chips on the hub rows matter. Without them Profile is a menu of dead ends and the patient has to open each one to find the outstanding consent.'},
+    {k:'',ref:'F-13',t:'Contact-detail edits route to staff review. A patient silently changing their own email is an account-takeover path.'},
+    {k:'open',ref:'D-21 (new)',t:'Is "Profile" the right word for something mostly containing a clinical record? "My record" is the current copy and is more accurate. Profile suggests settings, which are now genuinely elsewhere.'}
+  ]
+});
+
+S('forms', {
+  group:'Profile', title:'Forms', route:'/profile/forms', chrome:'app', tab:'profile', fab:true,
+  head:'Forms', back:'profile',
+  body:`
+    <div class="sect">Waiting for you</div>
+    <div class="list">
+      <button class="li go" data-go="consent"><div class="grow"><div class="strong small">Lip filler consent</div><div class="tiny">Sent 6 March · needed before 19 March</div></div><div class="rt"><span class="chip due">Sign</span></div></button>
+
+    </div>
+    <div class="sect">Done</div>
+    <div class="list">
+      <button class="li go" data-go="signed"><div class="grow"><div class="strong small">Skin booster consent</div><div class="tiny">Signed 19 February</div></div><div class="rt"><span class="chip ok">Signed</span></div></button>
+      <div class="li"><div class="grow"><div class="strong small">Skin booster aftercare</div><div class="tiny">21 February</div></div><div class="rt tiny">Read</div></div>
+      <button class="li go" data-go="intake"><div class="grow"><div class="strong small">Health questionnaire</div><div class="tiny">Completed 8 January · confirmed 6 March</div></div><div class="rt"><span class="chip ok">Done</span></div></button>
+      <div class="li" style="opacity:.6"><div class="grow"><div class="strong small">Consultation record</div><div class="tiny">Expired 8 February</div></div><div class="rt"><span class="chip">Expired</span></div></div>
+    </div>`,
+  notes:[
+    {k:'gap',ref:'G-06',t:'The expired row is unreachable today. document_status has viewed and expired; nothing sets viewed_at and nothing acts on expires_at.'},
+    {k:'',ref:'F-06',t:'Setting viewed_at gives staff the useful signal — read but not signed is a different problem from never opened.'},
+    {k:'',ref:'F-06',t:'Aftercare never expires and is cached for offline reading.'}
+  ]
+});
+
+S('intake', {
+  group:'Profile', title:'Intake — first time only', route:'/profile/forms/:id', chrome:'app', tab:'profile', fab:true,
+  head:'Health questionnaire', back:'forms',
+  body:`
+    <div class="row between" style="margin-bottom:7px"><div class="tiny">Section 5 of 9 · Medication</div><div class="tiny" style="color:var(--success-ink);font-weight:600">Saved just now</div></div>
+    <div class="steps" style="margin-bottom:20px"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></div>
+    <div class="field"><label>Are you taking any medication?</label><div class="grid2"><div class="slot">No</div><div class="slot sel">Yes</div></div></div>
+    <div class="field"><label>Which ones?</label><div class="inp tall">Include the dose if you know it</div><div class="hint">Prescriptions, the pill, supplements, anything over the counter.</div></div>
+    <div class="field"><label>Have you taken a blood thinner in the last 7 days?</label><div class="grid2"><div class="slot">No</div><div class="slot">Yes</div></div><div class="hint">Aspirin, warfarin, clopidogrel, apixaban.</div></div>
+    <div class="btns"><button class="btn sec">Back</button><button class="btn">Next</button></div>
+    <button class="btn ghost" style="margin:10px auto 0">Save and finish later</button>`,
+  notes:[
+    {k:'gap',ref:'G-05',t:'documents.fields and documents.responses are jsonb columns modelling exactly this, never implemented. The portal renders only body as plain text.'},
+    {k:'new',ref:'Change 3',t:'This nine-section form now runs once, during activation, framed as setup. Returning patients never see it again — they get the one-question check-in on the dashboard instead.'},
+    {k:'',ref:'F-06',t:'One question group per screen. Long multi-field forms clip and get abandoned on a phone.'},
+    {k:'',ref:'F-06',t:'Autosave on a 2s debounce, which also removes the need for a beforeunload guard on forms — none exist anywhere today.'},
+    {k:'',ref:'Writing',t:'Every clinical term is glossed. "Blood thinner" with drug names, not "anticoagulant therapy".'}
+  ]
+});
+
+S('consent', {
+  group:'Profile', title:'Consent — two stage', route:'/profile/forms/:id', chrome:'app', tab:'profile', fab:true,
+  head:'Lip filler consent', back:'forms',
+  body:`
+    <div class="card tint-sky">
+      <div class="tiny" style="color:var(--sky-ink);font-weight:600;margin-bottom:7px">What you and Nadia discussed</div>
+      <div class="small" style="color:var(--sky-ink);margin-bottom:10px">Consultation on 6 March, 11:00am</div>
+      <div class="kv" style="border-color:rgba(143,199,234,.4)"><span class="k" style="color:var(--sky-ink)">Risks covered</span><span class="v" style="max-width:58%">Bruising, swelling, asymmetry, lumps, vascular occlusion</span></div>
+      <div class="kv" style="border-color:rgba(143,199,234,.4)"><span class="k" style="color:var(--sky-ink)">Alternatives</span><span class="v" style="max-width:58%">No treatment; smaller volume; skin booster instead</span></div>
+      <div class="kv" style="border-color:rgba(143,199,234,.4)"><span class="k" style="color:var(--sky-ink)">You asked about</span><span class="v" style="max-width:58%">Recovery time before a wedding on 12 April</span></div>
+    </div>
+    <div class="banner info">If any of that does not match what you remember, do not sign. <span style="font-weight:600;text-decoration:underline">Message Nadia</span> instead.</div>
+    <div class="sect">The form</div>
+    <div class="card" style="max-height:186px;overflow-y:auto">
+      <p class="small muted" style="line-height:1.6">I confirm I have had the opportunity to discuss this treatment, including what it involves, how long results last, and what happens if I am unhappy with the outcome.</p>
+      <p class="small muted" style="line-height:1.6;margin-top:10px">I understand hyaluronic acid filler is not permanent and further treatment may be needed.</p>
+      <p class="small muted" style="line-height:1.6;margin-top:10px">I understand the risk of vascular occlusion is rare but serious, and I know to contact the clinic immediately if I have severe pain, blanching or vision changes.</p>
+      <div class="ph line"></div><div class="ph line w80"></div>
+    </div>
+    <div class="field" style="margin-top:13px"><label>Type your full name to sign</label><div class="inp">Aisha Bello</div></div>
+    <div class="banner due"><b>After you sign there is a 48-hour reflection period.</b> Your treatment can go ahead from Thursday 19 March, 2:30pm. You can withdraw at any point before then.</div>
+    <button class="btn" data-go="signed">Sign consent form</button>`,
+  notes:[
+    {k:'',ref:'F-06',t:'Stage 1 is the recorded clinical discussion, shown above the form. The patient confirms a conversation they had rather than signing boilerplate.'},
+    {k:'gap',ref:'G-08',t:'Today consent is a typed name against body text with no discussion record. GMC and the JCCP/CPSA code both require two stages; a signature without a documented discussion is not valid consent.'},
+    {k:'',ref:'§7.1',t:'Stage 1 lives in a new consent_discussions table written from the clinic app. A consent document with no stage-1 row cannot be sent.'},
+    {k:'gap',ref:'G-06',t:'signDocument does not set signed_ip despite the column existing. Capture ip, user agent, timestamp and a version hash of what was signed.'},
+    {k:'open',ref:'D-08',t:'Typed name is shown because it is what exists. A drawn signature is materially stronger evidence.'}
+  ]
+});
+
+S('signed', {
+  group:'Profile', title:'Signed + cooling off', route:'/profile/forms/:id', chrome:'app', tab:'profile', fab:true,
+  head:'Lip filler consent', back:'forms',
+  body:`
+    <div class="card tint-success">
+      <div class="row top" style="gap:11px">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--success);flex:none;display:grid;place-items:center;color:#fff;font-size:15px">&#10003;</div>
+        <div><div class="strong" style="color:var(--success-ink)">Signed 6 March, 11:42am</div><div class="small" style="color:var(--success-ink)">Aisha Bello</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="ct" style="margin-bottom:11px">Your reflection period</h3>
+      <div class="tl">
+        <div class="n done"><div class="small strong">Signed</div><div class="tiny">6 March, 11:42am</div></div>
+        <div class="n now"><div class="small strong">48 hours to reconsider</div><div class="tiny">Ends 8 March, 11:42am</div></div>
+        <div class="n"><div class="small strong">Treatment can go ahead</div><div class="tiny">Your appointment is 19 March</div></div>
+      </div>
+      <p class="small muted" style="margin-top:12px">Take this time to reconsider. You can withdraw at any point, and nobody will ask you to justify it.</p>
+    </div>
+    <div class="btns"><button class="btn sec">Download a copy</button><button class="btn sec" data-go="forms">Back to forms</button></div>
+    <button class="btn danger" style="margin-top:8px">Withdraw my consent</button>`,
+  notes:[
+    {k:'',ref:'F-06',t:'Withdrawal is a visible button, not buried. Under UK GDPR withdrawing consent must be as easy as giving it.'},
+    {k:'',ref:'F-06',t:'Sets withdrawn_at, notifies the practitioner, blocks the appointment. The signed record is retained immutably; withdrawal is a separate fact.'},
+    {k:'',ref:'§2.2',t:'Immutability already enforced by a BEFORE UPDATE OR DELETE trigger from 20260826002000. Triggers fire for the service-role client; RLS policies do not.'}
+  ]
+});
+
+S('treatments', {
+  group:'Profile', title:'Treatment history', route:'/profile/treatments', chrome:'app', tab:'profile', fab:true,
+  head:'Your treatments', back:'profile',
+  body:`
+    <div class="sect">2026</div>
+    <div class="list">
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Skin booster · full face</div><div class="tiny">21 February · Nadia Okonkwo</div></div><div class="rt"><span class="chip gold">Due 23 May</span></div></button>
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Consultation</div><div class="tiny">8 January · Nadia Okonkwo</div></div><div class="rt tiny">&rsaquo;</div></button>
+    </div>
+    <div class="sect">2025</div>
+    <div class="list">
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Lip filler · 0.5ml</div><div class="tiny">14 November · Nadia Okonkwo</div></div><div class="rt tiny">&rsaquo;</div></button>
+      <button class="li go" data-go="treatment-detail"><div class="grow"><div class="strong small">Skin booster · full face</div><div class="tiny">2 August · Marcus Reid</div></div><div class="rt tiny">&rsaquo;</div></button>
+    </div>`,
+  notes:[
+    {k:'',ref:'F-07',t:'Reverse chronological, grouped by year. Already works today — treatments is one of the five things getMyRecord returns.'},
+    {k:'',ref:'F-03',t:'The due chip comes from treatments.next_due_at. Information, not a booking prompt; the prompt lives on the dashboard.'}
+  ]
+});
+
+S('treatment-detail', {
+  group:'Profile', title:'Treatment detail', route:'/profile/treatments/:id', chrome:'app', tab:'profile', fab:true,
+  head:'Skin booster', back:'treatments',
+  body:`
+    <div class="card">
+      <div class="kv"><span class="k">Date</span><span class="v">21 February 2026</span></div>
+      <div class="kv"><span class="k">Area</span><span class="v">Full face</span></div>
+      <div class="kv"><span class="k">Practitioner</span><span class="v">Nadia Okonkwo</span></div>
+      <div class="kv"><span class="k">Next due</span><span class="v">23 May 2026</span></div>
+    </div>
+    <div class="card dashed">
+      <div class="row between"><div class="stack"><div class="small strong">Product and dose</div><div class="tiny">Hidden by clinic setting</div></div><span class="chip">D-05</span></div>
+    </div>
+    <div class="sect">Before and after</div>
+    <div class="grid2">
+      <div class="blur"><div class="img" style="height:132px">before</div><div class="cover">Tap to view</div></div>
+      <div class="blur"><div class="img" style="height:132px">after</div><div class="cover">Tap to view</div></div>
+    </div>
+    <div class="sect">Aftercare</div>
+    <div class="card"><p class="small muted">Do not touch the area for 6 hours. No make-up until tomorrow. Mild redness for 24 to 48 hours is normal.</p>
+      <div class="btns"><button class="btn sec sm">Read full aftercare</button></div></div>
+    <div class="card tint-stop">
+      <h3 class="ct" style="color:var(--destructive-ink)">Something does not look right?</h3>
+      <p class="small" style="color:var(--destructive-ink);margin-top:3px">Tell us what is happening and we will get back to you today.</p>
+      <div class="btns"><button class="btn danger sm" data-chat="1">Report a concern</button></div>
+    </div>`,
+  notes:[
+    {k:'open',ref:'D-05',t:'Product and dose visibility is contested. Some clinics treat batch and dose as commercially sensitive, others as a patient-safety entitlement. Shown as a clinic setting so it stays configurable.'},
+    {k:'open',ref:'D-06',t:'Practitioner notes not shown. DPA 2018 Schedule 3 lets a clinician withhold where disclosure would likely cause serious harm, so visibility must be per-note.'},
+    {k:'new',ref:'Messaging popup',t:'Concern reporting now opens the popup rather than a route, which shortens the path at the moment it matters most. For injectables, vascular occlusion is time-critical.'}
+  ]
+});
+
+S('photos', {
+  group:'Profile', title:'Before & after', route:'/profile/photos', chrome:'app', tab:'profile', fab:true,
+  head:'Photos', back:'profile',
+  body:`
+    <div class="banner info">Only photos your clinic has shared with you appear here. They are private to you and your clinic.</div>
+    <div class="sect">21 February · Skin booster</div>
+    <div class="card" style="padding:11px">
+      <div class="img" style="height:182px;position:relative"><span>drag to compare</span>
+        <div style="position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--accent-deep)"></div>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;background:linear-gradient(140deg,var(--accent-hi),var(--accent));border:1px solid var(--edge);box-shadow:var(--shadow-bloom);color:var(--accent-foreground);display:grid;place-items:center;font-size:13px">&#8596;</div>
+      </div>
+      <div class="row between" style="margin-top:10px"><span class="tiny">Before &middot; After</span><span class="chip">Blur off</span></div>
+    </div>
+    <div class="sect">14 November · Lip filler</div>
+    <div class="grid2">
+      <div class="blur"><div class="img" style="height:122px">before</div><div class="cover">Tap to view</div></div>
+      <div class="blur"><div class="img" style="height:122px">after</div><div class="cover">Tap to view</div></div>
+    </div>
+    <div class="sect">Marketing permission</div>
+    <div class="card">
+      <div class="row between"><div class="stack" style="flex:1"><div class="small strong">2 photos can be used in clinic marketing</div><div class="tiny">You agreed on 14 November</div></div><button class="btn ghost">Review</button></div>
+    </div>`,
+  notes:[
+    {k:'gap',ref:'G-04',t:'getMyRecord already queries treatment_photos where visible_to_patient = true and mints 3600s signed URLs. my-record.tsx never renders data.photos — fetched and discarded.'},
+    {k:'',ref:'F-08',t:'Blur-until-tapped by default. These are intimate images often opened on a train. No thumbnails on the dashboard.'},
+    {k:'',ref:'F-08',t:'Per-photo marketing consent withdrawal. marketing_consent is staff-set today with no patient control, which fails the withdraw-as-easily standard.'},
+    {k:'open',ref:'D-07',t:'Patient upload undecided. If yes, the patient-photos storage policies must change first — all four gate on is_staff(auth.uid()).'}
+  ]
+});
+
+S('health', {
+  group:'Profile', title:'Health information', route:'/profile/health', chrome:'app', tab:'profile', fab:true,
+  head:'Health information', back:'profile',
+  body:`
+    <div class="banner due">Changes are reviewed before your next visit. <b>If something is urgent, call 020 7000 0000.</b></div>
+    <div class="sect">Allergies</div>
+    <div class="card"><div class="row between"><div class="small">Penicillin</div><button class="btn ghost">Update</button></div></div>
+    <div class="card tint-sky">
+      <div class="tiny" style="font-weight:600;margin-bottom:8px;color:var(--sky-ink)">You are changing</div>
+      <div class="diff">Penicillin<ins>, latex</ins></div>
+      <div class="btns"><button class="btn sec sm">Cancel</button><button class="btn sm">Send this change</button></div>
+    </div>
+    <div class="sect">Medication</div>
+    <div class="card"><div class="row between top"><div class="stack" style="flex:1"><div class="small">Sertraline 50mg daily</div><div class="tiny" style="color:var(--consent-ink)">Sent 6 March · waiting for review</div></div><span class="chip due">Pending</span></div></div>
+    <div class="sect">Conditions</div>
+    <div class="card"><div class="row between top"><div class="stack" style="flex:1"><div class="small">Eczema</div><div class="tiny">Reviewed by Nadia Okonkwo on 22 February</div></div><button class="btn ghost">Update</button></div></div>`,
+  notes:[
+    {k:'new',ref:'Restructure',t:'Moved under Profile as you asked. It is record content, not a setting, so it sits with treatments and forms rather than with payments and security.'},
+    {k:'gap',ref:'G-14',t:'Today the form pre-fills three of six fields, leaves diet, pregnancy and other blank every render, submits all six regardless, then calls form.reset().'},
+    {k:'',ref:'F-07',t:'Per-section update with an explicit diff. Only the changed section is sent, so a new medical_history_versions row means something specific changed.'},
+    {k:'',ref:'Principle 5',t:'The urgent-contact line is non-dismissible. This is where a patient is most likely to disclose something time-critical.'}
+  ]
+});
+
+/* ============ SETTINGS ============ */
+S('settings', {
+  group:'Settings', title:'Settings hub', route:'/settings', chrome:'app', tab:'settings', fab:true,
+  head:'Settings', avatar:'AB',
+  body:`
+    <div class="list">
+      <button class="li go" data-go="payments"><div class="grow"><div class="strong small">Payments</div><div class="tiny">Deposits, balances and receipts</div></div><div class="rt"><span class="chip due">£50 due</span></div></button>
+      <button class="li go" data-go="security"><div class="grow"><div class="strong small">Sign-in and security</div><div class="tiny">Password, two-factor, your devices</div></div><div class="rt tiny">&rsaquo;</div></button>
+      <button class="li go" data-go="data"><div class="grow"><div class="strong small">Your data</div><div class="tiny">Download your record, your rights</div></div><div class="rt tiny">&rsaquo;</div></button>
+    </div>
+    <div class="sect">How we contact you</div>
+    <div class="card">
+      <div class="row between" style="padding:5px 0"><div class="stack" style="flex:1"><div class="small strong">Appointment reminders</div><div class="tiny">Confirmations and recall by email or text</div></div>
+        <div style="width:42px;height:25px;border-radius:999px;background:linear-gradient(to bottom right,var(--accent-hi),var(--accent));border:1px solid var(--accent-line);position:relative;flex:none"><div style="position:absolute;top:2px;right:2px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:var(--shadow-glass)"></div></div></div>
+      <div class="hr"></div>
+      <div class="row between" style="padding:5px 0"><div class="stack" style="flex:1"><div class="small strong">Offers and clinic news</div><div class="tiny">Turning this off also hides offers on your dashboard</div></div>
+        <div style="width:42px;height:25px;border-radius:999px;background:linear-gradient(to bottom right,var(--accent-hi),var(--accent));border:1px solid var(--accent-line);position:relative;flex:none"><div style="position:absolute;top:2px;right:2px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:var(--shadow-glass)"></div></div></div>
+      <div class="hr"></div>
+      <div class="row between" style="padding:5px 0"><div class="stack" style="flex:1"><div class="small strong">Text messages</div><div class="tiny">No texts between 9pm and 8am</div></div>
+        <div style="width:42px;height:25px;border-radius:999px;background:var(--bar);border:1px solid var(--edge-2);position:relative;flex:none"><div style="position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:var(--shadow-glass)"></div></div></div>
+    </div>
+    <button class="btn sec">Sign out</button>`,
+  notes:[
+    {k:'new',ref:'Restructure',t:'New hub. Payments, Security and Your data now sit here as you asked, and comms preferences join them — they were on the old my-record page mixed in with clinical content.'},
+    {k:'new',ref:'Offers',t:'The offers toggle explicitly says it also hides dashboard offers. One switch, both surfaces — a patient who opts out of marketing email should not still be sold to inside the product.'},
+    {k:'',ref:'F-13',t:'Reuses the existing CommsPreferencesCard, which is already patient-aware via as="patient" and writes through saveCommsPreferences.'},
+    {k:'open',ref:'D-20 (new)',t:'Whether offers are ever pushed by email or SMS. In-portal display to a signed-in patient is a different question from electronic direct marketing under PECR.'}
+  ]
+});
+
+S('payments', {
+  group:'Settings', title:'Payments', route:'/settings/payments?appointment=…', chrome:'app', tab:'settings', fab:true,
+  head:'Payments', back:'settings',
+  body:`
+    <div class="card tint-consent">
+      <h3 class="ct" style="color:var(--consent-ink)">Deposit due</h3>
+      <p class="small" style="color:var(--consent-ink);margin-top:2px">Lip filler · Thursday 19 March, 2:30pm</p>
+      <div class="row between" style="margin:15px 0 3px;align-items:flex-end">
+        <span class="small" style="color:var(--consent-ink)">Amount</span>
+        <span style="font-size:27px;font-weight:700;letter-spacing:-.024em;font-variant-numeric:tabular-nums">£50.00</span>
+      </div>
+      <button class="btn" style="margin-top:11px">Pay £50.00</button>
+      <p class="tiny" style="margin-top:9px;color:var(--consent-ink)">Comes off your £280 total. Refundable if you cancel before 2:30pm on Wed 18 March.</p>
+    </div>
+    <div class="sect">Coming up</div>
+    <div class="card"><div class="kv"><span class="k">Balance on the day</span><span class="v">£230.00</span></div><div class="kv"><span class="k">Pay by</span><span class="v">19 March</span></div></div>
+    <div class="sect">History</div>
+    <div class="list">
+      <div class="li"><div class="grow"><div class="strong small">Skin booster</div><div class="tiny">21 February · card ending 4021</div></div><div class="rt"><div class="small strong">£220.00</div><button class="btn ghost" style="min-height:auto">Receipt</button></div></div>
+      <div class="li"><div class="grow"><div class="strong small">Lip filler</div><div class="tiny">14 November · card ending 4021</div></div><div class="rt"><div class="small strong">£280.00</div><button class="btn ghost" style="min-height:auto">Receipt</button></div></div>
+    </div>`,
+  notes:[
+    {k:'gap',ref:'G-03',t:'payment-link.ts builds /portal?next=/my-record?pay=<id>&kind=<...> and staff send it from today-snapshot.tsx:968 and schedule.tsx:1071. my-record.tsx has no validateSearch and no payment UI — every payment link sent today lands on a page that ignores it.'},
+    {k:'new',ref:'Restructure',t:'The route moved again, to /settings/payments. That makes the redirect two hops for links already in inboxes: /my-record?pay=X&kind=Y must land here with params intact.'},
+    {k:'open',ref:'D-11',t:'No processor chosen, no payments table, no ledger — only payment_status and price on appointments. This screen is blocked on that.'},
+    {k:'',ref:'F-10',t:'No card data touches Aetheria. Hosted fields or redirect only.'}
+  ]
+});
+
+S('security', {
+  group:'Settings', title:'Sign-in and security', route:'/settings/security', chrome:'app', tab:'settings', fab:true,
+  head:'Sign-in and security', back:'settings',
+  body:`
+    <div class="sect">Password</div>
+    <div class="card"><div class="row between"><div class="small strong">Last changed 6 March</div><button class="btn ghost">Change</button></div></div>
+    <div class="sect">Two-factor</div>
+    <div class="card"><div class="row between top"><div class="stack" style="flex:1"><div class="small strong">Not set up</div><div class="tiny">Adds a code from your phone when you sign in.</div></div><button class="btn sec sm">Set up</button></div></div>
+    <div class="sect">Where you are signed in</div>
+    <div class="list">
+      <div class="li"><div class="grow"><div class="strong small">iPhone · Safari</div><div class="tiny">London · active now</div></div><div class="rt tiny" style="color:var(--success-ink);font-weight:600">This device</div></div>
+      <div class="li"><div class="grow"><div class="strong small">Windows · Chrome</div><div class="tiny">Manchester · 2 March</div></div><div class="rt"><button class="btn ghost" style="min-height:auto;color:var(--destructive-ink)">Sign out</button></div></div>
+    </div>
+    <button class="btn sec">Sign out everywhere else</button>`,
+  notes:[
+    {k:'',ref:'F-14',t:'listMySessions and revokeOtherSessions already exist as POLICY kind "self" — reusable for patients unchanged.'},
+    {k:'gap',ref:'G-13',t:'mfaRequired = isOwner || roles.includes("manager"). Patients cannot enrol even if they want to, despite the record holding special-category health data.'},
+    {k:'gap',ref:'G-12',t:'IdleWatchdog is enabled only when identity.isStaff, so a patient session on a shared device never times out. 30 minutes proposed, warning at 28.'}
+  ]
+});
+
+S('data', {
+  group:'Settings', title:'Your data', route:'/settings/data', chrome:'app', tab:'settings', fab:true,
+  head:'Your data', back:'settings',
+  body:`
+    <div class="sect">Get a copy</div>
+    <div class="card"><h3 class="ct">Download your record</h3>
+      <p class="tiny" style="margin-top:3px">Treatments, forms, photos and messages as a PDF. Ready in a few minutes; the link works for 24 hours.</p>
+      <div class="btns"><button class="btn sec sm">Request download</button></div></div>
+    <div class="sect">Your rights</div>
+    <div class="list">
+      <button class="li"><div class="grow"><div class="strong small">Request your full record</div><div class="tiny">We respond within one month</div></div><div class="rt tiny">&rsaquo;</div></button>
+      <button class="li"><div class="grow"><div class="strong small">Correct something</div><div class="tiny">Goes to the clinic to check</div></div><div class="rt tiny">&rsaquo;</div></button>
+      <button class="li"><div class="grow"><div class="strong small">Stop marketing</div><div class="tiny">Takes effect immediately</div></div><div class="rt tiny">&rsaquo;</div></button>
+    </div>
+    <div class="sect">Deleting your record</div>
+    <div class="card dashed">
+      <p class="small muted">We have to keep clinical records for <b>8 years after your last treatment</b>. Yours can be deleted from <b>May 2034</b>.</p>
+      <p class="small muted" style="margin-top:8px">You can ask us to delete it sooner and we will explain what we can and cannot remove.</p>
+      <div class="btns"><button class="btn sec sm">Ask about deletion</button></div>
+    </div>`,
+  notes:[
+    {k:'',ref:'F-12',t:'The retention answer is given honestly rather than behind a delete button that always fails. erase_patient() exists but is blocked by an 8-year clock and legal hold (20260826003000).'},
+    {k:'',ref:'§13',t:'SAR export is staff-reviewed. Third-party data must be redactable and the DPA 2018 serious-harm exemption applied, so a raw dump is not lawful.'}
+  ]
+});
+
+S('error', {
+  group:'Settings', title:'Load failure', route:'any', chrome:'app', tab:'dash', fab:true,
+  head:'Dashboard',
+  body:`<div class="card" style="text-align:center;padding:34px 20px">
+      <div style="width:42px;height:42px;border-radius:50%;border:2px solid var(--edge-2);margin:0 auto 14px"></div>
+      <h3 class="ct" style="font-size:16px">We could not load this</h3>
+      <p class="small muted" style="margin:6px auto 0;max-width:250px">Something went wrong reaching the clinic. Your record is safe.</p>
+      <div class="btns" style="justify-content:center"><button class="btn sm" data-go="dash-b">Try again</button><button class="btn sec sm">Call the clinic</button></div>
+    </div>`,
+  notes:[
+    {k:'gap',ref:'§7.3',t:'The audit found zero query error handling outside the identity gate. Every patient screen must inspect isError.'},
+    {k:'gap',ref:'§8.5',t:'The failure this prevents: the retention page renders a permission error as 0% and £0, indistinguishable from a real empty clinic. Fabricated zeros are worse than an error.'},
+    {k:'',ref:'Writing',t:'"Your record is safe" is the sentence the patient needs. Errors explain and direct; they do not apologise.'}
+  ]
+});
+</script>
+<script>
+
+S('pay-sheet', {
+  group:'Dashboard', title:'Pay deposit — sheet', route:'/dashboard', chrome:'app', tab:'dash',
+  head:'Hello Aisha', avatar:'AB',
+  body:`
+    <div class="sect">Upcoming appointments</div>
+    <div class="card">
+      <div class="row between top" style="margin-bottom:10px">
+        <div class="stack"><h3 class="ct">Lip filler · 0.5ml</h3><div class="small muted">Thursday 19 March, 2:30pm</div></div>
+        <span class="chip ok">Confirmed</span>
+      </div>
+      <div class="kv"><span class="k">Deposit</span><span class="v"><span class="money">£50 unpaid</span></span></div>
+    </div>
+    <div class="ph line w80"></div><div class="ph line"></div>`,
+  modal:`<div class="sheet">
+      <h3>Pay your deposit</h3>
+      <p class="small muted" style="margin:0 0 14px">Lip filler · Thursday 19 March, 2:30pm</p>
+      <div class="card" style="margin-bottom:14px">
+        <div class="kv"><span class="k">Deposit</span><span class="v">£50.00</span></div>
+        <div class="kv"><span class="k">Balance on the day</span><span class="v">£230.00</span></div>
+        <div class="kv"><span class="k">Total</span><span class="v">£280.00</span></div>
+      </div>
+      <div class="field"><label>Pay with</label><div class="inp" style="color:var(--foreground)">Visa ending 4021</div></div>
+      <p class="tiny" style="margin-bottom:12px">Refundable if you cancel before 2:30pm on Wed 18 March. Your receipt will be emailed and saved to your profile.</p>
+      <div class="btns"><button class="btn sec" data-go="dash-b">Not now</button><button class="btn" data-go="pay-done">Pay £50.00</button></div>
+    </div>`,
+  notes:[
+    {k:'new',ref:'Change 2',t:'A sheet over the dashboard, not a navigation. The patient never loses their place, and cancelling costs one tap.'},
+    {k:'new',ref:'Change 2',t:'Deposit, balance and total are all shown. A patient paying £50 needs to know it is part of £280, or the balance on the day is a surprise.'},
+    {k:'new',ref:'Change 2',t:'The receipt promise is made before payment, not after, so the patient knows where to look without being told twice.'},
+    {k:'open',ref:'D-11',t:'Blocked on the processor decision. There is no payments table and no ledger — only payment_status and price on appointments. Card entry is hosted fields or a redirect; no card data touches Aetheria.'},
+    {k:'',ref:'F-10',t:'A failed payment must not leave the appointment ambiguous. The hold expires, the slot releases, and the patient is told.'}
+  ]
+});
+
+S('pay-done', {
+  group:'Dashboard', title:'Paid — receipt', route:'/dashboard', chrome:'app', tab:'dash', fab:true,
+  body:`
+    <div class="banner ok" style="display:flex;gap:10px;align-items:flex-start">
+      <span style="width:22px;height:22px;border-radius:50%;background:var(--success);color:#fff;display:grid;place-items:center;font-size:12px;flex:none">✓</span>
+      <span><b>Deposit paid — £50.00</b><br>Receipt emailed to aisha@example.com and saved to your profile. <span style="text-decoration:underline;font-weight:600">View receipt</span></span>
+    </div>
+    <div class="sect">Your next appointment</div>
+    <div class="card appt">      <div class="aurora a"></div><div class="aurora b"></div>
+      <div class="row top" style="gap:14px;margin-bottom:12px">
+        <div class="datehero"><span class="dd">19</span><span class="mm">Mar</span></div>
+        <span class="countdown">in 6 days</span>
+      </div>
+      <h3 class="ct" style="font-size:17px">Lip filler · 0.5ml</h3>
+      <div class="small muted" style="margin-top:2px">2:30pm with Nadia Okonkwo · arrive 2:20pm</div>
+      <div class="row" style="gap:8px;margin-top:11px">
+        <span class="chip ok">Confirmed</span>
+        <span class="chip ok">£50 deposit paid</span>
+      </div>
+      <div class="prep">
+        <div class="plabel">Before this appointment</div>
+        <button class="pitem" data-go="consent">
+          <span class="st todo"></span>
+          <span class="pt"><span class="a">Sign your consent form</span><span class="b">About 2 minutes · then a 48-hour reflection period</span></span>
+          <span class="go-i">›</span>
+        </button>
+        <button class="pitem"><span class="st done"></span><span class="pt"><span class="a">Deposit paid</span><span class="b">£50 on 6 March · view receipt</span></span><span class="go-i">›</span></button>
+        <div class="pitem"><span class="st done"></span><span class="pt"><span class="a">Pre-care read</span><span class="b">No alcohol 24 hours before</span></span></div>
+      </div></div>`,
+  notes:[
+    {k:'new',ref:'Change 2',t:'Payment lands as a quiet confirmation strip, not a full-screen success page. The patient is mid-task; a takeover screen would be disproportionate for a £50 deposit.'},
+    {k:'new',ref:'Change 2',t:'The deposit chip flips to paid, and a paid prep row appears with a receipt link. The state change is visible in both places the patient might look.'},
+    {k:'',ref:'§10',t:'Fires payment_receipt through enqueueCommunication. Transactional, so it ignores marketing opt-out but honours a full unsubscribe.'},
+    {k:'',ref:'§7.1',t:'Needs the new payments table plus a webhook moving appointments.payment_status unpaid → deposit_paid → paid.'}
+  ]
+});
+
+S('dash-clear', {
+  group:'Dashboard', title:'Nothing to do', route:'/dashboard', chrome:'app', tab:'dash', fab:true,
+  body:`
+    <div class="greet"><div class="hi">Hello Aisha</div><div class="dt">Friday 13 March</div></div>
+    <div style="margin-top:13px"><div class="ribbon">
+      <button class="rcard" data-go="offer-detail"><span class="blob" style="background:var(--accent)"></span><div class="tag" style="font-size:10px;font-weight:600;color:var(--ink-3);margin-bottom:6px">Offer</div><div class="strong" style="font-size:13.5px;line-height:1.3">£40 off your next skin booster</div><div class="tiny" style="margin-top:4px">No end date.</div></button>
+      <button class="rcard" data-go="offer-detail"><span class="blob" style="background:var(--sky)"></span><div class="tag" style="font-size:10px;font-weight:600;color:var(--ink-3);margin-bottom:6px">Clinic news</div><div class="strong" style="font-size:13.5px;line-height:1.3">Saturday appointments from April</div><div class="tiny" style="margin-top:4px">One a month.</div></button>
+    </div></div>
+    <div class="sect">Your next appointment</div>
+    <div class="card appt">
+      <div class="aurora a"></div><div class="aurora b"></div>
+      <div class="row top" style="gap:14px;margin-bottom:12px">
+        <div class="datehero"><span class="dd">19</span><span class="mm">Mar</span></div>
+        <span class="countdown">in 6 days</span>
+      </div>
+      <h3 class="ct" style="font-size:17px">Lip filler · 0.5ml</h3>
+      <div class="small muted" style="margin-top:2px">2:30pm with Nadia Okonkwo · arrive 2:20pm</div>
+      <div class="row" style="gap:8px;margin-top:11px"><span class="chip ok">All set</span></div>
+      <div class="prep">
+        <div class="plabel">You're ready for this one</div>
+        <button class="pitem"><span class="st done"></span><span class="pt"><span class="a">Consent signed</span><span class="b">6 March · reflection period ended 8 March</span></span><span class="go-i">›</span></button>
+        <button class="pitem"><span class="st done"></span><span class="pt"><span class="a">Deposit paid</span><span class="b">£50 on 6 March · view receipt</span></span><span class="go-i">›</span></button>
+      </div>
+      <div class="btns"><button class="btn sec sm">Add to calendar</button><button class="btn sec sm" data-go="appt-detail">View details</button></div>
+    </div>`,
+  notes:[
+    {k:'new',ref:'Card redesign',t:'The payoff state. Same card, everything green, label flips from "Before this appointment" to "You\u2019re ready for this one". Flip between this and rendition C to see the difference.'},
+    {k:'new',ref:'Change 4',t:'No health check-in here or on any dashboard. It now lives under the profile, as you asked.'},
+    {k:'new',ref:'Card redesign',t:'Completed rows stay tappable so a patient can pull up the consent they signed or the receipt they paid. Done is not the same as gone.'}
+  ]
+});
+
+S('profile-checkin', {
+  group:'Profile', title:'Health — check-in prompt', route:'/profile/health', chrome:'app', tab:'profile', fab:true,
+  head:'Health information', back:'profile',
+  body:`
+    <div class="sect" style="margin-top:2px">Allergies</div>
+    <div class="card"><div class="row between"><div class="small">Penicillin</div><button class="btn ghost">Update</button></div></div>
+    <div class="sect">Medication</div>
+    <div class="card"><div class="row between"><div class="small">Sertraline 50mg daily</div><button class="btn ghost">Update</button></div></div>
+    <div class="sect">Conditions</div>
+    <div class="card"><div class="row between"><div class="small">Eczema</div><button class="btn ghost">Update</button></div></div>`,
+  modal:`<div class="sheet">
+      <div class="row" style="gap:10px;margin-bottom:10px"><span class="dot-badge"></span><div class="tiny" style="font-weight:600;color:var(--consent-ink)">Last confirmed 8 January</div></div>
+      <h3>Is this still right?</h3>
+      <p class="small muted" style="margin:0 0 14px">It has been a couple of months, so a quick check keeps you safe at your next appointment.</p>
+      <div class="card" style="margin-bottom:14px">
+        <div class="kv"><span class="k">Allergies</span><span class="v">Penicillin</span></div>
+        <div class="kv"><span class="k">Medication</span><span class="v">Sertraline 50mg daily</span></div>
+        <div class="kv"><span class="k">Conditions</span><span class="v">Eczema</span></div>
+      </div>
+      <div class="btns"><button class="btn sec" data-go="health-changed">Something's changed</button><button class="btn" data-go="profile">Yes, that's right</button></div>
+      <button class="btn ghost" style="margin:8px auto 0;display:flex" data-go="profile">Remind me later</button>
+    </div>`,
+  notes:[
+    {k:'new',ref:'Change 4',t:'Moved off the dashboard entirely. You were right \u2014 it was a clinic task wearing a patient costume, and the dashboard is not where a patient goes to think about their medical history.'},
+    {k:'new',ref:'Change 4',t:'It now fires as a sheet the first time the patient opens Health Information after the record has gone stale. Contextual: they are already looking at exactly this data.'},
+    {k:'new',ref:'Change 4',t:'The dot badge on the Profile row is the only ambient signal. No dashboard card, no red count, no push. If they never open Health, the pre-visit reminder catches it instead.'},
+    {k:'new',ref:'Change 4',t:'"Remind me later" is a real option and must actually work \u2014 suppressed for 30 days or until the next appointment is booked, whichever is sooner. A prompt that reappears every visit gets dismissed reflexively and stops being a safety check.'},
+    {k:'',ref:'F-07',t:'"Yes, that\u2019s right" writes a medical_history_versions row with source = patient and a confirmed-unchanged summary. A dated attestation is more useful to a practitioner than silence.'},
+    {k:'open',ref:'Staleness',t:'What counts as stale is a clinical decision. 90 days, or since the last treatment, or per-treatment-risk. Suggest clinics.history_confirm_days with a 90-day default.'}
+  ]
+});
+
+S('health-changed', {
+  group:'Profile', title:'Check-in — something changed', route:'/profile/health', chrome:'app', tab:'dash', fab:true,
+  head:'What has changed?', back:'profile-checkin',
+  body:`
+    <p class="small muted" style="margin:0 0 16px">Just tick what is different. You will not have to redo the whole questionnaire.</p>
+    <div class="list">
+      <button class="li"><span class="pi" style="width:24px;height:24px;border-radius:7px;border:1.5px solid var(--edge-2);flex:none"></span><div class="grow"><div class="strong small">Medication</div><div class="tiny">Sertraline 50mg daily</div></div></button>
+      <button class="li"><span class="pi" style="width:24px;height:24px;border-radius:7px;border:1.5px solid var(--accent-line);background:linear-gradient(140deg,var(--accent-hi),var(--accent));flex:none;display:grid;place-items:center;font-size:13px;color:var(--accent-foreground)">✓</span><div class="grow"><div class="strong small">Allergies</div><div class="tiny">Penicillin</div></div></button>
+      <button class="li"><span class="pi" style="width:24px;height:24px;border-radius:7px;border:1.5px solid var(--edge-2);flex:none"></span><div class="grow"><div class="strong small">Conditions</div><div class="tiny">Eczema</div></div></button>
+      <button class="li"><span class="pi" style="width:24px;height:24px;border-radius:7px;border:1.5px solid var(--edge-2);flex:none"></span><div class="grow"><div class="strong small">Pregnancy or breastfeeding</div><div class="tiny">Not recorded</div></div></button>
+    </div>
+    <div class="card tint-sky">
+      <div class="tiny" style="color:var(--sky-ink);font-weight:600;margin-bottom:7px">Allergies</div>
+      <div class="field" style="margin:0"><div class="inp tall" style="color:var(--foreground)">Penicillin, latex</div></div>
+      <div class="diff" style="margin-top:10px">Penicillin<ins>, latex</ins></div>
+    </div>
+    <button class="btn" data-go="dash-b">Send this update</button>
+    <p class="tiny" style="margin-top:10px;line-height:1.5">Nadia will review it before your appointment on 19 March. <b>If this is urgent, call 020 7000 0000.</b></p>`,
+  notes:[
+    {k:'new',ref:'Change 3',t:'Tapping "Something\u2019s changed" opens only the sections that need editing, pre-filled with what we hold. The nine-section form is never shown to a returning patient.'},
+    {k:'new',ref:'Change 3',t:'Sections are listed with their current values so the patient can scan and tick rather than read and recall. Ticking expands that one section inline.'},
+    {k:'',ref:'F-07',t:'Diff before submit, and only the changed section is written. A new medical_history_versions row then means something specific changed rather than a whole snapshot being resubmitted.'},
+    {k:'gap',ref:'G-14',t:'Today the form pre-fills three of six fields, leaves the rest blank each render, submits all six regardless, then calls form.reset().'},
+    {k:'new',ref:'Change 3',t:'One risk worth naming: a one-tap "still right" invites tapping through. Showing the actual allergy and drug name is the mitigation \u2014 it makes the confirmation an attestation about something concrete rather than a blank yes.'}
+  ]
+});
+
+/* ============ engine ============ */
+const stage=document.getElementById('stage'),rail=document.getElementById('rail'),
+      notes=document.getElementById('notes'),posEl=document.getElementById('pos');
+let current=ORDER[0], viewport='mobile', chatOpen=false, carIdx=0;
+
+const TABS=[
+  {id:'dash',    label:'Dashboard',    go:'dash-b'},
+  {id:'appts',   label:'Appointments', go:'appointments'},
+  {id:'profile', label:'Profile',      go:'profile'},
+  {id:'settings',label:'Settings',     go:'settings'}
+];
+const DNAV=[
+  {h:'Care',        items:[{label:'Dashboard',go:'dash-b'},{label:'Appointments',go:'appointments'}]},
+  {h:'Your profile',items:[{label:'Forms',go:'forms',n:2},{label:'Treatments',go:'treatments'},{label:'Photos',go:'photos'},{label:'Health information',go:'health'}]},
+  {h:'Settings',    items:[{label:'Payments',go:'payments'},{label:'Sign-in and security',go:'security'},{label:'Your data',go:'data'}]}
+];
+const tabFor = s => s.tab || 'dash';
+
+const CHAT=`<div class="chatwrap">
+  <div class="scrim" data-chat="0"></div>
+  <div class="chat">
+    <div class="chathead">
+      <span class="dot"></span>
+      <div class="stack"><div class="strong small">Ridgeway Skin Clinic</div><div class="tiny">Replies within 1 working day</div></div>
+      <button class="x" data-chat="0" aria-label="Close messages">&times;</button>
+    </div>
+    <div class="chatbody">
+      <div class="banner stop" style="margin-bottom:13px">Urgent? Call 020 7000 0000. Emergency? Call 999.</div>
+      <div class="thread">
+        <div class="bub them">Your lip filler consent form has been sent. Please review and sign it before your appointment.<div class="t">6 Mar, 11:20</div></div>
+        <div class="bub me">Signed it just now. Quick question — I have a wedding on 12 April, is 19 March far enough ahead?<div class="t">6 Mar, 11:44</div></div>
+        <div class="bub them">That is plenty of time. Swelling settles within a week for most people and you will be well past that.<div class="t">6 Mar, 14:02</div></div>
+        <div class="bub them">One thing — do not book anything else facial in the two weeks before.<div class="t">6 Mar, 14:03 · Read</div></div>
+      </div>
+    </div>
+    <div class="chatfoot">
+      <div class="quick"><span class="chip">Reschedule</span><span class="chip">Aftercare question</span><span class="chip stop">Report a concern</span></div>
+      <div class="row" style="gap:8px">
+        <div class="inp" style="flex:1;border:1px solid var(--edge);background:var(--glass);border-radius:999px;min-height:42px;display:flex;align-items:center;padding:0 15px;color:var(--subtle);font-size:13.5px">Write a message</div>
+        <button class="btn" style="width:42px;min-height:42px;padding:0;flex:none">&#8593;</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+const fabHtml = () => `<button class="fab" data-chat="1" aria-label="Messages, 1 unread"><span class="bub"></span><span class="n">1</span></button>`;
+
+function mobileChrome(s){
+  const t=tabFor(s);
+  const tabs=TABS.map(x=>`<button data-go="${x.go}" aria-current="${x.id===t}"><span class="ic"></span>${x.label}</button>`).join('');
+  const head=s.head?`<div class="apphead">${s.back?`<button class="back" data-go="${s.back}" aria-label="Back">&#8249;</button>`:''}<h1>${s.head}</h1>${s.avatar?`<span class="av">${s.avatar}</span>`:''}</div>`:'';
+  return `<div class="screen">
+    <div class="statusbar"><span>9:41</span><span>Aetheria</span></div>
+    ${head}<div class="scroll">${s.body}</div>
+    <nav class="tabbar">${tabs}</nav>
+    ${s.fab&&!chatOpen?fabHtml():''}
+    ${chatOpen?CHAT:''}
+  </div>${s.modal?`<div class="modal">${s.modal}</div>`:''}`;
+}
+function desktopChrome(s){
+  const flat=DNAV.flatMap(g=>g.items.map(i=>i.go));
+  const active=flat.includes(current)?current:(TABS.find(x=>x.id===tabFor(s))||{}).go;
+  const nav=DNAV.map(g=>`<h5>${g.h}</h5>`+g.items.map(i=>
+    `<button data-go="${i.go}" aria-current="${i.go===active}"><span>${i.label}</span>${i.n?`<span class="n">${i.n}</span>`:''}</button>`).join('')).join('');
+  return `<div class="screen">
+    <div class="dtop"><b>Aetheria</b><span class="tiny">Ridgeway Skin Clinic</span><span style="flex:1"></span><span class="chip">Aisha Bello</span></div>
+    <div class="dbody"><nav class="dnav">${nav}</nav>
+      <div class="scroll">${s.head?`<h1 style="margin:0 0 18px;font-size:26px;font-weight:600;letter-spacing:-.018em">${s.head}</h1>`:''}<div style="max-width:620px">${s.body}</div></div>
+    </div>
+    ${s.fab&&!chatOpen?fabHtml():''}
+    ${chatOpen?CHAT:''}
+  </div>${s.modal?`<div class="modal">${s.modal}</div>`:''}`;
+}
+function bareChrome(s){
+  return `<div class="screen">${viewport==='mobile'?'<div class="statusbar"><span>9:41</span><span></span></div>':''}${s.body}</div>`;
+}
+
+function renderRail(){
+  const g={}; ORDER.forEach(id=>{(g[SCREENS[id].group]=g[SCREENS[id].group]||[]).push(id)});
+  rail.innerHTML=Object.entries(g).map(([name,ids])=>
+    `<div class="railgroup"><h4>${name}</h4>`+ids.map(id=>
+      `<button class="railitem" data-go="${id}" aria-current="${id===current}">${SCREENS[id].title}<em>${SCREENS[id].route}</em></button>`).join('')+`</div>`).join('');
+}
+function renderNotes(s){
+  notes.innerHTML=`<h3>${s.title}</h3><div class="route">${s.route}</div>`+
+    (s.notes||[]).map(n=>`<div class="note ${n.k||''}"><div class="ref">${n.ref}</div><p>${n.t}</p></div>`).join('')+
+    `<div class="legend"><b>Annotation colours</b>
+      <span style="color:var(--meta)">Pink</span> — spec reference.
+      <span style="color:var(--destructive-ink)">Red</span> — a gap in the code today.
+      <span style="color:var(--consent-ink)">Lilac</span> — an open decision I have assumed an answer to.
+      <span style="color:var(--success-ink)">Green</span> — new in v0.2 from your feedback.
+    </div>`;
+}
+function render(id){
+  if(!SCREENS[id])return;
+  current=id;
+  const s=SCREENS[id];
+  const chrome = s.chrome==='bare' ? bareChrome : (viewport==='mobile'?mobileChrome:desktopChrome);
+  stage.innerHTML=`<div class="frame">${chrome(s)}</div>`;
+  renderRail(); renderNotes(s);
+  posEl.textContent=`${ORDER.indexOf(id)+1} / ${ORDER.length}`;
+  document.getElementById('prev').disabled=ORDER.indexOf(id)===0;
+  document.getElementById('next').disabled=ORDER.indexOf(id)===ORDER.length-1;
+  document.getElementById('chatbtn').setAttribute('aria-pressed',String(chatOpen));
+  carIdx=0;
+  stage.scrollTop=0;
+}
+function slideTo(i){
+  const track=document.querySelector('.ctrack'); if(!track) return;
+  const n=track.children.length; carIdx=((i%n)+n)%n;
+  track.style.transform='translateX(-'+(carIdx*100)+'%)';
+  document.querySelectorAll('.cdot').forEach((d,k)=>d.setAttribute('aria-current',String(k===carIdx)));
+}
+document.addEventListener('click',e=>{
+  const sl=e.target.closest('[data-slide]');
+  if(sl){ e.preventDefault(); const v=sl.getAttribute('data-slide');
+    slideTo(v==='next'?carIdx+1:v==='prev'?carIdx-1:parseInt(v,10)); return; }
+  const ex=e.target.closest('[data-ext]');
+  if(ex){ e.preventDefault();
+    alert('Opens the clinic site in a new tab.\n\ntarget="_blank" rel="noopener noreferrer"\nNo patient identifiers in the URL.'); return; }
+  const c=e.target.closest('[data-chat]');
+  if(c){ e.preventDefault(); chatOpen = c.getAttribute('data-chat')==='1'; render(current); return; }
+  const t=e.target.closest('[data-go]');
+  if(t){ e.preventDefault(); chatOpen=false; render(t.getAttribute('data-go')); }
+});
+document.getElementById('prev').onclick=()=>{const i=ORDER.indexOf(current);if(i>0)render(ORDER[i-1])};
+document.getElementById('next').onclick=()=>{const i=ORDER.indexOf(current);if(i<ORDER.length-1)render(ORDER[i+1])};
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&chatOpen){chatOpen=false;render(current);return}
+  if(e.key==='ArrowLeft')document.getElementById('prev').click();
+  if(e.key==='ArrowRight')document.getElementById('next').click();
+});
+function setViewport(v){
+  viewport=v; stage.className='stage '+v;
+  document.getElementById('vpm').setAttribute('aria-pressed',v==='mobile');
+  document.getElementById('vpd').setAttribute('aria-pressed',v==='desktop');
+  render(current);
+}
+document.getElementById('vpm').onclick=()=>setViewport('mobile');
+document.getElementById('vpd').onclick=()=>setViewport('desktop');
+document.getElementById('chatbtn').onclick=()=>{chatOpen=!chatOpen;render(current)};
+document.getElementById('annot').onclick=e=>{
+  const on=e.currentTarget.getAttribute('aria-pressed')==='true';
+  e.currentTarget.setAttribute('aria-pressed',String(!on));
+  document.body.classList.toggle('noannot',on);
+};
+render(ORDER[0]);
+</script>
+</body>
+</html>

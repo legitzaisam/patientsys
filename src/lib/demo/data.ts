@@ -1108,6 +1108,24 @@ patients.slice(0, 18).forEach((patient, index) => {
   }
 });
 
+/**
+ * A pending consent with a known token, so the public /d/$token signing route
+ * can be exercised in demo mode and by the e2e suite without scraping a token
+ * out of the UI.
+ */
+export const DEMO_CONSENT_TOKEN = "e2ec0deba5e00000e2ec0deba5e00000e2ec0deba5e00000";
+
+{
+  const pending = makeDocument(
+    patients[0]!["id"] as string,
+    "consent",
+    "Lip filler — consent form",
+    "sent",
+    1,
+  );
+  pending["access_token"] = DEMO_CONSENT_TOKEN;
+}
+
 /* ---------------------------------------------------------------- */
 /* appointments                                                      */
 /* ---------------------------------------------------------------- */

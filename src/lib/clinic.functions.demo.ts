@@ -33,6 +33,7 @@ import { assertEmail } from "@/lib/email";
 // capabilities than production.
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { assertCanSend, nextUnsubscribedAt, prefsFromPatient } from "@/lib/comms/preferences";
+import { consentRequestMessage, publicSigningUrl } from "@/lib/comms/templates";
 
 export { PERMISSION_KEYS, type PermissionKey };
 
@@ -1131,6 +1132,100 @@ export const addPhoto = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Signing links stop working after this long; a resend issues a fresh window. */
+const DOCUMENT_LINK_TTL_DAYS = 14;
+
+function documentLinkExpiry(from = new Date()) {
+  return new Date(from.getTime() + DOCUMENT_LINK_TTL_DAYS * 86400000).toISOString();
+}
+
+/**
+ * Fixture twin of enqueueCommunication's core: PECR check, then a queued row.
+ * Throws with the same reasons as production when the send is refused.
+ */
+function queueCommunication(input: {
+  patientId: string;
+  channel: "email" | "sms";
+  purpose: "transactional" | "reminder" | "marketing";
+  body: string;
+  subject?: string | null;
+  templateKey?: string | null;
+  toAddress?: string | null;
+  scheduledFor?: string | null;
+  relatedEntity?: string | null;
+  relatedId?: string | null;
+  createdBy?: string | null;
+}): { id: string } {
+  const patient = patientById(input.patientId);
+  if (!patient) throw new Error("Patient not found");
+  const toAddress =
+    input.toAddress?.trim() ||
+    (input.channel === "email"
+      ? String(patient.email ?? "").trim()
+      : String(patient.phone ?? "").trim());
+  const decision = assertCanSend(prefsFromPatient(patient), input.purpose, input.channel, toAddress);
+  if (!decision.ok) throw new Error(decision.reason);
+  const row = {
+    id: newId("m9"),
+    clinic_id: CLINIC_ID,
+    patient_id: input.patientId,
+    channel: input.channel,
+    purpose: input.purpose,
+    to_address: toAddress,
+    template_key: input.templateKey ?? null,
+    subject: input.subject?.trim() || null,
+    body: input.body,
+    status: "queued",
+    provider: null,
+    provider_message_id: null,
+    error: null,
+    attempts: 0,
+    scheduled_for: input.scheduledFor || new Date().toISOString(),
+    sent_at: null,
+    created_by: input.createdBy ?? null,
+    related_entity: input.relatedEntity ?? null,
+    related_id: input.relatedId ?? null,
+    created_at: new Date().toISOString(),
+  };
+  communications.unshift(row);
+  return { id: row.id };
+}
+
+/** Demo twin of the production helper: email the signing link, report success. */
+function enqueueDocumentEmail(opts: {
+  patientId: string;
+  documentId: string;
+  accessToken: string;
+  title: string;
+  origin?: string | null | undefined;
+  reminder?: boolean;
+  createdBy: string;
+}): boolean {
+  try {
+    const patient = patientById(opts.patientId);
+    const message = consentRequestMessage({
+      name: String(patient?.first_name ?? "there"),
+      title: opts.title,
+      url: publicSigningUrl(opts.origin ?? "", opts.accessToken),
+      reminder: opts.reminder ?? false,
+    });
+    queueCommunication({
+      patientId: opts.patientId,
+      channel: "email",
+      purpose: "transactional",
+      subject: message.subject,
+      body: message.body,
+      templateKey: "consent_request",
+      relatedEntity: "documents",
+      relatedId: opts.documentId,
+      createdBy: opts.createdBy,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const sendDocument = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -1139,6 +1234,7 @@ export const sendDocument = createServerFn({ method: "POST" })
       title: string;
       body?: string;
       treatment_id?: string;
+      app_origin?: string;
     }) => parseInput(schemas.SendDocument, data),
   )
   .handler(async ({ data }) => {
@@ -1162,7 +1258,7 @@ export const sendDocument = createServerFn({ method: "POST" })
       signed_name: null,
       signature_data: null,
       signed_ip: null,
-      expires_at: null,
+      expires_at: documentLinkExpiry(),
       created_by: me.userId,
       created_at: now,
       updated_at: now,
@@ -1179,18 +1275,51 @@ export const sendDocument = createServerFn({ method: "POST" })
       read_at: null,
       created_at: now,
     });
-    return { id: created.id };
+    const emailed = enqueueDocumentEmail({
+      patientId: data.patient_id,
+      documentId: created.id,
+      accessToken: created.access_token,
+      title: data.title,
+      origin: data.app_origin,
+      createdBy: me.userId,
+    });
+    return { id: created.id, emailed };
   });
 
 export const resendDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; patient_id: string }) => parseInput(schemas.ResendDocument, data))
+  .validator(
+    (data: { id: string; patient_id: string; app_origin?: string }) =>
+      parseInput(schemas.ResendDocument, data),
+  )
   .handler(async ({ data }) => {
+    const me = identity();
     const row = documents.find((d) => d.id === data.id);
-    if (row) {
-      row.status = "sent";
-      row.sent_at = new Date().toISOString();
-    }
-    return { ok: true };
+    if (!row) throw new Error("Document not found");
+    if (row.status === "signed") throw new Error("This form has already been signed");
+    row.status = "sent";
+    row.sent_at = new Date().toISOString();
+    row.expires_at = documentLinkExpiry();
+    messages.push({
+      id: newId("h9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      author: "staff",
+      author_id: me.userId,
+      body: `Reminder: ${row.title} is waiting for your signature in your patient portal.`,
+      attachments: [],
+      read_at: null,
+      created_at: new Date().toISOString(),
+    });
+    const emailed = enqueueDocumentEmail({
+      patientId: data.patient_id,
+      documentId: row.id,
+      accessToken: row.access_token,
+      title: row.title,
+      origin: data.app_origin,
+      reminder: true,
+      createdBy: me.userId,
+    });
+    return { ok: true, emailed };
   });
 
 export const signDocument = createServerFn({ method: "POST" })
@@ -1361,39 +1490,19 @@ export const enqueueCommunication = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = requireStaff();
     if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
-    const patient = patientById(data.patient_id);
-    if (!patient) throw new Error("Patient not found");
-    const toAddress =
-      data.to_address?.trim() ||
-      (data.channel === "email"
-        ? String(patient.email ?? "").trim()
-        : String(patient.phone ?? "").trim());
-    const decision = assertCanSend(prefsFromPatient(patient), data.purpose, data.channel, toAddress);
-    if (!decision.ok) throw new Error(decision.reason);
-    const row = {
-      id: newId("m9"),
-      clinic_id: CLINIC_ID,
-      patient_id: data.patient_id,
+    return queueCommunication({
+      patientId: data.patient_id,
       channel: data.channel,
       purpose: data.purpose,
-      to_address: toAddress,
-      template_key: data.template_key ?? null,
-      subject: data.subject?.trim() || null,
       body: data.body,
-      status: "queued",
-      provider: null,
-      provider_message_id: null,
-      error: null,
-      attempts: 0,
-      scheduled_for: data.scheduled_for || new Date().toISOString(),
-      sent_at: null,
-      created_by: me.userId,
-      related_entity: data.related_entity ?? null,
-      related_id: data.related_id ?? null,
-      created_at: new Date().toISOString(),
-    };
-    communications.unshift(row);
-    return { id: row.id };
+      subject: data.subject ?? null,
+      templateKey: data.template_key ?? null,
+      toAddress: data.to_address ?? null,
+      scheduledFor: data.scheduled_for ?? null,
+      relatedEntity: data.related_entity ?? null,
+      relatedId: data.related_id ?? null,
+      createdBy: me.userId,
+    });
   });
 
 export const listCommunications = createServerFn({ method: "GET" })

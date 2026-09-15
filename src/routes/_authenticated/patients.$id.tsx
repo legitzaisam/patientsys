@@ -151,6 +151,8 @@ function PatientRecord() {
       toast.success("Consent form issued - it is now in their portal");
       setDocOpen(false);
       invalidate();
+      // The issue now queues a signing-link email, so the outbox card changes.
+      void queryClient.invalidateQueries({ queryKey: ["communications", id] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -176,6 +178,7 @@ function PatientRecord() {
     onSuccess: () => {
       toast.success("Reminder posted to their portal");
       invalidate();
+      void queryClient.invalidateQueries({ queryKey: ["communications", id] });
     },
   });
   const markReviewed = useMutation({
@@ -427,6 +430,7 @@ function PatientRecord() {
                             kind: String(f.get("kind")) as any,
                             title: String(f.get("title")),
                             body: String(f.get("body") ?? ""),
+                            app_origin: window.location.origin,
                           },
                         });
                       }}
@@ -959,7 +963,15 @@ function PatientRecord() {
                             size="sm"
                             variant="ghost"
                            
-                            onClick={() => resend.mutate({ data: { id: d.id, patient_id: id } })}
+                            onClick={() =>
+                              resend.mutate({
+                                data: {
+                                  id: d.id,
+                                  patient_id: id,
+                                  app_origin: window.location.origin,
+                                },
+                              })
+                            }
                           >
                             Remind
                           </Button>
