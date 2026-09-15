@@ -19,13 +19,13 @@ todos:
     status: completed
   - id: 9b-token
     content: Build src/lib/documents/access.server.ts token resolver with uniform not-found, plus the public /d/$token signing route and its sign handler
-    status: in_progress
+    status: completed
   - id: 9b-wire
     content: Wire sendDocument and resendDocument to enqueueCommunication, set documents.expires_at, add the missing resend portal message
-    status: pending
+    status: completed
   - id: 9c-templates
     content: Build src/lib/comms/templates.ts renderTemplate + TEMPLATE_KEYS + channelsFor, and dedupe the client-side interpolation in send-recall-dialog and message-composer
-    status: pending
+    status: in_progress
   - id: 9c-booking
     content: Enqueue booking confirmations from saveAppointment, add reschedule confirmations to rescheduleAppointment and the saveAppointment update path
     status: pending

@@ -82,10 +82,15 @@ export function bookingDetailsMessage(opts: {
 }
 
 /**
- * Booking confirmations reach the patient's portal thread and nowhere else:
- * the clinic has no email or SMS transport yet. Do not reinstate a claim that
- * either was sent until dispatch actually exists.
+ * Booking-confirmation toast copy. Since Phase 9 the confirmation really is
+ * dispatched through the outbox, so the description reflects which channels
+ * were queued for this patient — and never claims one that was not.
  */
-export function bookingNotifyDescription() {
+export function bookingNotifyDescription(queued?: readonly string[]) {
+  const email = queued?.includes("email");
+  const sms = queued?.includes("sms");
+  if (email && sms) return "Confirmation sent by email and text, plus their patient portal.";
+  if (email) return "Confirmation sent by email, plus their patient portal.";
+  if (sms) return "Confirmation sent by text, plus their patient portal.";
   return "Confirmation and payment details saved to their patient portal.";
 }

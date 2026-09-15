@@ -25,13 +25,15 @@ test("sends a portal recall message from the dialog", async ({ page }) => {
   await expect(page.getByText("Recall message sent")).toBeVisible();
 });
 
-test("the email channel still hands off to the mail client (baseline)", async ({ page }) => {
+test("a recall email respects the patient's marketing opt-out", async ({ page }) => {
   await page.goto("/retention");
   await page.getByRole("button", { name: "Send recall" }).first().click();
 
   const dialog = page.getByRole("dialog", { name: /Send recall to / });
   await dialog.getByRole("tab", { name: "Email" }).click();
-  // Baseline behaviour: the action is a mailto: handoff, not a real send.
-  // Phase 9c replaces this button with a real outbox send.
-  await expect(dialog.getByRole("button", { name: "Open email" })).toBeVisible();
+  // Recall promotes a repeat treatment, so it is a marketing send under PECR.
+  // Every fixture patient is opted out, so the outbox must refuse — no more
+  // mailto: side door around the patient's preferences.
+  await dialog.getByRole("button", { name: "Send email" }).click();
+  await expect(page.getByText("has not opted in to marketing messages")).toBeVisible();
 });

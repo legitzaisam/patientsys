@@ -147,8 +147,12 @@ function PatientRecord() {
   });
   const issueDocument = useMutation({
     mutationFn: useServerFn(sendDocument),
-    onSuccess: () => {
-      toast.success("Consent form issued - it is now in their portal");
+    onSuccess: (r: { emailed: boolean }) => {
+      toast.success(
+        r.emailed
+          ? "Form sent — signing link emailed and added to their portal"
+          : "Form issued to their portal — no email on file to send the link",
+      );
       setDocOpen(false);
       invalidate();
       // The issue now queues a signing-link email, so the outbox card changes.
@@ -175,8 +179,12 @@ function PatientRecord() {
   });
   const resend = useMutation({
     mutationFn: useServerFn(resendDocument),
-    onSuccess: () => {
-      toast.success("Reminder posted to their portal");
+    onSuccess: (r: { emailed: boolean }) => {
+      toast.success(
+        r.emailed
+          ? "Reminder emailed with the signing link, and posted to their portal"
+          : "Reminder posted to their portal — no email on file to send the link",
+      );
       invalidate();
       void queryClient.invalidateQueries({ queryKey: ["communications", id] });
     },

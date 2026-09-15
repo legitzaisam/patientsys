@@ -239,9 +239,9 @@ export function QuickAddAppointment({
   });
   const book = useMutation({
     mutationFn: useServerFn(saveAppointment),
-    onSuccess: () => {
+    onSuccess: (r: { queued?: string[] }) => {
       toast.success("Appointment booked", {
-        description: bookingNotifyDescription(),
+        description: bookingNotifyDescription(r.queued),
       });
       setOpen(false);
       setNewPatient(false);

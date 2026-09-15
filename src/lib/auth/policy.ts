@@ -78,6 +78,7 @@ export const POLICY = {
   /* Patient messaging. The portal composer calls sendMessage as the patient, so
      the capability applies to the staff side only. */
   sendMessage: { kind: "staffOrOwnPatient", staffKey: "comms.send" },
+  sendPaymentRequest: { kind: "capability", key: "comms.send" },
   getUnreadMessages: { kind: "self" },
   markMessagesRead: { kind: "staffOrOwnPatient" },
   listMessageTemplates: { kind: "staff" },
@@ -143,6 +144,7 @@ export const POLICY = {
   getMyEarnings: { kind: "staff" },
   getRetention: { kind: "capability", key: "reports.retention" },
   logRetentionOutreach: { kind: "staff" },
+  sendRecall: { kind: "capability", key: "comms.send" },
 
   /* Recall tasks */
   createRecallTask: { kind: "staff" },

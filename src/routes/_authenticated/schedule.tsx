@@ -78,8 +78,8 @@ import { initialsOf, laneFor, toneForTreatment } from "@/lib/practitioner-colour
 import { PractitionerHoverCard } from "@/components/practitioner-hovercard";
 import { VisitNoteChip } from "@/components/visit-note-chip";
 import { useTreatmentColours } from "@/lib/use-treatment-colours";
-import { sendMessage } from "@/lib/clinic.functions";
-import { bookingNotifyDescription, formatMoney, patientPaymentUrl, paymentRequestMessage } from "@/lib/payment-link";
+import { resendDocument, sendMessage, sendPaymentRequest } from "@/lib/clinic.functions";
+import { bookingNotifyDescription, formatMoney } from "@/lib/payment-link";
 
 export const Route = createFileRoute("/_authenticated/schedule")({
   head: () => ({
@@ -398,9 +398,9 @@ function SchedulePage() {
 
   const book = useMutation({
     mutationFn: useServerFn(saveAppointment),
-    onSuccess: () => {
+    onSuccess: (r: { queued?: string[] }) => {
       toast.success("Appointment booked", {
-        description: bookingNotifyDescription(),
+        description: bookingNotifyDescription(r.queued),
       });
       setOpen(false);
       setNewPatient(false);
@@ -795,7 +795,8 @@ function SchedulePage() {
 
                         {bookingPayAction === "unpaid" && (
                           <p className="text-2xs text-muted-foreground">
-                            Confirmation and payment link are saved to their patient portal.
+                            Confirmation and payment link are sent by email or text when on file,
+                            plus their patient portal.
                           </p>
                         )}
 
@@ -833,16 +834,16 @@ function SchedulePage() {
                                 <span className="font-semibold text-foreground">
                                   {formatMoney(selectedAmount)}
                                 </span>
-                                . Confirmation is still saved to their portal.
+                                . Confirmation is still sent to the patient.
                               </p>
                             ) : (
                               <p className="text-2xs text-muted-foreground">
-                                After booking, confirmation goes to their patient portal with a{" "}
+                                After booking, the confirmation includes a{" "}
                                 {bookingPayKind === "deposit" ? "deposit" : "full payment"} link for{" "}
                                 <span className="font-semibold text-foreground">
                                   {formatMoney(selectedAmount)}
-                                </span>
-                                .
+                                </span>{" "}
+                                — sent by email or text when on file, plus their portal.
                               </p>
                             )}
                           </>
@@ -1023,7 +1024,7 @@ function AppointmentCard({ a, onState }: { a: any; onState?: (v: any) => Promise
 
 function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
   const send = useMutation({
-    mutationFn: useServerFn(sendMessage),
+    mutationFn: useServerFn(sendPaymentRequest),
     onError: (e: Error) => toast.error(e.message),
   });
   const [amountKind, setAmountKind] = useState<"deposit" | "full">("deposit");
@@ -1038,37 +1039,38 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
   const balance = Math.round((total - depositAmount) * 100) / 100;
   const when = new Date(a.starts_at).toLocaleDateString("en-GB");
 
-  const dispatch = (channel: "email" | "sms", body: string, label: string) => {
+  // The server builds the message and queues the real send; a portal copy is
+  // written alongside. Refused sends surface as the error toast.
+  const dispatch = (
+    channel: "email" | "sms",
+    kind: "deposit" | "full" | "balance" | "receipt",
+    label: string,
+  ) => {
     const target = channel === "email" ? email : phone;
     if (!target) {
       toast.error(channel === "email" ? "No email on file for this patient" : "No mobile number on file");
       return;
     }
     send.mutate(
-      { data: { patient_id: a.patient_id, as: "staff" as const, body } },
-      { onSuccess: () => toast.success(`${label} posted to their patient portal`) },
+      {
+        data: {
+          patient_id: a.patient_id,
+          appointment_id: a.id,
+          channel,
+          kind,
+          app_origin: window.location.origin,
+        },
+      },
+      {
+        onSuccess: () =>
+          toast.success(`${label} queued to send by ${channel === "email" ? "email" : "text"}`),
+      },
     );
   };
 
-  const sendPayment = (channel: "email" | "sms", kind: "deposit" | "full" | "balance", amount: number) => {
-    dispatch(
-      channel,
-      paymentRequestMessage({
-        name,
-        treatment: a.treatment_name,
-        treatmentNumber: a.treatment_number,
-        when,
-        amount,
-        kind,
-        appointmentId: a.id,
-      }),
-      kind === "deposit" ? "Deposit link" : "Payment link",
-    );
+  const sendPayment = (channel: "email" | "sms", kind: "deposit" | "full" | "balance") => {
+    dispatch(channel, kind, kind === "deposit" ? "Deposit link" : "Payment link");
   };
-
-  const receiptBody = `Hi ${name}, here is your receipt for ${a.treatment_name} (treatment #${a.treatment_number}) on ${when}. Amount paid: ${formatMoney(
-    total,
-  )}. Payment status: paid in full. A copy is also available in your patient portal: ${patientPaymentUrl(a.id, "full")}`;
 
   const chip = (
     <span
@@ -1110,7 +1112,7 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
                   variant="outline"
                   className="flex-1 text-xs"
                   disabled={send.isPending}
-                  onClick={() => dispatch("email", receiptBody, "Receipt")}
+                  onClick={() => dispatch("email", "receipt", "Receipt")}
                 >
                   <Mail className="mr-1 h-3 w-3" /> Email
                 </Button>
@@ -1118,7 +1120,7 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
                   variant="outline"
                   className="flex-1 text-xs"
                   disabled={send.isPending}
-                  onClick={() => dispatch("sms", receiptBody, "Receipt")}
+                  onClick={() => dispatch("sms", "receipt", "Receipt")}
                 >
                   <Phone className="mr-1 h-3 w-3" /> Text
                 </Button>
@@ -1139,7 +1141,7 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
                   variant="outline"
                   className="flex-1 text-xs"
                   disabled={send.isPending}
-                  onClick={() => sendPayment("email", "balance", balance)}
+                  onClick={() => sendPayment("email", "balance")}
                 >
                   <Mail className="mr-1 h-3 w-3" /> Email
                 </Button>
@@ -1147,7 +1149,7 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
                   variant="outline"
                   className="flex-1 text-xs"
                   disabled={send.isPending}
-                  onClick={() => sendPayment("sms", "balance", balance)}
+                  onClick={() => sendPayment("sms", "balance")}
                 >
                   <Phone className="mr-1 h-3 w-3" /> Text
                 </Button>
@@ -1187,7 +1189,7 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
                   variant="outline"
                   className="flex-1 text-xs"
                   disabled={send.isPending}
-                  onClick={() => sendPayment("email", amountKind, selectedAmount)}
+                  onClick={() => sendPayment("email", amountKind)}
                 >
                   <Mail className="mr-1 h-3 w-3" /> Email
                 </Button>
@@ -1195,7 +1197,7 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
                   variant="outline"
                   className="flex-1 text-xs"
                   disabled={send.isPending}
-                  onClick={() => sendPayment("sms", amountKind, selectedAmount)}
+                  onClick={() => sendPayment("sms", amountKind)}
                 >
                   <Phone className="mr-1 h-3 w-3" /> Text
                 </Button>
@@ -1213,6 +1215,10 @@ function ConsentChip({ a, signed, compact }: { a: any; signed: boolean; compact?
     mutationFn: useServerFn(sendMessage),
     onError: (e: Error) => toast.error(e.message),
   });
+  const remind = useMutation({
+    mutationFn: useServerFn(resendDocument),
+    onError: (e: Error) => toast.error(e.message),
+  });
   const name = `${a.patients?.first_name ?? ""}`.trim() || "there";
   const email = a.patients?.email as string | undefined;
   const phone = a.patients?.phone as string | undefined;
@@ -1221,6 +1227,28 @@ function ConsentChip({ a, signed, compact }: { a: any; signed: boolean; compact?
     const target = channel === "email" ? email : phone;
     if (!target) {
       toast.error(channel === "email" ? "No email on file for this patient" : "No mobile number on file");
+      return;
+    }
+    // With a consent form on the booking, remind with the real signing link.
+    if (a.consent_document_id) {
+      remind.mutate(
+        {
+          data: {
+            id: a.consent_document_id,
+            patient_id: a.patient_id,
+            channel,
+            app_origin: window.location.origin,
+          },
+        },
+        {
+          onSuccess: (r: { emailed: boolean }) =>
+            toast.success(
+              r.emailed
+                ? `Consent reminder queued to send by ${channel === "email" ? "email" : "text"}`
+                : "Consent reminder posted to their patient portal",
+            ),
+        },
+      );
       return;
     }
     send.mutate(
@@ -1277,7 +1305,7 @@ function ConsentChip({ a, signed, compact }: { a: any; signed: boolean; compact?
             <Button
               variant="outline"
               className="flex-1 text-xs"
-              disabled={send.isPending}
+              disabled={send.isPending || remind.isPending}
               onClick={() => sendReminder("email")}
             >
               <Mail className="mr-1 h-3 w-3" /> Email
@@ -1285,7 +1313,7 @@ function ConsentChip({ a, signed, compact }: { a: any; signed: boolean; compact?
             <Button
               variant="outline"
               className="flex-1 text-xs"
-              disabled={send.isPending}
+              disabled={send.isPending || remind.isPending}
               onClick={() => sendReminder("sms")}
             >
               <Phone className="mr-1 h-3 w-3" /> Text

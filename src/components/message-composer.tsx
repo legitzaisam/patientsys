@@ -25,6 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import type { Attachment } from "@/components/message-attachments";
+import { renderTemplate } from "@/lib/comms/templates";
 import { cn } from "@/lib/utils";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -154,7 +155,7 @@ export function MessageComposer({
   }
 
   function applyTemplate(text: string) {
-    const filled = text.replace(/\{\{first_name\}\}/g, patientFirstName ?? "there");
+    const filled = renderTemplate(text, { first_name: patientFirstName ?? "there" });
     setBody(filled);
     setTemplateOpen(false);
   }

@@ -25,7 +25,10 @@ test("issues a consent form to the patient", async ({ page }) => {
   await dialog.getByLabel("Content").fill("Please read and sign before your appointment.");
   await dialog.getByRole("button", { name: "Send", exact: true }).click();
 
-  await expect(page.getByText("Consent form issued - it is now in their portal")).toBeVisible();
+  // Olivia has an email on file, so the signing link goes out for real.
+  await expect(
+    page.getByText("Form sent — signing link emailed and added to their portal"),
+  ).toBeVisible();
   // exact: the title also appears inside the portal chat notification text.
   await expect(page.getByText("Dermal filler — consent form (e2e)", { exact: true })).toBeVisible();
 });
@@ -34,5 +37,7 @@ test("reminds the patient about an unsigned form", async ({ page }) => {
   await openOliviaDocuments(page);
 
   await page.getByRole("button", { name: "Remind" }).first().click();
-  await expect(page.getByText("Reminder posted to their portal")).toBeVisible();
+  await expect(
+    page.getByText("Reminder emailed with the signing link, and posted to their portal"),
+  ).toBeVisible();
 });

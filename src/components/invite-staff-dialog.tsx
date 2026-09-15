@@ -90,9 +90,11 @@ const EMPTY: InviteValues = {
   registrationNumber: "",
 };
 
+type InviteResult = { email: string; delivery: "emailed" | "link"; actionLink: string | null };
+
 export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
   const [open, setOpen] = useState(false);
-  const [result, setResult] = useState<{ email: string; temporaryPassword: string } | null>(null);
+  const [result, setResult] = useState<InviteResult | null>(null);
 
   // Same schema the server function validates against, so a field the handler
   // would reject is caught here first and shown against the field itself.
@@ -113,10 +115,10 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
 
   const invite = useMutation({
     mutationFn: useServerFn(inviteStaffMember),
-    onSuccess: (r: { email: string; temporaryPassword: string }) => {
-      setResult({ email: r.email, temporaryPassword: r.temporaryPassword });
+    onSuccess: (r: InviteResult) => {
+      setResult(r);
       form.reset(EMPTY);
-      toast.success("Invitation created");
+      toast.success(r.delivery === "emailed" ? "Invitation email sent" : "Sign-in link ready");
       onInvited?.();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -142,13 +144,9 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
         role: values.role,
         registrationBody: values.registrationBody ?? "",
         registrationNumber: values.registrationNumber ?? "",
+        app_origin: window.location.origin,
       },
     });
-  const mailto = result
-    ? `mailto:${result.email}?subject=${encodeURIComponent("Your Aetheria clinic account")}&body=${encodeURIComponent(
-        `Hello,\n\nAn account has been created for you on our clinic software.\n\nSign in at ${typeof window !== "undefined" ? window.location.origin : ""}/auth with:\n\nEmail: ${result.email}\nTemporary password: ${result.temporaryPassword}\n\nYou will be asked to choose a new password after you sign in. Do not share these details with anyone else.\n\nThank you.`,
-      )}`
-    : "";
 
   return (
     <>
@@ -168,12 +166,18 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
         <DialogContent className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
           <DialogHeader className="shrink-0 pr-8 text-left">
             <DialogTitle>
-              {result ? "Invitation ready" : "Invite a team member"}
+              {result
+                ? result.delivery === "emailed"
+                  ? "Invitation sent"
+                  : "Sign-in link ready"
+                : "Invite a team member"}
             </DialogTitle>
             <DialogDescription>
               {result
-                ? "Share this temporary password privately. They’ll sign in and be asked to change it."
-                : "We’ll create their account with a temporary password for you to share."}
+                ? result.delivery === "emailed"
+                  ? "They'll receive an email with a link to choose their own password."
+                  : "They already have an account. Share this one-time link privately — it lets them choose a new password."
+                : "We'll email them an invitation with a link to choose their own password."}
             </DialogDescription>
           </DialogHeader>
 
@@ -184,28 +188,35 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                   <Label>Work email</Label>
                   <Input readOnly value={result.email} />
                 </div>
-                <div className="field-stack">
-                  <Label>Temporary password</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      readOnly
-                      value={result.temporaryPassword}
-                      className="font-mono text-sm"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      aria-label="Copy temporary password"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(result.temporaryPassword);
-                        toast.success("Temporary password copied");
-                      }}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
+                {result.delivery === "link" && result.actionLink && (
+                  <div className="field-stack">
+                    <Label>One-time sign-in link</Label>
+                    <div className="flex items-center gap-2">
+                      <Input readOnly value={result.actionLink} className="font-mono text-xs" />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label="Copy sign-in link"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(result.actionLink ?? "");
+                          toast.success("Sign-in link copied");
+                        }}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                )}
+                {result.delivery === "emailed" && (
+                  <div className="flex gap-2.5 rounded-2xl border border-edge px-3.5 py-3">
+                    <Mail className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden />
+                    <p className="text-xs text-muted-foreground">
+                      The invitation email is on its way. If it does not arrive, check the address
+                      and invite them again.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="mt-4 flex justify-end gap-2">
                 <Button
@@ -216,11 +227,8 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                 >
                   Invite another
                 </Button>
-                <Button asChild>
-                  <a href={mailto}>
-                    <Mail className="mr-1 h-4 w-4" />
-                    Email instructions
-                  </a>
+                <Button type="button" onClick={() => setOpen(false)}>
+                  Done
                 </Button>
               </div>
             </>
@@ -350,7 +358,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
                     )}
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground">
-                    They sign in with a temporary password, then choose their own. You can fine-tune
+                    They follow the emailed link and choose their own password. You can fine-tune
                     what they see under staff access.
                   </p>
                 </div>

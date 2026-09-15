@@ -139,7 +139,12 @@ export const SendDocument = z.object({
   app_origin: optionalText(500),
 });
 
-export const ResendDocument = z.object({ id, patient_id: id, app_origin: optionalText(500) });
+export const ResendDocument = z.object({
+  id,
+  patient_id: id,
+  app_origin: optionalText(500),
+  channel: z.enum(["email", "sms"]).optional(),
+});
 
 export const SignDocument = z.object({ id, signed_name: text(240) });
 
@@ -151,6 +156,14 @@ export const SendMessage = z.object({
 });
 
 export const MarkMessagesRead = z.object({ patient_id: id });
+
+export const SendPaymentRequest = z.object({
+  patient_id: id,
+  appointment_id: id,
+  channel: z.enum(["email", "sms"]),
+  kind: z.enum(["deposit", "full", "balance", "receipt"]),
+  app_origin: optionalText(500),
+});
 
 export const SendStaffAlert = z.object({
   audience: z.enum(["managers", "practitioners", "front_desk", "all", "user"]),
@@ -229,6 +242,7 @@ export const InviteStaffMember = z.object({
   role: staffRole,
   registrationBody: optionalText(200),
   registrationNumber: optionalText(100),
+  app_origin: optionalText(500),
 });
 
 export const RevokeStaffAccess = z.object({ userId: id });
@@ -311,6 +325,13 @@ export const LogRetentionOutreach = z.object({
   patient_id: id,
   channel: optionalText(50),
   note: optionalText(4_000),
+});
+
+export const SendRecall = z.object({
+  patient_id: id,
+  channel: z.enum(["email", "sms"]),
+  subject: optionalText(240),
+  body: requiredText(10_000),
 });
 
 export const CreateRecallTask = z.object({

@@ -6,7 +6,13 @@ import { clampDurationMinutes } from "@/lib/treatment-duration";
 import {
   PRACTITIONER_OVERLAP_MESSAGE,
 } from "@/lib/appointment-overlap";
-import { bookingDetailsMessage, type PaymentLinkKind } from "@/lib/payment-link";
+import {
+  bookingDetailsMessage,
+  formatMoney,
+  patientPaymentUrl,
+  paymentRequestMessage,
+  type PaymentLinkKind,
+} from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
 import { PERMISSION_KEYS, type PermissionKey } from "@/lib/permissions";
 import { parseInput } from "@/lib/validation/parse";
@@ -55,18 +61,6 @@ async function adminClient(context: unknown) {
   return clinicScoped(supabaseAdmin, (context as Ctx).clinicId);
 }
 
-/** Readable temporary password for new staff invites (manager shares it out-of-band). */
-function generateTemporaryPassword(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  let raw = "";
-  for (const b of bytes) raw += alphabet[b % alphabet.length]!;
-  return `${raw.slice(0, 3)}-${raw.slice(3, 6)}-${raw.slice(6, 9)}-${raw.slice(9, 12)}`;
-}
-
-
-
 /** Reject if the practitioner already has a non-cancelled booking overlapping this window. */
 async function assertNoPractitionerOverlap(
   supabase: any,
@@ -90,12 +84,6 @@ async function assertNoPractitionerOverlap(
   if (error) throw new Error(error.message);
   if (data?.length) throw new Error(PRACTITIONER_OVERLAP_MESSAGE);
 }
-
-/** Metadata stamped on invited staff — password gate, then one-time team welcome. */
-const NEW_STAFF_APP_META = {
-  must_change_password: true,
-  welcome_pending: true,
-} as const;
 
 /** ~100 years — revoked staff cannot keep an Auth session or sign back in. */
 const STAFF_REVOKE_BAN = "876000h";
@@ -828,6 +816,133 @@ export const listAppointments = createServerFn({ method: "GET" })
     return rows ?? [];
   });
 
+/** One formatting of an appointment time for everything patient-facing. */
+function formatWhenLondon(start: Date) {
+  return start.toLocaleString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/London",
+  });
+}
+
+/**
+ * Queue one message on every channel the patient can receive, returning the
+ * channels actually queued. Refusals are per-channel — a PECR opt-out on one
+ * must not stop the other — and none of them may fail the clinical write that
+ * triggered the send.
+ */
+async function enqueueOnChannels(
+  ctx: Ctx,
+  opts: {
+    patientId: string;
+    purpose: "transactional" | "reminder" | "marketing";
+    subject: string | null;
+    body: string;
+    templateKey: string;
+    relatedEntity?: string | null;
+    relatedId?: string | null;
+    scheduledFor?: string | null;
+    patient?: { email?: string | null; phone?: string | null } | null;
+  },
+): Promise<("email" | "sms")[]> {
+  const queued: ("email" | "sms")[] = [];
+  try {
+    const { enqueueCommunication: enqueue } = await import("./comms/enqueue.server");
+    const { channelsFor } = await import("./comms/templates");
+    let patient = opts.patient;
+    if (!patient) {
+      const { data } = await ctx.supabase
+        .from("patients")
+        .select("email, phone")
+        .eq("id", opts.patientId)
+        .maybeSingle();
+      patient = (data as { email?: string | null; phone?: string | null } | null) ?? {};
+    }
+    for (const channel of channelsFor(patient ?? {}, opts.purpose)) {
+      try {
+        await enqueue(ctx.supabase, {
+          clinicId: clinicIdOf(ctx),
+          patientId: opts.patientId,
+          channel,
+          purpose: opts.purpose,
+          subject: channel === "email" ? opts.subject : null,
+          body: opts.body,
+          templateKey: opts.templateKey,
+          scheduledFor: opts.scheduledFor ?? null,
+          relatedEntity: opts.relatedEntity ?? null,
+          relatedId: opts.relatedId ?? null,
+          createdBy: ctx.userId,
+        });
+        queued.push(channel);
+      } catch (err) {
+        console.error(
+          `[comms] ${opts.templateKey} ${channel} not queued:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[comms] enqueue unavailable:", err instanceof Error ? err.message : err);
+  }
+  return queued;
+}
+
+/**
+ * Tell the patient their appointment moved: portal message plus a real
+ * transactional send. Shared by the booking-dialog update path and the
+ * drag-to-reschedule handler.
+ */
+async function notifyBookingChange(
+  ctx: Ctx,
+  opts: {
+    appointmentId: string;
+    patientId: string;
+    treatmentName: string;
+    treatmentNumber?: number | string | null;
+    startsAt: string;
+    practitionerId?: string | null;
+  },
+): Promise<("email" | "sms")[]> {
+  const [{ data: patient }, { data: practitioner }] = await Promise.all([
+    ctx.supabase
+      .from("patients")
+      .select("first_name, email, phone")
+      .eq("id", opts.patientId)
+      .maybeSingle(),
+    opts.practitionerId
+      ? ctx.supabase.from("profiles").select("full_name").eq("id", opts.practitionerId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const { bookingUpdatedMessage } = await import("./comms/templates");
+  const body = bookingUpdatedMessage({
+    name: `${patient?.first_name ?? ""}`.trim() || "there",
+    treatment: opts.treatmentName,
+    treatmentNumber: opts.treatmentNumber ?? null,
+    when: formatWhenLondon(new Date(opts.startsAt)),
+    practitioner: (practitioner?.full_name as string) ?? null,
+  });
+  await ctx.supabase.from("messages").insert({
+    clinic_id: clinicIdOf(ctx),
+    patient_id: opts.patientId,
+    author: "staff",
+    author_id: ctx.userId,
+    body,
+  });
+  return enqueueOnChannels(ctx, {
+    patientId: opts.patientId,
+    purpose: "transactional",
+    subject: "Your appointment has been rescheduled",
+    body,
+    templateKey: "booking_update",
+    relatedEntity: "appointments",
+    relatedId: opts.appointmentId,
+    patient: { email: patient?.email as string | null, phone: patient?.phone as string | null },
+  });
+}
+
 export const saveAppointment = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -877,6 +992,11 @@ export const saveAppointment = createServerFn({ method: "POST" })
       excludeAppointmentId: data.id ?? null,
     });
     if (data.id) {
+      const { data: before } = await supabase
+        .from("appointments")
+        .select("starts_at")
+        .eq("id", data.id)
+        .maybeSingle();
       const { error } = await supabase.from("appointments").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
       await audit(context as Ctx, "update", "appointment", data.id, data.patient_id);
@@ -896,7 +1016,20 @@ export const saveAppointment = createServerFn({ method: "POST" })
           { onConflict: "appointment_id" },
         );
       }
-      return { id: data.id };
+      // A silent edit is fine for price or notes; a moved time is not.
+      const timeChanged =
+        before?.starts_at && new Date(before.starts_at as string).getTime() !== start.getTime();
+      if (timeChanged) {
+        await notifyBookingChange(context as Ctx, {
+          appointmentId: data.id,
+          patientId: data.patient_id,
+          treatmentName: data.treatment_name,
+          treatmentNumber: data.treatment_number,
+          startsAt: payload.starts_at,
+          practitionerId: payload.practitioner_id,
+        });
+      }
+      return { id: data.id, notified: Boolean(timeChanged) };
     }
     const { data: created, error } = await supabase
       .from("appointments")
@@ -928,14 +1061,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       supabase.from("patients").select("first_name, last_name, email, phone").eq("id", data.patient_id).maybeSingle(),
       supabase.from("profiles").select("full_name").eq("id", payload.practitioner_id).maybeSingle(),
     ]);
-    const when = start.toLocaleString("en-GB", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "Europe/London",
-    });
+    const when = formatWhenLondon(start);
     const patientName = `${patient?.first_name ?? ""}`.trim() || "there";
     const payKind: PaymentLinkKind =
       payload.payment_status === "deposit_paid"
@@ -956,13 +1082,26 @@ export const saveAppointment = createServerFn({ method: "POST" })
       origin: data.app_origin,
     });
 
-    // Patient-facing confirmation in their portal thread (email + text release).
+    // Portal copy of the confirmation, then the real send through the outbox.
     await supabase.from("messages").insert({
       clinic_id: clinicIdOf(context),
       patient_id: data.patient_id,
       author: "staff",
       author_id: context.userId,
       body: confirmation,
+    });
+    const queuedChannels = await enqueueOnChannels(context as Ctx, {
+      patientId: data.patient_id,
+      purpose: "transactional",
+      subject: `Booking confirmed — ${data.treatment_name} on ${when}`,
+      body: confirmation,
+      templateKey: "booking_confirmation",
+      relatedEntity: "appointments",
+      relatedId: created.id as string,
+      patient: {
+        email: (patient?.email as string) ?? null,
+        phone: (patient?.phone as string) ?? null,
+      },
     });
 
     // Notify the booked practitioner and clinic managers only.
@@ -996,7 +1135,11 @@ export const saveAppointment = createServerFn({ method: "POST" })
     }
 
     await audit(context as Ctx, "notify", "appointment", created.id, data.patient_id, {
-      channels: { portal: true, email: patient?.email ?? null, sms: patient?.phone ?? null },
+      channels: {
+        portal: true,
+        email: queuedChannels.includes("email"),
+        sms: queuedChannels.includes("sms"),
+      },
       payment_link: payload.payment_status !== "paid",
     });
 
@@ -1005,6 +1148,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       confirmation,
       email: (patient?.email as string) ?? null,
       phone: (patient?.phone as string) ?? null,
+      queued: queuedChannels,
     };
   });
 
@@ -1242,9 +1386,10 @@ function documentLinkExpiry(from = new Date()) {
 }
 
 /**
- * Email the public signing link for a document. Returns whether the email was
- * queued: a patient with no address (or a refused send) must not block the
- * form reaching their portal, so failures are reported, not thrown.
+ * Send the public signing link for a document by email (default) or text.
+ * Returns whether the send was queued: a patient with no address (or a refused
+ * send) must not block the form reaching their portal, so failures are
+ * reported, not thrown.
  */
 async function enqueueDocumentEmail(
   ctx: Ctx,
@@ -1255,8 +1400,10 @@ async function enqueueDocumentEmail(
     title: string;
     origin?: string | null | undefined;
     reminder?: boolean;
+    channel?: "email" | "sms" | undefined;
   },
 ): Promise<boolean> {
+  const channel = opts.channel ?? "email";
   try {
     const { enqueueCommunication: enqueue } = await import("./comms/enqueue.server");
     const { consentRequestMessage, publicSigningUrl } = await import("./comms/templates");
@@ -1275,9 +1422,9 @@ async function enqueueDocumentEmail(
     await enqueue(ctx.supabase, {
       clinicId: clinicIdOf(ctx),
       patientId: opts.patientId,
-      channel: "email",
+      channel,
       purpose: "transactional",
-      subject: message.subject,
+      subject: channel === "email" ? message.subject : null,
       body: message.body,
       templateKey: "consent_request",
       relatedEntity: "documents",
@@ -1286,7 +1433,10 @@ async function enqueueDocumentEmail(
     });
     return true;
   } catch (err) {
-    console.error("[comms] consent email not queued:", err instanceof Error ? err.message : err);
+    console.error(
+      `[comms] consent ${channel} not queued:`,
+      err instanceof Error ? err.message : err,
+    );
     return false;
   }
 }
@@ -1346,7 +1496,7 @@ export const sendDocument = createServerFn({ method: "POST" })
 
 export const resendDocument = createServerFn({ method: "POST" })
   .validator(
-    (data: { id: string; patient_id: string; app_origin?: string }) =>
+    (data: { id: string; patient_id: string; app_origin?: string; channel?: "email" | "sms" }) =>
       parseInput(schemas.ResendDocument, data),
   )
   .middleware([requireSupabaseAuth])
@@ -1387,9 +1537,109 @@ export const resendDocument = createServerFn({ method: "POST" })
       title: doc.title as string,
       origin: data.app_origin,
       reminder: true,
+      channel: data.channel,
     });
-    await audit(context as Ctx, "resend", "document", data.id, data.patient_id, { emailed });
+    await audit(context as Ctx, "resend", "document", data.id, data.patient_id, {
+      emailed,
+      channel: data.channel ?? "email",
+    });
     return { ok: true, emailed };
+  });
+
+/**
+ * Deposit chase, balance chase or receipt from the payment chip. The staff
+ * member picked the channel, so a PECR refusal or missing address throws and
+ * reaches them as the toast — silently downgrading to portal-only is exactly
+ * the lie Phase 0 removed. A portal copy is still written on success.
+ */
+export const sendPaymentRequest = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      appointment_id: string;
+      channel: "email" | "sms";
+      kind: "deposit" | "full" | "balance" | "receipt";
+      app_origin?: string;
+    }) => parseInput(schemas.SendPaymentRequest, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "sendPaymentRequest");
+    const { data: appointment, error: appointmentError } = await ctx.supabase
+      .from("appointments")
+      .select("id, patient_id, treatment_name, treatment_number, starts_at, price")
+      .eq("id", data.appointment_id)
+      .maybeSingle();
+    if (appointmentError) throw new Error(appointmentError.message);
+    if (!appointment || appointment.patient_id !== data.patient_id) {
+      throw new Error("Appointment not found for this patient");
+    }
+    const { data: patient } = await ctx.supabase
+      .from("patients")
+      .select("first_name")
+      .eq("id", data.patient_id)
+      .maybeSingle();
+
+    const name = `${patient?.first_name ?? ""}`.trim() || "there";
+    const when = new Date(appointment.starts_at as string).toLocaleDateString("en-GB");
+    const total = Number(appointment.price ?? 0);
+    const depositAmount = Math.round(total * 0.3 * 100) / 100;
+    const origin = data.app_origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "";
+
+    let body: string;
+    let subject: string;
+    if (data.kind === "receipt") {
+      body =
+        `Hi ${name}, here is your receipt for ${appointment.treatment_name} on ${when}. ` +
+        `Amount paid: ${formatMoney(total)}. A copy is also available in your patient ` +
+        `portal: ${patientPaymentUrl(appointment.id as string, "full", origin)}`;
+      subject = `Your receipt — ${appointment.treatment_name}`;
+    } else {
+      const amount =
+        data.kind === "deposit"
+          ? depositAmount
+          : data.kind === "balance"
+            ? Math.round((total - depositAmount) * 100) / 100
+            : total;
+      body = paymentRequestMessage({
+        name,
+        treatment: appointment.treatment_name as string,
+        treatmentNumber: appointment.treatment_number as number | null,
+        when,
+        amount,
+        kind: data.kind,
+        appointmentId: appointment.id as string,
+        origin,
+      });
+      subject = `Payment link — ${appointment.treatment_name}`;
+    }
+
+    const { enqueueCommunication: enqueue } = await import("./comms/enqueue.server");
+    const { id: communicationId } = await enqueue(ctx.supabase, {
+      clinicId: clinicIdOf(context),
+      patientId: data.patient_id,
+      channel: data.channel,
+      purpose: "transactional",
+      subject: data.channel === "email" ? subject : null,
+      body,
+      templateKey: data.kind === "receipt" ? "payment_receipt" : "payment_request",
+      relatedEntity: "appointments",
+      relatedId: data.appointment_id,
+      createdBy: ctx.userId,
+    });
+    await ctx.supabase.from("messages").insert({
+      clinic_id: clinicIdOf(context),
+      patient_id: data.patient_id,
+      author: "staff",
+      author_id: ctx.userId,
+      body,
+    });
+    await audit(ctx, "comms.payment", "communications", communicationId, data.patient_id, {
+      kind: data.kind,
+      channel: data.channel,
+    });
+    return { ok: true, communication_id: communicationId };
   });
 
 export const sendMessage = createServerFn({ method: "POST" })
@@ -2266,10 +2516,11 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   });
 
 /**
- * Manager-only: invite a receptionist or practitioner. Creates the account with an
- * auto-generated temporary password (returned once for the manager to share) and
- * requires the invitee to change it on first sign-in.
- * If the email already has an auth user, their password is reset instead.
+ * Manager-only: invite a receptionist or practitioner. Supabase Auth emails an
+ * invite link and the invitee chooses their own password on /auth/reset —
+ * no plaintext temporary password ever reaches the UI or a manager's mailbox.
+ * If the email already has an auth user, a one-time recovery link is returned
+ * for the manager to share instead (Auth will not re-invite an existing user).
  */
 export const inviteStaffMember = createServerFn({ method: "POST" })
   .validator(
@@ -2280,6 +2531,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
+      app_origin?: string;
     }) => parseInput(schemas.InviteStaffMember, data),
   )
   .middleware([requireSupabaseAuth])
@@ -2287,58 +2539,53 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await authorize(ctx, "inviteStaffMember");
     const email = assertEmail(data.email, "work email")!;
-    const temporaryPassword = generateTemporaryPassword();
     const supabaseAdmin = await adminClient(context);
+    const origin = (data.app_origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(/\/$/, "");
+    const redirectTo = `${origin}/auth/reset`;
 
     let uid: string | undefined;
+    let delivery: "emailed" | "link" = "emailed";
+    let actionLink: string | null = null;
 
-    const created = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password: temporaryPassword,
-      email_confirm: true,
-      user_metadata: { full_name: data.fullName },
-      app_metadata: { ...NEW_STAFF_APP_META },
+    const invited = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      data: { full_name: data.fullName },
+      redirectTo,
     });
 
-    if (created.error) {
-      const msg = (created.error.message || "").toLowerCase();
+    if (invited.error) {
+      const msg = (invited.error.message || "").toLowerCase();
       const already =
         msg.includes("already been registered") ||
         msg.includes("already registered") ||
         msg.includes("user already exists") ||
-        created.error.status === 422;
-      if (!already) throw new Error(created.error.message);
+        invited.error.status === 422;
+      if (!already) throw new Error(invited.error.message);
 
-      // Email already has an auth user — reset password so invite still works.
-      const listed = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
-      if (listed.error) throw new Error(listed.error.message);
-      const existing = (listed.data.users ?? []).find((u) => (u.email ?? "").toLowerCase() === email);
-      if (!existing) throw new Error("That email is already registered, but the account could not be found to reset.");
-      uid = existing.id;
-      const updated = await supabaseAdmin.auth.admin.updateUserById(uid, {
-        password: temporaryPassword,
-        email_confirm: true,
-        ban_duration: "none",
-        user_metadata: { full_name: data.fullName },
-        app_metadata: {
-          ...(existing.app_metadata ?? {}),
-          ...NEW_STAFF_APP_META,
-        },
+      // Existing account: mint a one-time recovery link for the manager to
+      // share. It expires, it is single-use, and the invitee still chooses
+      // their own password — unlike the old plaintext temporary password.
+      const link = await supabaseAdmin.auth.admin.generateLink({
+        type: "recovery",
+        email,
+        options: { redirectTo },
       });
-      if (updated.error) throw new Error(updated.error.message);
+      if (link.error) throw new Error(link.error.message);
+      uid = link.data.user?.id;
+      actionLink = link.data.properties?.action_link ?? null;
+      delivery = "link";
     } else {
-      if (!created.data.user) throw new Error("Could not create the invitation");
-      uid = created.data.user.id;
-      // Belt-and-braces: some Auth setups accept createUser but leave password unusable
-      // until an explicit updateUserById. Force-set the same temporary password.
-      const confirmPw = await supabaseAdmin.auth.admin.updateUserById(uid, {
-        password: temporaryPassword,
-        email_confirm: true,
-        ban_duration: "none",
-        app_metadata: { ...NEW_STAFF_APP_META },
-      });
-      if (confirmPw.error) throw new Error(confirmPw.error.message);
+      uid = invited.data.user?.id;
     }
+    if (!uid) throw new Error("Could not create the invitation");
+
+    // They set their own password from the link, so no forced change remains;
+    // only the welcome tour is pending.
+    const meta = await supabaseAdmin.auth.admin.updateUserById(uid, {
+      ban_duration: "none",
+      user_metadata: { full_name: data.fullName },
+      app_metadata: { welcome_pending: true, must_change_password: false },
+    });
+    if (meta.error) throw new Error(meta.error.message);
 
     await supabaseAdmin.from("profiles").upsert({
       id: uid,
@@ -2352,13 +2599,14 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
     await supabaseAdmin.from("user_roles").insert({ user_id: uid, role: data.role });
     await clearExTeamArchive(clinicIdOf(context), uid);
     await unbanAuthUser(uid);
-    await audit(ctx, "staff.invite", "user_roles", uid, null, { email, role: data.role });
+    await audit(ctx, "staff.invite", "user_roles", uid, null, { email, role: data.role, delivery });
 
     return {
       userId: uid,
       email,
       role: data.role,
-      temporaryPassword,
+      delivery,
+      actionLink,
     };
   });
 
@@ -3480,6 +3728,48 @@ export const logRetentionOutreach = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Recall a lapsing patient by real email or text through the outbox. Marketing
+ * purpose on purpose: a recall promotes a repeat treatment, so it respects the
+ * patient's marketing opt-ins under PECR. Unlike the manual contact log above,
+ * the outreach row carries the communication id, so retention history can show
+ * whether the message actually left and was delivered.
+ */
+export const sendRecall = createServerFn({ method: "POST" })
+  .validator(
+    (data: { patient_id: string; channel: "email" | "sms"; subject?: string; body: string }) =>
+      parseInput(schemas.SendRecall, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "sendRecall");
+    const { enqueueCommunication: enqueue } = await import("./comms/enqueue.server");
+    const { id: communicationId } = await enqueue(ctx.supabase, {
+      clinicId: clinicIdOf(context),
+      patientId: data.patient_id,
+      channel: data.channel,
+      purpose: "marketing",
+      subject: data.subject ?? null,
+      body: data.body,
+      templateKey: "recall",
+      relatedEntity: "retention_outreach",
+      createdBy: ctx.userId,
+    });
+    const { error } = await ctx.supabase.from("retention_outreach").insert({
+      clinic_id: clinicIdOf(context),
+      patient_id: data.patient_id,
+      contacted_by: ctx.userId,
+      channel: data.channel,
+      communication_id: communicationId,
+    });
+    if (error) throw new Error(error.message);
+    await audit(ctx, "retention.recall_sent", "communications", communicationId, data.patient_id, {
+      channel: data.channel,
+    });
+    return { ok: true, communication_id: communicationId };
+  });
+
 /** Create a recall task for a practitioner or receptionist to chase a patient. */
 export const createRecallTask = createServerFn({ method: "POST" })
   .validator(
@@ -3870,7 +4160,7 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
     if (Number.isNaN(start.getTime())) throw new Error("Invalid date and time");
     const { data: current } = await ctx.supabase
       .from("appointments")
-      .select("starts_at, ends_at, practitioner_id")
+      .select("starts_at, ends_at, practitioner_id, patient_id, treatment_name, treatment_number")
       .eq("id", data.id)
       .maybeSingle();
     let minutes = data.duration_minutes;
@@ -3903,6 +4193,16 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
     if (data.practitioner_id) patch["practitioner_id"] = data.practitioner_id;
     const { error } = await ctx.supabase.from("appointments").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
+    if (current?.patient_id) {
+      await notifyBookingChange(ctx, {
+        appointmentId: data.id,
+        patientId: current.patient_id as string,
+        treatmentName: (current.treatment_name as string) ?? "your treatment",
+        treatmentNumber: (current.treatment_number as number) ?? null,
+        startsAt,
+        practitionerId: (practitionerId as string) ?? null,
+      });
+    }
     await audit(ctx, "update", "appointment", data.id, null, { starts_at: start.toISOString() });
     return { ok: true };
   });

@@ -26,14 +26,25 @@ import {
   findPractitionerOverlap,
   PRACTITIONER_OVERLAP_MESSAGE,
 } from "@/lib/appointment-overlap";
-import { bookingDetailsMessage, type PaymentLinkKind } from "@/lib/payment-link";
+import {
+  bookingDetailsMessage,
+  formatMoney,
+  patientPaymentUrl,
+  paymentRequestMessage,
+  type PaymentLinkKind,
+} from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
 // Re-exported rather than redeclared: a second copy of the key list silently
 // drifted from the real one, so demo mode enforced a different set of
 // capabilities than production.
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { assertCanSend, nextUnsubscribedAt, prefsFromPatient } from "@/lib/comms/preferences";
-import { consentRequestMessage, publicSigningUrl } from "@/lib/comms/templates";
+import {
+  bookingUpdatedMessage,
+  channelsFor,
+  consentRequestMessage,
+  publicSigningUrl,
+} from "@/lib/comms/templates";
 
 export { PERMISSION_KEYS, type PermissionKey };
 
@@ -797,10 +808,10 @@ export const saveAppointment = createServerFn({ method: "POST" })
 
     if (data.id) {
       const row = appointments.find((a) => a.id === data.id);
+      const beforeStartsAt = row?.starts_at as string | undefined;
       if (row) Object.assign(row, payload);
       const noteBody = String(data.notes ?? "");
       if (noteBody.trim()) {
-        const me = identity();
         const now = new Date().toISOString();
         let note = appointmentNotes.find((n) => n.appointment_id === data.id);
         if (!note) {
@@ -818,7 +829,21 @@ export const saveAppointment = createServerFn({ method: "POST" })
         note.updated_by_label = me.profile?.full_name ?? null;
         note.updated_at = now;
       }
-      return { id: data.id };
+      // A silent edit is fine for price or notes; a moved time is not.
+      const timeChanged =
+        Boolean(beforeStartsAt) && new Date(beforeStartsAt!).getTime() !== start.getTime();
+      if (timeChanged) {
+        notifyBookingChange({
+          appointmentId: data.id,
+          patientId: data.patient_id,
+          treatmentName: data.treatment_name,
+          treatmentNumber: data.treatment_number,
+          startsAt: payload.starts_at,
+          practitionerId: payload.practitioner_id,
+          createdBy: me.userId,
+        });
+      }
+      return { id: data.id, notified: timeChanged };
     }
 
     const created = { id: newId("a8"), created_at: new Date().toISOString(), ...payload };
@@ -842,14 +867,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
     }
 
     const patient = patientById(data.patient_id);
-    const when = start.toLocaleString("en-GB", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "Europe/London",
-    });
+    const when = formatWhenLondon(start);
     const practitioner = profileName(payload.practitioner_id);
     const payKind: PaymentLinkKind =
       payload.payment_status === "deposit_paid"
@@ -910,11 +928,23 @@ export const saveAppointment = createServerFn({ method: "POST" })
       });
     }
 
+    const queuedChannels = queueOnChannels({
+      patientId: data.patient_id,
+      purpose: "transactional",
+      subject: `Booking confirmed — ${data.treatment_name} on ${when}`,
+      body: confirmation,
+      templateKey: "booking_confirmation",
+      relatedEntity: "appointments",
+      relatedId: created.id,
+      createdBy: me.userId,
+    });
+
     return {
       id: created.id,
       confirmation,
       email: patient?.email ?? null,
       phone: patient?.phone ?? null,
+      queued: queuedChannels,
     };
   });
 
@@ -986,6 +1016,15 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
     row.stage = "booked";
     row.status = "booked";
     if (data.practitioner_id) row.practitioner_id = data.practitioner_id;
+    notifyBookingChange({
+      appointmentId: data.id,
+      patientId: row.patient_id,
+      treatmentName: row.treatment_name ?? "your treatment",
+      treatmentNumber: row.treatment_number ?? null,
+      startsAt,
+      practitionerId: practitionerId ?? null,
+      createdBy: identity().userId,
+    });
     return { ok: true };
   });
 
@@ -1191,7 +1230,96 @@ function queueCommunication(input: {
   return { id: row.id };
 }
 
-/** Demo twin of the production helper: email the signing link, report success. */
+/** One formatting of an appointment time for everything patient-facing. */
+function formatWhenLondon(start: Date) {
+  return start.toLocaleString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/London",
+  });
+}
+
+/** Demo twin of enqueueOnChannels: per-channel queue, refusals never throw. */
+function queueOnChannels(opts: {
+  patientId: string;
+  purpose: "transactional" | "reminder" | "marketing";
+  subject: string | null;
+  body: string;
+  templateKey: string;
+  relatedEntity?: string | null;
+  relatedId?: string | null;
+  scheduledFor?: string | null;
+  createdBy: string;
+}): ("email" | "sms")[] {
+  const patient = patientById(opts.patientId);
+  const queued: ("email" | "sms")[] = [];
+  for (const channel of channelsFor(patient ?? {}, opts.purpose)) {
+    try {
+      queueCommunication({
+        patientId: opts.patientId,
+        channel,
+        purpose: opts.purpose,
+        subject: channel === "email" ? opts.subject : null,
+        body: opts.body,
+        templateKey: opts.templateKey,
+        scheduledFor: opts.scheduledFor ?? null,
+        relatedEntity: opts.relatedEntity ?? null,
+        relatedId: opts.relatedId ?? null,
+        createdBy: opts.createdBy,
+      });
+      queued.push(channel);
+    } catch {
+      // PECR refusal on one channel must not stop the other.
+    }
+  }
+  return queued;
+}
+
+/** Demo twin of notifyBookingChange: portal message plus a real queued send. */
+function notifyBookingChange(opts: {
+  appointmentId: string;
+  patientId: string;
+  treatmentName: string;
+  treatmentNumber?: number | string | null;
+  startsAt: string;
+  practitionerId?: string | null;
+  createdBy: string;
+}): ("email" | "sms")[] {
+  const patient = patientById(opts.patientId);
+  const body = bookingUpdatedMessage({
+    name: `${patient?.first_name ?? ""}`.trim() || "there",
+    treatment: opts.treatmentName,
+    treatmentNumber: opts.treatmentNumber ?? null,
+    when: formatWhenLondon(new Date(opts.startsAt)),
+    practitioner: opts.practitionerId ? profileName(opts.practitionerId) : null,
+  });
+  messages.push({
+    id: newId("h9"),
+    clinic_id: CLINIC_ID,
+    patient_id: opts.patientId,
+    author: "staff",
+    author_id: opts.createdBy,
+    body,
+    attachments: [],
+    read_at: null,
+    created_at: new Date().toISOString(),
+  });
+  return queueOnChannels({
+    patientId: opts.patientId,
+    purpose: "transactional",
+    subject: "Your appointment has been rescheduled",
+    body,
+    templateKey: "booking_update",
+    relatedEntity: "appointments",
+    relatedId: opts.appointmentId,
+    createdBy: opts.createdBy,
+  });
+}
+
+/** Demo twin of the production helper: send the signing link, report success. */
 function enqueueDocumentEmail(opts: {
   patientId: string;
   documentId: string;
@@ -1199,8 +1327,10 @@ function enqueueDocumentEmail(opts: {
   title: string;
   origin?: string | null | undefined;
   reminder?: boolean;
+  channel?: "email" | "sms" | undefined;
   createdBy: string;
 }): boolean {
+  const channel = opts.channel ?? "email";
   try {
     const patient = patientById(opts.patientId);
     const message = consentRequestMessage({
@@ -1211,9 +1341,9 @@ function enqueueDocumentEmail(opts: {
     });
     queueCommunication({
       patientId: opts.patientId,
-      channel: "email",
+      channel,
       purpose: "transactional",
-      subject: message.subject,
+      subject: channel === "email" ? message.subject : null,
       body: message.body,
       templateKey: "consent_request",
       relatedEntity: "documents",
@@ -1288,7 +1418,7 @@ export const sendDocument = createServerFn({ method: "POST" })
 
 export const resendDocument = createServerFn({ method: "POST" })
   .validator(
-    (data: { id: string; patient_id: string; app_origin?: string }) =>
+    (data: { id: string; patient_id: string; app_origin?: string; channel?: "email" | "sms" }) =>
       parseInput(schemas.ResendDocument, data),
   )
   .handler(async ({ data }) => {
@@ -1317,6 +1447,7 @@ export const resendDocument = createServerFn({ method: "POST" })
       title: row.title,
       origin: data.app_origin,
       reminder: true,
+      channel: data.channel,
       createdBy: me.userId,
     });
     return { ok: true, emailed };
@@ -1340,6 +1471,83 @@ export const signDocument = createServerFn({ method: "POST" })
 /* ---------------------------------------------------------------- */
 /* messaging                                                          */
 /* ---------------------------------------------------------------- */
+
+export const sendPaymentRequest = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      appointment_id: string;
+      channel: "email" | "sms";
+      kind: "deposit" | "full" | "balance" | "receipt";
+      app_origin?: string;
+    }) => parseInput(schemas.SendPaymentRequest, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
+    const appointment = appointments.find((a) => a.id === data.appointment_id);
+    if (!appointment || appointment.patient_id !== data.patient_id) {
+      throw new Error("Appointment not found for this patient");
+    }
+    const patient = patientById(data.patient_id);
+    const name = `${patient?.first_name ?? ""}`.trim() || "there";
+    const when = new Date(appointment.starts_at).toLocaleDateString("en-GB");
+    const total = Number(appointment.price ?? 0);
+    const depositAmount = Math.round(total * 0.3 * 100) / 100;
+    const origin = data.app_origin?.trim() || "";
+
+    let body: string;
+    let subject: string;
+    if (data.kind === "receipt") {
+      body =
+        `Hi ${name}, here is your receipt for ${appointment.treatment_name} on ${when}. ` +
+        `Amount paid: ${formatMoney(total)}. A copy is also available in your patient ` +
+        `portal: ${patientPaymentUrl(appointment.id, "full", origin)}`;
+      subject = `Your receipt — ${appointment.treatment_name}`;
+    } else {
+      const amount =
+        data.kind === "deposit"
+          ? depositAmount
+          : data.kind === "balance"
+            ? Math.round((total - depositAmount) * 100) / 100
+            : total;
+      body = paymentRequestMessage({
+        name,
+        treatment: appointment.treatment_name,
+        treatmentNumber: appointment.treatment_number ?? null,
+        when,
+        amount,
+        kind: data.kind,
+        appointmentId: appointment.id,
+        origin,
+      });
+      subject = `Payment link — ${appointment.treatment_name}`;
+    }
+
+    const { id: communicationId } = queueCommunication({
+      patientId: data.patient_id,
+      channel: data.channel,
+      purpose: "transactional",
+      subject: data.channel === "email" ? subject : null,
+      body,
+      templateKey: data.kind === "receipt" ? "payment_receipt" : "payment_request",
+      relatedEntity: "appointments",
+      relatedId: data.appointment_id,
+      createdBy: me.userId,
+    });
+    messages.push({
+      id: newId("h9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      author: "staff",
+      author_id: me.userId,
+      body,
+      attachments: [],
+      read_at: null,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true, communication_id: communicationId };
+  });
 
 export const sendMessage = createServerFn({ method: "POST" })
   .validator(
@@ -2013,17 +2221,12 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       role: "owner" | "manager" | "practitioner" | "front_desk";
       registrationBody?: string;
       registrationNumber?: string;
+      app_origin?: string;
     }) => parseInput(schemas.InviteStaffMember, data),
   )
   .handler(async ({ data }) => {
     const email = assertEmail(data.email, "work email")!;
     const userId = newId("s8");
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-    const bytes = new Uint8Array(12);
-    crypto.getRandomValues(bytes);
-    let raw = "";
-    for (const b of bytes) raw += alphabet[b % alphabet.length]!;
-    const temporaryPassword = `${raw.slice(0, 3)}-${raw.slice(3, 6)}-${raw.slice(6, 9)}-${raw.slice(9, 12)}`;
     profiles.push({
       id: userId,
       clinic_id: CLINIC_ID,
@@ -2043,14 +2246,14 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       created_at: new Date().toISOString(),
     });
     db.staffEmails[userId] = email;
-    mustChangePasswordByUser.add(userId);
     welcomePendingByUser.add(userId);
     clearExTeamArchiveDemo(userId);
     return {
       userId,
       email,
       role: data.role,
-      temporaryPassword,
+      delivery: "emailed" as const,
+      actionLink: null,
     };
   });
 
@@ -2704,6 +2907,37 @@ export const logRetentionOutreach = createServerFn({ method: "POST" })
       created_at: new Date().toISOString(),
     });
     return { ok: true };
+  });
+
+export const sendRecall = createServerFn({ method: "POST" })
+  .validator(
+    (data: { patient_id: string; channel: "email" | "sms"; subject?: string; body: string }) =>
+      parseInput(schemas.SendRecall, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
+    const { id: communicationId } = queueCommunication({
+      patientId: data.patient_id,
+      channel: data.channel,
+      purpose: "marketing",
+      subject: data.subject ?? null,
+      body: data.body,
+      templateKey: "recall",
+      relatedEntity: "retention_outreach",
+      createdBy: me.userId,
+    });
+    retentionOutreach.push({
+      id: newId("j9"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      contacted_by: me.userId,
+      channel: data.channel,
+      note: null,
+      communication_id: communicationId,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true, communication_id: communicationId };
   });
 
 export const createRecallTask = createServerFn({ method: "POST" })

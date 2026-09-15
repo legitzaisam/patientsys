@@ -25,10 +25,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   sendMessage,
+  sendRecall,
   listMessageTemplates,
   logRetentionOutreach,
   saveMessageTemplate,
 } from "@/lib/clinic.functions";
+import { renderTemplate, TEMPLATE_VARIABLES } from "@/lib/comms/templates";
 
 type Channel = "message" | "email" | "sms";
 
@@ -37,14 +39,6 @@ const CHANNEL_CATEGORY: Record<Channel, string> = {
   email: "recall-email",
   sms: "recall-sms",
 };
-
-const VARIABLES = [
-  { token: "{{first_name}}", label: "First name" },
-  { token: "{{full_name}}", label: "Full name" },
-  { token: "{{treatment}}", label: "Treatment" },
-  { token: "{{due_date}}", label: "Due date" },
-  { token: "{{clinic}}", label: "Clinic" },
-];
 
 const DEFAULTS: Record<Channel, { subject?: string; body: string }> = {
   message: {
@@ -95,6 +89,7 @@ export function SendRecallDialog({
   });
 
   const post = useMutation({ mutationFn: useServerFn(sendMessage) });
+  const postRecall = useMutation({ mutationFn: useServerFn(sendRecall) });
   const mark = useMutation({ mutationFn: useServerFn(logRetentionOutreach) });
   const saveTemplate = useMutation({
     mutationFn: useServerFn(saveMessageTemplate),
@@ -108,16 +103,16 @@ export function SendRecallDialog({
   const values = useMemo(() => {
     const first = patientFirstName?.trim() || patientName.split(" ").slice(-1)[0] || "there";
     return {
-      "{{first_name}}": first,
-      "{{full_name}}": patientName,
-      "{{treatment}}": treatment || "your next treatment",
-      "{{due_date}}": dueDate ? new Date(dueDate).toLocaleDateString("en-GB") : "soon",
-      "{{clinic}}": clinicName,
+      first_name: first,
+      full_name: patientName,
+      treatment: treatment || "your next treatment",
+      due_date: dueDate ? new Date(dueDate).toLocaleDateString("en-GB") : "soon",
+      clinic: clinicName,
     } as Record<string, string>;
   }, [patientFirstName, patientName, treatment, dueDate, clinicName]);
 
   function render(text: string) {
-    return text.replace(/\{\{\s*\w+\s*\}\}/g, (m) => values[m.replace(/\s/g, "")] ?? m);
+    return renderTemplate(text, values);
   }
 
   const channelTemplates = (templates ?? []).filter((t: any) => {
@@ -159,8 +154,7 @@ export function SendRecallDialog({
     });
   }
 
-  function finish(channelLabel: Channel) {
-    mark.mutate({ data: { patient_id: patientId, channel: channelLabel } });
+  function finish() {
     queryClient.invalidateQueries({ queryKey: ["retention"] });
     setOpen(false);
   }
@@ -173,28 +167,42 @@ export function SendRecallDialog({
         {
           onSuccess: () => {
             toast.success("Recall message sent");
-            finish("message");
+            // Portal messages are not outbox sends, so log the contact here.
+            mark.mutate({ data: { patient_id: patientId, channel: "message" } });
+            finish();
           },
           onError: (e: Error) => toast.error(e.message),
         },
       );
       return;
     }
-    if (channel === "email") {
-      if (!email) {
-        toast.error("No email address on file for this patient");
-        return;
-      }
-      window.location.href = `mailto:${email}?subject=${encodeURIComponent(render(subject))}&body=${encodeURIComponent(text)}`;
-      finish("email");
+    // Email and SMS go through the outbox for real; the server records the
+    // outreach with the communication id, so no separate contact log here.
+    if (channel === "email" && !email) {
+      toast.error("No email address on file for this patient");
       return;
     }
-    if (!phone) {
+    if (channel === "sms" && !phone) {
       toast.error("No mobile number on file for this patient");
       return;
     }
-    window.location.href = `sms:${phone.replace(/\s/g, "")}?&body=${encodeURIComponent(text)}`;
-    finish("sms");
+    postRecall.mutate(
+      {
+        data: {
+          patient_id: patientId,
+          channel,
+          ...(channel === "email" ? { subject: render(subject) } : {}),
+          body: text,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success(channel === "email" ? "Recall email queued to send" : "Recall text queued to send");
+          finish();
+        },
+        onError: (e: Error) => toast.error(e.message),
+      },
+    );
   }
 
   return (
@@ -275,7 +283,7 @@ export function SendRecallDialog({
             placeholder="Write a recall message…"
           />
           <div className="flex flex-wrap gap-1.5 pt-1">
-            {VARIABLES.map((v) => (
+            {TEMPLATE_VARIABLES.map((v) => (
               <button
                 key={v.token}
                 type="button"
@@ -326,11 +334,11 @@ export function SendRecallDialog({
           <Button
             type="button"
            
-            disabled={!body.trim() || post.isPending}
+            disabled={!body.trim() || post.isPending || postRecall.isPending}
             onClick={submit}
           >
             <Send className="mr-1.5 h-3.5 w-3.5" />
-            {channel === "message" ? "Send recall" : channel === "email" ? "Open email" : "Open SMS"}
+            {channel === "message" ? "Send recall" : channel === "email" ? "Send email" : "Send text"}
           </Button>
         </DialogFooter>
       </DialogContent>
