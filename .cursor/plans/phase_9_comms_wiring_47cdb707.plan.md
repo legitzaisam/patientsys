@@ -55,7 +55,7 @@ todos:
     status: completed
   - id: docs
     content: Write docs/plans/phase-09-comms-flows.md, append WORKLOG entries for Phases 6, 7 and 9, mark Phase 9 complete in the master plan
-    status: in_progress
+    status: completed
 isProject: false
 ---
 
