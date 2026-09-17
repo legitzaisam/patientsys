@@ -58,13 +58,13 @@ todos:
     status: completed
   - id: p6-checks
     content: "Phase 6: check:policy / check:validators / check:tenancy, tsc --noEmit, migration status clean"
-    status: in_progress
+    status: completed
   - id: p6-sweep
     content: "Phase 6: Demo-mode Playwright sweep — dashboard sections, notes drag, patients tabs, board role defaults via role switcher, chat bubble, retention"
-    status: pending
+    status: completed
   - id: p6-commit
     content: "Phase 6: Fill work logs, commit all changes to patient0 and push with Zaisam's token (URL push, keychain untouched)"
-    status: pending
+    status: completed
 isProject: false
 ---
 

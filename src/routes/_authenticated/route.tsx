@@ -15,6 +15,7 @@ import {
   shouldShowWelcomeAfterGate,
 } from "@/lib/password-gate-session";
 import { DEMO_MODE } from "@/lib/demo/enabled";
+import { FloatingDockProvider } from "@/components/floating-dock/dock-context";
 import { useIdentity } from "@/lib/use-identity";
 
 const wasStaffKey = (userId: string) => `aetheria:was-staff:${userId}`;
@@ -247,7 +248,11 @@ function IdentityGate() {
         name={identity.profile?.full_name}
       />
       <IdleWatchdog enabled={Boolean(identity.isStaff)} />
-      <Outlet />
+      {/* Above the route components: pages register chat context with the dock
+          (rendered inside AppShell, a child of each route). */}
+      <FloatingDockProvider>
+        <Outlet />
+      </FloatingDockProvider>
     </>
   );
 }

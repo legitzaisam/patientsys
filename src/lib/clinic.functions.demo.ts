@@ -1921,6 +1921,40 @@ export const getUnreadMessages = createServerFn({ method: "GET" }).handler(async
   return { total: items.reduce((sum, i) => sum + i.count, 0), items };
 });
 
+export const listPatientThreads = createServerFn({ method: "GET" }).handler(async () => {
+  const threads = new Map<
+    string,
+    { patientId: string; name: string; avatarUrl: string | null; last: string; lastAt: string; lastAuthor: string; unread: number }
+  >();
+  for (const row of sortDesc([...messages], "created_at")) {
+    let thread = threads.get(row.patient_id);
+    if (!thread) {
+      const patient = patientById(row.patient_id);
+      thread = {
+        patientId: row.patient_id,
+        name: `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient",
+        avatarUrl: patient?.avatar_url ?? null,
+        last: row.body,
+        lastAt: row.created_at,
+        lastAuthor: row.author,
+        unread: 0,
+      };
+      threads.set(row.patient_id, thread);
+    }
+    if (row.author === "patient" && !row.read_at) thread.unread += 1;
+  }
+  return [...threads.values()].slice(0, 15);
+});
+
+export const getPatientMessages = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.GetPatientMessages, data))
+  .handler(async ({ data }) =>
+    sortAsc(
+      messages.filter((m) => m.patient_id === data.patient_id),
+      "created_at",
+    ),
+  );
+
 export const markMessagesRead = createServerFn({ method: "POST" })
   .validator((data: { patient_id: string }) => parseInput(schemas.MarkMessagesRead, data))
   .handler(async ({ data }) => {

@@ -36,8 +36,9 @@ export function DemoRoleSwitcher() {
 
   const current = ROLES.find((r) => r.value === role) ?? ROLES[0];
 
+  // Bottom-left: the floating dock (alert + chat bubbles) owns bottom-right.
   return (
-    <div className="fixed bottom-5 right-5 z-50 print:hidden">
+    <div className="fixed bottom-5 left-5 z-50 print:hidden">
       {open && (
         <div className="glass-card mb-2 w-56 overflow-hidden">
           <p className="border-b border-edge px-3 py-2 text-2xs tracking-[0.02em] text-muted-foreground">

@@ -21,9 +21,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrivalAlerts } from "@/components/arrival-alerts";
 import { AlertAckToaster } from "@/components/alert-ack-toaster";
-import { UrgentStaffAlerts } from "@/components/urgent-staff-alerts";
+import { FloatingDock } from "@/components/floating-dock/floating-dock";
 import { SentStaffAlerts } from "@/components/sent-staff-alerts";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
@@ -642,16 +641,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
         </main>
       </div>
 
-      {identity.isStaff && (
-        <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex w-[min(18rem,calc(100vw-2.5rem))] flex-col-reverse items-end gap-3">
-          <div className="pointer-events-auto flex w-full justify-end">
-            <ArrivalAlerts roles={identity.roles} />
-          </div>
-          <div className="pointer-events-auto flex w-full justify-end">
-            <UrgentStaffAlerts />
-          </div>
-        </div>
-      )}
+      {identity.isStaff && <FloatingDock roles={identity.roles} />}
       {identity.isStaff && <AlertAckToaster />}
       {DEMO_MODE && <DemoRoleSwitcher />}
     </div>

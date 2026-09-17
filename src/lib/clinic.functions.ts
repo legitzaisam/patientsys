@@ -2589,6 +2589,60 @@ export const drainCommunications = createServerFn({ method: "POST" })
     return summary;
   });
 
+export const listPatientThreads = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await authorize(context as Ctx, "listPatientThreads");
+    const supabase = (context as Ctx).supabase;
+
+    // Recent traffic, grouped into threads. 400 recent rows comfortably covers
+    // a clinic's active conversations without scanning the whole table.
+    const { data: rows, error } = await supabase
+      .from("messages")
+      .select("id, patient_id, author, body, read_at, created_at, patients(first_name, last_name, avatar_url)")
+      .order("created_at", { ascending: false })
+      .limit(400);
+    if (error) throw new Error(error.message);
+
+    const threads = new Map<
+      string,
+      { patientId: string; name: string; avatarUrl: string | null; last: string; lastAt: string; lastAuthor: string; unread: number }
+    >();
+    for (const row of (rows ?? []) as any[]) {
+      let thread = threads.get(row.patient_id);
+      if (!thread) {
+        thread = {
+          patientId: row.patient_id,
+          name: `${row.patients?.first_name ?? ""} ${row.patients?.last_name ?? ""}`.trim() || "Patient",
+          avatarUrl: row.patients?.avatar_url ?? null,
+          last: row.body,
+          lastAt: row.created_at,
+          lastAuthor: row.author,
+          unread: 0,
+        };
+        threads.set(row.patient_id, thread);
+      }
+      if (row.author === "patient" && !row.read_at) thread.unread += 1;
+    }
+    return [...threads.values()].slice(0, 15);
+  });
+
+export const getPatientMessages = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.GetPatientMessages, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    // Ownership-checked like getPatient: staff, or the patient whose thread it is.
+    await authorize(context as Ctx, "getPatientMessages", { patientId: data.patient_id });
+    const supabase = (context as Ctx).supabase;
+    const { data: rows, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("patient_id", data.patient_id)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    return rows ?? [];
+  });
+
 export const markMessagesRead = createServerFn({ method: "POST" })
   .validator((data: { patient_id: string }) => parseInput(schemas.MarkMessagesRead, data))
   .middleware([requireSupabaseAuth])

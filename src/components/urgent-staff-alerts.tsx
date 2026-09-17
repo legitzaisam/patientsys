@@ -25,7 +25,19 @@ import { Textarea } from "@/components/ui/textarea";
  * Bottom-right popup for unread urgent peer alerts.
  * Matches arrival-alert chrome (glass card, badge, collapsed pill).
  */
-export function UrgentStaffAlerts() {
+export function UrgentStaffAlerts({
+  variant = "standalone",
+  onCountChange,
+  onRequestCollapse,
+  panelVisible = true,
+}: {
+  /** "panel": rendered inside the floating dock's alert panel — no own pill. */
+  variant?: "standalone" | "panel";
+  onCountChange?: (count: number) => void;
+  onRequestCollapse?: () => void;
+  /** Panel mode: false while the dock keeps the panel closed (mounted but hidden). */
+  panelVisible?: boolean;
+} = {}) {
   const queryClient = useQueryClient();
   const sessionReady = useAuthSessionReady();
   const fetchAlerts = useServerFn(listStaffNotifications);
@@ -51,14 +63,28 @@ export function UrgentStaffAlerts() {
     [alerts],
   );
 
+  // The dock's alert bubble needs the live count even while its panel is shut.
+  // Report only once data has loaded: the transient 0 of a fresh mount must not
+  // look like "all alerts resolved" (it would reset the peek memory).
+  const loaded = alerts !== undefined;
+  useEffect(() => {
+    if (loaded) onCountChange?.(urgent.length);
+  }, [onCountChange, urgent.length, loaded]);
+
   useEffect(() => {
     if (collapsed || urgent.length === 0) return;
+    // Hidden panel: leave the keyboard alone (Escape belongs to whoever is visible).
+    if (variant === "panel" && !panelVisible) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
         if (replying) {
           setReplying(false);
           setReply("");
+          return;
+        }
+        if (variant === "panel") {
+          onRequestCollapse?.();
           return;
         }
         restoreFocus.current = true;
@@ -70,7 +96,7 @@ export function UrgentStaffAlerts() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [collapsed, urgent.length, replying]);
+  }, [collapsed, urgent.length, replying, variant, panelVisible]);
 
   useEffect(() => {
     if (collapsed && restoreFocus.current) {
@@ -132,7 +158,7 @@ export function UrgentStaffAlerts() {
     .replace(/^(Urgent|Message)\s+from\s+[^:]+:\s*/i, "")
     .trim() || current.title;
 
-  if (collapsed) {
+  if (collapsed && variant !== "panel") {
     return (
       <button
         type="button"
@@ -204,6 +230,10 @@ export function UrgentStaffAlerts() {
               onClick={() => {
                 setReplying(false);
                 setReply("");
+                if (variant === "panel") {
+                  onRequestCollapse?.();
+                  return;
+                }
                 setCollapsed(true);
               }}
               className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"

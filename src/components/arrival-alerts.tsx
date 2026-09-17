@@ -96,7 +96,21 @@ const phaseMeta: Record<
   },
 };
 
-export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
+export function ArrivalAlerts({
+  roles = [],
+  variant = "standalone",
+  onCountChange,
+  onRequestCollapse,
+  panelVisible = true,
+}: {
+  roles?: string[];
+  /** "panel": rendered inside the floating dock's alert panel — no own pill. */
+  variant?: "standalone" | "panel";
+  onCountChange?: (count: number) => void;
+  onRequestCollapse?: () => void;
+  /** Panel mode: false while the dock keeps the panel closed (mounted but hidden). */
+  panelVisible?: boolean;
+}) {
   void roles;
   const queryClient = useQueryClient();
   const fetchDashboard = useServerFn(getDashboard);
@@ -145,9 +159,15 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
 
   useEffect(() => {
     if (collapsed || noShowAppt) return;
+    // Hidden panel: leave the keyboard alone (Escape belongs to whoever is visible).
+    if (variant === "panel" && !panelVisible) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
+        if (variant === "panel") {
+          onRequestCollapse?.();
+          return;
+        }
         restoreFocus.current = true;
         setCollapsed(true);
       } else if (panelRef.current?.contains(document.activeElement)) {
@@ -157,7 +177,7 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [collapsed, noShowAppt]);
+  }, [collapsed, noShowAppt, variant, panelVisible]);
 
   useEffect(() => {
     if (collapsed && restoreFocus.current) {
@@ -189,6 +209,15 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
   const visible = alerts.filter(
     (a) => !isArrivalAlertSnoozed(a.appt.id, a.phase, now, snoozes),
   );
+
+  // The dock's alert bubble needs the live count even while its panel is shut.
+  // Report only once data has loaded: the transient 0 of a fresh mount must not
+  // look like "all alerts resolved" (it would reset the peek memory).
+  const loaded = data !== undefined;
+  const visibleCount = alerts.filter((x) => !isArrivalAlertSnoozed(x.appt.id, x.phase, now, snoozes)).length;
+  useEffect(() => {
+    if (loaded) onCountChange?.(visibleCount);
+  }, [onCountChange, visibleCount, loaded]);
 
   const mostUrgentPhase = useMemo<Phase>(() => {
     const order: Phase[] = ["due", "arrival", "late", "overdue"];
@@ -231,7 +260,7 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
         ? `${minutes(start + OVERDUE_MS - now)} min left`
         : time;
 
-  if (collapsed) {
+  if (collapsed && variant !== "panel") {
     const pill = phaseMeta[mostUrgentPhase];
     const PillIcon = pill.icon;
     return (
@@ -317,7 +346,7 @@ export function ArrivalAlerts({ roles = [] }: { roles?: string[] }) {
               <button
                 type="button"
                 aria-label="Collapse arrivals"
-                onClick={() => setCollapsed(true)}
+                onClick={() => (variant === "panel" ? onRequestCollapse?.() : setCollapsed(true))}
                 className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"
               >
                 <ChevronDown className="h-3.5 w-3.5" />

@@ -428,6 +428,8 @@ export const SetRolePermission = z.object({
   enabled: z.boolean(),
 });
 
+export const GetPatientMessages = z.object({ patient_id: id });
+
 /* Treatment plans (journeys) */
 
 export const ListTreatmentPlans = z.object({

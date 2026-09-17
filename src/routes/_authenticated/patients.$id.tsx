@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, MessageCircle, Upload } from "lucide-react";
+import { ArrowLeft, Upload } from "lucide-react";
 import {
   addPhoto,
   addTreatment,
@@ -20,6 +20,7 @@ import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
 import { PatientChatPanel } from "@/components/patient-chat-panel";
+import { useRegisterChatPage } from "@/components/floating-dock/dock-context";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { Card } from "@/components/ui/card";
@@ -101,6 +102,23 @@ function PatientRecord() {
     setChatCollapsed(next);
     localStorage.setItem("aetheria.patient-chat-collapsed", next ? "1" : "0");
   }
+
+  // Tell the floating dock which patient this page is about: while the docked
+  // panel is open the chat bubble hides; when minimised, the bubble opens the
+  // floating window on this patient, and its dock-back action lands here.
+  const registerChatPage = useRegisterChatPage();
+  const patientName = `${data?.patient?.first_name ?? ""} ${data?.patient?.last_name ?? ""}`.trim();
+  useEffect(() => {
+    if (!data?.patient) return;
+    registerChatPage({
+      patientId: id,
+      patientName: patientName || "Patient",
+      docked: !chatCollapsed,
+      restoreDock: () => setChatCollapsedPersisted(false),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, patientName, chatCollapsed, !!data?.patient]);
+  useEffect(() => () => registerChatPage(null), [registerChatPage]);
   const [resizing, setResizing] = useState(false);
   const resizeStart = useRef({ x: 0, width: 340 });
 
@@ -1057,39 +1075,7 @@ function PatientRecord() {
           />
         )}
       </div>
-      {chatCollapsed ? (
-        <ChatBubble
-          name={`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "Patient"}
-          unread={(data.messages ?? []).filter((m: any) => m.author === "patient" && !m.read_at).length}
-          onOpen={() => setChatCollapsedPersisted(false)}
-        />
-      ) : null}
     </AppShell>
-  );
-}
-
-/**
- * Collapsed chat, floating bottom-right as a messenger-style bubble. The very
- * corner belongs to the alert stack (and the demo role switcher), so the bubble
- * sits a step above them and keeps a higher z-index than the transient alerts:
- * a 52px bubble must stay reachable even while an alert card is showing.
- */
-function ChatBubble({ name, unread, onOpen }: { name: string; unread: number; onOpen: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={`Open chat with ${name}${unread ? ` (${unread} unread)` : ""}`}
-      title={`Message ${name}`}
-      className="fixed bottom-24 right-5 z-[60] flex h-13 w-13 items-center justify-center rounded-full border border-edge bg-primary p-3.5 text-primary-foreground shadow-lift transition-transform hover:scale-105 active:scale-95"
-    >
-      <MessageCircle className="h-5 w-5" aria-hidden />
-      {unread > 0 ? (
-        <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-bold text-white shadow-lift">
-          {unread > 9 ? "9+" : unread}
-        </span>
-      ) : null}
-    </button>
   );
 }
 
