@@ -1,5 +1,7 @@
 /** Retention maths. Server-only: never import from a component. */
 
+import { deriveRetentionInsights } from "./retention-insights.server";
+
 export type RetentionPatient = {
   id: string;
   title: string | null;
@@ -285,55 +287,9 @@ export function buildRetention(input: {
     })
     .sort((a, b) => b.patients - a.patients);
 
-  // ---- suggested actions
-  const suggestions: { id: string; title: string; detail: string; filter: RiskLevel | "all" }[] = [];
-  if (counts.overdue) {
-    suggestions.push({
-      id: "overdue",
-      title: `${counts.overdue} patient${counts.overdue === 1 ? " is" : "s are"} overdue for a treatment`,
-      detail: "Send a recall message so they rebook before the effect wears off.",
-      filter: "overdue",
-    });
-  }
-  if (counts.lapsing) {
-    suggestions.push({
-      id: "lapsing",
-      title: `${counts.lapsing} patient${counts.lapsing === 1 ? "" : "s"} last seen 3-6 months ago`,
-      detail: "A short check-in now is the cheapest way to keep them on the books.",
-      filter: "lapsing",
-    });
-  }
-  const latest = monthly[monthly.length - 1];
-  const monthBefore = monthly[monthly.length - 2];
-  if (latest && monthBefore && latest.rate < monthBefore.rate) {
-    suggestions.push({
-      id: "dip",
-      title: `Retention dipped ${monthBefore.rate - latest.rate}% this month`,
-      detail: `Now ${latest.rate}%, down from ${monthBefore.rate}%. Check no-shows and follow-up bookings at discharge.`,
-      filter: "all",
-    });
-  }
-  const lastCohort = cohorts[cohorts.length - 1];
-  const secondCohort = cohorts.filter((c) => c.patients >= 3).slice(-3);
-  const avgSecond = secondCohort.length
-    ? Math.round(secondCohort.reduce((s, c) => s + c.secondRate, 0) / secondCohort.length)
-    : lastCohort?.secondRate ?? 0;
-  if (secondCohort.length && avgSecond < 60) {
-    suggestions.push({
-      id: "second-visit",
-      title: `Only ${avgSecond}% of new patients return for a second treatment`,
-      detail: "Book the follow-up before they leave the clinic, and send an aftercare message at two weeks.",
-      filter: "all",
-    });
-  }
-  if (counts.lost) {
-    suggestions.push({
-      id: "lost",
-      title: `${counts.lost} patient${counts.lost === 1 ? " has" : "s have"} not been seen for 6 months`,
-      detail: "Worth one win-back message before marking them inactive.",
-      filter: "lost",
-    });
-  }
+  // ---- suggested actions: delegated to the insights engine so a smarter
+  // (API/model-driven) recommender can slot in without touching this report.
+  const suggestions = deriveRetentionInsights({ counts, monthly, cohorts });
 
   return {
     summary: {

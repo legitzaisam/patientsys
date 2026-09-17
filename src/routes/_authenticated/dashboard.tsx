@@ -13,7 +13,9 @@ import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TodaySnapshot } from "@/components/dashboard/today-snapshot";
 import { AttentionList } from "@/components/dashboard/attention-list";
 import { FollowUpTasks } from "@/components/dashboard/follow-up-tasks";
-import { NotesPanel } from "@/components/dashboard/notes-panel";
+import { FloatingNotes } from "@/components/dashboard/floating-notes";
+import { SafeToProceed } from "@/components/dashboard/safe-to-proceed";
+import { TreatmentJourneys } from "@/components/dashboard/treatment-journeys";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -140,6 +142,7 @@ function DashboardPage() {
           <h1 className="page-title">{heading}</h1>
           <p className="page-subtitle">{subheading}</p>
         </div>
+        <FloatingNotes />
       </div>
 
       <section className="mb-8">
@@ -148,6 +151,8 @@ function DashboardPage() {
                 ...data?.kpis,
                 revenueAtRisk: retention?.summary?.revenueAtRisk ?? 0,
                 patientsToChase: retention?.atRisk?.length ?? 0,
+                activePlans: (data as any)?.journeys?.activeCount ?? 0,
+                plansOverdue: (data as any)?.journeys?.overdueCount ?? 0,
               }}
               canRetention={canRetention}
               canRevenue={canRevenue}
@@ -191,21 +196,26 @@ function DashboardPage() {
         <TodaySnapshot appointments={diaryAppointments} isManager={isManager} span={diarySpan} />
       </section>
 
-      <div className="flex flex-1 flex-col gap-6 lg:flex-row">
-        <section className="flex min-w-0 flex-1 flex-col gap-6">
-          <div>
-            <div className="mb-4">
-              <h2 className="section-title">Attention needed</h2>
-              <p className="text-xs text-muted-foreground">
-                Outstanding items that need action — deposits must be paid at least 3 days before the appointment.
-              </p>
-            </div>
-            <AttentionList items={[...(data?.attentionItems ?? []), ...incompleteItems]} />
+      <section className="flex flex-1 flex-col gap-6">
+        <div>
+          <div className="mb-4">
+            <h2 className="section-title">Attention needed</h2>
+            <p className="text-xs text-muted-foreground">
+              Outstanding items that need action — deposits must be paid at least 3 days before the appointment.
+            </p>
           </div>
+          <AttentionList items={[...(data?.attentionItems ?? []), ...incompleteItems]} />
+        </div>
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           <FollowUpTasks />
-        </section>
-        <NotesPanel />
-      </div>
+          <SafeToProceed
+            items={((data as any)?.safeToProceed ?? []) as any}
+            readyCount={(data as any)?.safeReadyCount ?? 0}
+          />
+        </div>
+      </section>
+
+      <TreatmentJourneys journeys={(data as any)?.journeys} />
     </AppShell>
   );
 }

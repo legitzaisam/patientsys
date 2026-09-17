@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowDown, ArrowRight, ArrowUp, Calendar, PoundSterling, Repeat, Users } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Calendar, Layers, PoundSterling, Repeat, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ChipTone = "mint" | "rose" | "gold" | "lilac" | "sky" | "peach";
@@ -96,6 +96,21 @@ export function KpiGrid({
       chips: [percentChip("patients-change", kpis?.patientChange ?? 0)],
     },
     {
+      label: "Active skin plans",
+      value: kpis?.activePlans ?? 0,
+      hint: "Patients on a treatment journey",
+      icon: Layers,
+      to: "/patients",
+      search: { tab: "board" },
+      chips: [
+        {
+          id: "plans-overdue",
+          label: `${kpis?.plansOverdue ?? 0} overdue step${(kpis?.plansOverdue ?? 0) === 1 ? "" : "s"}`,
+          tone: (kpis?.plansOverdue ?? 0) > 0 ? ("rose" as const) : ("mint" as const),
+        },
+      ],
+    },
+    {
       label: "Treatments due",
       value: kpis?.treatmentsDue ?? "—",
       hint: "Next 30 days",
@@ -130,7 +145,13 @@ export function KpiGrid({
   ] as any[];
 
   const cols =
-    items.length >= 4 ? "lg:grid-cols-4" : items.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-2";
+    items.length >= 5
+      ? "lg:grid-cols-3 xl:grid-cols-5"
+      : items.length === 4
+        ? "lg:grid-cols-4"
+        : items.length === 3
+          ? "lg:grid-cols-3"
+          : "lg:grid-cols-2";
 
   return (
     <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${cols}`}>

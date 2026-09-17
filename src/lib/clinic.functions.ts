@@ -372,7 +372,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       supabase
         .from("appointments")
         .select(
-          "*, patients(first_name, last_name, reference, email, phone), profiles(full_name), documents(status, title), appointment_notes(body, updated_at, updated_by_label)",
+          "*, patients(first_name, last_name, reference, email, phone, avatar_url), profiles(full_name), documents(status, title), appointment_notes(body, updated_at, updated_by_label)",
         )
         .gte("starts_at", todayStart)
         .lt("starts_at", tomorrowStart)
@@ -402,6 +402,27 @@ export const getDashboard = createServerFn({ method: "GET" })
         .select("next_due_at, practitioner_id")
         .not("next_due_at", "is", null)
         .lte("next_due_at", in30),
+    ]);
+
+    // Journeys + Safe-to-proceed. Fetched after the main fan-out so the three
+    // queries can share the ids above; plans are few, so this stays cheap.
+    const dayAfterTomorrow = clinicDayRange(new Date(today.getTime() + 86400000)).endISO;
+    const [plansRaw, milestonesRaw, horizonApptsRaw] = await Promise.all([
+      supabase
+        .from("treatment_plans")
+        .select("id, patient_id, practitioner_id, name, phase, status, total_sessions, patients(first_name, last_name, avatar_url)")
+        .eq("status", "active")
+        .order("started_at", { ascending: true }),
+      supabase.from("plan_milestones").select("plan_id, status, kind, idx, due_date"),
+      supabase
+        .from("appointments")
+        .select(
+          "id, starts_at, treatment_name, patient_id, practitioner_id, status, payment_status, documents(status), patients(first_name, last_name, allergies, avatar_url)",
+        )
+        .gte("starts_at", todayStart)
+        .lt("starts_at", dayAfterTomorrow)
+        .eq("status", "booked")
+        .order("starts_at", { ascending: true }),
     ]);
 
     let all = patients.data ?? [];
@@ -547,6 +568,83 @@ export const getDashboard = createServerFn({ method: "GET" })
       });
     }
 
+    // ---- Journeys: active plans grouped by phase (dashboard bottom section).
+    let plans = (plansRaw.data ?? []) as any[];
+    if (scoped) plans = plans.filter((p) => !p.practitioner_id || p.practitioner_id === scoped);
+    const milestoneAgg = new Map<string, { done: number; total: number }>();
+    for (const m of (milestonesRaw.data ?? []) as any[]) {
+      const agg = milestoneAgg.get(m.plan_id) ?? { done: 0, total: 0 };
+      agg.total += 1;
+      if (m.status === "done" || m.status === "skipped") agg.done += 1;
+      milestoneAgg.set(m.plan_id, agg);
+    }
+    const journeyPhases = (["consult", "foundation", "build", "results"] as const).map((phase) => {
+      const inPhase = plans.filter((p) => p.phase === phase);
+      return {
+        phase,
+        count: inPhase.length,
+        plans: inPhase.slice(0, 4).map((p) => {
+          const agg = milestoneAgg.get(p.id) ?? { done: 0, total: p.total_sessions };
+          return {
+            id: p.id,
+            patientId: p.patient_id,
+            patientName: `${p.patients?.first_name ?? ""} ${p.patients?.last_name ?? ""}`.trim(),
+            avatarUrl: p.patients?.avatar_url ?? null,
+            name: p.name,
+            done: agg.done,
+            total: agg.total || p.total_sessions,
+          };
+        }),
+      };
+    });
+    const todayKeyForPlans = clinicDayKey(today);
+    const overduePlanIds = new Set<string>();
+    for (const m of ((milestonesRaw.data ?? []) as any[])) {
+      if ((m.status === "current" || m.status === "upcoming") && m.due_date && m.due_date < todayKeyForPlans) {
+        overduePlanIds.add(m.plan_id);
+      }
+    }
+    const journeys = {
+      activeCount: plans.length,
+      overdueCount: plans.filter((p) => overduePlanIds.has(p.id)).length,
+      phases: journeyPhases,
+    };
+
+    // Give each diary card its patient's active plan, so cards can say
+    // "Session 2 of 3" instead of a bare treatment number.
+    const planByPatient = new Map<string, { name: string; totalSessions: number }>();
+    for (const p of plans) {
+      if (!planByPatient.has(p.patient_id)) {
+        planByPatient.set(p.patient_id, { name: p.name, totalSessions: p.total_sessions });
+      }
+    }
+    todayAppts = todayAppts.map((a: any) => ({ ...a, plan: planByPatient.get(a.patient_id) ?? null }));
+
+    // ---- Safe to proceed: today/tomorrow bookings with pre-visit blockers.
+    let horizon = (horizonApptsRaw.data ?? []) as any[];
+    if (scoped) horizon = horizon.filter((a) => a.practitioner_id === scoped);
+    const safeToProceed: any[] = [];
+    for (const a of horizon) {
+      const blockers: string[] = [];
+      if (a.documents?.status !== "signed") blockers.push("Consent not signed");
+      if (a.payment_status === "unpaid") blockers.push("Deposit unpaid");
+      else if (a.payment_status === "deposit_paid") blockers.push("Balance due");
+      const allergies = (a.patients?.allergies ?? "").trim();
+      if (allergies && allergies.toLowerCase() !== "none") blockers.push(`Allergy: ${allergies.slice(0, 60)}`);
+      if (blockers.length === 0) continue;
+      safeToProceed.push({
+        id: a.id,
+        patientId: a.patient_id,
+        patientName: `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient",
+        avatarUrl: a.patients?.avatar_url ?? null,
+        treatment: a.treatment_name,
+        startsAt: a.starts_at,
+        blockers,
+      });
+      if (safeToProceed.length >= 8) break;
+    }
+    const safeReadyCount = horizon.length - safeToProceed.length;
+
     return {
       kpis: {
         totalClients: all.length,
@@ -567,6 +665,9 @@ export const getDashboard = createServerFn({ method: "GET" })
       },
       todayAppointments: todayAppts,
       attentionItems,
+      journeys,
+      safeToProceed,
+      safeReadyCount,
       due,
       pendingDocuments: pendingDocs.data ?? [],
       historyFlags: historyFlags.data ?? [],
@@ -596,17 +697,30 @@ export const listPatients = createServerFn({ method: "GET" })
     const ids = (data ?? []).map((p: { id: string }) => p.id);
     if (ids.length === 0) return [];
 
-    const [{ data: treatments }, { data: docs }, { data: upcoming }] = await Promise.all([
-      supabase.from("treatments").select("patient_id, name, performed_at, next_due_at").in("patient_id", ids),
-      supabase.from("documents").select("patient_id, status").in("patient_id", ids),
-      supabase
-        .from("appointments")
-        .select("patient_id, treatment_name, treatment_number, starts_at, status")
-        .in("patient_id", ids)
-        .gte("starts_at", new Date().toISOString())
-        .in("status", ["booked"])
-        .order("starts_at", { ascending: true }),
-    ]);
+    const [{ data: treatments }, { data: docs }, { data: upcoming }, { data: openRecalls }, { data: staffProfiles }] =
+      await Promise.all([
+        supabase
+          .from("treatments")
+          .select("patient_id, name, performed_at, next_due_at, practitioner_id")
+          .in("patient_id", ids),
+        supabase.from("documents").select("patient_id, status").in("patient_id", ids),
+        supabase
+          .from("appointments")
+          .select("patient_id, treatment_name, treatment_number, starts_at, status, practitioner_id")
+          .in("patient_id", ids)
+          .gte("starts_at", new Date().toISOString())
+          .in("status", ["booked"])
+          .order("starts_at", { ascending: true }),
+        supabase
+          .from("recall_tasks")
+          .select("id, patient_id, note, status")
+          .in("patient_id", ids)
+          .in("status", ["open", "contacted"]),
+        supabase.from("profiles").select("id, full_name"),
+      ]);
+
+    const nameOf = new Map((staffProfiles ?? []).map((s: any) => [s.id, s.full_name as string]));
+    const todayKey = clinicDayKey(new Date());
 
     return (data ?? []).map((p: Record<string, unknown>) => {
       const mine = (treatments ?? []).filter((t: { patient_id: string }) => t.patient_id === p["id"]);
@@ -618,14 +732,115 @@ export const listPatients = createServerFn({ method: "GET" })
         (d: any) => d.patient_id === p["id"] && (d.status === "sent" || d.status === "viewed"),
       ).length;
       const next = (upcoming ?? []).find((a: any) => a.patient_id === p["id"]);
+
+      // Active practitioner(s): whoever holds the next booking, then whoever
+      // treated them most recently. Unique, in that order.
+      const practitionerIds: string[] = [];
+      if (next?.practitioner_id) practitionerIds.push(next.practitioner_id);
+      for (const t of mine) {
+        if (t.practitioner_id && !practitionerIds.includes(t.practitioner_id)) practitionerIds.push(t.practitioner_id);
+      }
+      const practitioners = practitionerIds.map((pid) => nameOf.get(pid)).filter(Boolean) as string[];
+
+      // Open items: assigned recall tasks plus derived chase items.
+      const openTasks: { id: string; label: string; kind: string }[] = (openRecalls ?? [])
+        .filter((t: any) => t.patient_id === p["id"])
+        .map((t: any) => ({
+          id: t.id,
+          label: t.note?.trim() ? t.note.trim().slice(0, 80) : "Follow up and rebook",
+          kind: t.status === "contacted" ? "recall_contacted" : "recall",
+        }));
+      if (outstanding > 0) {
+        openTasks.push({
+          id: `docs-${p["id"]}`,
+          label: `${outstanding} form${outstanding === 1 ? "" : "s"} awaiting signature`,
+          kind: "paperwork",
+        });
+      }
+      if (due?.next_due_at && due.next_due_at < todayKey) {
+        openTasks.push({ id: `due-${p["id"]}`, label: `${due.name} overdue`, kind: "treatment_due" });
+      }
+
       return {
         ...p,
         lastTreatment: last ?? null,
         nextDue: due ?? null,
         nextAppointment: next ?? null,
         outstandingDocuments: outstanding,
+        practitioners,
+        openTasks,
       };
     });
+  });
+
+export const getPatientMetrics = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await authorize(context as Ctx, "getPatientMetrics");
+    const supabase = (context as Ctx).supabase;
+    const now = new Date();
+    const yearAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+    const [{ data: patients }, { data: treatments }] = await Promise.all([
+      supabase.from("patients").select("id, status, created_at").is("deleted_at", null),
+      supabase.from("treatments").select("patient_id, name, performed_at, next_due_at"),
+    ]);
+    const all = patients ?? [];
+    const tx = (treatments ?? []) as any[];
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const active = all.filter((p: any) => p.status === "active").length;
+    const newThisMonth = all.filter((p: any) => p.created_at >= monthStart).length;
+
+    // New patients per month, last 12 months.
+    const monthlyNew: { key: string; label: string; count: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      monthlyNew.push({
+        key: d.toISOString().slice(0, 7),
+        label: d.toLocaleDateString("en-GB", { month: "short" }),
+        count: all.filter((p: any) => p.created_at >= d.toISOString() && p.created_at < next.toISOString()).length,
+      });
+    }
+
+    // Top treatments by volume over the last 12 months.
+    const counts = new Map<string, number>();
+    for (const t of tx) {
+      if (t.performed_at >= yearAgo.toISOString()) counts.set(t.name, (counts.get(t.name) ?? 0) + 1);
+    }
+    const topTreatments = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count }));
+
+    // Treatments falling due, next six months, plus the overdue backlog.
+    const todayKey = clinicDayKey(now);
+    const dueByMonth: { key: string; label: string; due: number }[] = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const next = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+      dueByMonth.push({
+        key: d.toISOString().slice(0, 7),
+        label: d.toLocaleDateString("en-GB", { month: "short" }),
+        due: tx.filter(
+          (t) =>
+            t.next_due_at &&
+            t.next_due_at >= d.toISOString().slice(0, 10) &&
+            t.next_due_at < next.toISOString().slice(0, 10) &&
+            t.next_due_at >= todayKey,
+        ).length,
+      });
+    }
+    const overdue = tx.filter((t) => t.next_due_at && t.next_due_at < todayKey).length;
+
+    return {
+      totals: { total: all.length, active, inactive: all.length - active, newThisMonth },
+      monthlyNew,
+      topTreatments,
+      dueByMonth,
+      overdue,
+    };
   });
 
 export const getPatient = createServerFn({ method: "GET" })
@@ -5083,4 +5298,202 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
       .is("read_at", null);
 
     return { ok: true, lastReadAt: now, conversationId };
+  });
+
+/* ---------------------------------------------------------------------------
+ * Treatment plans (journeys)
+ *
+ * A plan is a phased course of care for one patient; its milestones are the
+ * ordered steps the clinic tracks. These power the journey board, the
+ * dashboard "Active skin plans" KPI and the "Active treatment journeys"
+ * section. Role defaults on the board (a practitioner opens "My patients"
+ * first) are a client-side default, not a data restriction: any staff member
+ * may view the whole board.
+ * ------------------------------------------------------------------------- */
+
+export const listTreatmentPlans = createServerFn({ method: "GET" })
+  .validator((data: { practitioner_id?: string; at_risk_only?: boolean; query?: string }) =>
+    parseInput(schemas.ListTreatmentPlans, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "listTreatmentPlans");
+    const supabase = (context as Ctx).supabase;
+
+    let planQuery = supabase
+      .from("treatment_plans")
+      .select(
+        "id, patient_id, practitioner_id, catalogue_id, name, phase, status, total_sessions, started_at, patients(first_name, last_name, reference, avatar_url), profiles(full_name)",
+      )
+      .eq("status", "active")
+      .order("started_at", { ascending: true });
+    if (data.practitioner_id) planQuery = planQuery.eq("practitioner_id", data.practitioner_id);
+    const { data: plans, error } = await planQuery;
+    if (error) throw new Error(error.message);
+
+    const planIds = (plans ?? []).map((p: { id: string }) => p.id);
+    const patientIds = [...new Set((plans ?? []).map((p: { patient_id: string }) => p.patient_id))];
+    const [{ data: milestones }, { data: upcomingAppts }] = await Promise.all([
+      planIds.length
+        ? supabase
+            .from("plan_milestones")
+            .select("id, plan_id, idx, title, kind, status, due_date")
+            .in("plan_id", planIds)
+            .order("idx", { ascending: true })
+        : Promise.resolve({ data: [] as any[] }),
+      patientIds.length
+        ? supabase
+            .from("appointments")
+            .select("patient_id, starts_at")
+            .in("patient_id", patientIds)
+            .eq("status", "booked")
+            .gte("starts_at", new Date().toISOString())
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+
+    const todayISO = clinicDayKey(new Date());
+    const hasUpcoming = new Set((upcomingAppts ?? []).map((a: any) => a.patient_id));
+    const needle = (data.query ?? "").trim().toLowerCase();
+
+    let rows = (plans ?? []).map((p: any) => {
+      const mine = ((milestones ?? []) as any[]).filter((m) => m.plan_id === p.id);
+      const done = mine.filter((m) => m.status === "done" || m.status === "skipped").length;
+      const next =
+        mine.find((m) => m.status === "current") ?? mine.find((m) => m.status === "upcoming") ?? null;
+      const overdue = Boolean(next?.due_date && next.due_date < todayISO);
+      const atRisk = overdue || !hasUpcoming.has(p.patient_id);
+      return {
+        id: p.id,
+        patientId: p.patient_id,
+        patientName: `${p.patients?.first_name ?? ""} ${p.patients?.last_name ?? ""}`.trim(),
+        patientReference: p.patients?.reference ?? null,
+        avatarUrl: p.patients?.avatar_url ?? null,
+        practitionerId: p.practitioner_id,
+        practitionerName: p.profiles?.full_name ?? null,
+        name: p.name,
+        phase: p.phase,
+        done,
+        total: mine.length || p.total_sessions,
+        nextMilestone: next ? { id: next.id, title: next.title, kind: next.kind, dueDate: next.due_date } : null,
+        overdue,
+        atRisk,
+        riskReason: overdue
+          ? "Next step overdue"
+          : !hasUpcoming.has(p.patient_id)
+            ? "No upcoming booking"
+            : null,
+      };
+    });
+
+    if (needle) {
+      rows = rows.filter(
+        (r: any) => r.patientName.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle),
+      );
+    }
+    if (data.at_risk_only) rows = rows.filter((r: any) => r.atRisk);
+    return rows;
+  });
+
+export const createTreatmentPlan = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      name: string;
+      practitioner_id?: string;
+      catalogue_id?: string;
+      phase?: "consult" | "foundation" | "build" | "results";
+      total_sessions?: number;
+      milestones: { title: string; kind?: "session" | "task" | "conditional"; due_date?: string }[];
+    }) => parseInput(schemas.CreateTreatmentPlan, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "createTreatmentPlan");
+    const supabase = (context as Ctx).supabase;
+    const clinicId = clinicIdOf(context);
+
+    const totalSessions =
+      data.total_sessions ?? Math.max(1, data.milestones.filter((m) => (m.kind ?? "task") === "session").length);
+    const { data: created, error } = await supabase
+      .from("treatment_plans")
+      .insert({
+        clinic_id: clinicId,
+        patient_id: data.patient_id,
+        practitioner_id: data.practitioner_id || null,
+        catalogue_id: data.catalogue_id || null,
+        name: data.name,
+        phase: data.phase ?? "consult",
+        total_sessions: totalSessions,
+        created_by: (context as Ctx).userId,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+
+    const { error: milestoneError } = await supabase.from("plan_milestones").insert(
+      data.milestones.map((m, i) => ({
+        clinic_id: clinicId,
+        plan_id: created.id,
+        idx: i + 1,
+        title: m.title,
+        kind: m.kind ?? "task",
+        status: i === 0 ? ("current" as const) : ("upcoming" as const),
+        due_date: m.due_date || null,
+      })),
+    );
+    if (milestoneError) throw new Error(milestoneError.message);
+
+    await audit(context as Ctx, "treatment_plan.create", "treatment_plans", created.id, data.patient_id, {
+      name: data.name,
+      milestones: data.milestones.length,
+    });
+    return { id: created.id };
+  });
+
+export const updatePlanMilestone = createServerFn({ method: "POST" })
+  .validator((data: { id: string; status: "upcoming" | "current" | "done" | "skipped" }) =>
+    parseInput(schemas.UpdatePlanMilestone, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "updatePlanMilestone");
+    const supabase = (context as Ctx).supabase;
+
+    const { data: updated, error } = await supabase
+      .from("plan_milestones")
+      .update({
+        status: data.status,
+        completed_at: data.status === "done" ? new Date().toISOString() : null,
+      })
+      .eq("id", data.id)
+      .select("id, plan_id, idx")
+      .single();
+    if (error) throw new Error(error.message);
+
+    // Keep the plan honest: promote the next step, and close the plan when
+    // every milestone is settled.
+    const { data: siblings } = await supabase
+      .from("plan_milestones")
+      .select("id, idx, status")
+      .eq("plan_id", updated.plan_id)
+      .order("idx", { ascending: true });
+    const open = (siblings ?? []).filter((m: any) => m.status === "upcoming" || m.status === "current");
+    if (data.status === "done" || data.status === "skipped") {
+      const hasCurrent = (siblings ?? []).some((m: any) => m.status === "current");
+      const nextUp = (siblings ?? []).find((m: any) => m.status === "upcoming");
+      if (!hasCurrent && nextUp) {
+        await supabase.from("plan_milestones").update({ status: "current" }).eq("id", nextUp.id);
+      }
+      if (open.length === 0) {
+        await supabase
+          .from("treatment_plans")
+          .update({ status: "completed", completed_at: new Date().toISOString() })
+          .eq("id", updated.plan_id);
+      }
+    }
+
+    await audit(context as Ctx, "plan_milestone.update", "plan_milestones", updated.id, null, {
+      status: data.status,
+    });
+    return { ok: true };
   });

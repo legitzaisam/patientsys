@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PatientAvatar } from "@/components/patient-avatar";
 import { Link } from "@tanstack/react-router";
 import { Check, Search, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -190,13 +191,16 @@ export function AtRiskTable({
             {visible.map((r) => (
               <tr key={r.patientId} className="border-b border-glass-line last:border-0">
                 <td className="px-4 py-3">
-                  <Link
-                    to="/patients/$id"
-                    params={{ id: r.patientId }}
-                    className="text-foreground underline-offset-4 hover:underline"
-                  >
-                    {r.name}
-                  </Link>
+                  <div className="flex items-center gap-2.5">
+                    <PatientAvatar patientId={r.patientId} name={r.name} size="xs" />
+                    <Link
+                      to="/patients/$id"
+                      params={{ id: r.patientId }}
+                      className="text-foreground underline-offset-4 hover:underline"
+                    >
+                      {r.name}
+                    </Link>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{r.lastTreatment ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">

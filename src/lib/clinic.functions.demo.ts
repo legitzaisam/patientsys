@@ -63,6 +63,8 @@ const messages = db.messages as any[];
 const medicalHistory = db.medicalHistory as any[];
 const photos = db.photos as any[];
 const recallTasks = db.recallTasks as any[];
+const treatmentPlans = db.treatmentPlans as any[];
+const planMilestones = db.planMilestones as any[];
 const retentionOutreach = db.retentionOutreach as any[];
 const staffNotifications = db.staffNotifications as any[];
 const staffConversations = db.staffConversations as any[];
@@ -237,6 +239,7 @@ function patientJoin(id: string) {
     reference: p.reference,
     email: p.email,
     phone: p.phone,
+    avatar_url: p.avatar_url ?? null,
     id: p.id,
   };
 }
@@ -476,6 +479,94 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     });
   }
 
+  // ---- Journeys: active plans grouped by phase (dashboard bottom section).
+  let activePlans = treatmentPlans.filter((p) => p.status === "active");
+  if (isPractitioner && !isManager) {
+    activePlans = activePlans.filter((p) => !p.practitioner_id || p.practitioner_id === me.userId);
+  }
+  const journeyPhases = (["consult", "foundation", "build", "results"] as const).map((phase) => {
+    const inPhase = activePlans.filter((p) => p.phase === phase);
+    return {
+      phase,
+      count: inPhase.length,
+      plans: inPhase.slice(0, 4).map((p) => {
+        const mine = planMilestones.filter((m) => m.plan_id === p.id);
+        const patient = patientById(p.patient_id);
+        return {
+          id: p.id,
+          patientId: p.patient_id,
+          patientName: `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
+          avatarUrl: patient?.avatar_url ?? null,
+          name: p.name,
+          done: mine.filter((m) => m.status === "done" || m.status === "skipped").length,
+          total: mine.length || p.total_sessions,
+        };
+      }),
+    };
+  });
+  const todayKeyForPlans = clinicDayKey(today);
+  const overduePlanIds = new Set<string>();
+  for (const m of planMilestones) {
+    if ((m.status === "current" || m.status === "upcoming") && m.due_date && m.due_date < todayKeyForPlans) {
+      overduePlanIds.add(m.plan_id);
+    }
+  }
+  const journeys = {
+    activeCount: activePlans.length,
+    overdueCount: activePlans.filter((p) => overduePlanIds.has(p.id)).length,
+    phases: journeyPhases,
+  };
+
+  // Same enrichment as production: diary cards read "Session X of Y" from the
+  // patient's active plan when one exists.
+  const planByPatient = new Map<string, { name: string; totalSessions: number }>();
+  for (const p of activePlans) {
+    if (!planByPatient.has(p.patient_id)) {
+      planByPatient.set(p.patient_id, { name: p.name, totalSessions: p.total_sessions });
+    }
+  }
+  todayAppts = todayAppts.map((a: any) => ({ ...a, plan: planByPatient.get(a.patient_id) ?? null }));
+
+  // ---- Safe to proceed: today/tomorrow bookings with pre-visit blockers.
+  const horizonEnd = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() + 2,
+  ).toISOString();
+  let horizon = sortAsc(
+    appointments.filter(
+      (a) => a.status === "booked" && a.starts_at >= range.startISO && a.starts_at < horizonEnd,
+    ),
+    "starts_at",
+  ).map(appointmentView);
+  if (isPractitioner && !isManager) {
+    horizon = horizon.filter((a) => a.practitioner_id === me.userId);
+  }
+  const safeToProceed: any[] = [];
+  for (const a of horizon) {
+    const patient = patientById(a.patient_id);
+    const blockers: string[] = [];
+    if (a.documents?.status !== "signed") blockers.push("Consent not signed");
+    if (a.payment_status === "unpaid") blockers.push("Deposit unpaid");
+    else if (a.payment_status === "deposit_paid") blockers.push("Balance due");
+    const allergies = (patient?.allergies ?? "").trim();
+    if (allergies && allergies.toLowerCase() !== "none" && allergies.toLowerCase() !== "none known") {
+      blockers.push(`Allergy: ${allergies.slice(0, 60)}`);
+    }
+    if (blockers.length === 0) continue;
+    safeToProceed.push({
+      id: a.id,
+      patientId: a.patient_id,
+      patientName: `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient",
+      avatarUrl: patient?.avatar_url ?? null,
+      treatment: a.treatment_name,
+      startsAt: a.starts_at,
+      blockers,
+    });
+    if (safeToProceed.length >= 8) break;
+  }
+  const safeReadyCount = horizon.length - safeToProceed.length;
+
   return {
     kpis: {
       totalClients: all.length,
@@ -496,6 +587,9 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     },
     todayAppointments: todayAppts,
     attentionItems,
+    journeys,
+    safeToProceed,
+    safeReadyCount,
     due,
     pendingDocuments: pendingDocs,
     historyFlags,
@@ -528,6 +622,40 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
           ),
           "starts_at",
         )[0] ?? null;
+      const outstanding = documents.filter(
+        (d) => d.patient_id === p.id && (d.status === "sent" || d.status === "viewed"),
+      ).length;
+
+      // Active practitioner(s): next booking's owner first, then recent treaters.
+      const practitionerIds: string[] = [];
+      if (next?.practitioner_id) practitionerIds.push(next.practitioner_id);
+      for (const t of sortDesc(mine, "performed_at")) {
+        if (t.practitioner_id && !practitionerIds.includes(t.practitioner_id)) {
+          practitionerIds.push(t.practitioner_id);
+        }
+      }
+      const practitionerNames = practitionerIds.map((pid) => profileName(pid)).filter(Boolean);
+
+      // Open items: assigned recall tasks plus derived chase items.
+      const todayKey = clinicDayKey(new Date());
+      const openTasks: { id: string; label: string; kind: string }[] = recallTasks
+        .filter((t) => t.patient_id === p.id && (t.status === "open" || t.status === "contacted"))
+        .map((t) => ({
+          id: t.id,
+          label: t.note?.trim() ? String(t.note).trim().slice(0, 80) : "Follow up and rebook",
+          kind: t.status === "contacted" ? "recall_contacted" : "recall",
+        }));
+      if (outstanding > 0) {
+        openTasks.push({
+          id: `docs-${p.id}`,
+          label: `${outstanding} form${outstanding === 1 ? "" : "s"} awaiting signature`,
+          kind: "paperwork",
+        });
+      }
+      if (dueRow?.next_due_at && dueRow.next_due_at < todayKey) {
+        openTasks.push({ id: `due-${p.id}`, label: `${dueRow.name} overdue`, kind: "treatment_due" });
+      }
+
       return {
         id: p.id,
         first_name: p.first_name,
@@ -557,11 +685,69 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
               status: next.status,
             }
           : null,
-        outstandingDocuments: documents.filter(
-          (d) => d.patient_id === p.id && (d.status === "sent" || d.status === "viewed"),
-        ).length,
+        outstandingDocuments: outstanding,
+        practitioners: practitionerNames,
+        openTasks,
       };
     });
+});
+
+export const getPatientMetrics = createServerFn({ method: "GET" }).handler(async () => {
+  const now = new Date();
+  const yearAgoIso = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const active = patients.filter((p) => p.status === "active").length;
+  const newThisMonth = patients.filter((p) => p.created_at >= monthStart).length;
+
+  const monthlyNew: { key: string; label: string; count: number }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    monthlyNew.push({
+      key: d.toISOString().slice(0, 7),
+      label: d.toLocaleDateString("en-GB", { month: "short" }),
+      count: patients.filter(
+        (p) => p.created_at >= d.toISOString() && p.created_at < next.toISOString(),
+      ).length,
+    });
+  }
+
+  const counts = new Map<string, number>();
+  for (const t of treatments) {
+    if (t.performed_at >= yearAgoIso) counts.set(t.name, (counts.get(t.name) ?? 0) + 1);
+  }
+  const topTreatments = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({ name, count }));
+
+  const todayKey = clinicDayKey(now);
+  const dueByMonth: { key: string; label: string; due: number }[] = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const next = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+    dueByMonth.push({
+      key: d.toISOString().slice(0, 7),
+      label: d.toLocaleDateString("en-GB", { month: "short" }),
+      due: treatments.filter(
+        (t) =>
+          t.next_due_at &&
+          t.next_due_at >= d.toISOString().slice(0, 10) &&
+          t.next_due_at < next.toISOString().slice(0, 10) &&
+          t.next_due_at >= todayKey,
+      ).length,
+    });
+  }
+  const overdue = treatments.filter((t) => t.next_due_at && t.next_due_at < todayKey).length;
+
+  return {
+    totals: { total: patients.length, active, inactive: patients.length - active, newThisMonth },
+    monthlyNew,
+    topTreatments,
+    dueByMonth,
+    overdue,
+  };
 });
 
 export const getPatient = createServerFn({ method: "GET" })
@@ -3731,4 +3917,148 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
       }
     }
     return { ok: true, lastReadAt: now, conversationId: conversation.id as string };
+  });
+
+/* ---------------------------------------------------------------- */
+/* treatment plans (journeys)                                        */
+/* ---------------------------------------------------------------- */
+
+export const listTreatmentPlans = createServerFn({ method: "GET" })
+  .validator((data: { practitioner_id?: string; at_risk_only?: boolean; query?: string }) =>
+    parseInput(schemas.ListTreatmentPlans, data),
+  )
+  .handler(async ({ data }) => {
+    const todayISO = clinicDayKey(new Date());
+    const nowISO = new Date().toISOString();
+    const hasUpcoming = new Set(
+      appointments.filter((a) => a.status === "booked" && a.starts_at >= nowISO).map((a) => a.patient_id),
+    );
+    const needle = (data.query ?? "").trim().toLowerCase();
+
+    let rows = treatmentPlans
+      .filter((p) => p.status === "active")
+      .filter((p) => !data.practitioner_id || p.practitioner_id === data.practitioner_id)
+      .map((p) => {
+        const patient = patientById(p.patient_id);
+        const mine = sortAsc(
+          planMilestones.filter((m) => m.plan_id === p.id),
+          "idx",
+        );
+        const done = mine.filter((m) => m.status === "done" || m.status === "skipped").length;
+        const next = mine.find((m) => m.status === "current") ?? mine.find((m) => m.status === "upcoming") ?? null;
+        const overdue = Boolean(next?.due_date && next.due_date < todayISO);
+        const atRisk = overdue || !hasUpcoming.has(p.patient_id);
+        return {
+          id: p.id,
+          patientId: p.patient_id,
+          patientName: `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
+          patientReference: patient?.reference ?? null,
+          avatarUrl: patient?.avatar_url ?? null,
+          practitionerId: p.practitioner_id,
+          practitionerName: p.practitioner_id ? profileName(p.practitioner_id) : null,
+          name: p.name,
+          phase: p.phase,
+          done,
+          total: mine.length || p.total_sessions,
+          nextMilestone: next
+            ? { id: next.id, title: next.title, kind: next.kind, dueDate: next.due_date }
+            : null,
+          overdue,
+          atRisk,
+          riskReason: overdue
+            ? "Next step overdue"
+            : !hasUpcoming.has(p.patient_id)
+              ? "No upcoming booking"
+              : null,
+        };
+      });
+
+    if (needle) {
+      rows = rows.filter(
+        (r) => r.patientName.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle),
+      );
+    }
+    if (data.at_risk_only) rows = rows.filter((r) => r.atRisk);
+    return rows;
+  });
+
+export const createTreatmentPlan = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      name: string;
+      practitioner_id?: string;
+      catalogue_id?: string;
+      phase?: "consult" | "foundation" | "build" | "results";
+      total_sessions?: number;
+      milestones: { title: string; kind?: "session" | "task" | "conditional" }[];
+    }) => parseInput(schemas.CreateTreatmentPlan, data),
+  )
+  .handler(async ({ data }) => {
+    const planId = newId("d7");
+    const nowISO = new Date().toISOString();
+    treatmentPlans.push({
+      id: planId,
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      practitioner_id: data.practitioner_id || null,
+      catalogue_id: data.catalogue_id || null,
+      name: data.name,
+      phase: data.phase ?? "consult",
+      status: "active",
+      total_sessions:
+        data.total_sessions ??
+        Math.max(1, data.milestones.filter((m) => (m.kind ?? "task") === "session").length),
+      started_at: nowISO,
+      completed_at: null,
+      created_by: identity().userId,
+      created_at: nowISO,
+      updated_at: nowISO,
+    });
+    data.milestones.forEach((m: any, i: number) => {
+      planMilestones.push({
+        id: newId("d8"),
+        clinic_id: CLINIC_ID,
+        plan_id: planId,
+        idx: i + 1,
+        title: m.title,
+        kind: m.kind ?? "task",
+        status: i === 0 ? "current" : "upcoming",
+        due_date: m.due_date || null,
+        appointment_id: null,
+        completed_at: null,
+        created_at: nowISO,
+      });
+    });
+    return { id: planId };
+  });
+
+export const updatePlanMilestone = createServerFn({ method: "POST" })
+  .validator((data: { id: string; status: "upcoming" | "current" | "done" | "skipped" }) =>
+    parseInput(schemas.UpdatePlanMilestone, data),
+  )
+  .handler(async ({ data }) => {
+    const milestone = planMilestones.find((m) => m.id === data.id);
+    if (!milestone) throw new Error("Milestone not found.");
+    milestone.status = data.status;
+    milestone.completed_at = data.status === "done" ? new Date().toISOString() : null;
+
+    const siblings = sortAsc(
+      planMilestones.filter((m) => m.plan_id === milestone.plan_id),
+      "idx",
+    );
+    if (data.status === "done" || data.status === "skipped") {
+      const hasCurrent = siblings.some((m) => m.status === "current");
+      const nextUp = siblings.find((m) => m.status === "upcoming");
+      if (!hasCurrent && nextUp) nextUp.status = "current";
+      const open = siblings.filter((m) => m.status === "upcoming" || m.status === "current");
+      if (open.length === 0) {
+        const plan = treatmentPlans.find((p) => p.id === milestone.plan_id);
+        if (plan) {
+          plan.status = "completed";
+          plan.completed_at = new Date().toISOString();
+        }
+      }
+    }
+    return { ok: true };
   });

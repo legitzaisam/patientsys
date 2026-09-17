@@ -18,6 +18,7 @@ import {
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
+import { PatientAvatar } from "@/components/patient-avatar";
 import { clinicDayKey } from "@/lib/clinic-time";
 import { seedAppointmentNoteQueries } from "@/lib/appointment-note-cache";
 import {
@@ -541,27 +542,17 @@ function TodayCard({
               {formatDayHeading(clinicDayKey(new Date(a.starts_at)))}
             </p>
           )}
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1 space-y-1">
-                <div onClick={stopCardOpen} onKeyDown={stopCardOpen}>
-                  <AppointmentTimeEditor appointment={a}>
-                    <button
-                      type="button"
-                      className="text-left text-xs font-medium tabular-nums text-accent-ink underline-offset-4 hover:underline"
-                    >
-                      {timeRange}
-                    </button>
-                  </AppointmentTimeEditor>
-                </div>
-                <Link
-                  to="/patients/$id"
-                  params={{ id: a.patient_id }}
-                  onClick={stopCardOpen}
-                  className="block text-sm font-semibold leading-snug tracking-[-0.012em] text-foreground text-balance hover:text-accent-ink"
-                >
-                  {patientName}
-                </Link>
+              <div onClick={stopCardOpen} onKeyDown={stopCardOpen}>
+                <AppointmentTimeEditor appointment={a}>
+                  <button
+                    type="button"
+                    className="text-left text-xs font-medium tabular-nums text-accent-ink underline-offset-4 hover:underline"
+                  >
+                    {timeRange}
+                  </button>
+                </AppointmentTimeEditor>
               </div>
               <div className="shrink-0" onClick={stopCardOpen}>
                 <StageBadge
@@ -572,11 +563,34 @@ function TodayCard({
                 />
               </div>
             </div>
-            <p className="text-xs leading-snug text-muted-foreground">{a.treatment_name}</p>
-            <p className="text-xs leading-snug text-muted-foreground whitespace-nowrap">
-              #{a.treatment_number}
-              {isManager && a.profiles?.full_name ? ` · ${a.profiles.full_name}` : null}
-            </p>
+            <div className="flex items-center gap-2.5">
+              <PatientAvatar
+                patientId={a.patient_id}
+                name={patientName}
+                photoUrl={a.patients?.avatar_url}
+                size="md"
+              />
+              <div className="min-w-0 flex-1">
+                <Link
+                  to="/patients/$id"
+                  params={{ id: a.patient_id }}
+                  onClick={stopCardOpen}
+                  className="block truncate text-sm font-semibold leading-snug tracking-[-0.012em] text-foreground hover:text-accent-ink"
+                >
+                  {patientName}
+                </Link>
+                <p className="truncate text-xs leading-snug text-muted-foreground">
+                  {a.plan && a.treatment_number <= a.plan.totalSessions
+                    ? `Session ${a.treatment_number} of ${a.plan.totalSessions}`
+                    : `#${a.treatment_number}`}
+                  {" · "}
+                  {a.treatment_name}
+                </p>
+              </div>
+            </div>
+            {isManager && a.profiles?.full_name ? (
+              <p className="text-xs leading-snug text-muted-foreground">⚕ {a.profiles.full_name}</p>
+            ) : null}
           </div>
 
           <div

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, type MouseEvent, type TouchEvent } from "react";
-import { Check, CheckCheck } from "lucide-react";
+import { Check, CheckCheck, Minus } from "lucide-react";
 import { MessageAttachments, type Attachment } from "@/components/message-attachments";
 import { MessageComposer } from "@/components/message-composer";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,7 @@ export function PatientChatPanel({
   as,
   onSent,
   onResizeStart,
+  onCollapse,
   templates = false,
   canDeleteTemplates = false,
   title,
@@ -72,6 +73,8 @@ export function PatientChatPanel({
   as: "staff" | "patient";
   onSent: () => void;
   onResizeStart?: (e: MouseEvent | TouchEvent) => void;
+  /** When set, the header shows a minimise control (chat collapses to a bubble). */
+  onCollapse?: () => void;
   templates?: boolean;
   canDeleteTemplates?: boolean;
   title?: string;
@@ -167,6 +170,19 @@ export function PatientChatPanel({
             <span className="text-2xs font-medium leading-none">A+</span>
           </Button>
         </div>
+        {onCollapse ? (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 shrink-0 text-muted-foreground hover:bg-glass-2 hover:text-foreground"
+            aria-label="Minimise chat"
+            title="Minimise chat"
+            onClick={onCollapse}
+          >
+            <Minus className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        ) : null}
       </header>
 
       <div

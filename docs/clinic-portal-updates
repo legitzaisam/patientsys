@@ -1,0 +1,38 @@
+Clinic Portal
+ 
+Page: Dashboard
+ 
+Use the appointment cards from ‘Journey’ mock up as the new design in current
+
+From ‘Advanced’ mock up:
+Move active skin plans card to current clinic dashboard
+Remove notes part on dashboard and add icon on top right (moveable notes card)
+With that space, put ‘Safe to proceed’ card under the attention title next to ‘to-do list’
+Then input the active treatments journeys at the bottom
+ 
+Page: Patients
+ 
+Have three tabs in the patient page:
+Patient records/list
+Metrics
+Patient journey board
+ 
+Under patient journey board:
+For managers, clinic owners, and receptionists: the default would be to view the journey board by all practitioners. However, if I am logged in as a practitioner, the default view would be ‘my patients’ and then a toggle down option for ‘all patients’.
+ 
+ 
+Page: Patients > List
+
+
+Record table: patient, last treatment, next treatment, active practitioner(s), task, status.
+ 
+ 
+Page: Patients > List > ^Patient Record^
+ 
+Collapsable Chat that turns into the chat bubble which would sit on the right of the alert card (when present)
+ 
+ 
+Page: Retention
+ 
+Have a mock data service for better demo & visualisation
+	•		•	‘Where to focus’: API driven recommendations/insight/focus tasks for the clinic, can be developed once we have more data. Will work more best when we have more data in the clinic portal. Engine that improves over time with more data.

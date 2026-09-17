@@ -780,6 +780,70 @@ export type Database = {
           },
         ];
       };
+      plan_milestones: {
+        Row: {
+          appointment_id: string | null;
+          clinic_id: string;
+          completed_at: string | null;
+          created_at: string;
+          due_date: string | null;
+          id: string;
+          idx: number;
+          kind: Database["public"]["Enums"]["plan_milestone_kind"];
+          plan_id: string;
+          status: Database["public"]["Enums"]["plan_milestone_status"];
+          title: string;
+        };
+        Insert: {
+          appointment_id?: string | null;
+          clinic_id: string;
+          completed_at?: string | null;
+          created_at?: string;
+          due_date?: string | null;
+          id?: string;
+          idx: number;
+          kind?: Database["public"]["Enums"]["plan_milestone_kind"];
+          plan_id: string;
+          status?: Database["public"]["Enums"]["plan_milestone_status"];
+          title: string;
+        };
+        Update: {
+          appointment_id?: string | null;
+          clinic_id?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          due_date?: string | null;
+          id?: string;
+          idx?: number;
+          kind?: Database["public"]["Enums"]["plan_milestone_kind"];
+          plan_id?: string;
+          status?: Database["public"]["Enums"]["plan_milestone_status"];
+          title?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "plan_milestones_appointment_id_fkey";
+            columns: ["appointment_id"];
+            isOneToOne: false;
+            referencedRelation: "appointments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "plan_milestones_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "plan_milestones_plan_id_fkey";
+            columns: ["plan_id"];
+            isOneToOne: false;
+            referencedRelation: "treatment_plans";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       profile_change_requests: {
         Row: {
           clinic_id: string;
@@ -1451,6 +1515,93 @@ export type Database = {
           },
         ];
       };
+      treatment_plans: {
+        Row: {
+          catalogue_id: string | null;
+          clinic_id: string;
+          completed_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          name: string;
+          patient_id: string;
+          phase: Database["public"]["Enums"]["treatment_plan_phase"];
+          practitioner_id: string | null;
+          started_at: string;
+          status: Database["public"]["Enums"]["treatment_plan_status"];
+          total_sessions: number;
+          updated_at: string;
+        };
+        Insert: {
+          catalogue_id?: string | null;
+          clinic_id: string;
+          completed_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          name: string;
+          patient_id: string;
+          phase?: Database["public"]["Enums"]["treatment_plan_phase"];
+          practitioner_id?: string | null;
+          started_at?: string;
+          status?: Database["public"]["Enums"]["treatment_plan_status"];
+          total_sessions?: number;
+          updated_at?: string;
+        };
+        Update: {
+          catalogue_id?: string | null;
+          clinic_id?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          name?: string;
+          patient_id?: string;
+          phase?: Database["public"]["Enums"]["treatment_plan_phase"];
+          practitioner_id?: string | null;
+          started_at?: string;
+          status?: Database["public"]["Enums"]["treatment_plan_status"];
+          total_sessions?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "treatment_plans_catalogue_id_fkey";
+            columns: ["catalogue_id"];
+            isOneToOne: false;
+            referencedRelation: "treatment_catalogue";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "treatment_plans_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "treatment_plans_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "treatment_plans_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "treatment_plans_practitioner_id_fkey";
+            columns: ["practitioner_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       treatments: {
         Row: {
           area: string | null;
@@ -1714,7 +1865,11 @@ export type Database = {
       patient_status: "active" | "inactive" | "archived";
       payment_status: "unpaid" | "deposit_paid" | "paid" | "refunded";
       photo_kind: "before" | "after";
+      plan_milestone_kind: "session" | "task" | "conditional";
+      plan_milestone_status: "upcoming" | "current" | "done" | "skipped";
       recall_task_status: "open" | "contacted" | "completed";
+      treatment_plan_phase: "consult" | "foundation" | "build" | "results";
+      treatment_plan_status: "active" | "completed" | "cancelled";
       visit_stage:
         "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
     };

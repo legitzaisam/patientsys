@@ -8,6 +8,10 @@ import type { z } from "zod";
 import { toast } from "sonner";
 import { Calendar, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { listPatients, savePatient } from "@/lib/clinic.functions";
+import { PatientAvatar } from "@/components/patient-avatar";
+import { PatientMetrics } from "@/components/patients/patient-metrics";
+import { JourneyBoard } from "@/components/patients/journey-board";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { SavePatient } from "@/lib/validation/schemas";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
@@ -33,9 +37,10 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-type SortColumn = "nextDue" | "paperwork" | "status";
+type SortColumn = "status";
 type SortDirection = "asc" | "desc";
 type PatientView = "all" | "active" | "inactive" | "due";
+type PatientsTab = "records" | "metrics" | "board";
 
 /**
  * Derived from the schema the savePatient server function validates against, so
@@ -67,12 +72,16 @@ const EMPTY_PATIENT: NewPatientValues = {
 const TITLES = ["Mr", "Mrs", "Ms", "Miss", "Mx", "Dr", "Prof"];
 
 export const Route = createFileRoute("/_authenticated/patients/")({
-  validateSearch: (search: Record<string, unknown>): { view?: PatientView; q?: string } => {
+  validateSearch: (search: Record<string, unknown>): { view?: PatientView; q?: string; tab?: PatientsTab } => {
     const v = String(search?.["view"] ?? "all");
-    const parsed: { view?: PatientView; q?: string } = {
+    const parsed: { view?: PatientView; q?: string; tab?: PatientsTab } = {
       view: (["all", "active", "inactive", "due"].includes(v) ? v : "all") as PatientView,
     };
     if (typeof search?.["q"] === "string" && search["q"]) parsed.q = search["q"];
+    const tab = String(search?.["tab"] ?? "records");
+    if (["records", "metrics", "board"].includes(tab) && tab !== "records") {
+      parsed.tab = tab as PatientsTab;
+    }
     return parsed;
   },
   head: () => ({
@@ -88,7 +97,7 @@ export const Route = createFileRoute("/_authenticated/patients/")({
 
 function PatientsPage() {
   const { data: identity } = useIdentity();
-  const { view = "all", q } = Route.useSearch();
+  const { view = "all", q, tab = "records" } = Route.useSearch();
   const fetchPatients = useServerFn(listPatients);
   const queryClient = useQueryClient();
   const [search, setSearch] = useState(q ?? "");
@@ -152,20 +161,6 @@ function PatientsPage() {
     if (!sort.column) return 0;
     const dir = sort.direction === "asc" ? 1 : -1;
 
-    if (sort.column === "nextDue") {
-      const aDate = a.nextDue?.next_due_at ? new Date(a.nextDue.next_due_at).getTime() : Infinity;
-      const bDate = b.nextDue?.next_due_at ? new Date(b.nextDue.next_due_at).getTime() : Infinity;
-      if (aDate === bDate) return 0;
-      return (aDate - bDate) * dir;
-    }
-
-    if (sort.column === "paperwork") {
-      const aCount = a.outstandingDocuments ?? 0;
-      const bCount = b.outstandingDocuments ?? 0;
-      if (aCount === bCount) return 0;
-      return (aCount - bCount) * dir;
-    }
-
     if (sort.column === "status") {
       const priority: Record<string, number> = { active: 0, inactive: 1 };
       const aVal = priority[a.status?.toLowerCase()] ?? 2;
@@ -182,9 +177,42 @@ function PatientsPage() {
       <div className="page-header !mb-3">
         <div>
           <h1 className="page-title">Patients</h1>
-          <p className="page-subtitle">{rows.length} records</p>
+          <p className="page-subtitle">
+            {tab === "records"
+              ? `${rows.length} records`
+              : tab === "metrics"
+                ? "The patient base at a glance."
+                : "Every active treatment plan by phase."}
+          </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
+            {(
+              [
+                { key: "records", label: "Records" },
+                { key: "metrics", label: "Metrics" },
+                { key: "board", label: "Journey board" },
+              ] as { key: PatientsTab; label: string }[]
+            ).map((t) => (
+              <Link
+                key={t.key}
+                to="/patients"
+                search={{
+                  ...(t.key === "records" ? { view, ...(q ? { q } : {}) } : {}),
+                  ...(t.key !== "records" ? { tab: t.key } : {}),
+                }}
+                className={`flex h-7 cursor-pointer items-center rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors ${
+                  tab === t.key
+                    ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
+                    : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
+                }`}
+              >
+                {t.label}
+              </Link>
+            ))}
+          </div>
+          {tab === "records" && (
+          <>
           <Input
             id="name-search"
             placeholder="Name or reference"
@@ -333,9 +361,15 @@ function PatientsPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </>
+          )}
         </div>
       </div>
 
+      {tab === "metrics" && <PatientMetrics />}
+      {tab === "board" && <JourneyBoard identity={identity} />}
+      {tab === "records" && (
+      <>
       <div className="mb-6 flex flex-wrap gap-2">
         {([
           { key: "all", label: "All" },
@@ -365,8 +399,8 @@ function PatientsPage() {
               <th className="px-4 py-3">Patient</th>
               <th className="px-4 py-3">Last treatment</th>
               <th className="px-4 py-3">Next treatment</th>
-              <SortHeader column="nextDue" label="Next due" sort={sort} setSort={setSort} />
-              <SortHeader column="paperwork" label="Paperwork" sort={sort} setSort={setSort} />
+              <th className="px-4 py-3">Active practitioner(s)</th>
+              <th className="px-4 py-3">Task</th>
               <SortHeader column="status" label="Status" sort={sort} setSort={setSort} />
             </tr>
           </thead>
@@ -374,14 +408,19 @@ function PatientsPage() {
             {rows.map((p: any) => (
               <tr key={p.id} className="hover:bg-glass-2">
                 <td className="px-4 py-3">
-                  <Link to="/patients/$id" params={{ id: p.id }} className="text-foreground hover:text-accent-ink">
-                    {p.last_name}, {p.title ? `${p.title} ` : ""}
-                    {p.first_name}
-                  </Link>
-                  <p className="text-xs text-muted-foreground">
-                    {p.date_of_birth ? new Date(p.date_of_birth).toLocaleDateString("en-GB") : ""}
-                    {p.reference ? ` · ${p.reference}` : ""}
-                  </p>
+                  <div className="flex items-center gap-2.5">
+                    <PatientAvatar patientId={p.id} name={`${p.first_name} ${p.last_name}`} photoUrl={p.avatar_url} size="sm" />
+                    <div className="min-w-0">
+                      <Link to="/patients/$id" params={{ id: p.id }} className="text-foreground hover:text-accent-ink">
+                        {p.last_name}, {p.title ? `${p.title} ` : ""}
+                        {p.first_name}
+                      </Link>
+                      <p className="text-xs text-muted-foreground">
+                        {p.date_of_birth ? new Date(p.date_of_birth).toLocaleDateString("en-GB") : ""}
+                        {p.reference ? ` · ${p.reference}` : ""}
+                      </p>
+                    </div>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {p.lastTreatment
@@ -399,19 +438,11 @@ function PatientsPage() {
                       }`
                     : "No upcoming treatment"}
                 </td>
-                <td className="w-[1%] whitespace-nowrap px-4 py-3 text-muted-foreground">
-                  {p.nextDue?.next_due_at
-                    ? new Date(p.nextDue.next_due_at).toLocaleDateString("en-GB")
-                    : "—"}
+                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                  <PractitionersCell names={p.practitioners ?? []} />
                 </td>
                 <td className="w-[1%] whitespace-nowrap px-4 py-3 text-muted-foreground">
-                  {p.outstandingDocuments > 0 ? (
-                    <Badge variant="outline" className="rounded-xl border-warning text-warning-ink">
-                      {p.outstandingDocuments} outstanding
-                    </Badge>
-                  ) : (
-                    <span>Complete</span>
-                  )}
+                  <TaskCell tasks={p.openTasks ?? []} />
                 </td>
                 <td className="w-[1%] whitespace-nowrap px-4 py-3 text-muted-foreground">
                   <StatusBadge status={p.status} />
@@ -428,6 +459,8 @@ function PatientsPage() {
           </tbody>
         </table>
       </Card>
+      </>
+      )}
     </AppShell>
   );
 }
@@ -471,6 +504,51 @@ function PatientField({
         </FormItem>
       )}
     />
+  );
+}
+
+function PractitionersCell({ names }: { names: string[] }) {
+  if (names.length === 0) return <span>—</span>;
+  const shown = names.slice(0, 2);
+  const extra = names.length - shown.length;
+  return (
+    <span className="text-foreground/80">
+      {shown.join(", ")}
+      {extra > 0 ? <span className="text-muted-foreground"> +{extra}</span> : null}
+    </span>
+  );
+}
+
+const TASK_KIND_LABEL: Record<string, string> = {
+  recall: "Recall task",
+  recall_contacted: "Recall · contacted",
+  paperwork: "Paperwork",
+  treatment_due: "Treatment due",
+};
+
+function TaskCell({ tasks }: { tasks: { id: string; label: string; kind: string }[] }) {
+  if (tasks.length === 0) return <span className="text-muted-foreground">—</span>;
+  return (
+    <HoverCard openDelay={150}>
+      <HoverCardTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2.5 py-1 text-[11px] font-semibold text-warning-ink shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
+        >
+          {tasks.length} open
+        </button>
+      </HoverCardTrigger>
+      <HoverCardContent align="start" className="w-72 p-3">
+        <ul className="space-y-2">
+          {tasks.map((task) => (
+            <li key={task.id} className="text-xs">
+              <p className="font-medium text-foreground">{task.label}</p>
+              <p className="text-2xs text-muted-foreground">{TASK_KIND_LABEL[task.kind] ?? "Task"}</p>
+            </li>
+          ))}
+        </ul>
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 

@@ -1736,6 +1736,42 @@ export const retentionOutreach: Row[] = [
     note: "Sent a six-month check-in.",
     created_at: iso(-18, 10, 30),
   },
+  {
+    id: id("j1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[2]!["id"],
+    contacted_by: USERS.frontDesk,
+    channel: "phone",
+    note: "Spoke on the phone — thinking about a top-up next month.",
+    created_at: iso(-4, 15, 20),
+  },
+  {
+    id: id("j1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[15]!["id"],
+    contacted_by: USERS.owner,
+    channel: "email",
+    note: "Win-back offer sent with a review link.",
+    created_at: iso(-11, 9, 45),
+  },
+  {
+    id: id("j1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[20]!["id"],
+    contacted_by: USERS.practitioner2,
+    channel: "message",
+    note: "Portal message about their overdue peel.",
+    created_at: iso(-2, 12, 10),
+  },
+  {
+    id: id("j1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[11]!["id"],
+    contacted_by: USERS.frontDesk,
+    channel: "phone",
+    note: "No answer — will try again Thursday.",
+    created_at: iso(-1, 16, 40),
+  },
 ];
 
 const recallGroup1 = id("k9");
@@ -2245,6 +2281,218 @@ export const userNotes: Row[] = [
 export const appointmentNotes: Row[] = [];
 
 /* ---------------------------------------------------------------- */
+/* treatment plans (journeys)                                        */
+/* ---------------------------------------------------------------- */
+
+type PlanStepSpec = { t: string; k?: "session" | "task" | "conditional" };
+type PlanRecipe = {
+  /** Index into PATIENT_SPECS / patients. */
+  patient: number;
+  name: string;
+  phase: "consult" | "foundation" | "build" | "results";
+  /** How many leading steps are already done. */
+  done: number;
+  /** Days until the current step is due; negative = overdue (at risk). */
+  nextDueIn: number | null;
+  steps: PlanStepSpec[];
+};
+
+const MICRONEEDLING_STEPS: PlanStepSpec[] = [
+  { t: "Consultation & skin assessment", k: "task" },
+  { t: "Baseline photos", k: "task" },
+  { t: "Microneedling session 1", k: "session" },
+  { t: "Blood test check", k: "task" },
+  { t: "If deficient: start vitamins", k: "conditional" },
+  { t: "Microneedling session 2", k: "session" },
+  { t: "Microneedling session 3", k: "session" },
+  { t: "Review & results photos", k: "task" },
+];
+
+const PLAN_RECIPES: PlanRecipe[] = [
+  {
+    patient: 0,
+    name: "Anti-Wrinkle Maintenance Plan",
+    phase: "build",
+    done: 4,
+    nextDueIn: 5,
+    steps: [
+      { t: "Consultation & consent", k: "task" },
+      { t: "Treatment session 1", k: "session" },
+      { t: "Two-week review", k: "task" },
+      { t: "Treatment session 2", k: "session" },
+      { t: "Treatment session 3", k: "session" },
+      { t: "Maintenance review", k: "task" },
+    ],
+  },
+  {
+    patient: 1,
+    name: "Profhilo Skin Quality Programme",
+    phase: "results",
+    done: 5,
+    nextDueIn: 9,
+    steps: [
+      { t: "Consultation & baseline photos", k: "task" },
+      { t: "Profhilo round 1", k: "session" },
+      { t: "One-month check-in", k: "task" },
+      { t: "Profhilo round 2", k: "session" },
+      { t: "Results photos", k: "task" },
+      { t: "Maintenance plan agreed", k: "task" },
+    ],
+  },
+  {
+    patient: 2,
+    name: "Lip Enhancement Journey",
+    phase: "foundation",
+    done: 2,
+    nextDueIn: -4,
+    steps: [
+      { t: "Consultation & patch test", k: "task" },
+      { t: "Lip filler session 1", k: "session" },
+      { t: "Two-week review & photos", k: "task" },
+      { t: "Top-up session", k: "session" },
+      { t: "Final review", k: "task" },
+    ],
+  },
+  { patient: 3, name: "3-Month Microneedling Plan", phase: "build", done: 3, nextDueIn: -2, steps: MICRONEEDLING_STEPS },
+  {
+    patient: 4,
+    name: "Chemical Peel Course",
+    phase: "foundation",
+    done: 2,
+    nextDueIn: 7,
+    steps: [
+      { t: "Skin assessment & prep plan", k: "task" },
+      { t: "Peel session 1", k: "session" },
+      { t: "Peel session 2", k: "session" },
+      { t: "Peel session 3", k: "session" },
+      { t: "Aftercare review", k: "task" },
+    ],
+  },
+  {
+    patient: 5,
+    name: "Skin Rejuvenation Plan",
+    phase: "consult",
+    done: 1,
+    nextDueIn: 3,
+    steps: [
+      { t: "Consultation & goals", k: "task" },
+      { t: "Medical history review", k: "task" },
+      { t: "Baseline photos", k: "task" },
+      { t: "Treatment plan agreed", k: "task" },
+    ],
+  },
+  { patient: 9, name: "3-Month Microneedling Plan", phase: "build", done: 5, nextDueIn: 4, steps: MICRONEEDLING_STEPS },
+  {
+    patient: 11,
+    name: "Rosacea Management Programme",
+    phase: "foundation",
+    done: 3,
+    nextDueIn: 6,
+    steps: [
+      { t: "Consultation & triggers diary", k: "task" },
+      { t: "Start prescribed routine", k: "task" },
+      { t: "Laser session 1", k: "session" },
+      { t: "Laser session 2", k: "session" },
+      { t: "Six-week review", k: "task" },
+    ],
+  },
+  {
+    patient: 13,
+    name: "Anti-Ageing Programme",
+    phase: "results",
+    done: 6,
+    nextDueIn: 14,
+    steps: [
+      { t: "Consultation", k: "task" },
+      { t: "Anti-wrinkle session 1", k: "session" },
+      { t: "Filler session", k: "session" },
+      { t: "Profhilo round 1", k: "session" },
+      { t: "Profhilo round 2", k: "session" },
+      { t: "Results photos", k: "task" },
+      { t: "Discharge & maintenance", k: "task" },
+    ],
+  },
+  {
+    patient: 15,
+    name: "New Patient Consultation Plan",
+    phase: "consult",
+    done: 0,
+    nextDueIn: -1,
+    steps: [
+      { t: "Consultation booked", k: "task" },
+      { t: "Medical history form", k: "task" },
+      { t: "Patch test", k: "task" },
+    ],
+  },
+];
+
+export const treatmentPlans: Row[] = [];
+export const planMilestones: Row[] = [];
+for (const recipe of PLAN_RECIPES) {
+  const patient = patients[recipe.patient];
+  if (!patient) continue;
+  const spec = PATIENT_SPECS[recipe.patient]!;
+  const planId = id("d7");
+  const sessions = recipe.steps.filter((s) => (s.k ?? "task") === "session").length;
+  treatmentPlans.push({
+    id: planId,
+    clinic_id: CLINIC_ID,
+    patient_id: patient["id"],
+    practitioner_id: spec.practitioner ?? USERS.practitioner,
+    catalogue_id: null,
+    name: recipe.name,
+    phase: recipe.phase,
+    status: "active",
+    total_sessions: Math.max(1, sessions),
+    started_at: iso(-45 + recipe.patient, 10, 0),
+    completed_at: null,
+    created_by: USERS.owner,
+    created_at: iso(-45 + recipe.patient, 10, 0),
+    updated_at: iso(-2, 9, 0),
+  });
+  recipe.steps.forEach((step, i) => {
+    const status = i < recipe.done ? "done" : i === recipe.done ? "current" : "upcoming";
+    planMilestones.push({
+      id: id("d8"),
+      clinic_id: CLINIC_ID,
+      plan_id: planId,
+      idx: i + 1,
+      title: step.t,
+      kind: step.k ?? "task",
+      status,
+      due_date:
+        status === "current" && recipe.nextDueIn != null
+          ? iso(recipe.nextDueIn).slice(0, 10)
+          : status === "upcoming"
+            ? iso(recipe.nextDueIn ?? 7 + (i - recipe.done) * 14).slice(0, 10)
+            : null,
+      appointment_id: null,
+      completed_at: status === "done" ? iso(-((recipe.done - i) * 9), 15, 0) : null,
+      created_at: iso(-45 + recipe.patient, 10, 0),
+    });
+  });
+}
+
+// Stable photo avatars for the demo clinic, matching the mockups.
+const AVATAR_POOL = [
+  "avatar-emma",
+  "avatar-alex",
+  "avatar-grace",
+  "avatar-priya",
+  "avatar-leila",
+  "avatar-theo",
+  "avatar-p1",
+  "avatar-p2",
+  "avatar-p3",
+  "avatar-p4",
+  "avatar-p5",
+  "avatar-p6",
+];
+patients.forEach((p, i) => {
+  p["avatar_url"] = `/patient-avatars/${AVATAR_POOL[i % AVATAR_POOL.length]}.png`;
+});
+
+/* ---------------------------------------------------------------- */
 /* mutable store                                                     */
 /* ---------------------------------------------------------------- */
 
@@ -2268,6 +2516,8 @@ export const db = {
   medicalHistory,
   photos,
   recallTasks,
+  treatmentPlans,
+  planMilestones,
   communications,
   retentionOutreach,
   staffNotifications,

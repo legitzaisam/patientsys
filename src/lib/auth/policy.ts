@@ -51,6 +51,7 @@ export const POLICY = {
   /* Dashboard and patient reads */
   getDashboard: { kind: "staff" },
   listPatients: { kind: "staff" },
+  getPatientMetrics: { kind: "staff" },
   getPatient: { kind: "staffOrOwnPatient" },
   getCatalogue: { kind: "staff" },
   listPractitioners: { kind: "staff" },
@@ -71,6 +72,12 @@ export const POLICY = {
   archivePatient: { kind: "owner" },
   addTreatment: { kind: "capability", key: "treatments.record" },
   reviewHistory: { kind: "capability", key: "treatments.record" },
+
+  /* Treatment plans (journeys). Reading the board is any-staff; writing a plan
+     is clinical work, so it shares the treatments.record capability. */
+  listTreatmentPlans: { kind: "staff" },
+  createTreatmentPlan: { kind: "capability", key: "treatments.record" },
+  updatePlanMilestone: { kind: "capability", key: "treatments.record" },
   addPhoto: { kind: "capability", key: "photos.manage" },
   sendDocument: { kind: "capability", key: "documents.send" },
   resendDocument: { kind: "capability", key: "documents.send" },

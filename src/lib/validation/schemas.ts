@@ -428,6 +428,38 @@ export const SetRolePermission = z.object({
   enabled: z.boolean(),
 });
 
+/* Treatment plans (journeys) */
+
+export const ListTreatmentPlans = z.object({
+  practitioner_id: optionalId,
+  at_risk_only: z.boolean().optional(),
+  query: optionalText(200),
+});
+
+export const CreateTreatmentPlan = z.object({
+  patient_id: id,
+  name: requiredText(200),
+  practitioner_id: optionalId,
+  catalogue_id: optionalId,
+  phase: z.enum(["consult", "foundation", "build", "results"]).optional(),
+  total_sessions: z.number().int().min(1).max(60).optional(),
+  milestones: z
+    .array(
+      z.object({
+        title: requiredText(200),
+        kind: z.enum(["session", "task", "conditional"]).optional(),
+        due_date: optionalDateString,
+      }),
+    )
+    .min(1)
+    .max(60),
+});
+
+export const UpdatePlanMilestone = z.object({
+  id,
+  status: z.enum(["upcoming", "current", "done", "skipped"]),
+});
+
 /* Notes */
 
 export const SaveMyNote = z.object({ body: text(100_000) });
