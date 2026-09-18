@@ -33,7 +33,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -185,34 +184,60 @@ function PatientsPage() {
                 : "Every active treatment plan by phase."}
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
-            {(
-              [
-                { key: "records", label: "Records" },
-                { key: "metrics", label: "Metrics" },
-                { key: "board", label: "Journey board" },
-              ] as { key: PatientsTab; label: string }[]
-            ).map((t) => (
-              <Link
-                key={t.key}
-                to="/patients"
-                search={{
-                  ...(t.key === "records" ? { view, ...(q ? { q } : {}) } : {}),
-                  ...(t.key !== "records" ? { tab: t.key } : {}),
-                }}
-                className={`flex h-7 cursor-pointer items-center rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors ${
-                  tab === t.key
-                    ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
-                    : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
-                }`}
-              >
-                {t.label}
-              </Link>
-            ))}
-          </div>
-          {tab === "records" && (
-          <>
+        <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
+          {(
+            [
+              { key: "records", label: "Records" },
+              { key: "metrics", label: "Metrics" },
+              { key: "board", label: "Journey board" },
+            ] as { key: PatientsTab; label: string }[]
+          ).map((t) => (
+            <Link
+              key={t.key}
+              to="/patients"
+              search={{
+                ...(t.key === "records" ? { view, ...(q ? { q } : {}) } : {}),
+                ...(t.key !== "records" ? { tab: t.key } : {}),
+              }}
+              className={`flex h-7 cursor-pointer items-center rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors ${
+                tab === t.key
+                  ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
+                  : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
+              }`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {tab === "metrics" && <PatientMetrics />}
+      {tab === "board" && <JourneyBoard identity={identity} />}
+      {tab === "records" && (
+      <>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+        {([
+          { key: "all", label: "All" },
+          { key: "active", label: "Active" },
+          { key: "inactive", label: "Inactive" },
+          { key: "due", label: "Treatments due" },
+        ] as { key: PatientView; label: string }[]).map((f) => (
+          <Link
+            key={f.key}
+            to="/patients"
+            search={{ view: f.key, ...(q ? { q } : {}) }}
+            className={`rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
+              view === f.key
+                ? "border-transparent bg-accent-soft text-accent-ink shadow-inset-hi"
+                : "border-edge bg-glass-2 text-ink-2 shadow-inset-hi hover:border-accent-line hover:bg-accent-wash hover:text-foreground"
+            }`}
+          >
+            {f.label}
+          </Link>
+        ))}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
           <Input
             id="name-search"
             placeholder="Name or reference"
@@ -242,11 +267,12 @@ function PatientsPage() {
               </button>
             )}
           </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>New patient</Button>
-            </DialogTrigger>
-            <DialogContent className="rounded-xl">
+          <Button type="button" onClick={() => setOpen(true)}>New patient</Button>
+        </div>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="rounded-xl">
               <DialogHeader>
                 <DialogTitle>New patient</DialogTitle>
               </DialogHeader>
@@ -361,36 +387,6 @@ function PatientsPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          </>
-          )}
-        </div>
-      </div>
-
-      {tab === "metrics" && <PatientMetrics />}
-      {tab === "board" && <JourneyBoard identity={identity} />}
-      {tab === "records" && (
-      <>
-      <div className="mb-6 flex flex-wrap gap-2">
-        {([
-          { key: "all", label: "All" },
-          { key: "active", label: "Active" },
-          { key: "inactive", label: "Inactive" },
-          { key: "due", label: "Treatments due" },
-        ] as { key: PatientView; label: string }[]).map((f) => (
-          <Link
-            key={f.key}
-            to="/patients"
-            search={{ view: f.key, ...(q ? { q } : {}) }}
-            className={`rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
-              view === f.key
-                ? "border-transparent bg-accent-soft text-accent-ink shadow-inset-hi"
-                : "border-edge bg-glass-2 text-ink-2 shadow-inset-hi hover:border-accent-line hover:bg-accent-wash hover:text-foreground"
-            }`}
-          >
-            {f.label}
-          </Link>
-        ))}
-      </div>
 
       <Card className="overflow-hidden rounded-2xl p-0">
         <table className="glass-table w-full text-sm">

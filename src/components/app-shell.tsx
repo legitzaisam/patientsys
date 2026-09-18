@@ -36,6 +36,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { NotificationBell } from "@/components/notification-bell";
 import { StaffAlertDialog } from "@/components/staff-alert-dialog";
+import { FloatingNotes } from "@/components/dashboard/floating-notes";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { listAppointments, listTeam } from "@/lib/clinic.functions";
@@ -135,6 +136,9 @@ function ToolbarAlerts({
             <Megaphone className="h-4 w-4" />
           </Button>
         </StaffAlertDialog>
+      )}
+      {identity.isStaff && (
+        <FloatingNotes triggerClassName={cn(chipSurface, iconHover)} />
       )}
       {identity.isStaff && (
         <SentStaffAlerts className={cn(chipSurface, iconHover)} />
@@ -605,7 +609,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
         <main
           id="app-main-scroll"
           ref={mainScrollRef}
-          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-5 sm:px-[26px] sm:pb-[26px]"
+          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-24 sm:px-[26px] sm:pb-24"
           onScroll={(event) => setScrollBlend(toolbarScrollBlend(event.currentTarget.scrollTop))}
         >
           <div className="pointer-events-none sticky top-0 z-20 -mx-5 flex h-[3.5rem] shrink-0 items-center gap-3 px-5 sm:-mx-[26px] sm:px-[26px]">

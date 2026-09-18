@@ -15,7 +15,6 @@ import {
   Heart,
   Hourglass,
   Mail,
-  Palette,
   Phone,
   Plus,
   Send,
@@ -134,7 +133,7 @@ function stageTone(stage: Stage) {
   if (stage === "in_treatment") return "bg-accent-soft text-accent-ink";
   if (stage === "aftercare") return "bg-destructive-bg text-aftercare-ink";
   if (stage === "booked") return "border border-edge bg-glass-2 text-muted-foreground";
-  if (stage === "arrived") return "bg-sky-bg text-arrived-ink";
+  if (stage === "arrived") return "bg-sky-bg text-sky-ink";
   return "bg-warning-bg text-warning-ink";
 }
 
@@ -145,10 +144,13 @@ function StageTracker({
   a,
   onState,
   compact,
+  badge,
 }: {
   a: any;
   onState?: ((v: any) => Promise<unknown>) | undefined;
   compact?: boolean;
+  /** Match the dashboard Today card stage pill (top-right). */
+  badge?: boolean;
 }) {
   const current = stageOf(a);
   const idx = STAGES.findIndex((s) => s.key === current);
@@ -161,11 +163,15 @@ function StageTracker({
   const trigger = (
     <button
       type="button"
-      className={`${CHIP_BASE} ${stageTone(current)}`}
+      className={
+        badge
+          ? `inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-2xs font-semibold shadow-inset-hi transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9] ${stageTone(current)}`
+          : `${CHIP_BASE} ${stageTone(current)}`
+      }
       title={`Patient stage: ${label}`}
     >
-      <Icon className={`h-3 w-3 ${meta.tone}`} />
-      {compact ? (STAGES[idx]?.short ?? "No show") : label}
+      <Icon className={badge ? "h-3 w-3" : `h-3 w-3 ${meta.tone}`} />
+      {compact && !badge ? (STAGES[idx]?.short ?? "No show") : label}
     </button>
   );
 
@@ -175,7 +181,7 @@ function StageTracker({
     <>
     <HoverCard openDelay={80} closeDelay={140}>
       <HoverCardTrigger asChild>{trigger}</HoverCardTrigger>
-      <HoverCardContent className="w-64 rounded-2xl" align="start">
+      <HoverCardContent className="w-64 rounded-2xl" align={badge ? "end" : "start"}>
         <p className="text-sm font-semibold text-foreground">Patient journey</p>
         <p className="mt-0.5 text-xs text-muted-foreground">Set where this patient is right now.</p>
         <div className="mt-3 space-y-1">
@@ -489,6 +495,7 @@ function SchedulePage() {
             </DialogTrigger>
             <DialogContent
               className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
+              onCloseAutoFocus={(e) => e.preventDefault()}
             >
               <DialogHeader className="shrink-0 pr-8 text-left">
                 <DialogTitle>
@@ -895,7 +902,6 @@ function SchedulePage() {
         </div>
       </div>
 
-      <TreatmentLegend rows={rows} isManager={Boolean(identity.isManager)} />
       {view === "day" && (
         <DayPlanner
           rows={rows}
@@ -936,49 +942,6 @@ function SchedulePage() {
       )}
       </div>
     </AppShell>
-  );
-}
-
-function TreatmentLegend({ rows, isManager }: { rows: any[]; isManager: boolean }) {
-  const overrides = useTreatmentColours();
-  const entries = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const r of rows) {
-      const name = (r.treatment_name ?? "").trim();
-      if (!name) continue;
-      const key = name.toLowerCase();
-      if (!seen.has(key)) seen.set(key, name);
-    }
-    return [...seen.values()].sort((a, b) => a.localeCompare(b));
-  }, [rows]);
-
-  if (entries.length === 0) return null;
-
-  return (
-    <div className="glass-card mb-4 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
-      <span className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">
-        Treatment colours
-      </span>
-      {entries.map((name) => {
-        const tone = toneForTreatment(name, overrides);
-        return (
-          <span key={name} className="inline-flex items-center gap-1.5 text-xs text-foreground">
-            <span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} style={tone.style} aria-hidden />
-            {name}
-          </span>
-        );
-      })}
-      {isManager && (
-        <Link
-          to="/settings"
-          className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent-soft hover:text-accent-ink"
-          aria-label="Customise treatment colours"
-          title="Customise treatment colours"
-        >
-          <Palette className="h-3.5 w-3.5" />
-        </Link>
-      )}
-    </div>
   );
 }
 
@@ -1031,7 +994,6 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
   const status = a.payment_status as "unpaid" | "deposit_paid" | "paid" | "refunded";
   const paid = status === "paid";
   const deposit = status === "deposit_paid";
-  const name = `${a.patients?.first_name ?? ""}`.trim() || "there";
   const email = a.patients?.email as string | undefined;
   const phone = a.patients?.phone as string | undefined;
   const total = Number(a.price ?? 0);
@@ -1102,7 +1064,7 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
           {paid ? (
             <>
               <p className="text-sm font-semibold text-foreground">Receipt</p>
-              <div className="glass-item p-2.5 text-muted-foreground">
+              <div className="text-muted-foreground">
                 <p className="text-foreground">{a.treatment_name} · #{a.treatment_number}</p>
                 <p>{when}</p>
                 <p className="mt-1 font-semibold text-foreground">Paid in full {formatMoney(total)}</p>
@@ -1130,11 +1092,30 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
             <>
               <p className="text-sm font-semibold text-foreground">Balance outstanding</p>
               <p className="text-muted-foreground">
-                Deposit {formatMoney(depositAmount)} received. Send {name} a link for the remaining{" "}
-                <span className="font-semibold text-foreground">{formatMoney(balance)}</span>.
+                The deposit is in. Send the remaining balance by email or text.
               </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
+                >
+                  <span className="text-2xs font-semibold tracking-[0.02em]">Deposit received</span>
+                  <span className="font-semibold tabular-nums">{formatMoney(depositAmount)}</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="selected"
+                  className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
+                >
+                  <span className="text-2xs font-semibold tracking-[0.02em]">Balance</span>
+                  <span className="font-semibold tabular-nums">{formatMoney(balance)}</span>
+                </Button>
+              </div>
               <p className="text-2xs text-muted-foreground">
-                Texts and emails include a link to their patient account to pay.
+                Sending a balance request for{" "}
+                <span className="font-semibold text-foreground">{formatMoney(balance)}</span>
+                . The message includes a link to pay in their account.
               </p>
               <div className="flex gap-2">
                 <Button
@@ -1642,7 +1623,7 @@ function DayPlanner({
   return (
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
       {/* Header */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
+      <div className="relative z-30 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-semibold tracking-[0.02em] text-foreground">Day planner</span>
           <span aria-hidden>·</span>
@@ -1766,12 +1747,16 @@ function DayPlanner({
                               colId: col.id,
                             });
                           }}
-                          className={`group/slot flex w-full cursor-pointer items-center justify-center border-b ${
+                          className={`group/slot relative flex w-full cursor-pointer items-center justify-center border-b ${
                             (o.row as { minute: number }).minute % 60 === 0 ? "border-glass-line" : "border-transparent"
-                          } transition-colors hover:bg-accent-wash`}
+                          }`}
                           aria-label={`Add appointment at ${label((o.row as { minute: number }).minute)} with ${col.name}`}
                         >
-                          <Plus className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover/slot:opacity-70" />
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute inset-x-1.5 inset-y-1 rounded-xl bg-[rgba(47,63,102,0.08)] opacity-0 transition-opacity group-hover/slot:opacity-100"
+                          />
+                          <Plus className="relative z-[1] h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover/slot:opacity-70" />
                         </button>
                       ) : (
                         <div
@@ -1820,7 +1805,7 @@ function DayPlanner({
                           onPointerDown={(ev) => beginDrag(ev, a, col.id)}
                           onPointerMove={moveDrag}
                           onPointerUp={() => endDrag(a)}
-                          className={`glass-card group absolute inset-x-1.5 z-[2] flex cursor-grab flex-col justify-center gap-1 overflow-hidden !rounded-xl px-3 py-2.5 transition-shadow hover:shadow-lift ${
+                          className={`diary-event glass-card group absolute inset-x-1.5 z-[2] flex cursor-grab flex-col justify-center gap-1 overflow-hidden !rounded-xl px-3 py-2.5 transition-shadow hover:shadow-lift ${
                             dragging ? "!z-30 cursor-grabbing opacity-90 shadow-lift" : ""
                           } ${isCurrent ? "shadow-lift" : ""}`}
                         >
@@ -2078,9 +2063,22 @@ function WeekView({
   const rows = filterByPractitioner(allRows, selected);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const today = new Date().toDateString();
+  const [quickAdd, setQuickAdd] = useState<null | { top: number; left: number; day: Date }>(null);
+
+  function openQuickAdd(event: { currentTarget: EventTarget & Element; clientX: number; clientY: number }, day: Date) {
+    const root = event.currentTarget.closest("#week-planner");
+    const rect = root?.getBoundingClientRect();
+    const startAt = new Date(day);
+    startAt.setHours(9, 0, 0, 0);
+    setQuickAdd({
+      top: event.clientY - (rect?.top ?? 0),
+      left: event.clientX - (rect?.left ?? 0),
+      day: startAt,
+    });
+  }
   return (
-    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl p-0">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
+    <Card id="week-planner" className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl p-0">
+      <div className="relative z-30 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-semibold tracking-[0.02em] text-foreground">Week planner</span>
           <span aria-hidden>·</span>
@@ -2091,27 +2089,28 @@ function WeekView({
           <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
         </div>
       </div>
-      <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 divide-y divide-glass-line sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="flex min-h-0 flex-1 flex-col px-5 pb-5">
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-auto">
+          <div className="grid min-h-0 h-full min-w-[1820px] auto-rows-fr grid-cols-7 divide-y divide-glass-line sm:divide-y-0">
         {days.map((day, i) => {
           const items = rows
             .filter((a) => new Date(a.starts_at).toDateString() === day.toDateString())
             .sort((x, y) => +new Date(x.starts_at) - +new Date(y.starts_at));
           const isToday = day.toDateString() === today;
-          const isWeekend = day.getDay() === 0 || day.getDay() === 6;
           return (
             <div
               key={day.toISOString()}
-              className={`flex min-h-0 min-w-0 flex-1 flex-col ${i > 0 ? "xl:border-l xl:border-glass-line" : ""} ${
-                isWeekend ? "bg-glass-2" : ""
-              } ${isToday ? "bg-accent-wash" : ""}`}
+              className={`flex min-h-0 min-w-0 flex-1 flex-col ${
+                i > 0 ? "border-l border-glass-line" : ""
+              }`}
             >
               <div
                 className={`sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-glass px-3 py-2.5 shadow-inset-hi backdrop-blur-glass ${
                   isToday ? "border-accent-line" : "border-glass-line"
                 }`}
               >
-                <div className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="text-xs font-semibold tracking-[0.02em] text-muted-foreground">
                     {day.toLocaleDateString("en-GB", { weekday: "short" })}
                   </span>
                   <span
@@ -2123,52 +2122,115 @@ function WeekView({
                   </span>
                 </div>
                 {items.length > 0 && (
-                  <span className="shrink-0 rounded-full border border-edge bg-glass-2 px-2 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground shadow-inset-hi">
+                  <span className="inline-grid size-6 shrink-0 place-items-center rounded-full bg-[rgba(47,63,102,0.08)] text-2xs font-semibold tabular-nums text-muted-foreground">
                     {items.length}
                   </span>
                 )}
               </div>
-              <div className="flex flex-1 flex-col gap-2 p-2.5">
-                {items.length === 0 ? (
-                  <div className="flex min-h-[64px] flex-1 items-center justify-center rounded-xl border border-dashed border-edge-2 px-2 py-4">
+              {isToday && items.length === 0 ? (
+                <button
+                  type="button"
+                  aria-label={`New booking on ${day.toLocaleDateString("en-GB")}`}
+                  onClick={(e) => openQuickAdd(e, day)}
+                  className="group flex min-h-0 min-w-0 flex-1 cursor-pointer flex-col gap-2 p-3 text-left transition-colors bg-[rgba(47,63,102,0.04)] hover:bg-[rgba(47,63,102,0.14)] active:bg-[rgba(47,63,102,0.18)]"
+                >
+                  <div className="flex min-h-[64px] flex-1 flex-col items-center justify-center gap-2 py-4">
+                    <Plus className="h-4 w-4 text-ink-3 opacity-40 transition-opacity group-hover:opacity-80" />
+                    <span className="text-2xs font-medium tracking-[0.02em] text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
+                      Free
+                    </span>
+                  </div>
+                </button>
+              ) : items.length === 0 ? (
+                <button
+                  type="button"
+                  aria-label={`New booking on ${day.toLocaleDateString("en-GB")}`}
+                  onClick={(e) => openQuickAdd(e, day)}
+                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer flex-col gap-2 p-3 text-left transition-colors hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
+                >
+                  <div className="flex min-h-[64px] flex-1 items-center justify-center py-4">
                     <span className="text-2xs font-medium tracking-[0.02em] text-muted-foreground/60">
                       Free
                     </span>
                   </div>
-                ) : (
-                  items.map((a) => <WeekAppointmentCard key={a.id} a={a} onState={onState} />)
-                )}
-              </div>
+                </button>
+              ) : (
+                <div
+                  className={
+                    isToday
+                      ? "flex min-h-0 min-w-0 flex-1 flex-col gap-2 bg-[rgba(47,63,102,0.08)] p-3"
+                      : "flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-3"
+                  }
+                >
+                  {items.map((a) => (
+                    <WeekAppointmentCard key={a.id} a={a} onState={onState} />
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
+          </div>
+        </div>
       </div>
+      {quickAdd && (
+        <div className="absolute z-50" style={{ top: quickAdd.top, left: quickAdd.left }}>
+          <QuickAddAppointment
+            patients={patients ?? []}
+            practitioners={practitioners ?? []}
+            catalogue={catalogue ?? []}
+            date={quickAdd.day}
+            defaultStart={quickAdd.day}
+            open
+            onOpenChange={(v) => {
+              if (!v) setQuickAdd(null);
+            }}
+            align="center"
+          >
+            <span className="block h-1 w-1" />
+          </QuickAddAppointment>
+        </div>
+      )}
     </Card>
   );
 }
 
-function WeekAppointmentCard({ a, onState }: { a: any; onState: (v: any) => Promise<unknown> }) {
+function WeekAppointmentCard({
+  a,
+  onState,
+}: {
+  a: any;
+  onState: (v: any) => Promise<unknown>;
+}) {
   const consentSigned = a.documents?.status === "signed";
   const treatmentColours = useTreatmentColours();
   const tone = toneForTreatment(a.treatment_name, treatmentColours);
+  const starts = new Date(a.starts_at);
+  const ends = a.ends_at ? new Date(a.ends_at) : null;
+  const timeFmt: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+  const name = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim();
+  const practitioner = a.profiles?.full_name ?? "Unassigned";
+  const timeLabel = ends
+    ? `${starts.toLocaleTimeString("en-GB", timeFmt)}–${ends.toLocaleTimeString("en-GB", timeFmt)}`
+    : starts.toLocaleTimeString("en-GB", timeFmt);
+
   return (
     <div
-      className="glass-card group relative overflow-hidden !rounded-xl p-2.5 transition-shadow hover:shadow-lift"
+      className="diary-event glass-card group relative overflow-hidden !rounded-xl p-3 transition-shadow hover:shadow-lift"
       style={tone.style}
     >
       <div className={`pointer-events-none absolute inset-0 rounded-[inherit] ${tone.bg}`} aria-hidden />
-      <div className="relative mb-1.5 flex items-center justify-between gap-2">
+      <div className="relative mb-1.5 flex items-start justify-between gap-2">
         <AppointmentTimeEditor appointment={a}>
           <button
             type="button"
-            className={`inline-flex items-center rounded-full ${tone.softBg} px-2 py-0.5 text-2xs font-semibold tabular-nums ${tone.text} transition-opacity hover:opacity-80`}
+            className={`inline-flex items-center text-left text-2xs font-semibold tabular-nums ${tone.text} transition-opacity hover:opacity-80`}
           >
-            {new Date(a.starts_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+            {timeLabel}
           </button>
         </AppointmentTimeEditor>
-        <div className="flex items-center gap-1">
-          <PaymentStatusChip a={a} compact />
-          <VisitNoteChip appointmentId={a.id} variant="chip" compact />
+        <div className="shrink-0">
+          <StageTracker a={a} onState={onState} badge />
         </div>
       </div>
       <Link
@@ -2176,16 +2238,19 @@ function WeekAppointmentCard({ a, onState }: { a: any; onState: (v: any) => Prom
         params={{ id: a.patient_id }}
         className="relative block break-words text-sm font-semibold leading-tight text-foreground hover:underline"
       >
-        {a.patients?.first_name} {a.patients?.last_name}
+        {name}
       </Link>
-      <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+      <p className="relative mt-0.5 break-words text-xs leading-snug text-muted-foreground">
         {a.treatment_name}{" "}
         <span className="text-muted-foreground/60">· #{a.treatment_number}</span>
-        <span className="text-muted-foreground/60"> · {a.profiles?.full_name ?? "Unassigned"}</span>
       </p>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <p className="relative mt-0.5 break-words text-xs leading-snug text-muted-foreground/80">
+        {practitioner}
+      </p>
+      <div className="relative mt-2 flex flex-wrap items-center gap-1.5">
         <ConsentChip a={a} signed={consentSigned} compact />
-        <StageTracker a={a} onState={onState} compact />
+        <PaymentStatusChip a={a} compact />
+        <VisitNoteChip appointmentId={a.id} variant="chip" compact />
       </div>
     </div>
   );
@@ -2217,7 +2282,7 @@ function MonthView({
   const today = new Date().toDateString();
   return (
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl p-0">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
+      <div className="relative z-30 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-semibold tracking-[0.02em] text-foreground">Month planner</span>
           <span aria-hidden>·</span>

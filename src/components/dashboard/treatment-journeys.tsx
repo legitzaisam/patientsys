@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import { Layers } from "lucide-react";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { Card } from "@/components/ui/card";
 
@@ -43,8 +42,7 @@ export function TreatmentJourneys({ journeys }: { journeys: Journeys | undefined
     <section className="mt-8">
       <div className="mb-4 flex items-end justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-2 section-title">
-            <Layers className="h-4 w-4 text-accent-ink" aria-hidden />
+          <h2 className="section-title">
             Active treatment journeys
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -86,7 +84,7 @@ export function TreatmentJourneys({ journeys }: { journeys: Journeys | undefined
                         <Link
                           to="/patients/$id"
                           params={{ id: plan.patientId }}
-                          className="glass-item flex items-center gap-2.5 p-2.5 transition-colors hover:bg-glass"
+                          className="flex items-center gap-2.5 rounded-xl py-2 transition-colors hover:bg-[rgba(47,63,102,0.08)]"
                         >
                           <PatientAvatar
                             patientId={plan.patientId}

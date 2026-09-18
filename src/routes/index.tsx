@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { ShieldCheck, Camera, MessagesSquare, ClipboardCheck } from "lucide-react";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
@@ -36,14 +36,6 @@ function Landing() {
       <header className="sticky top-0 z-30 border-b border-edge bg-sidebar shadow-inset-hi backdrop-blur-glass backdrop-saturate-150">
         <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
           <BrandLockup />
-          <div className="ml-auto flex items-center gap-2">
-            <Button asChild variant="outline">
-              <Link to="/portal">Patient portal</Link>
-            </Button>
-            <Button asChild>
-              <Link to="/auth">Staff sign in</Link>
-            </Button>
-          </div>
         </div>
       </header>
 
@@ -59,10 +51,10 @@ function Landing() {
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Button asChild size="lg">
-            <Link to="/auth">Staff sign in</Link>
+            <a href="/auth">Staff sign in</a>
           </Button>
           <Button asChild size="lg" variant="outline">
-            <Link to="/portal">Patient portal</Link>
+            <a href="/portal">Patient portal</a>
           </Button>
         </div>
       </section>

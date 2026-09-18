@@ -100,6 +100,7 @@ export function ArrivalAlerts({
   roles = [],
   variant = "standalone",
   onCountChange,
+  onPhaseChange,
   onRequestCollapse,
   panelVisible = true,
 }: {
@@ -107,6 +108,7 @@ export function ArrivalAlerts({
   /** "panel": rendered inside the floating dock's alert panel — no own pill. */
   variant?: "standalone" | "panel";
   onCountChange?: (count: number) => void;
+  onPhaseChange?: (phase: Phase | null) => void;
   onRequestCollapse?: () => void;
   /** Panel mode: false while the dock keeps the panel closed (mounted but hidden). */
   panelVisible?: boolean;
@@ -215,10 +217,6 @@ export function ArrivalAlerts({
   // look like "all alerts resolved" (it would reset the peek memory).
   const loaded = data !== undefined;
   const visibleCount = alerts.filter((x) => !isArrivalAlertSnoozed(x.appt.id, x.phase, now, snoozes)).length;
-  useEffect(() => {
-    if (loaded) onCountChange?.(visibleCount);
-  }, [onCountChange, visibleCount, loaded]);
-
   const mostUrgentPhase = useMemo<Phase>(() => {
     const order: Phase[] = ["due", "arrival", "late", "overdue"];
     let highest: Phase = "due";
@@ -227,6 +225,13 @@ export function ArrivalAlerts({
     }
     return highest;
   }, [visible]);
+
+  useEffect(() => {
+    if (loaded) {
+      onCountChange?.(visibleCount);
+      onPhaseChange?.(visibleCount > 0 ? mostUrgentPhase : null);
+    }
+  }, [onCountChange, onPhaseChange, visibleCount, loaded, mostUrgentPhase]);
 
   const noShowDialog = noShowAppt ? (
     <NoShowFollowUpDialog

@@ -64,7 +64,10 @@ const chatWindow = '[data-qc="chat-window"]';
 async function badgeCount(page) {
   const bubble = page.locator(alertBubble);
   if (!(await bubble.isVisible().catch(() => false))) return 0;
-  const text = (await bubble.locator("span").last().textContent()) ?? "0";
+  const text =
+    (await bubble.locator(".tabular-nums").first().textContent().catch(() => null)) ??
+    (await bubble.locator("span").first().textContent()) ??
+    "0";
   return text.trim() === "9+" ? 10 : Number(text.trim()) || 0;
 }
 
@@ -115,7 +118,9 @@ await scenario(browser, "corner-ownership", {}, async (page) => {
   if (intruders.length === 0) pass("only the dock is fixed in the bottom-right corner");
   else fail("only the dock is fixed in the bottom-right corner", intruders.join(", "));
 
-  const launchers = await page.locator(`${dockSel} > button:visible`).count();
+  const launchers =
+    (await page.locator(`${dockSel} ${alertBubble}:visible`).count()) +
+    (await page.locator(`${dockSel} ${chatBubble}:visible`).count());
   const count = await badgeCount(page);
   if (count > 0 ? launchers === 2 : launchers === 1) {
     pass("exactly two launchers (alert auto-hides at zero)", `alerts=${count}, launchers=${launchers}`);
@@ -203,7 +208,10 @@ await scenario(browser, "alert-actions", {}, async (page) => {
     ({ sel, prev }) => {
       const el = document.querySelector(sel);
       if (!el) return true; // bubble gone entirely = count hit zero
-      const t = el.querySelector("span:last-child")?.textContent?.trim() ?? "0";
+      const t =
+        el.querySelector(".tabular-nums")?.textContent?.trim() ??
+        el.querySelector("span")?.textContent?.trim() ??
+        "0";
       return (t === "9+" ? 10 : Number(t) || 0) < prev;
     },
     { sel: alertBubble, prev: before },

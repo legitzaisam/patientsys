@@ -55,14 +55,24 @@ export function ChatBubble() {
   useEffect(() => {
     if (!chatOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setChatOpen(false);
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('[data-qc="chat-window"], [data-qc="chat-bubble"]')) return;
+      setChatOpen(false);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
   }, [chatOpen, setChatOpen]);
 
   if (hidden) return null;
 
   return (
-    <>
+    <div className="flex flex-col items-end gap-3">
       {chatOpen && (
         <ChatWindow
           active={active}
@@ -81,16 +91,16 @@ export function ChatBubble() {
         }
         aria-expanded={chatOpen}
         data-qc="chat-bubble"
-        className="pointer-events-auto relative flex h-13 w-13 items-center justify-center rounded-full border border-edge bg-primary p-3.5 text-primary-foreground shadow-lift transition-transform hover:scale-105 active:scale-95 motion-reduce:transition-none"
+        className="glass-sheen pointer-events-auto relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-edge bg-[linear-gradient(140deg,var(--accent-hi),var(--accent)_75%)] text-accent-foreground shadow-bloom backdrop-blur-glass backdrop-saturate-150 transition-transform hover:scale-105 hover:brightness-[1.05] active:scale-95 active:brightness-[0.92] motion-reduce:transition-none"
       >
-        <MessageCircle className="h-5 w-5" aria-hidden />
+        <MessageCircle className="relative z-[1] h-4 w-4" aria-hidden />
         {unreadTotal > 0 && !chatOpen ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-bold text-white shadow-lift">
+          <span className="absolute -right-0.5 -top-0.5 z-[1] flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-bold text-white shadow-lift">
             {unreadTotal > 9 ? "9+" : unreadTotal}
           </span>
         ) : null}
       </button>
-    </>
+    </div>
   );
 }
 

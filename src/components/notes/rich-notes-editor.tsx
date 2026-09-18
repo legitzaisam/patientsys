@@ -79,11 +79,14 @@ export function RichNotesEditor({
   onChange,
   prefs,
   placeholder = "Jot down reminders, handover notes or things to follow up…",
+  fill = false,
 }: {
   value: string;
   onChange: (html: string) => void;
   prefs: Prefs;
   placeholder?: string;
+  /** Grow to fill a parent (floating notes card) instead of a fixed max height. */
+  fill?: boolean;
 }) {
   const theme = THEMES[prefs.theme];
   const lastEmitted = useRef(value);
@@ -106,7 +109,8 @@ export function RichNotesEditor({
     editorProps: {
       attributes: {
         class: cn(
-          "rich-notes max-h-[min(70vh,36rem)] min-h-[140px] overflow-y-auto px-3.5 py-3 outline-none",
+          "rich-notes overflow-y-auto px-3.5 py-3 outline-none",
+          fill ? "min-h-0 flex-1" : "max-h-[min(70vh,36rem)] min-h-[140px]",
           theme.text,
           FONTS[prefs.font].cls,
         ),
@@ -154,8 +158,8 @@ export function RichNotesEditor({
   const active = "bg-accent-soft text-accent-ink shadow-inset-hi";
 
   return (
-    <div className="flex min-h-0 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-glass-line pb-2">
+    <div className={cn("flex min-h-0 flex-col gap-2", fill && "h-full")}>
+      <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-glass-line pb-2">
         <ToolbarButton
           className={cn(btn, editor.isActive("bold") && active)}
           title="Bold"
@@ -326,8 +330,18 @@ export function RichNotesEditor({
         />
       </div>
 
-      <div className={cn("rounded-2xl border transition-colors", theme.rule, theme.surface)}>
-        <EditorContent editor={editor} />
+      <div
+        className={cn(
+          "rounded-2xl border transition-colors",
+          theme.rule,
+          theme.surface,
+          fill && "flex min-h-0 flex-1 flex-col overflow-hidden",
+        )}
+      >
+        <EditorContent
+          editor={editor}
+          className={fill ? "flex min-h-0 min-w-0 flex-1 flex-col" : undefined}
+        />
       </div>
     </div>
   );

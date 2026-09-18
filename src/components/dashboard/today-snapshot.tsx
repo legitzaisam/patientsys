@@ -260,48 +260,119 @@ function AppointmentCarousel({
     return () => cancelAnimationFrame(id);
   }, [startAt, appointments]);
 
-  const scrollByCards = (dir: -1 | 1) => {
-    scrollToIndex(nearestIndex() + dir);
+  /** Leftmost card at the snap origin — floor, not nearest (nearest + 1 skips a card). */
+  const alignedIndex = () => {
+    const el = scrollerRef.current;
+    if (!el) return 0;
+    const list = slides();
+    if (list.length === 0) return 0;
+    const origin = el.getBoundingClientRect().left + padX(el).left;
+    let idx = 0;
+    list.forEach((slide, i) => {
+      if (slide.getBoundingClientRect().left <= origin + 12) idx = i;
+    });
+    return idx;
   };
 
-  const HOVER_AUTO_SLIDE_DELAY_MS = 500;
-  const AUTO_SLIDE_STEP_MS = 750;
+  const HOVER_GLIDE_DELAY_MS = 480;
+  const HOVER_GLIDE_PX_PER_SEC = 168;
   const hoverAutoRef = useRef<{
     dir: -1 | 1;
     delayTimer: ReturnType<typeof setTimeout> | null;
-    intervalTimer: ReturnType<typeof setInterval> | null;
+    raf: number | null;
+    startedAt: number;
   } | null>(null);
+  const gutterLockRef = useRef(false);
+  const gutterAnimatingRef = useRef(false);
 
-  const clearHoverAutoSlide = () => {
+  const setSnap = (on: boolean) => {
+    scrollerRef.current?.classList.toggle("is-free-scroll", !on);
+  };
+
+  const stopHoverGlide = () => {
     const hover = hoverAutoRef.current;
     if (!hover) return;
     if (hover.delayTimer !== null) clearTimeout(hover.delayTimer);
-    if (hover.intervalTimer !== null) clearInterval(hover.intervalTimer);
+    if (hover.raf !== null) cancelAnimationFrame(hover.raf);
     hoverAutoRef.current = null;
   };
 
-  const startHoverAutoSlide = (dir: -1 | 1) => {
-    clearHoverAutoSlide();
+  const startHoverAutoSlide = (dir: -1 | 1, delayMs = HOVER_GLIDE_DELAY_MS) => {
+    if (gutterLockRef.current) return;
+    stopHoverGlide();
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setSnap(true);
+      return;
+    }
     const delayTimer = setTimeout(() => {
-      const tick = () => {
+      const el = scrollerRef.current;
+      if (!el || !hoverAutoRef.current || gutterLockRef.current) return;
+      setSnap(false);
+      const startedAt = performance.now();
+      hoverAutoRef.current.startedAt = startedAt;
+      let last = startedAt;
+      const step = (now: number) => {
+        const hover = hoverAutoRef.current;
+        if (!hover || hover.raf === null || gutterLockRef.current) return;
+        const scroller = scrollerRef.current;
+        if (!scroller) return;
+        const dt = Math.min(24, now - last);
+        last = now;
+        const ramp = Math.min(1, (now - hover.startedAt) / 420);
+        const eased = ramp * ramp * (3 - 2 * ramp);
+        const speed = HOVER_GLIDE_PX_PER_SEC * (0.22 + 0.78 * eased);
+        const max = scroller.scrollWidth - scroller.clientWidth;
+        scroller.scrollLeft = Math.max(0, Math.min(max, scroller.scrollLeft + dir * speed * (dt / 1000)));
+        syncEdges();
         const edges = getEdges();
         if (dir === -1 ? !edges.canPrev : !edges.canNext) {
-          clearHoverAutoSlide();
+          stopHoverGlide();
+          setSnap(true);
+          scrollToIndex(nearestIndex(), "smooth");
           return;
         }
-        scrollByCards(dir);
+        hover.raf = requestAnimationFrame(step);
       };
-      tick();
-      const intervalTimer = setInterval(tick, AUTO_SLIDE_STEP_MS);
-      if (hoverAutoRef.current) {
-        hoverAutoRef.current.intervalTimer = intervalTimer;
-        hoverAutoRef.current.delayTimer = null;
-      }
-    }, HOVER_AUTO_SLIDE_DELAY_MS);
-    hoverAutoRef.current = { dir, delayTimer, intervalTimer: null };
+      hoverAutoRef.current.delayTimer = null;
+      hoverAutoRef.current.raf = requestAnimationFrame(step);
+    }, delayMs);
+    hoverAutoRef.current = { dir, delayTimer, raf: null, startedAt: 0 };
   };
 
-  useEffect(() => () => clearHoverAutoSlide(), []);
+  const onGutterPointerDown = () => {
+    stopHoverGlide();
+    gutterLockRef.current = true;
+  };
+
+  const onGutterClick = (dir: -1 | 1) => {
+    stopHoverGlide();
+    gutterLockRef.current = true;
+    const el = scrollerRef.current;
+    if (!el) return;
+    gutterAnimatingRef.current = true;
+    setSnap(false);
+    scrollToIndex(alignedIndex() + dir, "smooth");
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      gutterAnimatingRef.current = false;
+      setSnap(true);
+      syncEdges();
+    };
+    el.addEventListener("scrollend", settle, { once: true });
+    window.setTimeout(settle, 500);
+  };
+
+  const onGutterLeave = () => {
+    stopHoverGlide();
+    gutterLockRef.current = false;
+    if (gutterAnimatingRef.current) return;
+    setSnap(true);
+    scrollToIndex(nearestIndex(), "smooth");
+  };
+
+  useEffect(() => () => stopHoverGlide(), []);
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -357,72 +428,74 @@ function AppointmentCarousel({
         KPI / Attention, while pl-* keeps left shadows from clipping.
       */}
       <div className="relative -ml-5 min-w-0">
+        {/*
+          Mask the strip (not a painted grey overlay) so clipped cards dissolve
+          into the page wash — the old --background gradient read as a grey
+          ombre once the peach bloom sat behind the gutter.
+        */}
         <div
-          ref={scrollerRef}
-          className="diary-carousel-scroller relative flex cursor-grab gap-4 overflow-x-auto overscroll-x-contain pl-5 pr-4 pt-3 pb-8 active:cursor-grabbing"
-          style={{
-            scrollSnapType: "x mandatory",
-            scrollPaddingInline: "1.25rem 1rem",
-            touchAction: "pan-x",
-          }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
+          className={`diary-carousel-clip${canPrev ? " is-fade-left" : ""}${canNext ? " is-fade-right" : ""}`}
         >
-          {appointments.map((a) => (
-            <div
-              key={a.id}
-              data-diary-slide
-              className="w-[min(100%,280px)] shrink-0 snap-start py-1 sm:w-[280px] lg:w-[300px]"
-            >
-              <TodayCard appointment={a} isManager={isManager} showDay={showDay} />
-            </div>
-          ))}
+          <div
+            ref={scrollerRef}
+            className="diary-carousel-scroller relative flex cursor-grab gap-4 overflow-x-auto overscroll-x-contain pl-5 pr-4 pt-3 pb-8 active:cursor-grabbing"
+            style={{
+              scrollSnapType: "x mandatory",
+              scrollPaddingInline: "1.25rem 1rem",
+              touchAction: "pan-x",
+            }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+          >
+            {appointments.map((a) => (
+              <div
+                key={a.id}
+                data-diary-slide
+                className="w-[min(100%,280px)] shrink-0 snap-start py-1 sm:w-[280px] lg:w-[300px]"
+              >
+                <TodayCard appointment={a} isManager={isManager} showDay={showDay} />
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/*
-          Fades cover the full strip (incl. shadow gutters) so they don’t hard-cut
-          across card bottoms; arrows stay centered on the card band (top-3 / bottom-8).
-        */}
+        {/* Arrows sit on the unmasked gutter so they stay fully opaque. */}
         {canPrev ? (
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-[4.75rem] sm:w-[5.25rem]">
-            <div aria-hidden className="diary-carousel-fade-left absolute inset-0" />
-            <div className="absolute top-3 bottom-8 left-0 right-0 flex items-center justify-start pl-5">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="pointer-events-auto relative z-[1] h-9 w-9 shrink-0 rounded-full border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]"
-                onClick={() => scrollByCards(-1)}
-                onMouseEnter={() => startHoverAutoSlide(-1)}
-                onMouseLeave={clearHoverAutoSlide}
-                aria-label="Previous appointments"
-              >
+          <button
+            type="button"
+            aria-label="Previous appointments"
+            className="absolute inset-y-0 left-0 z-20 w-[4.75rem] cursor-pointer sm:w-[5.25rem]"
+            onPointerDown={onGutterPointerDown}
+            onClick={() => onGutterClick(-1)}
+            onMouseEnter={() => startHoverAutoSlide(-1)}
+            onMouseLeave={onGutterLeave}
+          >
+            <span className="pointer-events-none absolute top-3 bottom-8 left-0 right-0 flex items-center justify-start pl-5">
+              <span className="relative z-[1] inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]">
                 <ChevronLeft className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+              </span>
+            </span>
+          </button>
         ) : null}
 
         {canNext ? (
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 sm:w-[4.5rem]">
-            <div aria-hidden className="diary-carousel-fade-right absolute inset-0" />
-            <div className="absolute top-3 bottom-8 left-0 right-0 flex items-center justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="pointer-events-auto relative z-[1] mr-1 h-9 w-9 shrink-0 rounded-full border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]"
-                onClick={() => scrollByCards(1)}
-                onMouseEnter={() => startHoverAutoSlide(1)}
-                onMouseLeave={clearHoverAutoSlide}
-                aria-label="Next appointments"
-              >
+          <button
+            type="button"
+            aria-label="Next appointments"
+            className="absolute inset-y-0 right-0 z-20 w-16 cursor-pointer sm:w-[4.5rem]"
+            onPointerDown={onGutterPointerDown}
+            onClick={() => onGutterClick(1)}
+            onMouseEnter={() => startHoverAutoSlide(1)}
+            onMouseLeave={onGutterLeave}
+          >
+            <span className="pointer-events-none absolute top-3 bottom-8 left-0 right-0 flex items-center justify-end pr-1">
+              <span className="relative z-[1] inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]">
                 <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+              </span>
+            </span>
+          </button>
         ) : null}
       </div>
     </div>
@@ -537,22 +610,24 @@ function TodayCard({
         className="cursor-pointer rounded-[22px] shadow-[var(--shadow-glass)] transition-[box-shadow] hover:shadow-[var(--shadow-lift)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <div className="glass-card flex h-full flex-col gap-3 p-4 !shadow-none">
-          {showDay && (
-            <p className="text-[11px] font-semibold tracking-[0.02em] text-ink-3">
-              {formatDayHeading(clinicDayKey(new Date(a.starts_at)))}
-            </p>
-          )}
           <div className="space-y-1.5">
             <div className="flex items-start justify-between gap-3">
-              <div onClick={stopCardOpen} onKeyDown={stopCardOpen}>
-                <AppointmentTimeEditor appointment={a}>
-                  <button
-                    type="button"
-                    className="text-left text-xs font-medium tabular-nums text-accent-ink underline-offset-4 hover:underline"
-                  >
-                    {timeRange}
-                  </button>
-                </AppointmentTimeEditor>
+              <div className={showDay ? "space-y-1" : undefined}>
+                {showDay && (
+                  <p className="text-[11px] font-semibold leading-none tracking-[0.02em] text-ink-3">
+                    {formatDayHeading(clinicDayKey(new Date(a.starts_at)))}
+                  </p>
+                )}
+                <div onClick={stopCardOpen} onKeyDown={stopCardOpen}>
+                  <AppointmentTimeEditor appointment={a}>
+                    <button
+                      type="button"
+                      className="text-left text-xs font-medium leading-none tabular-nums text-accent-ink underline-offset-4 hover:underline"
+                    >
+                      {timeRange}
+                    </button>
+                  </AppointmentTimeEditor>
+                </div>
               </div>
               <div className="shrink-0" onClick={stopCardOpen}>
                 <StageBadge
@@ -835,11 +910,11 @@ function StageBadge({
         align="end"
         sideOffset={8}
         collisionPadding={12}
-        className="w-56 rounded-2xl border-edge-2 p-3.5"
+        className="w-56 rounded-2xl p-3.5"
       >
-        <p className="text-sm font-semibold text-foreground">Patient journey</p>
-        <p className="text-xs text-ink-2">Set current stage.</p>
-        <div className="mt-2.5 space-y-0.5">
+        <p className="text-sm font-semibold leading-snug text-foreground">Patient journey</p>
+        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">Set current stage.</p>
+        <div className="mt-2.5 -mx-1.5 space-y-0.5">
           {STAGES.map((s) => {
             const Icon = s.icon;
             const active = s.key === stage;
@@ -848,24 +923,26 @@ function StageBadge({
                 key={s.key}
                 type="button"
                 onClick={() => onChange(s.key)}
-                className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
+                className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs leading-snug transition-colors ${
                   active
                     ? "bg-accent-soft font-semibold text-accent-ink"
                     : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
                 }`}
               >
-                <Icon className="h-3 w-3" /> {s.label}
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span>{s.label}</span>
               </button>
             );
           })}
           <button
             type="button"
             onClick={() => onChange("no_show")}
-            className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-destructive-bg active:bg-destructive-bg ${
+            className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs leading-snug transition-colors hover:bg-destructive-bg active:bg-destructive-bg ${
               stage === "no_show" ? "bg-destructive-bg font-semibold text-destructive-ink" : "text-destructive-ink"
             }`}
           >
-            <UserX className="h-3.5 w-3.5" /> No show
+            <UserX className="h-3.5 w-3.5 shrink-0" />
+            <span>No show</span>
           </button>
         </div>
       </HoverCardContent>
@@ -951,9 +1028,9 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
           {chip}
         </button>
       </HoverCardTrigger>
-      <HoverCardContent side="bottom" align="start" sideOffset={8} className="w-64 rounded-2xl border-edge-2 p-3.5">
-        <p className="text-sm font-semibold text-foreground">Consent outstanding</p>
-        <p className="mt-1 text-xs text-muted-foreground">Send a reminder to complete the consent form.</p>
+      <HoverCardContent side="bottom" align="start" sideOffset={8} className="w-64 rounded-2xl p-3.5 text-left">
+        <p className="text-sm font-semibold leading-snug text-foreground">Consent outstanding</p>
+        <p className="mt-1 text-xs leading-snug text-muted-foreground">Send a reminder to complete the consent form.</p>
         <div className="mt-3 flex gap-2">
           <Button
             variant="outline"
@@ -961,7 +1038,7 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
             disabled={send.isPending || remind.isPending}
             onClick={() => sendReminder("email")}
           >
-            <Mail className="mr-1 h-3 w-3" /> Email
+            <Mail className="h-3 w-3" /> Email
           </Button>
           <Button
             variant="outline"
@@ -969,7 +1046,7 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
             disabled={send.isPending || remind.isPending}
             onClick={() => sendReminder("sms")}
           >
-            <Phone className="mr-1 h-3 w-3" /> Text
+            <Phone className="h-3 w-3" /> Text
           </Button>
         </div>
       </HoverCardContent>
@@ -1055,12 +1132,12 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
           {chip}
         </button>
       </HoverCardTrigger>
-      <HoverCardContent side="bottom" align="end" sideOffset={8} className="w-72 rounded-2xl border-edge-2 p-3.5">
-        <div className="space-y-3 text-xs">
+      <HoverCardContent side="bottom" align="end" sideOffset={8} className="w-72 rounded-2xl p-3.5 text-left">
+        <div className="space-y-3 text-xs leading-snug">
           {paid ? (
             <>
-              <p className="text-sm font-semibold text-foreground">Receipt</p>
-              <div className="glass-item p-2.5 text-muted-foreground">
+              <p className="text-sm font-semibold leading-snug text-foreground">Receipt</p>
+              <div className="text-muted-foreground">
                 <p className="text-foreground">{a.treatment_name}</p>
                 <p>{when}</p>
                 <p className="mt-1 font-semibold text-foreground">Paid in full {formatMoney(total)}</p>
@@ -1072,7 +1149,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
                   disabled={send.isPending}
                   onClick={() => dispatch("email", "receipt", "Receipt")}
                 >
-                  <Mail className="mr-1 h-3 w-3" /> Email
+                  <Mail className="h-3 w-3" /> Email
                 </Button>
                 <Button
                   variant="outline"
@@ -1080,13 +1157,13 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
                   disabled={send.isPending}
                   onClick={() => dispatch("sms", "receipt", "Receipt")}
                 >
-                  <Phone className="mr-1 h-3 w-3" /> Text
+                  <Phone className="h-3 w-3" /> Text
                 </Button>
               </div>
             </>
           ) : deposit ? (
             <>
-              <p className="text-sm font-semibold text-foreground">Balance outstanding</p>
+              <p className="text-sm font-semibold leading-snug text-foreground">Balance outstanding</p>
               <p className="text-muted-foreground">
                 Deposit {formatMoney(depositAmount)} received. Send a link for the remaining{" "}
                 <span className="font-semibold text-foreground">{formatMoney(balance)}</span>.
@@ -1101,7 +1178,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
                   disabled={send.isPending}
                   onClick={() => sendPayment("email", "balance")}
                 >
-                  <Mail className="mr-1 h-3 w-3" /> Email
+                  <Mail className="h-3 w-3" /> Email
                 </Button>
                 <Button
                   variant="outline"
@@ -1109,32 +1186,32 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
                   disabled={send.isPending}
                   onClick={() => sendPayment("sms", "balance")}
                 >
-                  <Phone className="mr-1 h-3 w-3" /> Text
+                  <Phone className="h-3 w-3" /> Text
                 </Button>
               </div>
             </>
           ) : (
             <>
-              <p className="text-sm font-semibold text-foreground">Payment outstanding</p>
+              <p className="text-sm font-semibold leading-snug text-foreground">Payment outstanding</p>
               <p className="text-muted-foreground">Choose deposit or full amount, then send by email or text.</p>
               <div className="flex gap-2">
                 <Button
                   type="button"
                   variant={amountKind === "deposit" ? "selected" : "outline"}
                   onClick={() => setAmountKind("deposit")}
-                  className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
+                  className="h-auto flex-1 flex-col items-center justify-center gap-0.5 py-2 text-center text-xs"
                 >
-                  <span className="text-2xs font-semibold tracking-[0.02em]">Deposit</span>
-                  <span className="font-semibold tabular-nums">{formatMoney(depositAmount)}</span>
+                  <span className="block w-full text-center text-2xs font-semibold tracking-[0.02em]">Deposit</span>
+                  <span className="block w-full text-center font-semibold tabular-nums">{formatMoney(depositAmount)}</span>
                 </Button>
                 <Button
                   type="button"
                   variant={amountKind === "full" ? "selected" : "outline"}
                   onClick={() => setAmountKind("full")}
-                  className="h-auto flex-1 flex-col gap-0.5 py-2 text-xs"
+                  className="h-auto flex-1 flex-col items-center justify-center gap-0.5 py-2 text-center text-xs"
                 >
-                  <span className="text-2xs font-semibold tracking-[0.02em]">Full amount</span>
-                  <span className="font-semibold tabular-nums">{formatMoney(total)}</span>
+                  <span className="block w-full text-center text-2xs font-semibold tracking-[0.02em]">Full amount</span>
+                  <span className="block w-full text-center font-semibold tabular-nums">{formatMoney(total)}</span>
                 </Button>
               </div>
               <p className="text-2xs text-muted-foreground">
@@ -1149,7 +1226,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
                   disabled={send.isPending}
                   onClick={() => sendPayment("email", amountKind)}
                 >
-                  <Mail className="mr-1 h-3 w-3" /> Email
+                  <Mail className="h-3 w-3" /> Email
                 </Button>
                 <Button
                   variant="outline"
@@ -1157,7 +1234,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
                   disabled={send.isPending}
                   onClick={() => sendPayment("sms", amountKind)}
                 >
-                  <Phone className="mr-1 h-3 w-3" /> Text
+                  <Phone className="h-3 w-3" /> Text
                 </Button>
               </div>
             </>

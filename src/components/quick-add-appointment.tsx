@@ -8,6 +8,12 @@ import { checkEmail } from "@/lib/email";
 import { bookingNotifyDescription } from "@/lib/payment-link";
 import { durationForCatalogueItem } from "@/lib/treatment-duration";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -22,6 +28,48 @@ function toLocalDate(d: Date) {
 
 function patientLabel(p: { first_name?: string; last_name?: string }) {
   return `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim();
+}
+
+type ScrollSnap = {
+  windowX: number;
+  windowY: number;
+  mainTop: number;
+  mainLeft: number;
+  weekTop: number;
+  weekLeft: number;
+};
+
+function snapshotScroll(): ScrollSnap {
+  const main = document.getElementById("app-main-scroll");
+  const week = document.querySelector("#week-planner .overflow-x-auto");
+  return {
+    windowX: window.scrollX,
+    windowY: window.scrollY,
+    mainTop: main?.scrollTop ?? 0,
+    mainLeft: main?.scrollLeft ?? 0,
+    weekTop: week instanceof HTMLElement ? week.scrollTop : 0,
+    weekLeft: week instanceof HTMLElement ? week.scrollLeft : 0,
+  };
+}
+
+function restoreScroll(snap: ScrollSnap | null) {
+  if (!snap) return;
+  const apply = () => {
+    window.scrollTo(snap.windowX, snap.windowY);
+    const main = document.getElementById("app-main-scroll");
+    if (main) {
+      main.scrollTop = snap.mainTop;
+      main.scrollLeft = snap.mainLeft;
+    }
+    const week = document.querySelector("#week-planner .overflow-x-auto");
+    if (week instanceof HTMLElement) {
+      week.scrollTop = snap.weekTop;
+      week.scrollLeft = snap.weekLeft;
+    }
+  };
+  apply();
+  requestAnimationFrame(apply);
+  window.setTimeout(apply, 0);
 }
 
 function PatientCombobox({
@@ -173,6 +221,7 @@ export function QuickAddAppointment({
   onOpenChange,
   align = "start",
   title = "Quick add",
+  centered = false,
   children,
 }: {
   patients: any[];
@@ -185,6 +234,8 @@ export function QuickAddAppointment({
   onOpenChange?: (v: boolean) => void;
   align?: "start" | "center" | "end";
   title?: string;
+  /** Open the card in the middle of the clinic portal (main pane), not next to the trigger. */
+  centered?: boolean;
   children: React.ReactNode;
 }) {
   const queryClient = useQueryClient();
@@ -208,6 +259,13 @@ export function QuickAddAppointment({
   const [duration, setDuration] = useState("30");
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const scrollSnapRef = useRef<ScrollSnap | null>(null);
+
+  function handleOpenChange(next: boolean) {
+    if (next) scrollSnapRef.current = snapshotScroll();
+    setOpen(next);
+    if (!next) restoreScroll(scrollSnapRef.current);
+  }
 
   useEffect(() => {
     if (!isOpen) return;
@@ -243,7 +301,7 @@ export function QuickAddAppointment({
       toast.success("Appointment booked", {
         description: bookingNotifyDescription(r.queued),
       });
-      setOpen(false);
+      handleOpenChange(false);
       setNewPatient(false);
       setFirstName("");
       setLastName("");
@@ -398,14 +456,7 @@ export function QuickAddAppointment({
 
   const field = "h-9 rounded-xl text-xs";
 
-  return (
-    <Popover open={isOpen} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent
-        align={align}
-        className="flex max-h-[min(90dvh,var(--radix-popover-content-available-height))] w-[480px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0"
-        style={{ translate: `${offset.x}px ${offset.y}px` }}
-      >
+  const form = (
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
           <div
             className="flex shrink-0 cursor-grab items-center justify-between px-4 pt-4 active:cursor-grabbing"
@@ -626,6 +677,43 @@ export function QuickAddAppointment({
             <p className="text-center text-2xs text-muted-foreground">Press Esc to dismiss</p>
           </div>
         </form>
+  );
+
+  if (centered) {
+    return (
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        <DialogTrigger asChild>{children}</DialogTrigger>
+        <DialogContent
+          tabIndex={-1}
+          className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-0 shadow-popover sm:rounded-[22px] [&>button]:hidden"
+          style={{ translate: `calc(-50% + ${offset.x}px) calc(-50% + ${offset.y}px)` }}
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
+          }}
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            restoreScroll(scrollSnapRef.current);
+          }}
+        >
+          <DialogTitle className="sr-only">{title}</DialogTitle>
+          {form}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Popover open={isOpen} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent
+        align={align}
+        className="flex max-h-[min(90dvh,var(--radix-popover-content-available-height))] w-[480px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0"
+        style={{ translate: `${offset.x}px ${offset.y}px` }}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
+        {form}
       </PopoverContent>
     </Popover>
   );

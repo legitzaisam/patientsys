@@ -16,6 +16,7 @@ import {
 } from "@/lib/password-gate-session";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { FloatingDockProvider } from "@/components/floating-dock/dock-context";
+import { FloatingNotesProvider } from "@/components/dashboard/floating-notes";
 import { useIdentity } from "@/lib/use-identity";
 
 const wasStaffKey = (userId: string) => `aetheria:was-staff:${userId}`;
@@ -251,7 +252,9 @@ function IdentityGate() {
       {/* Above the route components: pages register chat context with the dock
           (rendered inside AppShell, a child of each route). */}
       <FloatingDockProvider>
-        <Outlet />
+        <FloatingNotesProvider>
+          <Outlet />
+        </FloatingNotesProvider>
       </FloatingDockProvider>
     </>
   );

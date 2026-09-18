@@ -214,16 +214,19 @@ export function AttentionList({ items }: { items: any[] }) {
   const urgent = items.filter((i) => i.urgency === "urgent");
   const thisWeek = items.filter((i) => i.urgency === "this_week");
 
+  if (items.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 p-8 text-center">
+        <Bell className="mx-auto h-5 w-5 text-ink-3" />
+        <p className="mt-2 text-sm text-muted-foreground">Nothing needs attention right now.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      {urgent.length > 0 && <AttentionSection title="Urgent" items={urgent} tone="urgent" />}
-      {thisWeek.length > 0 && <AttentionSection title="This week" items={thisWeek} tone="muted" />}
-      {items.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 p-8 text-center">
-          <Bell className="mx-auto h-5 w-5 text-ink-3" />
-          <p className="mt-2 text-sm text-muted-foreground">Nothing needs attention right now.</p>
-        </div>
-      )}
+    <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+      <AttentionSection title="Urgent" items={urgent} tone="urgent" />
+      <AttentionSection title="This week" items={thisWeek} tone="muted" />
     </div>
   );
 }
@@ -266,14 +269,20 @@ function AttentionSection({
         </span>
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-4 py-3">
-        {tasks.map((task) => (
-          <TaskCategory
-            key={task.kind}
-            task={task}
-            open={openKinds.has(task.kind)}
-            onToggle={() => toggleKind(task.kind)}
-          />
-        ))}
+        {tasks.length === 0 ? (
+          <p className="px-1 py-6 text-center text-xs text-muted-foreground">
+            {tone === "urgent" ? "Nothing urgent right now." : "Nothing due this week."}
+          </p>
+        ) : (
+          tasks.map((task) => (
+            <TaskCategory
+              key={task.kind}
+              task={task}
+              open={openKinds.has(task.kind)}
+              onToggle={() => toggleKind(task.kind)}
+            />
+          ))
+        )}
       </div>
     </div>
   );

@@ -212,8 +212,8 @@ export function NotificationBell({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 rounded-2xl p-0">
-        <div className="bg-glass-2 px-4 py-3">
+      <PopoverContent align="end" className="w-80 overflow-hidden rounded-2xl p-0">
+        <div className="rounded-t-2xl bg-glass-2 px-4 py-3">
           <p className="text-sm font-medium text-foreground">Notifications</p>
           <p className="text-xs text-muted-foreground">Bookings and patient messages</p>
         </div>

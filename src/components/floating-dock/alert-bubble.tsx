@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { Bell } from "lucide-react";
+import { useEffect, useRef, useState, type ElementType } from "react";
+import { CalendarClock, ChevronDown, ChevronUp, Clock, Megaphone, TriangleAlert } from "lucide-react";
 import { ArrivalAlerts } from "@/components/arrival-alerts";
 import { UrgentStaffAlerts } from "@/components/urgent-staff-alerts";
+import type { ArrivalAlertPhase } from "@/lib/arrival-alert-snooze";
+import { cn } from "@/lib/utils";
 
 const PEEK_MS = 8_000;
 /** Highest alert count already peeked this session — the shell remounts on
@@ -24,14 +26,38 @@ function storeSeen(n: number) {
   }
 }
 
+const ARRIVAL_PILL: Record<
+  ArrivalAlertPhase,
+  { className: string; icon: ElementType }
+> = {
+  due: {
+    className: "bg-[#9ccfe3] text-[#2a5f7a] ring-arrived/40",
+    icon: Clock,
+  },
+  arrival: {
+    className: "bg-[#b8a8e0] text-[#4a3a7a] ring-warning/40",
+    icon: CalendarClock,
+  },
+  late: {
+    className: "bg-[#e8c49a] text-[#7a4518] ring-[rgba(224,154,92,0.45)]",
+    icon: TriangleAlert,
+  },
+  overdue: {
+    className: "bg-[#e0a8c4] text-[#7a2a4a] ring-destructive/40",
+    icon: TriangleAlert,
+  },
+};
+
+const TEAM_PILL = {
+  className: "bg-[#b8a8e0] text-[#4a3a7a] ring-warning/40",
+  icon: Megaphone,
+};
+
 /**
- * One launcher for everything that used to pile up in the corner: arrival
- * alerts and urgent team alerts collapse into a single bubble with a badge.
+ * One launcher for arrival alerts and urgent team alerts.
  *
- * A newly arriving alert "peeks" — the panel opens by itself for a few
- * seconds (paused while hovered) and then folds back into the bubble, so
- * time-critical arrivals are still seen without permanently owning the
- * corner. The bubble disappears entirely at zero.
+ * Resting state is the original coloured “N Alerts” pill. Newly arriving
+ * alerts still peek the panel for a few seconds (paused while hovered).
  */
 export function AlertBubble({ roles }: { roles: string[] }) {
   const [open, setOpen] = useState(false);
@@ -40,6 +66,7 @@ export function AlertBubble({ roles }: { roles: string[] }) {
   // "zero alerts" (it would reset the peek memory and replay on every page).
   const [arrivalCount, setArrivalCount] = useState<number | null>(null);
   const [urgentCount, setUrgentCount] = useState<number | null>(null);
+  const [arrivalPhase, setArrivalPhase] = useState<ArrivalAlertPhase | null>(null);
   const ready = arrivalCount !== null && urgentCount !== null;
   const total = (arrivalCount ?? 0) + (urgentCount ?? 0);
 
@@ -67,14 +94,23 @@ export function AlertBubble({ roles }: { roles: string[] }) {
     }
   }, [ready, total, open]);
 
-  useEffect(() => () => {
-    if (peekTimer.current) clearTimeout(peekTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (peekTimer.current) clearTimeout(peekTimer.current);
+    },
+    [],
+  );
 
   const showPanel = (open || peeking) && total > 0;
+  const pill =
+    arrivalCount && arrivalCount > 0 && arrivalPhase
+      ? ARRIVAL_PILL[arrivalPhase]
+      : TEAM_PILL;
+  const PillIcon = pill.icon;
+  const Chevron = showPanel ? ChevronDown : ChevronUp;
 
   return (
-    <>
+    <div className="flex flex-col items-end gap-3">
       {/* Cards stay mounted while hidden so their data hooks keep the badge
           count live and the no-show dialog keeps working. */}
       <div
@@ -99,6 +135,7 @@ export function AlertBubble({ roles }: { roles: string[] }) {
           variant="panel"
           panelVisible={showPanel}
           onCountChange={setArrivalCount}
+          onPhaseChange={setArrivalPhase}
           onRequestCollapse={() => {
             setOpen(false);
             setPeeking(false);
@@ -125,17 +162,20 @@ export function AlertBubble({ roles }: { roles: string[] }) {
           aria-expanded={showPanel}
           aria-label={`${showPanel ? "Hide" : "Show"} ${total} clinic alert${total === 1 ? "" : "s"}`}
           data-qc="alert-bubble"
-          className="pointer-events-auto relative flex h-13 w-13 items-center justify-center rounded-full border border-edge bg-glass p-3.5 text-foreground shadow-lift backdrop-blur transition-transform hover:scale-105 active:scale-95 motion-reduce:transition-none"
+          className={cn(
+            "pointer-events-auto inline-flex h-10 cursor-pointer items-center gap-2 rounded-full px-3.5 text-xs font-semibold shadow-glass ring-1 transition-all hover:-translate-y-0.5",
+            pill.className,
+          )}
         >
-          <Bell className="h-5 w-5" aria-hidden />
-          <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-bold text-white shadow-lift">
-            {total > 9 ? "9+" : total}
-          </span>
+          <PillIcon className="h-3.5 w-3.5" aria-hidden />
+          <span className="tabular-nums">{total > 9 ? "9+" : total}</span>
+          Alert{total === 1 ? "" : "s"}
+          <Chevron className="h-3.5 w-3.5 opacity-70" aria-hidden />
         </button>
       ) : (
         // Zero alerts: no bubble, but the (hidden) cards above keep counting.
         <span data-qc="alert-bubble-hidden" className="hidden" />
       )}
-    </>
+    </div>
   );
 }

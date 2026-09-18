@@ -124,7 +124,7 @@ export function FollowUpTasks() {
   };
 
   return (
-    <section>
+    <section className="mt-2">
       <div className="mb-4">
         <h2 className="section-title">My tasks</h2>
         <p className="text-xs text-muted-foreground">Patients to contact and rebook by chat, phone or email.</p>

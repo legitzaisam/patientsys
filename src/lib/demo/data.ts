@@ -17,6 +17,7 @@ export const USERS = {
   practitioner2: "10000000-0000-4000-8000-000000000003",
   frontDesk: "10000000-0000-4000-8000-000000000004",
   patient: "10000000-0000-4000-8000-000000000005",
+  former: "10000000-0000-4000-8000-000000000006",
 } as const;
 
 export type DemoRole = "owner" | "practitioner" | "front_desk" | "patient";
@@ -120,7 +121,7 @@ export const profiles: Row[] = [
     job_title: "Clinic Director",
     registration_body: "GMC",
     registration_number: "7412885",
-    avatar_url: null,
+    avatar_url: "/patient-avatars/avatar-priya.png",
     commission_rate: 40,
     created_at: iso(-720),
     updated_at: iso(-30),
@@ -132,7 +133,7 @@ export const profiles: Row[] = [
     job_title: "Aesthetic Practitioner",
     registration_body: "NMC",
     registration_number: "18C4471E",
-    avatar_url: null,
+    avatar_url: "/patient-avatars/avatar-emma.png",
     commission_rate: 45,
     created_at: iso(-540),
     updated_at: iso(-21),
@@ -144,7 +145,7 @@ export const profiles: Row[] = [
     job_title: "Aesthetic Doctor",
     registration_body: "GMC",
     registration_number: "7719034",
-    avatar_url: null,
+    avatar_url: "/patient-avatars/avatar-theo.png",
     commission_rate: 42,
     created_at: iso(-400),
     updated_at: iso(-60),
@@ -156,10 +157,22 @@ export const profiles: Row[] = [
     job_title: "Patient Coordinator",
     registration_body: null,
     registration_number: null,
-    avatar_url: null,
+    avatar_url: "/patient-avatars/avatar-grace.png",
     commission_rate: 0,
     created_at: iso(-300),
     updated_at: iso(-45),
+  },
+  {
+    id: USERS.former,
+    clinic_id: CLINIC_ID,
+    full_name: "Dr Helen Cho",
+    job_title: "Aesthetic Practitioner",
+    registration_body: "GMC",
+    registration_number: "7018821",
+    avatar_url: "/patient-avatars/avatar-leila.png",
+    commission_rate: 40,
+    created_at: iso(-500),
+    updated_at: iso(-21),
   },
 ];
 
@@ -291,6 +304,30 @@ const CATALOGUE_SPECS: CatalogueSpec[] = [
     interval: null,
     consent: false,
     description: "Thirty minute assessment and treatment plan.",
+  },
+  {
+    name: "Jawline Filler",
+    category: "Injectables",
+    price: 480,
+    interval: 365,
+    consent: true,
+    description: "Mandibular contouring, 1–2ml hyaluronic acid.",
+  },
+  {
+    name: "Polynucleotides",
+    category: "Skin Boosters",
+    price: 380,
+    interval: 90,
+    consent: true,
+    description: "Salmon-DNA biostimulator course, three sessions.",
+  },
+  {
+    name: "Hydrafacial",
+    category: "Skin",
+    price: 165,
+    interval: 28,
+    consent: false,
+    description: "Medical-grade cleanse, extract and hydrate.",
   },
   {
     name: "Laser Hair Removal",
@@ -982,6 +1019,21 @@ const TREATMENT_DETAIL: Record<string, { products: string[]; areas: string[]; do
     doses: ["Medium depth", "Superficial"],
   },
   "Skin Consultation": { products: ["—"], areas: ["Full face"], doses: ["—"] },
+  "Jawline Filler": {
+    products: ["Juvederm Volux", "Restylane Defyne"],
+    areas: ["Jawline and chin", "Mandible"],
+    doses: ["1ml", "2ml"],
+  },
+  Polynucleotides: {
+    products: ["Plinest", "Nucleofill"],
+    areas: ["Periorbital", "Full face"],
+    doses: ["2ml"],
+  },
+  Hydrafacial: {
+    products: ["Hydrafacial Syndeo"],
+    areas: ["Full face", "Face and neck"],
+    doses: ["Signature protocol"],
+  },
   "Laser Hair Removal": {
     products: ["Nd:YAG 1064nm"],
     areas: ["Underarms", "Lower legs", "Bikini"],
@@ -1077,7 +1129,7 @@ function makeDocument(
   return doc;
 }
 
-patients.slice(0, 18).forEach((patient, index) => {
+patients.slice(0, 90).forEach((patient, index) => {
   const spec = patientSpecById.get(patient["id"] as string)!;
   const signed = makeDocument(
     patient["id"] as string,
@@ -1095,7 +1147,7 @@ patients.slice(0, 18).forEach((patient, index) => {
       "aftercare",
       `${spec.favourite} — aftercare advice`,
       "viewed",
-      spec.lastVisit - 1,
+      Math.max(1, spec.lastVisit - 1),
     );
   }
   if (index % 5 === 2) {
@@ -1105,6 +1157,15 @@ patients.slice(0, 18).forEach((patient, index) => {
       "Treatment plan — next 6 months",
       "sent",
       between(2, 9),
+    );
+  }
+  if (index % 7 === 1) {
+    makeDocument(
+      patient["id"] as string,
+      "consultation",
+      "Consultation summary",
+      "signed",
+      spec.lastVisit,
     );
   }
 });
@@ -1513,7 +1574,7 @@ export const photos: Row[] = [
     clinic_id: CLINIC_ID,
     patient_id: oliviaId,
     treatment_id: oliviaTreatments[1]?.["id"] ?? null,
-    storage_path: "/demo-photos/olivia-before-1.jpg",
+    storage_path: "/demo-photos/skin-before-1.png",
     kind: "before",
     caption: "Baseline, relaxed",
     taken_at: iso(-140, 10, 0),
@@ -1526,7 +1587,7 @@ export const photos: Row[] = [
     clinic_id: CLINIC_ID,
     patient_id: oliviaId,
     treatment_id: oliviaTreatments[1]?.["id"] ?? null,
-    storage_path: "/demo-photos/olivia-after-1.jpg",
+    storage_path: "/demo-photos/skin-after-1.png",
     kind: "after",
     caption: "Two weeks post treatment",
     taken_at: iso(-126, 10, 0),
@@ -1539,7 +1600,7 @@ export const photos: Row[] = [
     clinic_id: CLINIC_ID,
     patient_id: oliviaId,
     treatment_id: oliviaTreatments[0]?.["id"] ?? null,
-    storage_path: "/demo-photos/olivia-before-2.jpg",
+    storage_path: "/demo-photos/skin-before-2.png",
     kind: "before",
     caption: "Baseline, animated",
     taken_at: iso(-21, 10, 0),
@@ -1552,7 +1613,7 @@ export const photos: Row[] = [
     clinic_id: CLINIC_ID,
     patient_id: oliviaId,
     treatment_id: oliviaTreatments[0]?.["id"] ?? null,
-    storage_path: "/demo-photos/olivia-after-2.jpg",
+    storage_path: "/demo-photos/skin-after-2.png",
     kind: "after",
     caption: "Two week review",
     taken_at: iso(-7, 10, 0),
@@ -1561,6 +1622,71 @@ export const photos: Row[] = [
     created_at: iso(-7, 10, 0),
   },
 ];
+
+const PHOTO_ASSETS = [
+  "/demo-photos/skin-before-1.png",
+  "/demo-photos/skin-after-1.png",
+  "/demo-photos/skin-before-2.png",
+  "/demo-photos/skin-after-2.png",
+  "/demo-photos/skin-progress-2.png",
+];
+
+function addPhotoSet(patientIndex: number, daysAgo: number) {
+  const patient = patients[patientIndex];
+  if (!patient) return;
+  const mine = treatments.filter((t) => t["patient_id"] === patient["id"]);
+  const treatmentId = mine[0]?.["id"] ?? null;
+  const captions = [
+    ["before", "Baseline, relaxed"],
+    ["after", "Two weeks post treatment"],
+    ["before", "Baseline, animated"],
+    ["after", "Review photos"],
+  ] as const;
+  captions.forEach(([kind, caption], i) => {
+    photos.push({
+      id: id("g1"),
+      clinic_id: CLINIC_ID,
+      patient_id: patient["id"],
+      treatment_id: treatmentId,
+      storage_path: PHOTO_ASSETS[i % PHOTO_ASSETS.length],
+      kind,
+      caption,
+      taken_at: iso(-(daysAgo - i * 7), 10, 0),
+      marketing_consent: i < 2,
+      visible_to_patient: true,
+      created_at: iso(-(daysAgo - i * 7), 10, 0),
+    });
+  });
+}
+
+for (const [index, daysAgo] of [
+  [1, 90],
+  [2, 40],
+  [3, 55],
+  [4, 20],
+  [5, 70],
+  [6, 15],
+  [7, 28],
+  [8, 45],
+  [9, 12],
+  [10, 22],
+  [11, 35],
+  [12, 60],
+  [13, 25],
+  [14, 33],
+  [15, 50],
+  [16, 18],
+  [17, 14],
+  [18, 9],
+  [20, 41],
+  [21, 8],
+  [22, 19],
+  [24, 27],
+  [26, 11],
+  [28, 16],
+] as const) {
+  addPhotoSet(index, daysAgo);
+}
 
 export const messages: Row[] = [];
 
@@ -1651,6 +1777,175 @@ thread(patients[4]!["id"] as string, [
   },
 ]);
 
+thread(patients[1]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Charlotte, your Profhilo second session is in the diary. Drink plenty of water the day before.",
+    daysAgo: 8,
+  },
+  { author: "patient", body: "Will do — thanks Nadia.", daysAgo: 8 },
+]);
+
+thread(patients[3]!["id"] as string, [
+  {
+    author: "patient",
+    body: "The redness from microneedling has settled. Happy to book session two.",
+    daysAgo: 6,
+  },
+  {
+    author: "staff",
+    body: "Lovely to hear. Sofia will hold Thursday morning if that still works.",
+    daysAgo: 6,
+  },
+]);
+
+thread(patients[5]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Eleanor, it has been four months since your cheek filler. Would you like a review this month?",
+    daysAgo: 4,
+  },
+  {
+    author: "patient",
+    body: "Yes please — afternoons are easier.",
+    daysAgo: 3,
+    unread: true,
+  },
+]);
+
+thread(patients[7]!["id"] as string, [
+  {
+    author: "staff",
+    body: "We have a complimentary review slot if you would like to come back in.",
+    daysAgo: 10,
+  },
+]);
+
+thread(patients[8]!["id"] as string, [
+  {
+    author: "patient",
+    body: "Could you send the aftercare for the peel again? I lost the email.",
+    daysAgo: 2,
+    unread: true,
+  },
+]);
+
+thread(patients[9]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Rest today after PRP. Sleep on your back and skip the gym until Friday.",
+    daysAgo: 0,
+  },
+  { author: "patient", body: "Understood, thank you.", daysAgo: 0 },
+]);
+
+thread(patients[11]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Just checking in on the rosacea plan. Any new triggers this week?",
+    daysAgo: 7,
+  },
+  {
+    author: "patient",
+    body: "Spicy food still flares it. The cream is helping though.",
+    daysAgo: 6,
+  },
+]);
+
+thread(patients[12]!["id"] as string, [
+  {
+    author: "patient",
+    body: "Hi, I moved house — is it still OK to keep my appointments here?",
+    daysAgo: 5,
+    unread: true,
+  },
+]);
+
+thread(patients[15]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Welcome to Aetheria. Your consultation forms are in the portal whenever you have a moment.",
+    daysAgo: 9,
+  },
+]);
+
+thread(patients[18]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Consent form for this afternoon's peel is still outstanding — I have resent the link.",
+    daysAgo: 0,
+  },
+]);
+
+thread(patients[21]!["id"] as string, [
+  {
+    author: "patient",
+    body: "Running five minutes late, still coming.",
+    daysAgo: 0,
+    unread: true,
+  },
+]);
+
+thread(patients[23]!["id"] as string, [
+  {
+    author: "staff",
+    body: "We missed you this afternoon. Reply here if you would like to rebook — no charge for today.",
+    daysAgo: 0,
+  },
+]);
+
+thread(patients[10]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Your polynucleotide course is booked. Avoid retinoids the night before.",
+    daysAgo: 4,
+  },
+  { author: "patient", body: "Noted — see you then.", daysAgo: 4 },
+]);
+
+thread(patients[14]!["id"] as string, [
+  {
+    author: "patient",
+    body: "Could I add a Hydrafacial onto my next visit?",
+    daysAgo: 1,
+    unread: true,
+  },
+]);
+
+thread(patients[17]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Photos from last week are in your record. Happy to talk through a jawline plan if you want.",
+    daysAgo: 6,
+  },
+]);
+
+thread(patients[20]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Your peel is overdue — shall I hold a Friday slot?",
+    daysAgo: 3,
+  },
+]);
+
+thread(patients[22]!["id"] as string, [
+  {
+    author: "patient",
+    body: "The anti-wrinkle has started to fade. Can we bring the next one forward?",
+    daysAgo: 2,
+    unread: true,
+  },
+]);
+
+thread(patients[24]!["id"] as string, [
+  {
+    author: "staff",
+    body: "Session four of your laser course is in the diary. Shave the area the night before.",
+    daysAgo: 1,
+  },
+  { author: "patient", body: "Will do, thanks.", daysAgo: 1 },
+]);
+
 messages.sort((a, b) => (a["created_at"] < b["created_at"] ? -1 : 1));
 
 export const medicalHistory: Row[] = [
@@ -1711,7 +2006,289 @@ export const medicalHistory: Row[] = [
     reviewed_at: iso(-30, 11, 0),
     created_at: iso(-30, 11, 0),
   },
+  {
+    id: id("i1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[1]!["id"] as string,
+    data: {
+      medications: "Levothyroxine",
+      allergies: "None known",
+      conditions: "Hypothyroidism",
+      diet: "No restrictions",
+      pregnancy: "No",
+      other: "Prefers afternoon appointments.",
+    },
+    summary: "Patient updated their medical and lifestyle information",
+    source: "patient",
+    changed_by: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: iso(-6, 19, 10),
+  },
+  {
+    id: id("i1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[4]!["id"] as string,
+    data: {
+      medications: "None",
+      allergies: "None known",
+      conditions: "None",
+      diet: "Pescatarian",
+      pregnancy: "No",
+      other: "Started tretinoin three nights a week.",
+    },
+    summary: "Patient updated their medical and lifestyle information",
+    source: "patient",
+    changed_by: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: iso(-1, 21, 5),
+  },
+  {
+    id: id("i1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[5]!["id"] as string,
+    data: {
+      medications: "None",
+      allergies: "Aspirin",
+      conditions: "None",
+      diet: "",
+      pregnancy: "No",
+      other: "",
+    },
+    summary: "Reviewed at consultation",
+    source: "staff",
+    changed_by: USERS.practitioner,
+    reviewed_by: USERS.practitioner,
+    reviewed_at: iso(-12, 11, 20),
+    created_at: iso(-12, 11, 20),
+  },
+  {
+    id: id("i1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[9]!["id"] as string,
+    data: {
+      medications: "Iron supplement",
+      allergies: "None known",
+      conditions: "None",
+      diet: "Vegetarian",
+      pregnancy: "No",
+      other: "Bloods done last month — ferritin low-normal.",
+    },
+    summary: "Patient updated their medical and lifestyle information",
+    source: "patient",
+    changed_by: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: iso(-3, 18, 40),
+  },
+  {
+    id: id("i1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[11]!["id"] as string,
+    data: {
+      medications: "Topical ivermectin",
+      allergies: "None known",
+      conditions: "Rosacea",
+      diet: "Avoids spicy food",
+      pregnancy: "No",
+      other: "Heat and alcohol still flare.",
+    },
+    summary: "Patient updated their medical and lifestyle information",
+    source: "patient",
+    changed_by: null,
+    reviewed_by: USERS.practitioner2,
+    reviewed_at: iso(-5, 14, 0),
+    created_at: iso(-8, 20, 0),
+  },
+  {
+    id: id("i1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[13]!["id"] as string,
+    data: {
+      medications: "None",
+      allergies: "None known",
+      conditions: "None",
+      diet: "",
+      pregnancy: "No",
+      other: "",
+    },
+    summary: "Reviewed at consultation",
+    source: "staff",
+    changed_by: USERS.owner,
+    reviewed_by: USERS.owner,
+    reviewed_at: iso(-40, 10, 0),
+    created_at: iso(-40, 10, 0),
+  },
+  {
+    id: id("i1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[16]!["id"] as string,
+    data: {
+      medications: "Combined oral contraceptive",
+      allergies: "None known",
+      conditions: "None",
+      diet: "",
+      pregnancy: "No",
+      other: "",
+    },
+    summary: "Patient updated their medical and lifestyle information",
+    source: "patient",
+    changed_by: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: iso(-2, 22, 18),
+  },
 ];
+
+function addHistory(
+  patientIndex: number,
+  data: Row,
+  daysAgo: number,
+  source: "patient" | "staff",
+  reviewer?: string,
+) {
+  const patient = patients[patientIndex];
+  if (!patient) return;
+  medicalHistory.push({
+    id: id("i1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patient["id"],
+    data,
+    summary:
+      source === "patient"
+        ? "Patient updated their medical and lifestyle information"
+        : "Reviewed at consultation",
+    source,
+    changed_by: source === "staff" ? (reviewer ?? USERS.practitioner) : null,
+    reviewed_by: reviewer ?? null,
+    reviewed_at: reviewer ? iso(-daysAgo, 11, 0) : null,
+    created_at: iso(-daysAgo, source === "patient" ? 20 : 11, 0),
+  });
+}
+
+addHistory(
+  3,
+  {
+    medications: "None",
+    allergies: "None known",
+    conditions: "None",
+    diet: "",
+    pregnancy: "No",
+    other: "Microneedling course in progress.",
+  },
+  14,
+  "staff",
+  USERS.practitioner2,
+);
+addHistory(
+  7,
+  {
+    medications: "None",
+    allergies: "None known",
+    conditions: "None",
+    diet: "Vegan",
+    pregnancy: "No",
+    other: "",
+  },
+  9,
+  "patient",
+);
+addHistory(
+  8,
+  {
+    medications: "None",
+    allergies: "Nuts",
+    conditions: "None",
+    diet: "",
+    pregnancy: "No",
+    other: "Prefers text reminders.",
+  },
+  5,
+  "patient",
+);
+addHistory(
+  12,
+  {
+    medications: "None",
+    allergies: "None known",
+    conditions: "None",
+    diet: "",
+    pregnancy: "No",
+    other: "Moved house recently — confirm address at next visit.",
+  },
+  11,
+  "staff",
+  USERS.practitioner,
+);
+addHistory(
+  15,
+  {
+    medications: "None",
+    allergies: "None known",
+    conditions: "None",
+    diet: "",
+    pregnancy: "No",
+    other: "New consult, history taken at first visit.",
+  },
+  10,
+  "staff",
+  USERS.frontDesk,
+);
+addHistory(
+  18,
+  {
+    medications: "None",
+    allergies: "None known",
+    conditions: "None",
+    diet: "",
+    pregnancy: "No",
+    other: "",
+  },
+  1,
+  "patient",
+);
+addHistory(
+  20,
+  {
+    medications: "None",
+    allergies: "None known",
+    conditions: "None",
+    diet: "",
+    pregnancy: "No",
+    other: "Overdue peel — skin has been dry.",
+  },
+  20,
+  "staff",
+  USERS.owner,
+);
+addHistory(
+  21,
+  {
+    medications: "None",
+    allergies: "None known",
+    conditions: "None",
+    diet: "",
+    pregnancy: "No",
+    other: "",
+  },
+  2,
+  "patient",
+);
+addHistory(
+  24,
+  {
+    medications: "Isotretinoin (completed 2024)",
+    allergies: "None known",
+    conditions: "Acne (resolved)",
+    diet: "",
+    pregnancy: "No",
+    other: "Waited 12 months after isotretinoin before laser.",
+  },
+  16,
+  "staff",
+  USERS.practitioner2,
+);
 
 /* ---------------------------------------------------------------- */
 /* retention, recalls, notifications, settings                       */
@@ -1773,6 +2350,27 @@ export const retentionOutreach: Row[] = [
     created_at: iso(-1, 16, 40),
   },
 ];
+
+for (const [patientIndex, by, channel, note, daysAgo] of [
+  [1, USERS.practitioner, "email", "Profhilo reminder with a booking link.", 9],
+  [3, USERS.practitioner2, "phone", "Left a voicemail about session two.", 5],
+  [5, USERS.practitioner, "message", "Personal note about cheek filler review.", 3],
+  [7, USERS.frontDesk, "email", "Complimentary review offer sent.", 8],
+  [12, USERS.frontDesk, "phone", "Win-back call — considering November.", 4],
+  [19, USERS.owner, "email", "Consult follow-up with treatment menu.", 10],
+  [22, USERS.practitioner, "message", "Anti-wrinkle due — portal reminder.", 2],
+  [24, USERS.frontDesk, "email", "Laser course restart offer.", 12],
+] as const) {
+  retentionOutreach.push({
+    id: id("j1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[patientIndex]!["id"],
+    contacted_by: by,
+    channel,
+    note,
+    created_at: iso(-daysAgo, 11, 20),
+  });
+}
 
 const recallGroup1 = id("k9");
 const recallGroup2 = id("k9");
@@ -1871,6 +2469,36 @@ export const recallTasks: Row[] = [
   },
 ];
 
+function addRecall(patientIndex: number, assignee: string, label: string, note: string, daysAgo: number, status: "open" | "contacted" = "open") {
+  recallTasks.push({
+    id: id("k1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[patientIndex]!["id"],
+    group_id: id("k9"),
+    assigned_to: assignee,
+    assigned_label: label,
+    created_by: USERS.owner,
+    note,
+    status,
+    contacted_at: status === "contacted" ? iso(-(daysAgo - 1), 14, 0) : null,
+    contacted_by: status === "contacted" ? assignee : null,
+    completed_at: null,
+    completed_by: null,
+    status_by_label: status === "contacted" ? label : null,
+    created_at: iso(-daysAgo, 10, 0),
+    updated_at: iso(-daysAgo, 10, 0),
+  });
+}
+
+addRecall(1, USERS.practitioner, "Dr Nadia Rahman", "Profhilo due — offer the second sitting this month.", 4);
+addRecall(3, USERS.practitioner2, "Dr Tom Whitfield", "Microneedling course unfinished. Call about session two.", 6);
+addRecall(8, USERS.frontDesk, "Sofia Marchetti", "Six-month peel check-in. Prefers text.", 2);
+addRecall(11, USERS.practitioner2, "Dr Tom Whitfield", "Rosacea laser overdue by a week.", 1);
+addRecall(15, USERS.frontDesk, "Sofia Marchetti", "New consult who never booked treatment. One more chase.", 7, "contacted");
+addRecall(20, USERS.owner, "Dr Amara Osei", "Overdue peel — personal note from Amara.", 3);
+addRecall(22, USERS.practitioner, "Dr Nadia Rahman", "Anti-wrinkle lapsed at five months.", 5);
+addRecall(24, USERS.frontDesk, "Sofia Marchetti", "Laser course paused. See if they want to restart.", 9);
+
 export const communications: Row[] = [
   {
     id: id("m1"),
@@ -1895,6 +2523,168 @@ export const communications: Row[] = [
     created_at: iso(-1, 10, 0),
   },
 ];
+
+function pushCommunication(row: Omit<Row, "id" | "clinic_id">) {
+  communications.push({
+    id: id("m1"),
+    clinic_id: CLINIC_ID,
+    ...row,
+  });
+}
+
+const namedForComms = [0, 1, 2, 4, 5, 6, 9, 11, 13, 16, 18, 21];
+for (const index of namedForComms) {
+  const patient = patients[index]!;
+  pushCommunication({
+    patient_id: patient["id"],
+    channel: index % 2 === 0 ? "email" : "sms",
+    purpose: "reminder",
+    to_address: index % 2 === 0 ? patient["email"] : patient["phone"],
+    template_key: "two_week_review",
+    subject: "Two week review",
+    body: `Hi ${patient["first_name"]}, you are two weeks post treatment. How are you finding the results?`,
+    status: "sent",
+    provider: "sandbox",
+    provider_message_id: `sbx_${index}_review`,
+    error: null,
+    attempts: 1,
+    scheduled_for: iso(-12, 9, 0),
+    sent_at: iso(-12, 9, 2),
+    created_by: USERS.frontDesk,
+    related_entity: "appointment",
+    related_id: null,
+    created_at: iso(-12, 9, 0),
+  });
+  pushCommunication({
+    patient_id: patient["id"],
+    channel: "email",
+    purpose: "reminder",
+    to_address: patient["email"],
+    template_key: "consent_request",
+    subject: "Your consent form",
+    body: `Hi ${patient["first_name"]}, your consent form is waiting in the patient portal.`,
+    status: index === 18 || index === 21 ? "queued" : "sent",
+    provider: index === 18 || index === 21 ? null : "sandbox",
+    provider_message_id: index === 18 || index === 21 ? null : `sbx_${index}_consent`,
+    error: null,
+    attempts: index === 18 || index === 21 ? 0 : 1,
+    scheduled_for: iso(-2, 8, 30),
+    sent_at: index === 18 || index === 21 ? null : iso(-2, 8, 32),
+    created_by: USERS.frontDesk,
+    related_entity: "document",
+    related_id: null,
+    created_at: iso(-2, 8, 30),
+  });
+}
+
+pushCommunication({
+  patient_id: patients[6]!["id"],
+  channel: "sms",
+  purpose: "transactional",
+  to_address: patients[6]!["phone"],
+  template_key: "payment_request",
+  subject: "Balance outstanding",
+  body: "Hi Zara, there is a small balance outstanding on your last visit.",
+  status: "sent",
+  provider: "sandbox",
+  provider_message_id: "sbx_zara_pay",
+  error: null,
+  attempts: 1,
+  scheduled_for: iso(-3, 11, 0),
+  sent_at: iso(-3, 11, 1),
+  created_by: USERS.frontDesk,
+  related_entity: "appointment",
+  related_id: null,
+  created_at: iso(-3, 11, 0),
+});
+
+pushCommunication({
+  patient_id: patients[5]!["id"],
+  channel: "email",
+  purpose: "reminder",
+  to_address: patients[5]!["email"],
+  template_key: "recall",
+  subject: "Time for a review",
+  body: "Hi Eleanor, it has been a little while since your last cheek filler with us.",
+  status: "sent",
+  provider: "sandbox",
+  provider_message_id: "sbx_eleanor_recall",
+  error: null,
+  attempts: 1,
+  scheduled_for: iso(-4, 10, 0),
+  sent_at: iso(-4, 10, 1),
+  created_by: USERS.owner,
+  related_entity: "patient",
+  related_id: patients[5]!["id"],
+  created_at: iso(-4, 10, 0),
+});
+
+const extraComms = [7, 8, 10, 12, 14, 17, 20, 22, 24, 26, 28, 30];
+for (const index of extraComms) {
+  const patient = patients[index];
+  if (!patient) continue;
+  pushCommunication({
+    patient_id: patient["id"],
+    channel: "email",
+    purpose: "transactional",
+    to_address: patient["email"],
+    template_key: "confirmation",
+    subject: "Your appointment is confirmed",
+    body: `Hi ${patient["first_name"]}, your appointment is in the diary. Reply if you need to move it.`,
+    status: "sent",
+    provider: "sandbox",
+    provider_message_id: `sbx_${index}_confirm`,
+    error: null,
+    attempts: 1,
+    scheduled_for: iso(-6, 9, 0),
+    sent_at: iso(-6, 9, 1),
+    created_by: USERS.frontDesk,
+    related_entity: "appointment",
+    related_id: null,
+    created_at: iso(-6, 9, 0),
+  });
+  pushCommunication({
+    patient_id: patient["id"],
+    channel: index % 3 === 0 ? "sms" : "email",
+    purpose: "reminder",
+    to_address: index % 3 === 0 ? patient["phone"] : patient["email"],
+    template_key: "aftercare",
+    subject: "Aftercare",
+    body: `Hi ${patient["first_name"]}, a quick reminder of today's aftercare. The leaflet is in your portal.`,
+    status: index === 30 ? "failed" : "sent",
+    provider: "sandbox",
+    provider_message_id: `sbx_${index}_after`,
+    error: index === 30 ? "Mailbox full" : null,
+    attempts: index === 30 ? 3 : 1,
+    scheduled_for: iso(-5, 16, 0),
+    sent_at: index === 30 ? null : iso(-5, 16, 1),
+    created_by: USERS.frontDesk,
+    related_entity: "appointment",
+    related_id: null,
+    created_at: iso(-5, 16, 0),
+  });
+}
+
+pushCommunication({
+  patient_id: patients[4]!["id"],
+  channel: "email",
+  purpose: "marketing",
+  to_address: patients[4]!["email"],
+  template_key: "recall",
+  subject: "Autumn skin reset",
+  body: `Hi ${patients[4]!["first_name"]}, we have a few peel course spaces left this month if you would like to continue.`,
+  status: "sent",
+  provider: "sandbox",
+  provider_message_id: "sbx_peel_mkt",
+  error: null,
+  attempts: 1,
+  scheduled_for: iso(-8, 10, 0),
+  sent_at: iso(-8, 10, 2),
+  created_by: USERS.owner,
+  related_entity: "patient",
+  related_id: patients[4]!["id"],
+  created_at: iso(-8, 10, 0),
+});
 
 export const staffNotifications: Row[] = [
   {
@@ -1967,6 +2757,76 @@ export const staffNotifications: Row[] = [
     read_at: null,
     created_at: iso(0, 9, 5),
   },
+  {
+    id: id("l1"),
+    clinic_id: CLINIC_ID,
+    recipient_id: USERS.practitioner2,
+    sender_id: USERS.frontDesk,
+    kind: "staff_message",
+    title: "Message from Sofia Marchetti: 11:00 running late",
+    body: "Your 11:00 filler has texted from the Northern line — about ten minutes behind.",
+    urgent: false,
+    patient_id: patients[21]!["id"],
+    appointment_id: null,
+    read_at: null,
+    created_at: iso(0, 10, 48),
+  },
+  {
+    id: id("l1"),
+    clinic_id: CLINIC_ID,
+    recipient_id: USERS.practitioner,
+    sender_id: USERS.owner,
+    kind: "urgent",
+    title: "Urgent from Dr Amara Osei: Consent chase",
+    body: "Please do not start the 15:00 until Olivia's consent is on file.",
+    urgent: true,
+    patient_id: patients[0]!["id"],
+    appointment_id: null,
+    read_at: null,
+    created_at: iso(0, 14, 20),
+  },
+  {
+    id: id("l1"),
+    clinic_id: CLINIC_ID,
+    recipient_id: USERS.frontDesk,
+    sender_id: USERS.practitioner2,
+    kind: "staff_message",
+    title: "Message from Dr Tom Whitfield: Aftercare print",
+    body: "Room 2 is out of peel aftercare sheets. Could you print a pack?",
+    urgent: false,
+    patient_id: null,
+    appointment_id: null,
+    read_at: iso(0, 9, 40),
+    created_at: iso(0, 8, 50),
+  },
+  {
+    id: id("l1"),
+    clinic_id: CLINIC_ID,
+    recipient_id: USERS.practitioner2,
+    sender_id: USERS.owner,
+    kind: "staff_message",
+    title: "Message from Dr Amara Osei: Thursday cover",
+    body: "Can you cover Nadia's Thursday morning if her course overruns?",
+    urgent: false,
+    patient_id: null,
+    appointment_id: null,
+    read_at: iso(-1, 18, 10),
+    created_at: iso(-2, 17, 5),
+  },
+  {
+    id: id("l1"),
+    clinic_id: CLINIC_ID,
+    recipient_id: USERS.owner,
+    sender_id: null,
+    kind: "appointment",
+    title: "No-show logged",
+    body: "A diary no-show was logged this afternoon. Front desk will offer a rebook.",
+    urgent: false,
+    patient_id: patients[23]!["id"],
+    appointment_id: null,
+    read_at: iso(0, 16, 0),
+    created_at: iso(0, 15, 40),
+  },
 ];
 
 export const messageTemplates: Row[] = [
@@ -2013,6 +2873,39 @@ export const messageTemplates: Row[] = [
     created_by: USERS.frontDesk,
     created_at: iso(-45),
     updated_at: iso(-45),
+  },
+  {
+    id: id("m1"),
+    clinic_id: CLINIC_ID,
+    key: "confirmation",
+    title: "Appointment confirmed",
+    body: "Hi {{first_name}}, your appointment is confirmed. Please arrive five minutes early so we can settle any forms.",
+    category: "Admin",
+    created_by: USERS.frontDesk,
+    created_at: iso(-40),
+    updated_at: iso(-40),
+  },
+  {
+    id: id("m1"),
+    clinic_id: CLINIC_ID,
+    key: "aftercare",
+    title: "Aftercare reminder",
+    body: "Hi {{first_name}}, a reminder of today's aftercare. The leaflet is in your portal — message us if anything feels unexpected.",
+    category: "Aftercare",
+    created_by: USERS.practitioner,
+    created_at: iso(-35),
+    updated_at: iso(-35),
+  },
+  {
+    id: id("m1"),
+    clinic_id: CLINIC_ID,
+    key: "no_show",
+    title: "We missed you",
+    body: "Hi {{first_name}}, we missed you today. Reply here if you would like to rebook — there is no charge for this visit.",
+    category: "Admin",
+    created_by: USERS.frontDesk,
+    created_at: iso(-20),
+    updated_at: iso(-20),
   },
 ];
 
@@ -2067,6 +2960,27 @@ export const treatmentColours: Row[] = [
     updated_by: USERS.owner,
     updated_at: iso(-30),
   },
+  {
+    treatment_name: "jawline filler",
+    lane: 4,
+    hex: null,
+    updated_by: USERS.owner,
+    updated_at: iso(-30),
+  },
+  {
+    treatment_name: "polynucleotides",
+    lane: 2,
+    hex: null,
+    updated_by: USERS.owner,
+    updated_at: iso(-30),
+  },
+  {
+    treatment_name: "hydrafacial",
+    lane: 6,
+    hex: null,
+    updated_by: USERS.owner,
+    updated_at: iso(-30),
+  },
 ];
 
 export const colourThemes: Row[] = [
@@ -2078,6 +2992,9 @@ export const colourThemes: Row[] = [
       "lip filler": 3,
       "cheek filler": 4,
       profhilo: 2,
+      "jawline filler": 4,
+      polynucleotides: 2,
+      hydrafacial: 6,
     },
     created_by: USERS.owner,
     created_at: iso(-60),
@@ -2280,6 +3197,60 @@ export const userNotes: Row[] = [
 
 export const appointmentNotes: Row[] = [];
 
+const VISIT_NOTES = [
+  "<p>Patient tolerated well. Mild erythema expected for 24 hours. Aftercare leaflet given and verbally confirmed.</p>",
+  "<p>Good result. Advised SPF 50, no actives for five days, and a two-week photo if anything feels uneven.</p>",
+  "<p>Cannula technique, no vascular concerns. Arnica gel supplied. Review at two weeks.</p>",
+  "<p>Session completed as planned. Cooling applied. Sleep on back tonight, skip the gym until Friday.</p>",
+  "<p>Peel endpoint reached. Neutralised. Strict sun avoidance discussed; next sitting booked.</p>",
+  "<p>PRP drawn and applied. Patient comfortable throughout. Iron levels noted from last bloods.</p>",
+];
+
+{
+  const noted = new Set<string>();
+  const todayKey = TODAY.toDateString();
+  for (const booking of appointments) {
+    const when = new Date(booking["starts_at"] as string);
+    const isToday = when.toDateString() === todayKey;
+    const stage = booking["stage"] as string;
+    if (isToday && (stage === "complete" || stage === "aftercare" || stage === "in_treatment" || stage === "waiting" || stage === "arrived")) {
+      const practitioner = profiles.find((p) => p["id"] === booking["practitioner_id"]);
+      appointmentNotes.push({
+        id: id("r1"),
+        appointment_id: booking["id"],
+        clinic_id: CLINIC_ID,
+        patient_id: booking["patient_id"],
+        body: VISIT_NOTES[noted.size % VISIT_NOTES.length],
+        updated_by: booking["practitioner_id"],
+        updated_by_label: practitioner?.["full_name"] ?? "Practitioner",
+        created_at: booking["starts_at"],
+        updated_at: booking["updated_at"],
+      });
+      booking["notes"] = String(VISIT_NOTES[noted.size % VISIT_NOTES.length]).replace(/<\/?p>/g, "");
+      noted.add(booking["id"] as string);
+    }
+  }
+  for (const booking of appointments) {
+    if (noted.size >= 90) break;
+    if (noted.has(booking["id"] as string)) continue;
+    if (booking["status"] !== "attended" && booking["stage"] !== "complete") continue;
+    if (new Date(booking["starts_at"] as string) > NOW) continue;
+    const practitioner = profiles.find((p) => p["id"] === booking["practitioner_id"]);
+    appointmentNotes.push({
+      id: id("r1"),
+      appointment_id: booking["id"],
+      clinic_id: CLINIC_ID,
+      patient_id: booking["patient_id"],
+      body: VISIT_NOTES[noted.size % VISIT_NOTES.length],
+      updated_by: booking["practitioner_id"],
+      updated_by_label: practitioner?.["full_name"] ?? "Practitioner",
+      created_at: booking["starts_at"],
+      updated_at: booking["updated_at"],
+    });
+    noted.add(booking["id"] as string);
+  }
+}
+
 /* ---------------------------------------------------------------- */
 /* treatment plans (journeys)                                        */
 /* ---------------------------------------------------------------- */
@@ -2424,6 +3395,141 @@ const PLAN_RECIPES: PlanRecipe[] = [
       { t: "Patch test", k: "task" },
     ],
   },
+  {
+    patient: 6,
+    name: "Lip Shape & Balance Plan",
+    phase: "foundation",
+    done: 1,
+    nextDueIn: 8,
+    steps: [
+      { t: "Consultation & photos", k: "task" },
+      { t: "Lip filler session 1", k: "session" },
+      { t: "Two-week review", k: "task" },
+      { t: "Balance top-up", k: "session" },
+    ],
+  },
+  {
+    patient: 16,
+    name: "Midface Volume Programme",
+    phase: "build",
+    done: 2,
+    nextDueIn: 11,
+    steps: [
+      { t: "Consultation", k: "task" },
+      { t: "Cheek filler session 1", k: "session" },
+      { t: "Review & photos", k: "task" },
+      { t: "Cheek filler session 2", k: "session" },
+      { t: "Maintenance plan", k: "task" },
+    ],
+  },
+  {
+    patient: 21,
+    name: "Lip Filler Aftercare Track",
+    phase: "results",
+    done: 3,
+    nextDueIn: 16,
+    steps: [
+      { t: "Treatment session", k: "session" },
+      { t: "48-hour check-in", k: "task" },
+      { t: "Two-week review", k: "task" },
+      { t: "Photos & discharge", k: "task" },
+    ],
+  },
+  {
+    patient: 7,
+    name: "Maintenance Review Track",
+    phase: "consult",
+    done: 1,
+    nextDueIn: 4,
+    steps: [
+      { t: "Complimentary review booked", k: "task" },
+      { t: "Photos", k: "task" },
+      { t: "Plan agreed", k: "task" },
+    ],
+  },
+  {
+    patient: 8,
+    name: "Peel Course",
+    phase: "foundation",
+    done: 2,
+    nextDueIn: 12,
+    steps: [
+      { t: "Skin prep", k: "task" },
+      { t: "Peel session 1", k: "session" },
+      { t: "Peel session 2", k: "session" },
+      { t: "Peel session 3", k: "session" },
+      { t: "Review", k: "task" },
+    ],
+  },
+  {
+    patient: 10,
+    name: "Skin Booster Course",
+    phase: "build",
+    done: 2,
+    nextDueIn: -3,
+    steps: [
+      { t: "Consultation", k: "task" },
+      { t: "Polynucleotide session 1", k: "session" },
+      { t: "Polynucleotide session 2", k: "session" },
+      { t: "Polynucleotide session 3", k: "session" },
+      { t: "Results photos", k: "task" },
+    ],
+  },
+  {
+    patient: 12,
+    name: "Win-back Review",
+    phase: "consult",
+    done: 0,
+    nextDueIn: -6,
+    steps: [
+      { t: "Re-engagement call", k: "task" },
+      { t: "Consultation", k: "task" },
+      { t: "Treatment plan", k: "task" },
+    ],
+  },
+  {
+    patient: 18,
+    name: "Hydrafacial Series",
+    phase: "foundation",
+    done: 1,
+    nextDueIn: 10,
+    steps: [
+      { t: "Consultation", k: "task" },
+      { t: "Hydrafacial 1", k: "session" },
+      { t: "Hydrafacial 2", k: "session" },
+      { t: "Hydrafacial 3", k: "session" },
+    ],
+  },
+  {
+    patient: 22,
+    name: "Anti-Wrinkle Maintenance",
+    phase: "build",
+    done: 3,
+    nextDueIn: 2,
+    steps: [
+      { t: "Consultation", k: "task" },
+      { t: "Session 1", k: "session" },
+      { t: "Two-week review", k: "task" },
+      { t: "Session 2", k: "session" },
+      { t: "Maintenance diary", k: "task" },
+    ],
+  },
+  {
+    patient: 24,
+    name: "Laser Hair Course",
+    phase: "build",
+    done: 4,
+    nextDueIn: 8,
+    steps: [
+      { t: "Patch test", k: "task" },
+      { t: "Session 1", k: "session" },
+      { t: "Session 2", k: "session" },
+      { t: "Session 3", k: "session" },
+      { t: "Session 4", k: "session" },
+      { t: "Session 5", k: "session" },
+      { t: "Session 6", k: "session" },
+    ],
+  },
 ];
 
 export const treatmentPlans: Row[] = [];
@@ -2500,6 +3606,159 @@ patients.forEach((p, i) => {
 export const staffConversations: Row[] = [];
 export const staffChatMessages: Row[] = [];
 export const staffConversationReads: Row[] = [];
+
+function seedStaffThread(a: string, b: string, lines: { from: string; body: string; daysAgo: number; hour: number }[]) {
+  const [userLow, userHigh] = a < b ? [a, b] : [b, a];
+  const conversationId = id("sc");
+  staffConversations.push({
+    id: conversationId,
+    clinic_id: CLINIC_ID,
+    user_low: userLow,
+    user_high: userHigh,
+    created_at: iso(-lines[lines.length - 1]!.daysAgo, 8, 0),
+    updated_at: iso(-lines[0]!.daysAgo, lines[0]!.hour, 0),
+  });
+  for (const line of [...lines].reverse()) {
+    staffChatMessages.push({
+      id: id("sm"),
+      conversation_id: conversationId,
+      clinic_id: CLINIC_ID,
+      sender_id: line.from,
+      body: line.body,
+      attachments: [],
+      created_at: iso(-line.daysAgo, line.hour, between(0, 50)),
+    });
+  }
+  staffConversationReads.push({
+    id: id("sr"),
+    conversation_id: conversationId,
+    user_id: a,
+    last_read_at: iso(0, 8, 0),
+  });
+  staffConversationReads.push({
+    id: id("sr"),
+    conversation_id: conversationId,
+    user_id: b,
+    last_read_at: iso(-1, 18, 0),
+  });
+}
+
+seedStaffThread(USERS.owner, USERS.frontDesk, [
+  { from: USERS.frontDesk, body: "Autoclave in room 2 failed its cycle. Engineer booked for 11.", daysAgo: 0, hour: 8 },
+  { from: USERS.owner, body: "Thank you. Use room 1 and put a note on the door.", daysAgo: 0, hour: 8 },
+  { from: USERS.frontDesk, body: "Done. Also chasing the two outstanding consent forms now.", daysAgo: 0, hour: 9 },
+]);
+
+seedStaffThread(USERS.owner, USERS.practitioner, [
+  { from: USERS.practitioner, body: "We are down to two vials of Profhilo. Can we reorder before Friday?", daysAgo: 1, hour: 12 },
+  { from: USERS.owner, body: "Yes — I'll sign the order this afternoon.", daysAgo: 1, hour: 13 },
+  { from: USERS.practitioner, body: "Olivia's 15:00 still has no consent on file.", daysAgo: 0, hour: 14 },
+]);
+
+seedStaffThread(USERS.practitioner, USERS.frontDesk, [
+  { from: USERS.frontDesk, body: "Your 11:00 called from the Northern line — about fifteen minutes behind.", daysAgo: 0, hour: 10 },
+  { from: USERS.practitioner, body: "Thanks, I'll take the next one first if they are here.", daysAgo: 0, hour: 10 },
+]);
+
+seedStaffThread(USERS.practitioner2, USERS.frontDesk, [
+  { from: USERS.practitioner2, body: "Room 2 is out of peel aftercare sheets. Could you print a pack?", daysAgo: 0, hour: 8 },
+  { from: USERS.frontDesk, body: "Printing now — I'll leave them on the trolley.", daysAgo: 0, hour: 9 },
+]);
+
+seedStaffThread(USERS.owner, USERS.practitioner2, [
+  { from: USERS.owner, body: "Can you cover Nadia's Thursday morning if her course overruns?", daysAgo: 2, hour: 17 },
+  { from: USERS.practitioner2, body: "Yes — I can take the 09:30 and 10:15.", daysAgo: 2, hour: 18 },
+  { from: USERS.owner, body: "Perfect. Sofia will move the diary.", daysAgo: 1, hour: 8 },
+]);
+
+export const formerTeamSeed = [
+  {
+    id: id("ex"),
+    userId: USERS.former,
+    email: "helen.cho@aetheria.clinic",
+    fullName: "Dr Helen Cho",
+    jobTitle: "Aesthetic Practitioner",
+    registrationBody: "GMC",
+    registrationNumber: "7018821",
+    role: "practitioner",
+    commissionRate: 40,
+    revokedAt: iso(-21, 10, 0),
+    retainUntil: iso(69, 10, 0),
+    purgedAt: null,
+  },
+];
+
+/* Named patients get clinical notes; a few roster rows miss contact details so
+   the manager incomplete-profile chase has something to show. */
+for (const [index, note] of [
+  [0, "Penicillin allergy on file. Prefers Nadia. Portal user."],
+  [1, "On levothyroxine — treat as usual. Afternoons only."],
+  [2, "Lidocaine sensitivity. Use alternative if injecting."],
+  [4, "On a peel course. Strict SPF."],
+  [5, "Due a cheek filler review. Personal recall from Amara."],
+  [6, "Often runs late. Confirm the morning of."],
+  [8, "Prefers text. Six-month peel check-in due."],
+  [9, "PRP — sleep on back after sessions."],
+  [11, "Rosacea. Heat and alcohol flare."],
+  [13, "Prefers Amara. Anti-ageing programme."],
+  [16, "Insurance copy requested via portal chat."],
+] as const) {
+  const patient = patients[index];
+  if (patient) patient["notes"] = note;
+}
+
+patients.forEach((patient, index) => {
+  patient["email_opt_in"] = index % 3 !== 0;
+  patient["sms_opt_in"] = index % 4 !== 0;
+  patient["marketing_opt_in"] = index % 5 === 0;
+  patient["reminders_opt_in"] = true;
+});
+
+for (const index of [40, 41, 43]) {
+  const patient = patients[index];
+  if (!patient) continue;
+  patient["email"] = "";
+  patient["phone"] = index === 43 ? "" : patient["phone"];
+}
+if (patients[42]) patients[42]!["date_of_birth"] = "";
+
+const nowIsoForPlans = NOW.toISOString();
+for (const milestone of planMilestones) {
+  if (milestone["status"] !== "current") continue;
+  const plan = treatmentPlans.find((p) => p["id"] === milestone["plan_id"]);
+  if (!plan) continue;
+  const upcoming = appointments.find(
+    (a) =>
+      a["patient_id"] === plan["patient_id"] &&
+      a["starts_at"] >= nowIsoForPlans &&
+      a["status"] === "booked",
+  );
+  if (upcoming) milestone["appointment_id"] = upcoming["id"];
+}
+
+userNotes.push(
+  {
+    id: id("q1"),
+    user_id: USERS.practitioner,
+    body: "Today\n\n- Confirm Olivia consent before 15:00\n- Reorder Profhilo\n- Eleanor recall — afternoons",
+    created_at: iso(-3),
+    updated_at: iso(0, 8, 10),
+  },
+  {
+    id: id("q1"),
+    user_id: USERS.frontDesk,
+    body: "Front desk\n\n- Print peel aftercare for room 2\n- Chase two consent forms\n- Engineer for autoclave at 11",
+    created_at: iso(-1),
+    updated_at: iso(0, 8, 20),
+  },
+  {
+    id: id("q1"),
+    user_id: USERS.practitioner2,
+    body: "List\n\n- Print aftercare pack for room 2\n- Cover Nadia Thursday 09:30 / 10:15\n- Rosacea laser follow-up",
+    created_at: iso(-2),
+    updated_at: iso(0, 7, 50),
+  },
+);
 
 export const db = {
   clinic,

@@ -13,6 +13,7 @@ import {
   DEMO_ACCOUNTS,
   USERS,
   db,
+  formerTeamSeed,
   newId,
   profileName,
   type DemoRole,
@@ -122,7 +123,7 @@ type ExTeamMember = {
 };
 
 const EX_TEAM_RETAIN_DAYS = 90;
-const exTeamMembers: ExTeamMember[] = [];
+const exTeamMembers: ExTeamMember[] = formerTeamSeed.map((row) => ({ ...row }));
 
 function retainUntilFrom(revokedAt = new Date()) {
   return new Date(revokedAt.getTime() + EX_TEAM_RETAIN_DAYS * 86400000).toISOString();

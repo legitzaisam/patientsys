@@ -13,8 +13,6 @@ import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TodaySnapshot } from "@/components/dashboard/today-snapshot";
 import { AttentionList } from "@/components/dashboard/attention-list";
 import { FollowUpTasks } from "@/components/dashboard/follow-up-tasks";
-import { FloatingNotes } from "@/components/dashboard/floating-notes";
-import { SafeToProceed } from "@/components/dashboard/safe-to-proceed";
 import { TreatmentJourneys } from "@/components/dashboard/treatment-journeys";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -142,7 +140,6 @@ function DashboardPage() {
           <h1 className="page-title">{heading}</h1>
           <p className="page-subtitle">{subheading}</p>
         </div>
-        <FloatingNotes />
       </div>
 
       <section className="mb-8">
@@ -206,12 +203,8 @@ function DashboardPage() {
           </div>
           <AttentionList items={[...(data?.attentionItems ?? []), ...incompleteItems]} />
         </div>
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        <div>
           <FollowUpTasks />
-          <SafeToProceed
-            items={((data as any)?.safeToProceed ?? []) as any}
-            readyCount={(data as any)?.safeReadyCount ?? 0}
-          />
         </div>
       </section>
 
