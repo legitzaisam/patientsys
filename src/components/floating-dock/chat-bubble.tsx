@@ -91,7 +91,9 @@ export function ChatBubble() {
         }
         aria-expanded={chatOpen}
         data-qc="chat-bubble"
-        className="glass-sheen pointer-events-auto relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-edge bg-[linear-gradient(140deg,var(--accent-hi),var(--accent)_75%)] text-accent-foreground shadow-bloom backdrop-blur-glass backdrop-saturate-150 transition-transform hover:scale-105 hover:brightness-[1.05] active:scale-95 active:brightness-[0.92] motion-reduce:transition-none"
+        // No overflow-hidden: the sheen clips itself (border-radius: inherit),
+        // and clipping here cuts off the unread badge that hangs past the circle.
+        className="glass-sheen pointer-events-auto relative flex h-10 w-10 items-center justify-center rounded-full border border-edge bg-[linear-gradient(140deg,var(--accent-hi),var(--accent)_75%)] text-accent-foreground shadow-bloom backdrop-blur-glass backdrop-saturate-150 transition-transform hover:scale-105 hover:brightness-[1.05] active:scale-95 active:brightness-[0.92] motion-reduce:transition-none"
       >
         <MessageCircle className="relative z-[1] h-4 w-4" aria-hidden />
         {unreadTotal > 0 && !chatOpen ? (
