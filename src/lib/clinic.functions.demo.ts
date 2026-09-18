@@ -21,6 +21,8 @@ import {
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
 import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
+import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
+import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
 import {
@@ -1847,6 +1849,27 @@ export const logCallAttempt = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/* Browser voice calls: real telephony even in demo — calls ring the
+   TWILIO_DEMO_NUMBERS pool, never the fixture patients' fake numbers. */
+
+export const getVoiceCallConfig = createServerFn({ method: "GET" }).handler(async () => ({
+  available: voiceAvailable(),
+}));
+
+export const getVoiceCallToken = createServerFn({ method: "POST" }).handler(async () => {
+  const me = identity();
+  if (!voiceAvailable()) throw new Error("Voice calling is not configured");
+  return { token: mintVoiceToken(me.userId), identity: me.userId };
+});
+
+export const getVoiceCallTarget = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.GetVoiceCallTarget, data))
+  .handler(async ({ data }) => {
+    const target = voiceTargetFor(data.patient_id);
+    if (!target) throw new Error("Voice calling is not configured");
+    return target;
+  });
+
 export const sendMessage = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -1872,6 +1895,8 @@ export const sendMessage = createServerFn({ method: "POST" })
       read_at: null,
       created_at: new Date().toISOString(),
     });
+    // Demo magic: the patient texts back (Cohere persona, canned fallback).
+    if (data.as === "staff") schedulePatientReply(data.patient_id);
     return { ok: true };
   });
 
@@ -1949,12 +1974,14 @@ export const listPatientThreads = createServerFn({ method: "GET" }).handler(asyn
 
 export const getPatientMessages = createServerFn({ method: "GET" })
   .validator((data: { patient_id: string }) => parseInput(schemas.GetPatientMessages, data))
-  .handler(async ({ data }) =>
-    sortAsc(
+  .handler(async ({ data }) => ({
+    messages: sortAsc(
       messages.filter((m) => m.patient_id === data.patient_id),
       "created_at",
     ),
-  );
+    // True while the AI patient is composing — the chat shows a typing bubble.
+    typing: isPatientReplyPending(data.patient_id),
+  }));
 
 export const markMessagesRead = createServerFn({ method: "POST" })
   .validator((data: { patient_id: string }) => parseInput(schemas.MarkMessagesRead, data))

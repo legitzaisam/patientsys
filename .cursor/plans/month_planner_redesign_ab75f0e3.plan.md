@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: month-commit
     content: Commit to patient0 and push with Zaisam's token
-    status: in_progress
+    status: completed
 isProject: false
 ---
 

@@ -15,6 +15,7 @@ import {
 } from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
 import { PERMISSION_KEYS, type PermissionKey } from "@/lib/permissions";
+import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
 import {
@@ -1992,6 +1993,34 @@ export const logCallAttempt = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/* Browser voice calls (demo pool) — see docs/voice-call-setup.md. */
+
+export const getVoiceCallConfig = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await authorize(context as Ctx, "getVoiceCallConfig");
+    return { available: voiceAvailable() };
+  });
+
+export const getVoiceCallToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const identity = await authorize(context as Ctx, "getVoiceCallToken");
+    if (!voiceAvailable()) throw new Error("Voice calling is not configured");
+    return { token: mintVoiceToken(identity.userId ?? "staff"), identity: identity.userId };
+  });
+
+export const getVoiceCallTarget = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.GetVoiceCallTarget, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "getVoiceCallTarget");
+    // Demo pool: the patient's real number is never dialled.
+    const target = voiceTargetFor(data.patient_id);
+    if (!target) throw new Error("Voice calling is not configured");
+    return target;
+  });
+
 export const sendMessage = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -2640,7 +2669,8 @@ export const getPatientMessages = createServerFn({ method: "GET" })
       .eq("patient_id", data.patient_id)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return rows ?? [];
+    // Same shape as the demo twin; real patients type at their own pace.
+    return { messages: rows ?? [], typing: false };
   });
 
 export const markMessagesRead = createServerFn({ method: "POST" })

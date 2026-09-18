@@ -55,6 +55,7 @@ export function PatientChatThread({
   fontSize = 13,
   templates = false,
   canDeleteTemplates = false,
+  typing = false,
 }: {
   patientId: string;
   patientName: string;
@@ -64,6 +65,8 @@ export function PatientChatThread({
   fontSize?: number;
   templates?: boolean;
   canDeleteTemplates?: boolean;
+  /** Render a "…" bubble at the end of the thread (demo AI patient composing). */
+  typing?: boolean;
 }) {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const firstName = patientName.trim().split(/\s+/)[0] || patientName;
@@ -91,7 +94,7 @@ export function PatientChatThread({
     const thread = threadRef.current;
     if (!thread) return;
     thread.scrollTo({ top: thread.scrollHeight, behavior: "smooth" });
-  }, [renderItems.length]);
+  }, [renderItems.length, typing]);
 
   return (
     <>
@@ -100,7 +103,7 @@ export function PatientChatThread({
         className="staff-chat-thread min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3"
         style={{ ["--staff-chat-fs" as string]: `${fontSize}px` }}
       >
-        {messages.length === 0 ? (
+        {messages.length === 0 && !typing ? (
           <div className="flex h-full min-h-40 items-center justify-center px-4">
             <p className="staff-chat-day max-w-[16rem] text-center">
               {as === "staff"
@@ -155,6 +158,17 @@ export function PatientChatThread({
                 </div>
               );
             })}
+            {typing ? (
+              <div className="staff-chat-item staff-chat-item--break" data-qc="typing-bubble">
+                <div className="staff-chat-bubble staff-chat-bubble--in">
+                  <span className="flex items-center gap-1 py-0.5" aria-label={`${patientName.split(" ")[0]} is typing`}>
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-3/60 [animation-delay:0ms] motion-reduce:animate-none" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-3/60 [animation-delay:150ms] motion-reduce:animate-none" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-3/60 [animation-delay:300ms] motion-reduce:animate-none" />
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

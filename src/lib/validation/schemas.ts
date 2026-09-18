@@ -430,6 +430,8 @@ export const SetRolePermission = z.object({
 
 export const GetPatientMessages = z.object({ patient_id: id });
 
+export const GetVoiceCallTarget = z.object({ patient_id: id });
+
 /* Treatment plans (journeys) */
 
 export const ListTreatmentPlans = z.object({

@@ -1,16 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, MessageCircle, PanelRight, X } from "lucide-react";
+import { ArrowLeft, MessageCircle, Mic, MicOff, PanelRight, Phone, PhoneOff, X } from "lucide-react";
 import {
   getPatientMessages,
   getUnreadMessages,
+  getVoiceCallConfig,
+  getVoiceCallTarget,
   listPatientThreads,
+  logCallAttempt,
   markMessagesRead,
 } from "@/lib/clinic.functions";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { PatientChatThread, type PatientChatMessage } from "@/components/patient-chat-thread";
 import { useFloatingDock } from "./dock-context";
+import { useVoiceCall, type VoiceCallState } from "./use-voice-call";
 
 type ActiveThread = { patientId: string; patientName: string; avatarUrl?: string | null };
 
@@ -121,6 +125,31 @@ function ChatWindow({
 }) {
   const { chatPage, setChatOpen } = useFloatingDock();
 
+  const fetchVoiceConfig = useServerFn(getVoiceCallConfig);
+  const fetchVoiceTarget = useServerFn(getVoiceCallTarget);
+  const logCall = useServerFn(logCallAttempt);
+  const { data: voiceConfig } = useQuery({
+    queryKey: ["voice-call-config"],
+    queryFn: () => fetchVoiceConfig(),
+    staleTime: Infinity,
+  });
+  const voiceReady = Boolean(voiceConfig?.available);
+  const call = useVoiceCall();
+  const [callTargetLabel, setCallTargetLabel] = useState<string | null>(null);
+
+  async function startCall() {
+    if (!active || !voiceReady || call.state === "connecting" || call.state === "ringing" || call.state === "connected") return;
+    try {
+      const target = await fetchVoiceTarget({ data: { patient_id: active.patientId } });
+      setCallTargetLabel(target.label);
+      // Comms trail: the call shows up on the patient record.
+      void logCall({ data: { patient_id: active.patientId, phone: target.phone } }).catch(() => {});
+      await call.start(target.phone);
+    } catch {
+      /* the hook surfaces its own error state */
+    }
+  }
+
   return (
     <div
       role="dialog"
@@ -144,6 +173,21 @@ function ChatWindow({
               <p className="truncate text-sm font-semibold text-foreground">{active.patientName}</p>
               <p className="text-2xs text-muted-foreground">Private messages with this patient</p>
             </div>
+            <button
+              type="button"
+              data-qc="call-button"
+              aria-label={voiceReady ? `Call ${active.patientName}` : "Voice calling is not configured"}
+              title={
+                voiceReady
+                  ? `Call ${active.patientName} (rings your demo line)`
+                  : "Voice calling isn't configured — see docs/voice-call-setup.md"
+              }
+              disabled={!voiceReady}
+              onClick={() => void startCall()}
+              className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-glass-2 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Phone className="h-4 w-4" aria-hidden />
+            </button>
             {chatPage && chatPage.patientId === active.patientId ? (
               <button
                 type="button"
@@ -175,7 +219,104 @@ function ChatWindow({
         </button>
       </header>
 
+      {call.state !== "idle" && (
+        <CallStrip
+          state={call.state}
+          error={call.error}
+          muted={call.muted}
+          seconds={call.seconds}
+          targetLabel={callTargetLabel}
+          patientName={active?.patientName ?? "Patient"}
+          onMute={call.toggleMute}
+          onHangUp={call.hangUp}
+          onDismiss={call.dismiss}
+        />
+      )}
+
       {active ? <ThreadView key={active.patientId} thread={active} /> : <InboxView onPick={onPick} />}
+    </div>
+  );
+}
+
+function CallStrip({
+  state,
+  error,
+  muted,
+  seconds,
+  targetLabel,
+  patientName,
+  onMute,
+  onHangUp,
+  onDismiss,
+}: {
+  state: VoiceCallState;
+  error: string | null;
+  muted: boolean;
+  seconds: number;
+  targetLabel: string | null;
+  patientName: string;
+  onMute: () => void;
+  onHangUp: () => void;
+  onDismiss: () => void;
+}) {
+  const live = state === "connecting" || state === "ringing" || state === "connected";
+  const timer = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  const label =
+    state === "connecting"
+      ? "Connecting…"
+      : state === "ringing"
+        ? `Ringing ${patientName}…`
+        : state === "connected"
+          ? `On call with ${patientName}`
+          : state === "ended"
+            ? "Call ended"
+            : (error ?? "Call failed");
+
+  return (
+    <div
+      data-qc="call-strip"
+      className={`flex shrink-0 items-center gap-2 border-b border-edge px-3.5 py-2 text-xs ${
+        state === "error" ? "bg-destructive-bg text-destructive" : "bg-accent-wash text-foreground"
+      }`}
+    >
+      <span className={`h-2 w-2 shrink-0 rounded-full ${
+        state === "connected" ? "bg-success" : state === "error" ? "bg-destructive" : "bg-warning animate-pulse motion-reduce:animate-none"
+      }`} aria-hidden />
+      <span className="min-w-0 flex-1 truncate font-medium">
+        {label}
+        {targetLabel && live ? <span className="text-muted-foreground"> · {targetLabel}</span> : null}
+        {state === "connected" ? <span className="tabular-nums text-muted-foreground"> · {timer}</span> : null}
+      </span>
+      {state === "connected" ? (
+        <button
+          type="button"
+          onClick={onMute}
+          aria-label={muted ? "Unmute" : "Mute"}
+          aria-pressed={muted}
+          className="rounded-full p-1.5 text-muted-foreground hover:bg-glass-2 hover:text-foreground"
+        >
+          {muted ? <MicOff className="h-3.5 w-3.5" aria-hidden /> : <Mic className="h-3.5 w-3.5" aria-hidden />}
+        </button>
+      ) : null}
+      {live ? (
+        <button
+          type="button"
+          onClick={onHangUp}
+          aria-label="Hang up"
+          className="flex items-center gap-1 rounded-full bg-destructive px-2.5 py-1 text-2xs font-semibold text-white hover:brightness-110"
+        >
+          <PhoneOff className="h-3 w-3" aria-hidden /> End
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss call status"
+          className="rounded-full p-1 text-muted-foreground hover:bg-glass-2 hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      )}
     </div>
   );
 }
@@ -234,10 +375,14 @@ function ThreadView({ thread }: { thread: ActiveThread }) {
   const queryClient = useQueryClient();
   const fetchMessages = useServerFn(getPatientMessages);
   const markRead = useServerFn(markMessagesRead);
-  const { data: messages } = useQuery({
+  // After sending, poll fast for a while: the demo AI patient replies within
+  // seconds and the typing bubble + answer should land without a long wait.
+  const fastUntil = useRef(0);
+  const { data } = useQuery({
     queryKey: ["patient-messages", thread.patientId],
     queryFn: () => fetchMessages({ data: { patient_id: thread.patientId } }),
-    refetchInterval: 12_000,
+    refetchInterval: (query) =>
+      Date.now() < fastUntil.current || query.state.data?.typing ? 4_000 : 12_000,
   });
 
   // Opening the thread reads it: clear unread + refresh the inbox/bell counts.
@@ -253,10 +398,12 @@ function ThreadView({ thread }: { thread: ActiveThread }) {
     <PatientChatThread
       patientId={thread.patientId}
       patientName={thread.patientName}
-      messages={(messages ?? []) as PatientChatMessage[]}
+      messages={(data?.messages ?? []) as PatientChatMessage[]}
+      typing={Boolean(data?.typing)}
       as="staff"
       templates
       onSent={() => {
+        fastUntil.current = Date.now() + 30_000;
         queryClient.invalidateQueries({ queryKey: ["patient-messages", thread.patientId] });
         queryClient.invalidateQueries({ queryKey: ["patient-threads"] });
         queryClient.invalidateQueries({ queryKey: ["patient", thread.patientId] });
