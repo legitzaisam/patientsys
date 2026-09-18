@@ -72,7 +72,9 @@ export function ChatBubble() {
   if (hidden) return null;
 
   return (
-    <div className="flex flex-col items-end gap-3">
+    // The window floats above the launcher row (absolute, anchored to the
+    // bubble) so opening it never widens the row and shifts the alert pill.
+    <div className="relative flex flex-col items-end">
       {chatOpen && (
         <ChatWindow
           active={active}
@@ -124,7 +126,7 @@ function ChatWindow({
       role="dialog"
       aria-label={active ? `Chat with ${active.patientName}` : "Patient conversations"}
       data-qc="chat-window"
-      className="pointer-events-auto flex h-[560px] max-h-[70vh] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-edge bg-popover shadow-[var(--shadow-popover)] backdrop-blur-glass backdrop-saturate-150"
+      className="pointer-events-auto absolute bottom-[calc(100%+0.75rem)] right-0 flex h-[560px] max-h-[70vh] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-edge bg-popover shadow-[var(--shadow-popover)] backdrop-blur-glass backdrop-saturate-150"
     >
       <header className="flex shrink-0 items-center gap-2.5 border-b border-edge px-3.5 py-3">
         {active ? (
