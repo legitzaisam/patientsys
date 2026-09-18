@@ -2292,6 +2292,7 @@ function MonthView({
   onSelect: (v: string[]) => void;
 }) {
   const rows = filterByPractitioner(allRows, selected);
+  const treatmentColours = useTreatmentColours();
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   const today = new Date().toDateString();
   return (
@@ -2322,43 +2323,171 @@ function MonthView({
             .sort((x, y) => +new Date(x.starts_at) - +new Date(y.starts_at));
           const outside = day.getMonth() !== anchor.getMonth();
           const isToday = day.toDateString() === today;
-          return (
+
+          // Browsers vertically centre <button> content, which left the day
+          // number floating mid-cell on empty days — hence the flex column.
+          const cell = (
             <button
-              key={day.toISOString()}
               onClick={() => onPick(day)}
-              className={`h-full min-h-0 cursor-pointer rounded-xl border border-edge bg-glass-2 p-2 text-left align-top shadow-inset-hi transition-colors hover:bg-glass ${
+              aria-label={`Open ${day.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} in the day planner`}
+              className={`group/mday relative flex h-full min-h-0 cursor-pointer flex-col items-stretch overflow-hidden rounded-xl border border-edge bg-glass-2 p-2 text-left shadow-inset-hi transition-colors hover:bg-glass ${
                 outside ? "opacity-40" : ""
               } ${isToday ? "border-accent-line bg-accent-wash" : ""}`}
             >
-              <span
-                className={`inline-grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs font-semibold tabular-nums ${
-                  isToday ? "bg-accent text-accent-foreground shadow-bloom" : "text-muted-foreground"
-                }`}
-              >
-                {day.getDate()}
-              </span>
-              <div className="mt-1.5 space-y-1">
-                {items.slice(0, 3).map((a) => (
-                  <p
-                    key={a.id}
-                    className="truncate rounded-full border border-edge bg-glass px-2 py-0.5 text-2xs text-foreground"
-                  >
-                    <span className="tabular-nums text-muted-foreground">
-                      {new Date(a.starts_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}{" "}
-                    </span>
-                    {a.patients?.first_name} {a.patients?.last_name?.[0]}.
-                  </p>
-                ))}
-                {items.length > 3 && (
-                  <p className="pl-2 text-2xs text-accent-ink">+{items.length - 3} more</p>
+              {items.length === 0 && !outside && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-1 rounded-lg bg-[rgba(47,63,102,0.06)] opacity-0 transition-opacity group-hover/mday:opacity-100"
+                />
+              )}
+              <span className="relative flex shrink-0 items-center justify-between gap-1">
+                <span
+                  className={`inline-grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs font-semibold tabular-nums ${
+                    isToday ? "bg-accent text-accent-foreground shadow-bloom" : "text-muted-foreground"
+                  }`}
+                >
+                  {day.getDate()}
+                </span>
+                {items.length > 0 && (
+                  <span className="inline-grid size-6 shrink-0 place-items-center rounded-full bg-[rgba(47,63,102,0.08)] text-2xs font-semibold tabular-nums text-muted-foreground">
+                    {items.length}
+                  </span>
                 )}
-              </div>
+              </span>
+              <span className="relative mt-1.5 flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
+                {items.slice(0, 3).map((a) => {
+                  const tone = toneForTreatment(a.treatment_name, treatmentColours);
+                  return (
+                    <span
+                      key={a.id}
+                      style={tone.style}
+                      className={`flex min-w-0 shrink-0 items-center gap-1 rounded-lg px-1.5 py-[3px] text-2xs leading-none ${tone.bg}`}
+                    >
+                      <span className={`shrink-0 font-semibold tabular-nums ${tone.text}`}>
+                        {new Date(a.starts_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                      <span className="truncate font-medium text-foreground">
+                        {a.patients?.first_name} {a.patients?.last_name?.[0]}.
+                      </span>
+                    </span>
+                  );
+                })}
+                {items.length > 3 && (
+                  <span className="pl-1.5 text-2xs font-medium text-accent-ink">+{items.length - 3} more</span>
+                )}
+              </span>
             </button>
+          );
+
+          if (items.length === 0) {
+            return <div key={day.toISOString()}>{cell}</div>;
+          }
+
+          return (
+            <HoverCard key={day.toISOString()} openDelay={280} closeDelay={140}>
+              <HoverCardTrigger asChild>{cell}</HoverCardTrigger>
+              <HoverCardContent
+                side="right"
+                align="start"
+                sideOffset={8}
+                collisionPadding={12}
+                className="w-80 rounded-2xl p-0"
+              >
+                <div className="flex items-baseline justify-between gap-2 border-b border-edge px-3.5 py-2.5">
+                  <p className="text-sm font-semibold text-foreground">
+                    {day.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                  </p>
+                  <p className="text-2xs tabular-nums text-muted-foreground">
+                    {items.length} booked
+                  </p>
+                </div>
+                <div className="max-h-[50vh] space-y-2 overflow-y-auto p-3">
+                  {items.map((a) => (
+                    <MonthPeekCard key={a.id} a={a} treatmentColours={treatmentColours} />
+                  ))}
+                </div>
+                <div className="border-t border-edge p-2.5">
+                  <Button size="sm" variant="outline" className="w-full" onClick={() => onPick(day)}>
+                    Open day
+                  </Button>
+                </div>
+              </HoverCardContent>
+            </HoverCard>
           );
         })}
       </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Read-only miniature of the week card for the month peek: same tone wash and
+ * text hierarchy, but static status glyphs — the interactive ChipRow opens
+ * nested popovers that fight a hover-card surface.
+ */
+function MonthPeekCard({
+  a,
+  treatmentColours,
+}: {
+  a: any;
+  treatmentColours: Record<string, number | string>;
+}) {
+  const tone = toneForTreatment(a.treatment_name, treatmentColours);
+  const starts = new Date(a.starts_at);
+  const ends = a.ends_at ? new Date(a.ends_at) : null;
+  const timeFmt: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+  const timeLabel = ends
+    ? `${starts.toLocaleTimeString("en-GB", timeFmt)}–${ends.toLocaleTimeString("en-GB", timeFmt)}`
+    : starts.toLocaleTimeString("en-GB", timeFmt);
+  const name = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim();
+  const practitioner = a.profiles?.full_name ?? "Unassigned";
+
+  const signed = a.documents?.status === "signed";
+  const paid = a.payment_status === "paid";
+  const deposit = a.payment_status === "deposit_paid";
+  const paymentTone = paid
+    ? "bg-success-bg text-success-ink"
+    : deposit
+      ? "bg-warning-bg text-warning-ink"
+      : "bg-destructive-bg text-destructive";
+  const consentTone = signed ? "bg-success-bg text-success-ink" : "bg-warning-bg text-consent-ink";
+  const stage = stageOf(a);
+  const stageMeta = STAGE_META[stage];
+  const StageIcon = stageMeta.icon;
+
+  return (
+    <div
+      className="diary-event glass-card relative overflow-hidden !rounded-xl px-3 py-2.5"
+      style={tone.style}
+    >
+      <div className={`pointer-events-none absolute inset-0 rounded-[inherit] ${tone.bg}`} aria-hidden />
+      <div className="relative flex items-center justify-between gap-2">
+        <span className={`text-2xs font-semibold tabular-nums ${tone.text}`}>{timeLabel}</span>
+        <span className="flex shrink-0 items-center gap-1" aria-hidden>
+          <span className={`grid h-3.5 w-3.5 place-items-center rounded-full ${paymentTone}`} title={paid ? "Paid" : deposit ? "Deposit paid" : "Unpaid"}>
+            <CreditCard className="h-2 w-2" />
+          </span>
+          <span className={`grid h-3.5 w-3.5 place-items-center rounded-full ${consentTone}`} title={signed ? "Consent signed" : "Consent due"}>
+            <FileSignature className="h-2 w-2" />
+          </span>
+          <span className={`grid h-3.5 w-3.5 place-items-center rounded-full ${stageMeta.ring}`} title={stageMeta.label}>
+            <StageIcon className="h-2 w-2" />
+          </span>
+        </span>
+      </div>
+      <Link
+        to="/patients/$id"
+        params={{ id: a.patient_id }}
+        className="relative mt-1 block break-words text-xs font-semibold leading-tight text-foreground hover:underline"
+      >
+        {name}
+      </Link>
+      <p className="relative mt-0.5 truncate text-2xs text-muted-foreground">
+        {a.treatment_name} · #{a.treatment_number}
+      </p>
+      <p className="relative truncate text-2xs text-muted-foreground/80">{practitioner}</p>
+    </div>
   );
 }
 
