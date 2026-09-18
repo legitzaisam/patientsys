@@ -33,6 +33,8 @@ import {
 } from "@/lib/clinic.functions";
 import { checkEmail } from "@/lib/email";
 import { useIdentity } from "@/lib/use-identity";
+import { useStaffPresence } from "@/lib/use-staff-presence";
+import { cn } from "@/lib/utils";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -138,19 +140,16 @@ function stageTone(stage: Stage) {
 }
 
 const CHIP_BASE =
-  "inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-2xs font-medium tracking-[0.02em] leading-none transition-colors";
+  "inline-flex h-6 shrink-0 items-center gap-1 rounded-full px-2.5 text-2xs font-medium tracking-[0.02em] leading-none transition-colors [&_svg]:pointer-events-none [&_svg]:size-3 [&_svg]:shrink-0";
 
 function StageTracker({
   a,
   onState,
   compact,
-  badge,
 }: {
   a: any;
   onState?: ((v: any) => Promise<unknown>) | undefined;
   compact?: boolean;
-  /** Match the dashboard Today card stage pill (top-right). */
-  badge?: boolean;
 }) {
   const current = stageOf(a);
   const idx = STAGES.findIndex((s) => s.key === current);
@@ -163,15 +162,11 @@ function StageTracker({
   const trigger = (
     <button
       type="button"
-      className={
-        badge
-          ? `inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-2xs font-semibold shadow-inset-hi transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9] ${stageTone(current)}`
-          : `${CHIP_BASE} ${stageTone(current)}`
-      }
+      className={`${CHIP_BASE} ${stageTone(current)}`}
       title={`Patient stage: ${label}`}
     >
-      <Icon className={badge ? "h-3 w-3" : `h-3 w-3 ${meta.tone}`} />
-      {compact && !badge ? (STAGES[idx]?.short ?? "No show") : label}
+      <Icon />
+      {compact ? (STAGES[idx]?.short ?? "No show") : label}
     </button>
   );
 
@@ -181,7 +176,7 @@ function StageTracker({
     <>
     <HoverCard openDelay={80} closeDelay={140}>
       <HoverCardTrigger asChild>{trigger}</HoverCardTrigger>
-      <HoverCardContent className="w-64 rounded-2xl" align={badge ? "end" : "start"}>
+      <HoverCardContent className="w-64 rounded-2xl" align="start">
         <p className="text-sm font-semibold text-foreground">Patient journey</p>
         <p className="mt-0.5 text-xs text-muted-foreground">Set where this patient is right now.</p>
         <div className="mt-3 space-y-1">
@@ -1034,30 +1029,49 @@ function PaymentStatusChip({ a, compact }: { a: any; compact?: boolean }) {
     dispatch(channel, kind, kind === "deposit" ? "Deposit link" : "Payment link");
   };
 
+  const chipClass = `${CHIP_BASE} ${
+    paid
+      ? "bg-success-bg text-success-ink"
+      : deposit
+        ? "bg-warning-bg text-warning-ink"
+        : "bg-destructive-bg text-destructive"
+  }`;
+  const chipLabel = compact
+    ? paid
+      ? "Paid"
+      : deposit
+        ? "Deposit"
+        : status === "refunded"
+          ? "Refund"
+          : "Unpaid"
+    : status.replace("_", " ");
   const chip = (
-    <span
-      className={`${CHIP_BASE} ${
-        paid
-          ? "bg-success-bg text-success"
-          : deposit
-            ? "bg-warning-bg text-warning-ink"
-            : "bg-destructive-bg text-destructive"
-      }`}
-      title={`Payment: ${status.replace("_", " ")}`}
-    >
-      <CreditCard className="h-3 w-3" />
-      {compact ? (paid ? "Paid" : deposit ? "Deposit" : status === "refunded" ? "Refund" : "Unpaid") : status.replace("_", " ")}
-    </span>
+    <>
+      <CreditCard />
+      {chipLabel}
+    </>
   );
 
-  if (status === "refunded") return chip;
+  if (status === "refunded") {
+    return (
+      <span className={chipClass} title={`Payment: ${status.replace("_", " ")}`}>
+        {chip}
+      </span>
+    );
+  }
 
   const selectedAmount = amountKind === "deposit" ? depositAmount : total;
 
   return (
     <HoverCard openDelay={80} closeDelay={140}>
       <HoverCardTrigger asChild>
-        <button type="button" className="inline-flex">{chip}</button>
+        <button
+          type="button"
+          className={chipClass}
+          title={`Payment: ${status.replace("_", " ")}`}
+        >
+          {chip}
+        </button>
       </HoverCardTrigger>
       <HoverCardContent className="w-72 rounded-2xl" align="end">
         <div className="space-y-3 text-xs">
@@ -1246,35 +1260,41 @@ function ConsentChip({ a, signed, compact }: { a: any; signed: boolean; compact?
     );
   };
 
-  const chip = compact ? (
-    <span
-      className={`${CHIP_BASE} ${
-        signed ? "bg-success-bg text-success" : "bg-warning-bg text-consent-ink"
-      }`}
-      title={signed ? "Consent signed" : "Consent pending"}
-    >
-      <FileSignature className="h-3 w-3" />
-      {signed ? "Consent" : "Consent due"}
-    </span>
-  ) : (
-    <span
-      className={`${CHIP_BASE} ${
-        signed
-          ? "bg-success-bg text-success"
-          : "bg-warning-bg text-consent-ink hover:bg-warning-bg"
-      }`}
-    >
-      <FileSignature className="h-3 w-3" />
-      {signed ? "Consent signed" : "Consent pending"}
-    </span>
+  const chipClass = `${CHIP_BASE} ${
+    signed ? "bg-success-bg text-success-ink" : "bg-warning-bg text-consent-ink"
+  }`;
+  const chipLabel = compact
+    ? signed
+      ? "Consent"
+      : "Consent due"
+    : signed
+      ? "Consent signed"
+      : "Consent pending";
+  const chip = (
+    <>
+      <FileSignature />
+      {chipLabel}
+    </>
   );
 
-  if (signed) return chip;
+  if (signed) {
+    return (
+      <span className={chipClass} title="Consent signed">
+        {chip}
+      </span>
+    );
+  }
 
   return (
     <HoverCard openDelay={80} closeDelay={120}>
       <HoverCardTrigger asChild>
-        <button type="button" className="inline-flex">{chip}</button>
+        <button
+          type="button"
+          className={chipClass}
+          title="Consent pending"
+        >
+          {chip}
+        </button>
       </HoverCardTrigger>
       <HoverCardContent className="w-72 rounded-2xl" align="start">
         <div className="space-y-3 text-xs">
@@ -1413,6 +1433,8 @@ function DayPlanner({
   onSelect: (v: string[]) => void;
 }) {
   const queryClient = useQueryClient();
+  const { data: identity } = useIdentity();
+  const onlineIds = useStaffPresence(Boolean(identity?.isStaff), identity?.userId);
   const treatmentColours = useTreatmentColours();
   const gridRef = useRef<HTMLDivElement | null>(null);
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1619,9 +1641,15 @@ function DayPlanner({
 
   const showNow = isToday && nowMin >= startMin && nowMin <= endMin;
   const nowY = showNow ? yFor(nowMin) : null;
+  const slideCols = columns.length > 3;
+  // Keep each practitioner lane as wide as a 3-up day, then slide the rest
+  // the same way the week planner slides extra days.
+  const boardMinWidth = slideCols
+    ? `calc(5rem + ${columns.length} * max(220px, (100% - 5rem) / 3))`
+    : undefined;
 
   return (
-    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl p-0">
       {/* Header */}
       <div className="relative z-30 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1649,21 +1677,25 @@ function DayPlanner({
         </div>
       )}
 
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col p-5">
       {columns.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center p-12 text-center text-sm text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center text-center text-sm text-muted-foreground">
           No bookings on {date.toLocaleDateString("en-GB")}.
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
-          <div className="min-w-[680px]">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto" data-qc="day-planner-scroll">
+          <div
+            className={cn(!slideCols && "min-w-[680px]")}
+            style={boardMinWidth ? { minWidth: boardMinWidth } : undefined}
+          >
             {/* Practitioner header */}
             <div className="sticky top-0 z-20 flex border-b border-glass-line bg-glass shadow-inset-hi backdrop-blur-glass">
-              <div className="w-20 shrink-0" />
+              <div className="sticky left-0 z-30 w-20 shrink-0 bg-[var(--glass-hi)] shadow-[1px_0_0_0_var(--glass-line)] backdrop-blur-glass" />
               {columns.map((col) => {
                 const lane = laneFor(col.id);
-                const busy = col.items.some((a: any) => stageOf(a) === "in_treatment");
+                const online = onlineIds.has(col.id);
                 return (
-                  <div key={col.id} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3">
+                  <div key={col.id} className="relative z-0 flex min-w-0 flex-1 items-center gap-3 px-3 py-3">
                     <PractitionerHoverCard
                       practitionerId={col.id}
                       name={col.name}
@@ -1675,10 +1707,14 @@ function DayPlanner({
                       className="flex min-w-0 items-center gap-3 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <span
-                        title={busy ? "In treatment" : "Available"}
-                        className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-2xs font-semibold ring-2 ring-offset-2 ring-offset-card ${lane.softBg} ${lane.text} ${
-                          busy ? "ring-destructive" : "ring-success"
-                        }`}
+                        title={online ? "Online" : undefined}
+                        aria-label={online ? `${col.name}, online` : col.name}
+                        className={cn(
+                          "grid h-7 w-7 shrink-0 place-items-center rounded-full text-2xs font-semibold",
+                          lane.softBg,
+                          lane.text,
+                          online && "ring-2 ring-[#4a9d75] ring-offset-2 ring-offset-card",
+                        )}
                       >
                         {initialsOf(col.name)}
                       </span>
@@ -1698,7 +1734,7 @@ function DayPlanner({
             {/* Time grid */}
             <div ref={gridRef} className="relative flex" style={{ height: gridHeight }}>
               {/* Gutter */}
-              <div className="w-20 shrink-0">
+              <div className="sticky left-0 z-20 w-20 shrink-0 bg-[var(--glass-hi)] shadow-[1px_0_0_0_var(--glass-line)] backdrop-blur-glass">
                 {offsets.map((o, i) =>
                   o.row.type === "slot" ? (
                     <div
@@ -1729,7 +1765,7 @@ function DayPlanner({
                   <div
                     key={col.id}
                     ref={(el) => { colRefs.current[col.id] = el; }}
-                    className="relative min-w-0 flex-1 border-l border-glass-line"
+                    className="relative z-0 min-w-0 flex-1 border-l border-glass-line"
                   >
                     {offsets.map((o, i) =>
                       o.row.type === "slot" ? (
@@ -1754,7 +1790,7 @@ function DayPlanner({
                         >
                           <span
                             aria-hidden
-                            className="pointer-events-none absolute inset-x-1.5 inset-y-1 rounded-xl bg-[rgba(47,63,102,0.08)] opacity-0 transition-opacity group-hover/slot:opacity-100"
+                            className="pointer-events-none absolute inset-x-1.5 inset-y-1 rounded-xl bg-[rgba(47,63,102,0.06)] opacity-0 transition-opacity group-hover/slot:opacity-100"
                           />
                           <Plus className="relative z-[1] h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover/slot:opacity-70" />
                         </button>
@@ -1805,7 +1841,7 @@ function DayPlanner({
                           onPointerDown={(ev) => beginDrag(ev, a, col.id)}
                           onPointerMove={moveDrag}
                           onPointerUp={() => endDrag(a)}
-                          className={`diary-event glass-card group absolute inset-x-1.5 z-[2] flex cursor-grab flex-col justify-center gap-1 overflow-hidden !rounded-xl px-3 py-2.5 transition-shadow hover:shadow-lift ${
+                          className={`diary-event glass-card group absolute inset-x-1.5 z-[2] flex cursor-grab flex-col overflow-hidden !rounded-xl px-3 py-2.5 transition-shadow hover:shadow-lift ${
                             dragging ? "!z-30 cursor-grabbing opacity-90 shadow-lift" : ""
                           } ${isCurrent ? "shadow-lift" : ""}`}
                         >
@@ -1827,11 +1863,11 @@ function DayPlanner({
                           <Link
                             to="/patients/$id"
                             params={{ id: a.patient_id }}
-                            className="relative block break-words text-xs font-semibold leading-tight text-foreground hover:text-accent-ink"
+                            className="relative mt-1 block break-words text-xs font-semibold leading-tight text-foreground hover:text-accent-ink"
                           >
                             {a.patients?.first_name} {a.patients?.last_name}
                           </Link>
-                          <p className="relative truncate text-2xs text-muted-foreground">
+                          <p className="relative mt-0.5 truncate text-2xs text-muted-foreground">
                             {a.treatment_name} · #{a.treatment_number}
                           </p>
                         </div>
@@ -1847,7 +1883,7 @@ function DayPlanner({
                   className="pointer-events-none absolute inset-x-0"
                   style={{ top: nowY! }}
                 >
-                  <div className="absolute left-0 z-[5] h-0 w-20">
+                  <div className="sticky left-0 z-[5] h-0 w-20">
                     <span className="absolute top-1/2 right-1 -translate-y-1/2 rounded-full bg-foreground px-2 py-0.5 text-2xs font-semibold tabular-nums text-background shadow-sm">
                       {label(nowMin)}
                     </span>
@@ -1885,6 +1921,7 @@ function DayPlanner({
           </div>
         </div>
       )}
+      </div>
 
       <div className="border-t border-glass-line bg-glass-2 px-5 py-2 text-2xs text-muted-foreground">
         Drag an appointment to move it · click an empty slot to book · Esc cancels a drag
@@ -1961,11 +1998,11 @@ function ChipRow({ a, onState }: { a: any; onState: (v: any) => Promise<unknown>
   const paid = a.payment_status === "paid";
   const deposit = a.payment_status === "deposit_paid";
   const paymentTone = paid
-    ? "bg-success-bg text-success"
+    ? "bg-success-bg text-success-ink"
     : deposit
       ? "bg-warning-bg text-warning-ink"
       : "bg-destructive-bg text-destructive";
-  const consentTone = signed ? "bg-success-bg text-success" : "bg-warning-bg text-consent-ink";
+  const consentTone = signed ? "bg-success-bg text-success-ink" : "bg-warning-bg text-consent-ink";
 
   return (
     <HoverCard openDelay={120} closeDelay={140}>
@@ -2089,18 +2126,19 @@ function WeekView({
           <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col px-5 pb-5">
-        <div className="min-h-0 min-w-0 flex-1 overflow-x-auto">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col p-5">
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-auto" data-qc="week-planner-scroll">
           <div className="grid min-h-0 h-full min-w-[1820px] auto-rows-fr grid-cols-7 divide-y divide-glass-line sm:divide-y-0">
         {days.map((day, i) => {
           const items = rows
             .filter((a) => new Date(a.starts_at).toDateString() === day.toDateString())
             .sort((x, y) => +new Date(x.starts_at) - +new Date(y.starts_at));
           const isToday = day.toDateString() === today;
+          const newBookingLabel = `New booking on ${day.toLocaleDateString("en-GB")}`;
           return (
             <div
               key={day.toISOString()}
-              className={`flex min-h-0 min-w-0 flex-1 flex-col ${
+              className={`group/day flex min-h-0 min-w-0 flex-1 flex-col ${
                 i > 0 ? "border-l border-glass-line" : ""
               }`}
             >
@@ -2127,46 +2165,30 @@ function WeekView({
                   </span>
                 )}
               </div>
-              {isToday && items.length === 0 ? (
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-3">
+                {items.map((a) => (
+                  <WeekAppointmentCard key={a.id} a={a} onState={onState} />
+                ))}
                 <button
                   type="button"
-                  aria-label={`New booking on ${day.toLocaleDateString("en-GB")}`}
+                  aria-label={newBookingLabel}
                   onClick={(e) => openQuickAdd(e, day)}
-                  className="group flex min-h-0 min-w-0 flex-1 cursor-pointer flex-col gap-2 p-3 text-left transition-colors bg-[rgba(47,63,102,0.04)] hover:bg-[rgba(47,63,102,0.14)] active:bg-[rgba(47,63,102,0.18)]"
+                  className="relative flex min-h-[64px] flex-1 cursor-pointer items-center justify-center"
                 >
-                  <div className="flex min-h-[64px] flex-1 flex-col items-center justify-center gap-2 py-4">
-                    <Plus className="h-4 w-4 text-ink-3 opacity-40 transition-opacity group-hover:opacity-80" />
-                    <span className="text-2xs font-medium tracking-[0.02em] text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
-                      Free
-                    </span>
-                  </div>
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 inset-y-1 rounded-xl bg-[rgba(47,63,102,0.06)] opacity-0 transition-opacity group-hover/day:opacity-100"
+                  />
+                  <span className="relative z-[1] grid place-items-center">
+                    {items.length === 0 && (
+                      <span className="col-start-1 row-start-1 text-2xs font-medium tracking-[0.02em] text-muted-foreground/60 transition-opacity group-hover/day:opacity-0">
+                        Free
+                      </span>
+                    )}
+                    <Plus className="col-start-1 row-start-1 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover/day:opacity-70" />
+                  </span>
                 </button>
-              ) : items.length === 0 ? (
-                <button
-                  type="button"
-                  aria-label={`New booking on ${day.toLocaleDateString("en-GB")}`}
-                  onClick={(e) => openQuickAdd(e, day)}
-                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer flex-col gap-2 p-3 text-left transition-colors hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
-                >
-                  <div className="flex min-h-[64px] flex-1 items-center justify-center py-4">
-                    <span className="text-2xs font-medium tracking-[0.02em] text-muted-foreground/60">
-                      Free
-                    </span>
-                  </div>
-                </button>
-              ) : (
-                <div
-                  className={
-                    isToday
-                      ? "flex min-h-0 min-w-0 flex-1 flex-col gap-2 bg-[rgba(47,63,102,0.08)] p-3"
-                      : "flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-3"
-                  }
-                >
-                  {items.map((a) => (
-                    <WeekAppointmentCard key={a.id} a={a} onState={onState} />
-                  ))}
-                </div>
-              )}
+              </div>
             </div>
           );
         })}
@@ -2202,7 +2224,6 @@ function WeekAppointmentCard({
   a: any;
   onState: (v: any) => Promise<unknown>;
 }) {
-  const consentSigned = a.documents?.status === "signed";
   const treatmentColours = useTreatmentColours();
   const tone = toneForTreatment(a.treatment_name, treatmentColours);
   const starts = new Date(a.starts_at);
@@ -2216,11 +2237,11 @@ function WeekAppointmentCard({
 
   return (
     <div
-      className="diary-event glass-card group relative overflow-hidden !rounded-xl p-3 transition-shadow hover:shadow-lift"
+      className="diary-event glass-card group relative overflow-hidden !rounded-xl px-3 py-2.5 transition-shadow hover:shadow-lift"
       style={tone.style}
     >
       <div className={`pointer-events-none absolute inset-0 rounded-[inherit] ${tone.bg}`} aria-hidden />
-      <div className="relative mb-1.5 flex items-start justify-between gap-2">
+      <div className="relative flex items-center justify-between gap-2">
         <AppointmentTimeEditor appointment={a}>
           <button
             type="button"
@@ -2229,29 +2250,22 @@ function WeekAppointmentCard({
             {timeLabel}
           </button>
         </AppointmentTimeEditor>
-        <div className="shrink-0">
-          <StageTracker a={a} onState={onState} badge />
+        <div className="flex items-center gap-1">
+          <ChipRow a={a} onState={onState} />
+          <VisitNoteChip appointmentId={a.id} variant="ghost" />
         </div>
       </div>
       <Link
         to="/patients/$id"
         params={{ id: a.patient_id }}
-        className="relative block break-words text-sm font-semibold leading-tight text-foreground hover:underline"
+        className="relative mt-1 block break-words text-xs font-semibold leading-tight text-foreground hover:underline"
       >
         {name}
       </Link>
-      <p className="relative mt-0.5 break-words text-xs leading-snug text-muted-foreground">
-        {a.treatment_name}{" "}
-        <span className="text-muted-foreground/60">· #{a.treatment_number}</span>
+      <p className="relative mt-0.5 truncate text-2xs text-muted-foreground">
+        {a.treatment_name} · #{a.treatment_number}
       </p>
-      <p className="relative mt-0.5 break-words text-xs leading-snug text-muted-foreground/80">
-        {practitioner}
-      </p>
-      <div className="relative mt-2 flex flex-wrap items-center gap-1.5">
-        <ConsentChip a={a} signed={consentSigned} compact />
-        <PaymentStatusChip a={a} compact />
-        <VisitNoteChip appointmentId={a.id} variant="chip" compact />
-      </div>
+      <p className="relative truncate text-2xs text-muted-foreground/80">{practitioner}</p>
     </div>
   );
 }
@@ -2293,7 +2307,7 @@ function MonthView({
           <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col p-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col p-5">
       <div className="grid shrink-0 grid-cols-7 pb-2 text-center text-2xs tracking-[0.02em] text-muted-foreground">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div key={d} className="py-1">
