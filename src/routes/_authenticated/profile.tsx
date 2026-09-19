@@ -5,10 +5,12 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Clock, Check, X } from "lucide-react";
 import { getMyProfile, saveMyProfile } from "@/lib/clinic.functions";
+import { joinStaffName, splitStaffName, STAFF_TITLES } from "@/lib/staff-name";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
-import { SecuritySettings } from "@/components/security-settings";
-import { StaffAvatar, StaffDocuments } from "@/components/staff-files";
+import { StaffAvatar } from "@/components/staff-files";
+import { MyPerformanceKpis } from "@/components/performance/my-performance-kpis";
+import { ProfileAccountTabs } from "@/components/profile-account-tabs";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,6 +49,7 @@ function ProfilePage() {
   });
 
   const [form, setForm] = useState({
+    title: "",
     fullName: "",
     jobTitle: "",
     registrationBody: "",
@@ -56,8 +59,10 @@ function ProfilePage() {
   // Sync from server only when those fields change — not on every query object identity.
   useEffect(() => {
     if (!data?.profile) return;
+    const split = splitStaffName(data.profile.full_name ?? "");
     setForm({
-      fullName: data.profile.full_name ?? "",
+      title: split.title,
+      fullName: split.name,
       jobTitle: data.profile.job_title ?? "",
       registrationBody: data.profile.registration_body ?? "",
       registrationNumber: data.profile.registration_number ?? "",
@@ -75,7 +80,7 @@ function ProfilePage() {
     mutationFn: async () =>
       saveProfile({
         data: {
-          fullName: form.fullName,
+          fullName: joinStaffName(form.title, form.fullName),
           jobTitle: form.jobTitle,
           registrationBody: form.registrationBody,
           registrationNumber: form.registrationNumber,
@@ -109,14 +114,20 @@ function ProfilePage() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-1">
-        <Card className="overflow-hidden p-0">
+      <div
+        className={
+          requests.length > 0
+            ? "grid items-start gap-5 lg:grid-cols-3"
+            : undefined
+        }
+      >
+        <Card className={requests.length > 0 ? "overflow-hidden p-0 lg:col-span-2" : "overflow-hidden p-0"}>
           <div className="grid sm:grid-cols-[13.5rem_minmax(0,1fr)]">
             <aside className="flex flex-col items-center border-b border-edge bg-glass-2/70 px-5 pt-5 pb-6 sm:border-b-0 sm:border-r sm:px-6 sm:pt-6 sm:pb-7">
               <div className="flex w-full max-w-[8.5rem] flex-col items-center gap-3">
                 <div className="w-full text-center">
                   <p className="text-balance text-sm font-semibold leading-none tracking-[-0.012em] text-foreground">
-                    {form.fullName.trim() || "Your name"}
+                    {joinStaffName(form.title, form.fullName) || "Your name"}
                   </p>
                   <p className="mt-1 text-pretty text-2xs leading-snug text-muted-foreground">
                     {form.jobTitle.trim() || identity.email}
@@ -124,7 +135,7 @@ function ProfilePage() {
                 </div>
                 <StaffAvatar
                   userId={identity.userId}
-                  fullName={form.fullName || identity.email}
+                  fullName={joinStaffName(form.title, form.fullName) || identity.email}
                   avatarPath={data?.profile?.avatar_url ?? null}
                   size="md"
                 />
@@ -133,7 +144,23 @@ function ProfilePage() {
 
             <div className="flex min-w-0 flex-col">
               <div className="grid gap-x-5 gap-y-4 p-5 pb-4 sm:grid-cols-2 sm:gap-x-6 sm:p-6 sm:px-7 sm:pb-4">
-                <div className="field-stack min-w-0 sm:col-span-2">
+                <div className="field-stack min-w-0">
+                  <Label htmlFor="p-title">Title</Label>
+                  <select
+                    id="p-title"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    className="flex h-9 w-full rounded-[11px] border border-edge bg-glass-2 px-3 text-[13px] shadow-inset-hi outline-none transition-colors hover:border-edge-2 focus-visible:border-accent-deep focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">—</option>
+                    {STAFF_TITLES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field-stack min-w-0">
                   <Label htmlFor="p-name">Full name</Label>
                   <Input
                     id="p-name"
@@ -186,12 +213,12 @@ function ProfilePage() {
         </Card>
 
         {requests.length > 0 ? (
-          <Card className="p-5">
+          <Card className="flex h-[308px] min-h-0 flex-col overflow-hidden p-5">
             <h2 className="section-title">Earlier change requests</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Past requests sent for manager review (new edits save immediately).
+              Past requests sent for manager review. New edits save immediately.
             </p>
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto">
               {requests.map((r) => {
                 const s = STATUS[r.status] ?? STATUS["pending"]!;
                 const Icon = s.icon;
@@ -223,12 +250,14 @@ function ProfilePage() {
         ) : null}
       </div>
 
-      <div className="mt-6">
-        <SecuritySettings identity={identity} />
-      </div>
+      {identity.roles.includes("practitioner") || identity.isOwner ? (
+        <div className="mt-6">
+          <MyPerformanceKpis />
+        </div>
+      ) : null}
 
       <div className="mt-6">
-        <StaffDocuments userId={identity.userId} />
+        <ProfileAccountTabs userId={identity.userId} identity={identity} />
       </div>
     </AppShell>
   );

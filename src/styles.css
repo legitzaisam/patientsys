@@ -325,7 +325,7 @@
   }
 
   .glass-table tbody tr:hover {
-    background: var(--accent-wash);
+    background: rgba(47, 63, 102, 0.08);
   }
 }
 
@@ -445,6 +445,11 @@
     border: 1px solid var(--edge);
     background: var(--glass-2);
     box-shadow: var(--shadow-inset-hi);
+    transition: background-color 0.15s ease;
+  }
+
+  .glass-item:hover {
+    background: rgba(47, 63, 102, 0.08);
   }
 
   /* Staff 1:1 thread — soft glass bubbles on a quiet wash.
@@ -636,7 +641,7 @@
   }
 
   .diary-carousel-scroller.is-free-scroll {
-    scroll-snap-type: none;
+    scroll-snap-type: none !important;
   }
 
   .diary-carousel-scroller::-webkit-scrollbar {

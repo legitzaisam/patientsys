@@ -76,13 +76,6 @@ function sortByStart(appointments: any[]) {
   );
 }
 
-/** Index of the soonest upcoming (or in-progress) appointment; falls back to 0. */
-function upcomingIndex(appointments: any[]) {
-  const now = Date.now();
-  const idx = appointments.findIndex((a) => new Date(a.ends_at).getTime() >= now);
-  return idx >= 0 ? idx : 0;
-}
-
 export function TodaySnapshot({
   appointments,
   isManager,
@@ -133,7 +126,6 @@ function AppointmentCarousel({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
-  const startAt = useMemo(() => upcomingIndex(appointments), [appointments]);
   const jumpedKeyRef = useRef<string | null>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -246,21 +238,21 @@ function AppointmentCarousel({
     };
   }, [appointments.length]);
 
-  // Jump once per list identity to the soonest upcoming card.
+  // Jump once per list identity to the first (earliest) appointment card.
   useEffect(() => {
-    const key = `${appointments.length}:${startAt}:${appointments[0]?.id ?? ""}:${appointments[appointments.length - 1]?.id ?? ""}`;
+    const key = `${appointments.length}:${appointments[0]?.id ?? ""}:${appointments[appointments.length - 1]?.id ?? ""}`;
     if (jumpedKeyRef.current === key) return;
     const el = scrollerRef.current;
     if (!el) return;
     const id = requestAnimationFrame(() => {
       jumpedKeyRef.current = key;
-      scrollToIndex(startAt, "auto");
+      scrollToIndex(0, "auto");
       syncEdges();
     });
     return () => cancelAnimationFrame(id);
-  }, [startAt, appointments]);
+  }, [appointments]);
 
-  /** Leftmost card at the snap origin — floor, not nearest (nearest + 1 skips a card). */
+  /** Leftmost card at the snap origin — floor, not nearest. */
   const alignedIndex = () => {
     const el = scrollerRef.current;
     if (!el) return 0;
@@ -274,8 +266,8 @@ function AppointmentCarousel({
     return idx;
   };
 
-  const HOVER_GLIDE_DELAY_MS = 480;
-  const HOVER_GLIDE_PX_PER_SEC = 168;
+  const HOVER_GLIDE_DELAY_MS = 80;
+  const HOVER_GLIDE_PX_PER_SEC = 260;
   const hoverAutoRef = useRef<{
     dir: -1 | 1;
     delayTimer: ReturnType<typeof setTimeout> | null;
@@ -284,9 +276,15 @@ function AppointmentCarousel({
   } | null>(null);
   const gutterLockRef = useRef(false);
   const gutterAnimatingRef = useRef(false);
+  const gutterHoveringRef = useRef<-1 | 1 | null>(null);
 
   const setSnap = (on: boolean) => {
-    scrollerRef.current?.classList.toggle("is-free-scroll", !on);
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.classList.toggle("is-free-scroll", !on);
+    // Inline snap must come off during a glide — the scroller also sets
+    // scroll-snap-type in CSS, and an inline value would win over the class.
+    el.style.scrollSnapType = on ? "x mandatory" : "none";
   };
 
   const stopHoverGlide = () => {
@@ -304,10 +302,10 @@ function AppointmentCarousel({
       setSnap(true);
       return;
     }
+    setSnap(false);
     const delayTimer = setTimeout(() => {
       const el = scrollerRef.current;
       if (!el || !hoverAutoRef.current || gutterLockRef.current) return;
-      setSnap(false);
       const startedAt = performance.now();
       hoverAutoRef.current.startedAt = startedAt;
       let last = startedAt;
@@ -318,9 +316,9 @@ function AppointmentCarousel({
         if (!scroller) return;
         const dt = Math.min(24, now - last);
         last = now;
-        const ramp = Math.min(1, (now - hover.startedAt) / 420);
+        const ramp = Math.min(1, (now - hover.startedAt) / 180);
         const eased = ramp * ramp * (3 - 2 * ramp);
-        const speed = HOVER_GLIDE_PX_PER_SEC * (0.22 + 0.78 * eased);
+        const speed = HOVER_GLIDE_PX_PER_SEC * (0.55 + 0.45 * eased);
         const max = scroller.scrollWidth - scroller.clientWidth;
         scroller.scrollLeft = Math.max(0, Math.min(max, scroller.scrollLeft + dir * speed * (dt / 1000)));
         syncEdges();
@@ -351,20 +349,29 @@ function AppointmentCarousel({
     if (!el) return;
     gutterAnimatingRef.current = true;
     setSnap(false);
-    scrollToIndex(alignedIndex() + dir, "smooth");
+    scrollToIndex(alignedIndex() + dir * 2, "smooth");
     let settled = false;
     const settle = () => {
       if (settled) return;
       settled = true;
       gutterAnimatingRef.current = false;
+      gutterLockRef.current = false;
       setSnap(true);
       syncEdges();
+      const hovering = gutterHoveringRef.current;
+      if (hovering) startHoverAutoSlide(hovering, 0);
     };
     el.addEventListener("scrollend", settle, { once: true });
     window.setTimeout(settle, 500);
   };
 
+  const onGutterEnter = (dir: -1 | 1) => {
+    gutterHoveringRef.current = dir;
+    startHoverAutoSlide(dir);
+  };
+
   const onGutterLeave = () => {
+    gutterHoveringRef.current = null;
     stopHoverGlide();
     gutterLockRef.current = false;
     if (gutterAnimatingRef.current) return;
@@ -440,7 +447,6 @@ function AppointmentCarousel({
             ref={scrollerRef}
             className="diary-carousel-scroller relative flex cursor-grab gap-4 overflow-x-auto overscroll-x-contain pl-5 pr-4 pt-3 pb-8 active:cursor-grabbing"
             style={{
-              scrollSnapType: "x mandatory",
               scrollPaddingInline: "1.25rem 1rem",
               touchAction: "pan-x",
             }}
@@ -469,7 +475,7 @@ function AppointmentCarousel({
             className="absolute inset-y-0 left-0 z-20 w-[4.75rem] cursor-pointer sm:w-[5.25rem]"
             onPointerDown={onGutterPointerDown}
             onClick={() => onGutterClick(-1)}
-            onMouseEnter={() => startHoverAutoSlide(-1)}
+            onMouseEnter={() => onGutterEnter(-1)}
             onMouseLeave={onGutterLeave}
           >
             <span className="pointer-events-none absolute top-3 bottom-8 left-0 right-0 flex items-center justify-start pl-5">
@@ -487,7 +493,7 @@ function AppointmentCarousel({
             className="absolute inset-y-0 right-0 z-20 w-16 cursor-pointer sm:w-[4.5rem]"
             onPointerDown={onGutterPointerDown}
             onClick={() => onGutterClick(1)}
-            onMouseEnter={() => startHoverAutoSlide(1)}
+            onMouseEnter={() => onGutterEnter(1)}
             onMouseLeave={onGutterLeave}
           >
             <span className="pointer-events-none absolute top-3 bottom-8 left-0 right-0 flex items-center justify-end pr-1">

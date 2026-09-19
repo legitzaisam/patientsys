@@ -377,7 +377,7 @@ function ChatQuickReplyToast({
         className={cn(
           "flex min-h-7 items-center",
           expanded ? "pr-[7.75rem]" : "pr-8",
-          expanded && "cursor-pointer rounded-xl transition-colors hover:bg-glass-2/80",
+          expanded && "cursor-pointer rounded-xl transition-colors hover:bg-[rgba(47,63,102,0.08)]",
         )}
         onClick={handleHeaderClick}
         onKeyDown={(e) => {

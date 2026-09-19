@@ -61,7 +61,7 @@ export function SafeToProceed({
                 <Link
                   to="/patients/$id"
                   params={{ id: item.patientId }}
-                  className="glass-item flex items-start gap-3 p-3 transition-colors hover:bg-glass"
+                  className="glass-item flex items-start gap-3 p-3"
                 >
                   <PatientAvatar
                     patientId={item.patientId}

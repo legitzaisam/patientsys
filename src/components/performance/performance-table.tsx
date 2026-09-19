@@ -138,12 +138,10 @@ function ExpandRow({
   const label = shortStaffName(row.fullName);
 
   return (
-    <tr>
-      <td colSpan={7} className="border-b border-glass-line bg-[rgba(47,63,102,0.03)] px-4 py-4">
-        <div className="glass-panel relative overflow-hidden rounded-[22px] px-4 py-4 sm:px-5">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--sheen)] via-transparent to-transparent" />
-
-          <div className="relative z-[1] flex flex-wrap items-center justify-between gap-3">
+    <tr className="hover:!bg-transparent">
+      <td colSpan={7} className="border-b border-glass-line bg-[rgba(47,63,102,0.08)] px-4 py-4">
+        <div className="rounded-[22px] border border-edge bg-glass-2 px-4 py-4 shadow-inset-hi sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">
                 {label}’s extras
@@ -156,14 +154,14 @@ function ExpandRow({
               to="/team/$id" search={{}}
               params={{ id: row.userId }}
               onClick={(e) => e.stopPropagation()}
-              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-accent-line bg-accent-soft px-3 py-1.5 text-2xs font-semibold text-accent-ink shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
+              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-edge bg-background/70 px-3 py-1.5 text-2xs font-semibold text-foreground shadow-inset-hi transition-colors hover:bg-[rgba(47,63,102,0.08)]"
             >
               Commission {row.commissionRate}%
               <span className="font-medium opacity-80">· Edit on Team</span>
             </Link>
           </div>
 
-          <div className="relative z-[1] mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <MetricTile label="Collected" value={money(row.collected)} hint="Marked paid" />
             <MetricTile label="Clinic keeps" value={money(row.clinicEarnedShare)} hint="After their share" />
             <MetricTile
@@ -176,7 +174,7 @@ function ExpandRow({
             <MetricTile label="New patients" value={String(row.newPatients)} />
           </div>
 
-          <div className="relative z-[1] mt-3 rounded-2xl border border-edge bg-glass-2/80 px-3.5 py-3 shadow-inset-hi">
+          <div className="mt-3 rounded-2xl border border-edge bg-background/60 px-3.5 py-3 shadow-inset-hi">
             <div className="flex items-center justify-between gap-3">
               <p className="text-2xs font-medium tracking-[0.02em] text-ink-3">Earnings trend</p>
               <span className="text-2xs text-muted-foreground">This period</span>
@@ -244,7 +242,14 @@ export function PerformanceTable({
             <div>
               <p className="text-xs font-medium tracking-[0.02em] text-muted-foreground">Top performer</p>
               <p className="section-title">
-                {top.fullName}{" "}
+                <Link
+                  to="/team/$id"
+                  search={{}}
+                  params={{ id: top.userId }}
+                  className="hover:text-accent-ink"
+                >
+                  {top.fullName}
+                </Link>{" "}
                 <span className="text-sm font-normal text-muted-foreground">{top.jobTitle || "Practitioner"}</span>
               </p>
               <p className="text-xs text-muted-foreground">
@@ -262,16 +267,25 @@ export function PerformanceTable({
 
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
-          <table className="glass-table w-full min-w-[900px] text-sm">
+          <table className="glass-table w-full min-w-[960px] table-fixed text-sm">
+            <colgroup>
+              <col className="w-[22%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+              <col className="w-[13%]" />
+            </colgroup>
             <thead>
               <tr>
-                <th className="px-4 py-3">Practitioner</th>
-                <th className="px-4 py-3">Earned</th>
-                <th className="px-4 py-3">Treatments</th>
-                <th className="px-4 py-3">Attendance</th>
-                <th className="px-4 py-3">Retention</th>
-                <th className="px-4 py-3">Outstanding</th>
-                <th className="px-4 py-3 text-right">Details</th>
+                <th className="px-5 py-3">Practitioner</th>
+                <th className="px-5 py-3">Earned</th>
+                <th className="px-5 py-3">Treatments</th>
+                <th className="px-5 py-3">Attendance</th>
+                <th className="px-5 py-3">Retention</th>
+                <th className="px-5 py-3">Outstanding</th>
+                <th className="px-5 py-3">Details</th>
               </tr>
             </thead>
             <tbody>
@@ -281,12 +295,12 @@ export function PerformanceTable({
                   <Fragment key={r.userId}>
                     <tr
                       className={cn(
-                        "cursor-pointer border-b border-glass-line transition-colors hover:bg-glass-2",
-                        expanded && "bg-glass-2",
+                        "cursor-pointer border-b border-glass-line transition-colors hover:bg-[rgba(47,63,102,0.08)]",
+                        expanded && "bg-[rgba(47,63,102,0.08)]",
                       )}
                       onClick={() => toggle(r.userId)}
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-wash text-xs font-medium text-accent-ink">
                             {r.fullName
@@ -297,38 +311,45 @@ export function PerformanceTable({
                               .toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-foreground">{r.fullName}</p>
+                            <Link
+                              to="/team/$id"
+                              search={{}}
+                              params={{ id: r.userId }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-foreground hover:text-accent-ink"
+                            >
+                              {r.fullName}
+                            </Link>
                             <p className="text-2xs text-muted-foreground">{r.jobTitle || "Practitioner"}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3">
                         <p className="text-foreground">{money(r.earned)}</p>
                         <p className="text-2xs text-muted-foreground">{money(r.earnedShare)} to them</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3">
                         <p className="text-foreground">{r.treatments}</p>
                         <p className="text-2xs text-muted-foreground">{money(r.averageValue)} avg</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3">
                         <p className="text-foreground">{r.attendance}%</p>
                         <p className="text-2xs text-muted-foreground">{r.noShows} no shows</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3">
                         <p className="text-foreground">{r.retention}%</p>
                         <p className="text-2xs text-muted-foreground">{r.patients} patients</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3">
                         <p className={r.outstanding > 0 ? "text-destructive" : "text-foreground"}>
                           {r.outstanding > 0 ? money(r.outstanding) : "—"}
                         </p>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-5 py-3 text-right">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                         
                           onClick={(e) => {
                             e.stopPropagation();
                             toggle(r.userId);
@@ -344,7 +365,7 @@ export function PerformanceTable({
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
                     No practitioners yet — add them under Team.
                   </td>
                 </tr>
@@ -353,7 +374,7 @@ export function PerformanceTable({
             {rows.length > 0 && clinic && (
               <tfoot>
                 <tr className="border-t border-edge bg-glass-2 font-medium text-foreground">
-                  <td className="px-4 py-3.5">
+                  <td className="px-5 py-3.5">
                     <p className="tracking-tight">Clinic total</p>
                     <p className="text-xs font-normal text-muted-foreground">
                       {rows.length} practitioner{rows.length === 1 ? "" : "s"}
@@ -361,24 +382,24 @@ export function PerformanceTable({
                       <span className="tabular-nums">{clinic.averageCommission}% avg commission</span>
                     </p>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-5 py-3.5">
                     <p className="tabular-nums">{money(clinic.earned)}</p>
                     <p className="text-2xs font-normal text-muted-foreground">
                       {money(clinic.toPractitioners)} paid out
                     </p>
                   </td>
-                  <td className="px-4 py-3.5 tabular-nums">{clinic.treatments}</td>
-                  <td className="px-4 py-3.5 tabular-nums">{clinic.attendance}%</td>
-                  <td className="px-4 py-3.5 tabular-nums">{clinic.retention}%</td>
+                  <td className="px-5 py-3.5 tabular-nums">{clinic.treatments}</td>
+                  <td className="px-5 py-3.5 tabular-nums">{clinic.attendance}%</td>
+                  <td className="px-5 py-3.5 tabular-nums">{clinic.retention}%</td>
                   <td
                     className={cn(
-                      "px-4 py-3.5 tabular-nums",
+                      "px-5 py-3.5 tabular-nums",
                       clinic.outstanding > 0 ? "text-destructive-ink" : undefined,
                     )}
                   >
                     {clinic.outstanding > 0 ? money(clinic.outstanding) : "—"}
                   </td>
-                  <td className="px-4 py-3.5" />
+                  <td className="px-5 py-3.5" />
                 </tr>
               </tfoot>
             )}

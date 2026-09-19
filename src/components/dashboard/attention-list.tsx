@@ -308,7 +308,7 @@ function TaskCategory({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-[rgba(47,63,102,0.06)] active:bg-[rgba(47,63,102,0.1)]"
+        className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
       >
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
@@ -339,7 +339,7 @@ function TaskCategory({
               <button
                 type="button"
                 onClick={() => setShowAll((v) => !v)}
-                className="w-full cursor-pointer rounded-md px-1.5 py-1.5 text-left text-2xs font-semibold text-accent-ink transition-colors hover:bg-[rgba(47,63,102,0.06)] hover:underline"
+                className="w-full cursor-pointer rounded-md px-1.5 py-1.5 text-left text-2xs font-semibold text-accent-ink transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:underline"
               >
                 {showAll ? "Show less" : `Show ${hiddenCount} more`}
               </button>
@@ -392,7 +392,7 @@ function AttentionPersonRow({
       <li>
         <Link
           to={href as any}
-          className="flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.06)] active:bg-[rgba(47,63,102,0.1)]"
+          className="flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
         >
           <i className={`h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
           <p ref={textRef} className="min-w-0 flex-1 truncate text-[13px] leading-snug text-foreground">
@@ -405,7 +405,7 @@ function AttentionPersonRow({
 
   return (
     <li>
-      <div className="flex items-start gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.06)]">
+      <div className="flex items-start gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.08)]">
         <i className={`mt-1.5 h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
         <div className="min-w-0 flex-1">
           <button

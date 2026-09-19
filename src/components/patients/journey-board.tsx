@@ -179,7 +179,7 @@ export function JourneyBoard({ identity }: { identity: Identity }) {
                     <Link
                       to="/patients/$id"
                       params={{ id: plan.patientId }}
-                      className="glass-item block p-3 transition-colors hover:bg-glass"
+                      className="glass-item block p-3"
                     >
                       <div className="flex items-center gap-2.5">
                         <PatientAvatar patientId={plan.patientId} name={plan.patientName} photoUrl={plan.avatarUrl} size="sm" />

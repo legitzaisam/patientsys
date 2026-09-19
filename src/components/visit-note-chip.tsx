@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { StickyNote } from "lucide-react";
+import { StickyNote, X } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getAppointmentNote, saveAppointmentNote } from "@/lib/clinic.functions";
+import { useIdentity } from "@/lib/use-identity";
+import { plainVisitNote } from "@/lib/sanitize-note-html";
 import {
   appointmentNoteQueryKey,
   type AppointmentNoteData,
@@ -22,13 +24,20 @@ export function VisitNoteEditor({
   className,
   minHeightClass = "min-h-[160px]",
   footerEnd,
+  onClose,
 }: {
   appointmentId: string;
   className?: string;
   minHeightClass?: string;
   footerEnd?: ReactNode;
+  onClose?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { data: identity } = useIdentity();
+  const editorName =
+    typeof identity?.profile?.full_name === "string" ? identity.profile.full_name : null;
+  const editorNameRef = useRef(editorName);
+  editorNameRef.current = editorName;
   const fetchNote = useServerFn(getAppointmentNote);
   const saveFn = useServerFn(saveAppointmentNote);
   const key = appointmentNoteQueryKey(appointmentId);
@@ -51,6 +60,7 @@ export function VisitNoteEditor({
   const hydrated = useRef(false);
   const valueRef = useRef(value);
   const dirtyRef = useRef(dirty);
+  const originalRef = useRef("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const prefs = useNotesPrefs("notes-prefs:visit-notes");
 
@@ -63,21 +73,28 @@ export function VisitNoteEditor({
     hydrated.current = false;
     setValue("");
     setDirty(false);
+    originalRef.current = "";
   }, [appointmentId]);
 
   useEffect(() => {
     if (data && !hydrated.current) {
-      setValue(data.body ?? "");
+      const plain = plainVisitNote(data.body);
+      setValue(plain);
+      originalRef.current = plain;
       hydrated.current = true;
     }
   }, [data]);
 
+  const noteChanged = (body: string) => plainVisitNote(body) !== originalRef.current;
+
   const save = useMutation({
     mutationFn: saveFn,
     onSuccess: (res) => {
+      const plain = plainVisitNote(res.body);
       setDirty(false);
       dirtyRef.current = false;
-      queryClient.setQueryData(key, res);
+      originalRef.current = plain;
+      queryClient.setQueryData(key, { ...res, body: plain });
       // Refresh diary lists so embeds keep the note icon accurate after navigation.
       void queryClient.invalidateQueries({ queryKey: ["appointments"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -87,8 +104,10 @@ export function VisitNoteEditor({
   });
 
   const persist = (body: string) => {
-    writeCache(body);
-    save.mutate({ data: { appointment_id: appointmentId, body } });
+    const plain = plainVisitNote(body);
+    if (!noteChanged(plain)) return;
+    writeCache(plain, editorNameRef.current ? { updatedBy: editorNameRef.current } : undefined);
+    save.mutate({ data: { appointment_id: appointmentId, body: plain } });
   };
 
   useEffect(() => {
@@ -98,15 +117,28 @@ export function VisitNoteEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, dirty]);
 
-  // Flush pending edits when leaving / unmounting.
+  const discardPending = () => {
+    const original = originalRef.current;
+    setValue(original);
+    setDirty(false);
+    dirtyRef.current = false;
+    valueRef.current = original;
+    writeCache(original);
+  };
+
+  // Flush pending edits when leaving / unmounting — only if the text changed.
   useEffect(() => {
     const flush = () => {
       if (!dirtyRef.current) return;
-      const body = valueRef.current;
+      const body = plainVisitNote(valueRef.current);
       dirtyRef.current = false;
-      writeCache(body);
+      if (!noteChanged(body)) return;
+      writeCache(body, editorNameRef.current ? { updatedBy: editorNameRef.current } : undefined);
       void saveFn({ data: { appointment_id: appointmentId, body } }).then((res) => {
-        queryClient.setQueryData(appointmentNoteQueryKey(appointmentId), res);
+        queryClient.setQueryData(appointmentNoteQueryKey(appointmentId), {
+          ...res,
+          body: plainVisitNote(res.body),
+        });
         void queryClient.invalidateQueries({ queryKey: ["appointments"] });
         void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         void queryClient.invalidateQueries({ queryKey: ["dashboard-week"] });
@@ -128,7 +160,12 @@ export function VisitNoteEditor({
 
   const update = (v: string) => {
     setValue(v);
-    setDirty(true);
+    setDirty(plainVisitNote(v) !== originalRef.current);
+  };
+
+  const closeEditor = () => {
+    discardPending();
+    onClose?.();
   };
 
   return (
@@ -152,7 +189,22 @@ export function VisitNoteEditor({
       />
       <div className="mt-1.5 flex items-center justify-between gap-2 pl-1">
         <SaveState saving={save.isPending} dirty={dirty} />
-        {footerEnd}
+        <div className="flex items-center gap-1.5">
+          {footerEnd}
+          {onClose ? (
+            <button
+              type="button"
+              aria-label="Close visit note"
+              onClick={(e) => {
+                e.stopPropagation();
+                closeEditor();
+              }}
+              className="grid h-8 w-8 place-items-center rounded-full border border-edge bg-glass-2 text-ink-2 shadow-inset-hi transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -179,7 +231,7 @@ export function VisitNoteChip({
     queryFn: () => fetchNote({ data: { appointment_id: appointmentId } }),
   });
 
-  const body = (data?.body ?? "").trim();
+  const body = plainVisitNote(data?.body);
   const has = body.length > 0;
   const preview = has
     ? body.length > 160
@@ -237,15 +289,26 @@ export function VisitNoteChip({
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <VisitNoteEditor appointmentId={appointmentId} />
+          <VisitNoteEditor appointmentId={appointmentId} onClose={() => setEditorOpen(false)} />
         </PopoverContent>
       </Popover>
       <HoverCardContent
         align="end"
         side="top"
-        className="w-56 rounded-xl p-3"
-        onClick={(e) => e.stopPropagation()}
+        className="w-56 cursor-pointer rounded-xl p-3"
+        onClick={(e) => {
+          e.stopPropagation();
+          setEditorOpen(true);
+        }}
         onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setEditorOpen(true);
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         {has ? (
           <>

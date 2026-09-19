@@ -145,10 +145,10 @@ function MessageRow({
   return (
     <div
       className={cn(
-        "group flex items-start gap-1 transition-colors",
+        "group flex items-start gap-1 rounded-2xl transition-colors",
         compact
-          ? "hover:bg-[rgba(47,63,102,0.06)]"
-          : "rounded-2xl border border-edge bg-glass-2 shadow-inset-hi hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)]",
+          ? "hover:bg-[rgba(47,63,102,0.08)]"
+          : "border border-edge bg-glass-2 shadow-inset-hi hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)]",
       )}
     >
       <button

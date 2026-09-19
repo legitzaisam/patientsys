@@ -223,7 +223,6 @@ function SidebarChrome({
   pathname,
   clinicLinks,
   reportLinks,
-  extraLinks,
   teamMembers,
   onlineIds,
   canTeam,
@@ -238,7 +237,6 @@ function SidebarChrome({
   pathname: string;
   clinicLinks: NavLink[];
   reportLinks: NavLink[];
-  extraLinks: NavLink[];
   teamMembers: { id: string; fullName: string }[];
   onlineIds: Set<string>;
   canTeam: boolean;
@@ -288,14 +286,6 @@ function SidebarChrome({
         {reportLinks.length > 0 && (
           <NavGroup label="Reports">
             {reportLinks.map((item) => (
-              <NavItem key={item.to} item={item} active={pathname.startsWith(item.to)} onNavigate={onNavigate} />
-            ))}
-          </NavGroup>
-        )}
-
-        {extraLinks.length > 0 && (
-          <NavGroup label="You">
-            {extraLinks.map((item) => (
               <NavItem key={item.to} item={item} active={pathname.startsWith(item.to)} onNavigate={onNavigate} />
             ))}
           </NavGroup>
@@ -448,12 +438,10 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   const reportLinks: NavLink[] = [
     ...(canRetention ? [{ to: "/retention", label: "Retention", icon: Repeat }] : []),
     ...(canPerformance ? [{ to: "/performance", label: "Performance", icon: TrendingUp }] : []),
+    ...(identity.isStaff && isPractitioner && !identity.isManager
+      ? [{ to: "/earnings", label: "Earnings", icon: Wallet }]
+      : []),
   ];
-
-  const extraLinks: NavLink[] =
-    identity.isStaff && isPractitioner && !identity.isManager
-      ? [{ to: "/earnings", label: "My earnings", icon: Wallet }]
-      : [];
 
   const displayName =
     identity.profile?.full_name ||
@@ -562,7 +550,6 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     pathname,
     clinicLinks,
     reportLinks,
-    extraLinks,
     teamMembers: teamMembersForNav,
     onlineIds,
     canTeam,

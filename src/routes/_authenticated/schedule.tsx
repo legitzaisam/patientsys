@@ -2138,7 +2138,7 @@ function WeekView({
           return (
             <div
               key={day.toISOString()}
-              className={`group/day flex min-h-0 min-w-0 flex-1 flex-col ${
+              className={`flex min-h-0 min-w-0 flex-1 flex-col ${
                 i > 0 ? "border-l border-glass-line" : ""
               }`}
             >
@@ -2173,19 +2173,19 @@ function WeekView({
                   type="button"
                   aria-label={newBookingLabel}
                   onClick={(e) => openQuickAdd(e, day)}
-                  className="relative flex min-h-[64px] flex-1 cursor-pointer items-center justify-center"
+                  className="group/slot relative flex min-h-[64px] flex-1 cursor-pointer items-center justify-center"
                 >
                   <span
                     aria-hidden
-                    className="pointer-events-none absolute inset-x-0 inset-y-1 rounded-xl bg-[rgba(47,63,102,0.06)] opacity-0 transition-opacity group-hover/day:opacity-100"
+                    className="pointer-events-none absolute inset-x-0 inset-y-1 rounded-xl bg-[rgba(47,63,102,0.06)] opacity-0 transition-opacity group-hover/slot:opacity-100"
                   />
                   <span className="relative z-[1] grid place-items-center">
                     {items.length === 0 && (
-                      <span className="col-start-1 row-start-1 text-2xs font-medium tracking-[0.02em] text-muted-foreground/60 transition-opacity group-hover/day:opacity-0">
+                      <span className="col-start-1 row-start-1 text-2xs font-medium tracking-[0.02em] text-muted-foreground/60 transition-opacity group-hover/slot:opacity-0">
                         Free
                       </span>
                     )}
-                    <Plus className="col-start-1 row-start-1 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover/day:opacity-70" />
+                    <Plus className="col-start-1 row-start-1 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover/slot:opacity-70" />
                   </span>
                 </button>
               </div>

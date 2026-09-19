@@ -16,6 +16,13 @@ export type InsightSeverity = "urgent" | "attention" | "opportunity";
 
 export type InsightIcon = "clock" | "wave" | "trend" | "repeat" | "winback";
 
+export type InsightSection = "at-risk" | "trend" | "breakdown";
+
+export type InsightTarget = {
+  section: InsightSection;
+  tab?: "cohorts";
+};
+
 export type RetentionInsight = {
   id: string;
   severity: InsightSeverity;
@@ -24,6 +31,8 @@ export type RetentionInsight = {
   detail: string;
   /** Clicking an insight focuses the at-risk table on this risk band. */
   filter: RiskLevel | "all";
+  /** Section (and optional tab) to scroll to — where the task is actionable. */
+  target: InsightTarget;
 };
 
 export type RetentionSignals = {
@@ -46,6 +55,7 @@ export function deriveRetentionInsights(signals: RetentionSignals): RetentionIns
       title: `${counts.overdue} patient${counts.overdue === 1 ? " is" : "s are"} overdue for a treatment`,
       detail: "Send a recall message so they rebook before the effect wears off.",
       filter: "overdue",
+      target: { section: "at-risk" },
     });
   }
   if (counts.lapsing) {
@@ -56,6 +66,7 @@ export function deriveRetentionInsights(signals: RetentionSignals): RetentionIns
       title: `${counts.lapsing} patient${counts.lapsing === 1 ? "" : "s"} last seen 3-6 months ago`,
       detail: "A short check-in now is the cheapest way to keep them on the books.",
       filter: "lapsing",
+      target: { section: "at-risk" },
     });
   }
 
@@ -69,6 +80,7 @@ export function deriveRetentionInsights(signals: RetentionSignals): RetentionIns
       title: `Retention dipped ${monthBefore.rate - latest.rate}% this month`,
       detail: `Now ${latest.rate}%, down from ${monthBefore.rate}%. Check no-shows and follow-up bookings at discharge.`,
       filter: "all",
+      target: { section: "trend" },
     });
   }
 
@@ -85,6 +97,7 @@ export function deriveRetentionInsights(signals: RetentionSignals): RetentionIns
       title: `Only ${avgSecond}% of new patients return for a second treatment`,
       detail: "Book the follow-up before they leave the clinic, and send an aftercare message at two weeks.",
       filter: "all",
+      target: { section: "breakdown", tab: "cohorts" },
     });
   }
 
@@ -96,6 +109,7 @@ export function deriveRetentionInsights(signals: RetentionSignals): RetentionIns
       title: `${counts.lost} patient${counts.lost === 1 ? " has" : "s have"} not been seen for 6 months`,
       detail: "Worth one win-back message before marking them inactive.",
       filter: "lost",
+      target: { section: "at-risk" },
     });
   }
 

@@ -216,10 +216,14 @@ export function StaffDocuments({
   userId,
   readOnly,
   queryKey,
+  embedded = false,
+  onCount,
 }: {
   userId: string;
   readOnly?: boolean;
   queryKey?: string[];
+  embedded?: boolean;
+  onCount?: (n: number) => void;
 }) {
   const queryClient = useQueryClient();
   const { data: identity } = useIdentity();
@@ -293,24 +297,32 @@ export function StaffDocuments({
 
   const list = (docs ?? []) as any[];
 
-  return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="section-title">Documents</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {readOnly
-              ? "Records held on file for JCCP and UK clinic practice. Managers can open but not edit these."
-              : "Records required for JCCP and UK clinic practice. Stored privately — only you and clinic managers can open them."}
-          </p>
-        </div>
-        <Badge variant="outline" className="rounded-xl text-2xs uppercase">
-          {list.length} on file
-        </Badge>
+  useEffect(() => {
+    onCount?.(list.length);
+  }, [list.length, onCount]);
+
+  const header = embedded ? null : (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="section-title">Documents</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {readOnly
+            ? "Records held on file for JCCP and UK clinic practice. Managers can open but not edit these."
+            : "Records required for JCCP and UK clinic practice. Stored privately — only you and clinic managers can open them."}
+        </p>
       </div>
+      <Badge variant="outline" className="rounded-xl text-2xs uppercase">
+        {list.length} on file
+      </Badge>
+    </div>
+  );
+
+  const body = (
+    <>
+      {header}
 
       {!readOnly && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_260px_auto] sm:items-end">
+        <div className={embedded ? "grid gap-3 sm:grid-cols-[1fr_260px_auto] sm:items-end" : "mt-4 grid gap-3 sm:grid-cols-[1fr_260px_auto] sm:items-end"}>
           <div className="field-stack">
             <Label htmlFor="doc-title">Document name</Label>
             <Input
@@ -342,12 +354,19 @@ export function StaffDocuments({
         </div>
       )}
 
-      <ul className="mt-4 divide-y divide-edge overflow-hidden rounded-2xl border border-edge">
+      <ul
+        className={
+          embedded
+            ? "-mx-5 mt-4 divide-y divide-edge border-t border-edge sm:-mx-6"
+            : "mt-4 divide-y divide-edge overflow-hidden rounded-2xl border border-edge"
+        }
+      >
         {CATEGORIES.map((c) => {
           const items = list.filter((d) => d.category === c.value);
+          const rowPad = embedded ? "px-5 sm:px-6" : "px-3.5";
           return (
-            <li key={c.value} className="px-3.5 py-3">
-              <div className="flex items-start justify-between gap-3">
+            <li key={c.value} className="py-3">
+              <div className={cn("flex items-start justify-between gap-3", rowPad)}>
                 <div className="min-w-0">
                   <h3 className="text-sm font-medium text-foreground">{c.label}</h3>
                   <p className="mt-0.5 text-2xs leading-snug text-muted-foreground">{c.hint}</p>
@@ -361,11 +380,14 @@ export function StaffDocuments({
                 )}
               </div>
               {items.length > 0 ? (
-                <div className="mt-2.5 space-y-2">
+                <div className="mt-1.5">
                   {items.map((d) => (
                     <div
                       key={d.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-glass-line bg-glass-2/50 px-3 py-2"
+                      className={cn(
+                        "flex items-center justify-between gap-3 py-2 transition-colors hover:bg-[rgba(47,63,102,0.08)]",
+                        rowPad,
+                      )}
                     >
                       <button
                         type="button"
@@ -404,7 +426,13 @@ export function StaffDocuments({
           ? list
               .filter((d) => !CATEGORIES.find((c) => c.value === d.category))
               .map((d) => (
-                <li key={d.id} className="flex items-center justify-between gap-3 px-3.5 py-3">
+                <li
+                  key={d.id}
+                  className={cn(
+                    "flex items-center justify-between gap-3 py-3 transition-colors hover:bg-[rgba(47,63,102,0.08)]",
+                    embedded ? "px-5 sm:px-6" : "px-3.5",
+                  )}
+                >
                   <button
                     type="button"
                     onClick={() => void openSigned(d.path)}
@@ -420,6 +448,9 @@ export function StaffDocuments({
               ))
           : null}
       </ul>
-    </Card>
+    </>
   );
+
+  if (embedded) return body;
+  return <Card className="p-5">{body}</Card>;
 }

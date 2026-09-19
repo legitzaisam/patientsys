@@ -253,7 +253,10 @@ export const RestoreExTeamMember = z.object({ userId: id });
 
 export const SetStaffPassword = z.object({ userId: id, password });
 
-export const ChangeOwnPassword = z.object({ password });
+export const ChangeOwnPassword = z.object({
+  password,
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code").optional(),
+});
 
 export const ConfirmStepUp = z.object({ password });
 
@@ -271,7 +274,12 @@ export const SetCommissionRate = z.object({ userId: id, rate: percentage });
 
 export const GetPractitionerDay = z.object({ practitionerId: id, date: dateString });
 
-export const GetPractitionerPerformance = z.object({ from: dateString, to: dateString });
+export const GetPractitionerPerformance = z.object({
+  from: dateString,
+  to: dateString,
+  previousFrom: dateString,
+  previousTo: dateString,
+});
 
 export const GetMyEarnings = z.object({ from: dateString, to: dateString });
 

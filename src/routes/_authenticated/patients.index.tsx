@@ -402,7 +402,7 @@ function PatientsPage() {
           </thead>
           <tbody>
             {rows.map((p: any) => (
-              <tr key={p.id} className="hover:bg-glass-2">
+              <tr key={p.id}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2.5">
                     <PatientAvatar patientId={p.id} name={`${p.first_name} ${p.last_name}`} photoUrl={p.avatar_url} size="sm" />

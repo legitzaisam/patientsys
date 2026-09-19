@@ -41,6 +41,7 @@ export const POLICY = {
   /* Session */
   getMe: { kind: "self" },
   changeOwnPassword: { kind: "self" },
+  sendPasswordEmailCode: { kind: "self" },
   acknowledgeWelcome: { kind: "self" },
   confirmStepUp: { kind: "self" },
   sendLoginEmailCode: { kind: "manager" },

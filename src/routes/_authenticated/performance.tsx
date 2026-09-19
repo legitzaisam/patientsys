@@ -3,13 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 
-import { TrendingUp } from "lucide-react";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { getPractitionerPerformance } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
-import { can } from "@/lib/permissions";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { PeriodPicker, periodRange, money, type PeriodKey } from "@/components/period-picker";
+import { PeriodPicker, periodRange, previousPeriodRange, money, type PeriodKey } from "@/components/period-picker";
 import { PerformanceTrends } from "@/components/performance-trends";
 import { PerformanceTable } from "@/components/performance/performance-table";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
@@ -38,20 +37,24 @@ function PerformancePage() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<PeriodKey>("month");
   const range = useMemo(() => periodRange(period), [period]);
+  const previous = useMemo(() => previousPeriodRange(period), [period]);
   const fetchPerformance = useServerFn(getPractitionerPerformance);
 
   const { data } = useQuery({
     queryKey: ["performance", period],
-    queryFn: () => fetchPerformance({ data: range }),
-    enabled: can(identity, "reports.performance"),
+    queryFn: () =>
+      fetchPerformance({
+        data: { ...range, previousFrom: previous.from, previousTo: previous.to },
+      }),
+    enabled: Boolean(identity?.isOwner || identity?.isManager),
   });
 
   useEffect(() => {
-    if (identity && !can(identity, "reports.performance")) navigate({ to: "/dashboard", replace: true });
+    if (identity && !identity.isOwner && !identity.isManager) navigate({ to: "/dashboard", replace: true });
   }, [identity, navigate]);
 
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
-  if (!can(identity, "reports.performance")) return null;
+  if (!identity.isOwner && !identity.isManager) return null;
 
   const totals = data?.totals;
 
@@ -68,14 +71,15 @@ function PerformancePage() {
       </div>
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Total label="Earned" value={totals?.earned} hint="Treatments performed" />
-        <Total label="Collected" value={totals?.collected} hint="Bookings marked paid" />
-        <Total label="To practitioners" value={totals?.toPractitioners} hint="Commission payable" />
-        <Total label="Retained by clinic" value={totals?.toClinic} hint="After commission" />
+          <Total label="Earned" value={totals?.earned} hint="Treatments performed" change={data?.changes?.earned} />
+          <Total label="Collected" value={totals?.collected} hint="Bookings marked paid" change={data?.changes?.collected} />
+          <Total label="To practitioners" value={totals?.toPractitioners} hint="Commission payable" change={data?.changes?.toPractitioners} />
+          <Total label="Retained by clinic" value={totals?.toClinic} hint="After commission" change={data?.changes?.toClinic} />
       </div>
 
       <PerformanceTrends
         trend={data?.trend}
+        {...(data?.trendViews ? { trendViews: data.trendViews } : {})}
         practitioners={(data?.rows ?? []).map((r) => ({ userId: r.userId, fullName: r.fullName }))}
       />
 
@@ -103,13 +107,29 @@ function PerformancePage() {
   );
 }
 
-function Total({ label, value, hint }: { label: string; value: number | undefined; hint: string }) {
+function Total({
+  label,
+  value,
+  hint,
+  change,
+}: {
+  label: string;
+  value: number | undefined;
+  hint: string;
+  change: number | undefined;
+}) {
+  const delta = change ?? 0;
+  const TrendIcon = delta < 0 ? TrendingDown : TrendingUp;
+  const trendClass =
+    delta > 0 ? "text-success-ink" : delta < 0 ? "text-destructive-ink" : "text-ink-3";
+
   return (
     <Card className="p-5">
       <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{money(value ?? 0)}</p>
       <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-        <TrendingUp className="h-3 w-3 text-ink-3" /> {hint}
+        {delta !== 0 ? <TrendIcon className={`h-3 w-3 ${trendClass}`} /> : null}
+        {hint}
       </p>
     </Card>
   );

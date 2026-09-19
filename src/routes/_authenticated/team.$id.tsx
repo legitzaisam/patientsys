@@ -8,16 +8,17 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { getStaffProfile, restoreExTeamMember, updateStaffMember } from "@/lib/clinic.functions";
+import { joinStaffName, splitStaffName, STAFF_TITLES } from "@/lib/staff-name";
 import { UpdateStaffMember } from "@/lib/validation/schemas";
 import { numericText } from "@/lib/validation/primitives";
 import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { usePanelWidth } from "@/hooks/use-panel-width";
 import { AppShell } from "@/components/app-shell";
-import { StaffAvatar, StaffDocuments } from "@/components/staff-files";
-import { StaffDocCompliance } from "@/components/staff-doc-compliance";
+import { StaffAvatar } from "@/components/staff-files";
 import { StaffChatPanel } from "@/components/staff-chat-panel";
-import { EffectivePermissions } from "@/components/effective-permissions";
+import { StaffRecordTabs } from "@/components/staff-record-tabs";
+import { StaffPerformanceKpis } from "@/components/performance/staff-performance-kpis";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ import {
 
 /** Commission is typed as text; the percentage bound comes from the server schema. */
 const StaffProfileSchema = z.object({
+  title: z.string().trim().max(20),
   fullName: UpdateStaffMember.shape.fullName,
   jobTitle: z.string().trim().max(200),
   registrationBody: z.string().trim().max(200),
@@ -112,6 +114,7 @@ function StaffProfilePage() {
   const profileForm = useForm<StaffProfileValues>({
     resolver: zodResolver(StaffProfileSchema),
     defaultValues: {
+      title: "",
       fullName: "",
       jobTitle: "",
       registrationBody: "",
@@ -159,8 +162,10 @@ function StaffProfilePage() {
 
   useEffect(() => {
     if (!data?.profile) return;
+    const split = splitStaffName(data.profile.full_name ?? "");
     profileForm.reset({
-      fullName: data.profile.full_name ?? "",
+      title: split.title,
+      fullName: split.name,
       jobTitle: data.profile.job_title ?? "",
       registrationBody: data.profile.registration_body ?? "",
       registrationNumber: data.profile.registration_number ?? "",
@@ -189,7 +194,11 @@ function StaffProfilePage() {
   const canViewTeam = can(identity, "team.view");
   const showChat = !revoked;
   const canViewDocuments = Boolean(data?.canViewDocuments) && !revoked;
-  const displayName = watched.fullName || data?.profile?.full_name || data?.email || "Team member";
+  const displayName =
+    joinStaffName(watched.title, watched.fullName) ||
+    data?.profile?.full_name ||
+    data?.email ||
+    "Team member";
   const asideTitle = revoked
     ? "Access removed"
     : watched.jobTitle.trim() || (canEdit ? roleLabel(watched.role) : data?.email || "Team member");
@@ -253,7 +262,7 @@ function StaffProfilePage() {
                 <div className="flex w-full max-w-[8.5rem] flex-col items-center gap-3">
                   <div className="w-full text-center">
                     <p className="text-balance text-sm font-semibold leading-none tracking-[-0.012em] text-foreground">
-                      {watched.fullName.trim() || displayName}
+                      {joinStaffName(watched.title, watched.fullName) || displayName}
                     </p>
                     <p className="mt-1 text-pretty text-2xs leading-snug text-muted-foreground">
                       {asideTitle}
@@ -279,7 +288,7 @@ function StaffProfilePage() {
                         data: {
                           userId: id,
                           role: values.role,
-                          fullName: values.fullName,
+                          fullName: joinStaffName(values.title, values.fullName),
                           jobTitle: values.jobTitle,
                           registrationBody: values.registrationBody,
                           registrationNumber: values.registrationNumber,
@@ -291,9 +300,33 @@ function StaffProfilePage() {
                   >
                     <FormField
                       control={profileForm.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0">
+                          <FormLabel>Title</FormLabel>
+                          <FormControl>
+                            <select
+                              className="flex h-9 w-full rounded-[11px] border border-edge bg-glass-2 px-3 text-[13px] shadow-inset-hi outline-none transition-colors hover:border-edge-2 focus-visible:border-accent-deep focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={!canEdit}
+                              {...field}
+                            >
+                              <option value="">—</option>
+                              {STAFF_TITLES.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                            </select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
                       name="fullName"
                       render={({ field }) => (
-                        <FormItem className="min-w-0 sm:col-span-2">
+                        <FormItem className="min-w-0">
                           <FormLabel>Full name</FormLabel>
                           <FormControl>
                             <Input readOnly={!canEdit} {...field} />
@@ -393,9 +426,6 @@ function StaffProfilePage() {
                               </FormControl>
                               <span className="shrink-0 text-sm text-muted-foreground">%</span>
                             </div>
-                            <p className="text-2xs text-muted-foreground">
-                              Share of treatment revenue paid to this person.
-                            </p>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -414,19 +444,15 @@ function StaffProfilePage() {
             </div>
           </Card>
 
-          {data?.capabilities ? (
-            <EffectivePermissions capabilities={data.capabilities} name={displayName} />
-          ) : null}
+          <StaffPerformanceKpis userId={id} identity={identity} role={data?.role ?? ""} />
 
-          {canViewDocuments ? (
-            <StaffDocuments userId={id} readOnly queryKey={["staff-documents", id]} />
-          ) : (
-            <StaffDocCompliance
-              userId={id}
-              fullName={displayName}
-              presentCategories={data?.presentCategories ?? []}
-            />
-          )}
+          <StaffRecordTabs
+            name={displayName}
+            {...(data?.capabilities ? { capabilities: data.capabilities } : {})}
+            userId={id}
+            canViewDocuments={canViewDocuments}
+            presentCategories={data?.presentCategories ?? []}
+          />
         </div>
 
         {showChat ? (

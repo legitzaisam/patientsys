@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 
@@ -30,28 +29,28 @@ function Bar({ value }: { value: number }) {
 
 export function CohortTable({ cohorts }: { cohorts: CohortRow[] }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="-mx-5 overflow-x-auto">
       <table className="glass-table w-full text-sm">
         <thead>
           <tr>
-            <th className="px-4 py-3">First seen</th>
-            <th className="px-4 py-3">New patients</th>
-            <th className="px-4 py-3">Returned 2nd</th>
-            <th className="px-4 py-3">Returned 3rd</th>
+            <th className="px-5 py-3">First seen</th>
+            <th className="px-5 py-3">New patients</th>
+            <th className="px-5 py-3">Returned 2nd</th>
+            <th className="px-5 py-3">Returned 3rd</th>
           </tr>
         </thead>
         <tbody>
           {cohorts.map((c) => (
             <tr key={c.key} className="border-b border-glass-line last:border-0">
-              <td className="px-4 py-3 text-foreground">{c.label}</td>
-              <td className="px-4 py-3 text-muted-foreground">{c.patients}</td>
-              <td className="px-4 py-3">
+              <td className="px-5 py-3 text-foreground">{c.label}</td>
+              <td className="px-5 py-3 text-muted-foreground">{c.patients}</td>
+              <td className="px-5 py-3">
                 <p className="text-muted-foreground">
                   {c.second} · {c.secondRate}%
                 </p>
                 <Bar value={c.secondRate} />
               </td>
-              <td className="px-4 py-3">
+              <td className="px-5 py-3">
                 <p className="text-muted-foreground">
                   {c.third} · {c.thirdRate}%
                 </p>
@@ -62,7 +61,7 @@ export function CohortTable({ cohorts }: { cohorts: CohortRow[] }) {
           {cohorts.length === 0 && (
             <tr className="hover:bg-transparent">
               <td colSpan={4} className="p-2">
-                <div className="rounded-2xl p-8 text-center text-sm text-muted-foreground transition-colors hover:bg-accent-wash hover:text-foreground">
+                <div className="rounded-2xl p-8 text-center text-sm text-muted-foreground transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground">
                   No new patients in the last 12 months yet.
                 </div>
               </td>
@@ -74,30 +73,38 @@ export function CohortTable({ cohorts }: { cohorts: CohortRow[] }) {
   );
 }
 
-export function TreatmentRetentionTable({ rows }: { rows: TreatmentRetentionRow[] }) {
+export function TreatmentRetentionTable({
+  rows,
+  nameHeader = "Treatment",
+  empty = "No treatments recorded yet.",
+}: {
+  rows: TreatmentRetentionRow[];
+  nameHeader?: string;
+  empty?: string;
+}) {
   return (
-    <div className="overflow-x-auto">
+    <div className="-mx-5 overflow-x-auto">
       <table className="glass-table w-full text-sm">
         <thead>
           <tr>
-            <th className="px-4 py-3">Treatment</th>
-            <th className="px-4 py-3">Patients</th>
-            <th className="px-4 py-3">Repeat rate</th>
-            <th className="px-4 py-3">Average gap</th>
+            <th className="px-5 py-3">{nameHeader}</th>
+            <th className="px-5 py-3">Patients</th>
+            <th className="px-5 py-3">Repeat rate</th>
+            <th className="px-5 py-3">Average gap</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.name} className="border-b border-glass-line last:border-0">
-              <td className="px-4 py-3 text-foreground">{r.name}</td>
-              <td className="px-4 py-3 text-muted-foreground">{r.patients}</td>
-              <td className="px-4 py-3">
+              <td className="px-5 py-3 text-foreground">{r.name}</td>
+              <td className="px-5 py-3 text-muted-foreground">{r.patients}</td>
+              <td className="px-5 py-3">
                 <p className="text-muted-foreground">
                   {r.repeatPatients} · {r.repeatRate}%
                 </p>
                 <Bar value={r.repeatRate} />
               </td>
-              <td className="px-4 py-3 text-muted-foreground">
+              <td className="px-5 py-3 text-muted-foreground">
                 {r.averageGapDays ? `${r.averageGapDays} days` : "—"}
               </td>
             </tr>
@@ -105,8 +112,8 @@ export function TreatmentRetentionTable({ rows }: { rows: TreatmentRetentionRow[
           {rows.length === 0 && (
             <tr className="hover:bg-transparent">
               <td colSpan={4} className="p-2">
-                <div className="rounded-2xl p-8 text-center text-sm text-muted-foreground transition-colors hover:bg-accent-wash hover:text-foreground">
-                  No treatments recorded yet.
+                <div className="rounded-2xl p-8 text-center text-sm text-muted-foreground transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground">
+                  {empty}
                 </div>
               </td>
             </tr>
@@ -117,7 +124,9 @@ export function TreatmentRetentionTable({ rows }: { rows: TreatmentRetentionRow[
   );
 }
 
-const PANELS = {
+export type BreakdownTab = "cohorts" | "treatments" | "practitioners";
+
+const PANELS: Record<BreakdownTab, { title: string; hint: string }> = {
   cohorts: {
     title: "New patient cohorts",
     hint: "Grouped by the month of their first treatment — how many came back for a second and third.",
@@ -126,29 +135,39 @@ const PANELS = {
     title: "Retention by treatment",
     hint: "Which treatments bring patients back, and how long they typically leave between visits.",
   },
-} as const;
+  practitioners: {
+    title: "Retention by practitioner",
+    hint: "Which books keep patients coming back, and how long they typically leave between visits.",
+  },
+};
 
 export function RetentionBreakdown({
   cohorts,
   byTreatment,
+  byPractitioner,
+  tab,
+  onTabChange,
 }: {
   cohorts: CohortRow[];
   byTreatment: TreatmentRetentionRow[];
+  byPractitioner: TreatmentRetentionRow[];
+  tab: BreakdownTab;
+  onTabChange: (tab: BreakdownTab) => void;
 }) {
-  const [tab, setTab] = useState<keyof typeof PANELS>("cohorts");
   const panel = PANELS[tab];
 
   return (
-    <Card className="p-5">
-      <Tabs value={tab} onValueChange={(value) => setTab(value as keyof typeof PANELS)}>
+    <Card id="retention-breakdown" className="scroll-mt-20 p-5">
+      <Tabs value={tab} onValueChange={(value) => onTabChange(value as BreakdownTab)}>
         <div className="mb-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="min-w-0 section-title">
-              {panel.title}
-            </h2>
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="section-title">{panel.title}</h2>
+            </div>
             <TabsList className="ml-auto shrink-0">
               <TabsTrigger value="cohorts">Cohorts</TabsTrigger>
               <TabsTrigger value="treatments">By treatment</TabsTrigger>
+              <TabsTrigger value="practitioners">By practitioner</TabsTrigger>
             </TabsList>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{panel.hint}</p>
@@ -158,6 +177,13 @@ export function RetentionBreakdown({
         </TabsContent>
         <TabsContent value="treatments" className="mt-0">
           <TreatmentRetentionTable rows={byTreatment} />
+        </TabsContent>
+        <TabsContent value="practitioners" className="mt-0">
+          <TreatmentRetentionTable
+            rows={byPractitioner}
+            nameHeader="Practitioner"
+            empty="No practitioner activity recorded yet."
+          />
         </TabsContent>
       </Tabs>
     </Card>

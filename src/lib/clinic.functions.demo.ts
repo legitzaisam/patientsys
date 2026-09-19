@@ -20,11 +20,12 @@ import {
 } from "@/lib/demo/data";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
-import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
+import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
+import { EMAIL_OTP_RESEND_MS } from "@/lib/auth/constants";
 import {
   findPractitionerOverlap,
   PRACTITIONER_OVERLAP_MESSAGE,
@@ -106,6 +107,31 @@ function currentRole(): DemoRole {
 
 /** userIds that must change password after invite/reset */
 const mustChangePasswordByUser = new Set<string>();
+
+type DemoSession = { id: string; current: boolean; createdAt: string; label?: string };
+
+function seedDemoSessions(): DemoSession[] {
+  const now = Date.now();
+  return [
+    { id: "current", current: true, createdAt: new Date(now).toISOString(), label: "This device" },
+    {
+      id: "other-phone",
+      current: false,
+      createdAt: new Date(now - 2 * 86400000).toISOString(),
+      label: "Safari on iPhone",
+    },
+    {
+      id: "other-clinic",
+      current: false,
+      createdAt: new Date(now - 9 * 86400000).toISOString(),
+      label: "Chrome at the clinic desk",
+    },
+  ];
+}
+
+let demoSessions: DemoSession[] = seedDemoSessions();
+const passwordChangeCodes = new Map<string, string>();
+const passwordChangeCodeAt = new Map<string, number>();
 /** Newly invited demo staff until they dismiss the welcome dialog. */
 const welcomePendingByUser = new Set<string>();
 
@@ -257,7 +283,7 @@ function appointmentView(a: any) {
     documents: doc ? { status: doc.status, title: doc.title } : null,
     appointment_notes: note
       ? {
-          body: note.body ?? "",
+          body: plainVisitNote(note.body),
           updated_at: note.updated_at ?? null,
           updated_by_label: note.updated_by_label ?? null,
         }
@@ -779,10 +805,10 @@ export const getPatient = createServerFn({ method: "GET" })
     )
       .map((a) => {
         const view = appointmentView(a);
-        const fromTable = String(view.appointment_notes?.body ?? "").trim();
-        const booking = String(a.notes ?? "")
-          .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
-          .trim();
+        const fromTable = plainVisitNote(view.appointment_notes?.body);
+        const booking = plainVisitNote(
+          String(a.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, ""),
+        );
         const body = fromTable || booking;
         if (!body) return null;
         return {
@@ -1255,10 +1281,10 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const row = appointmentNotes.find((n) => n.appointment_id === data.appointment_id);
-    const visitBody = (row?.body ?? "").trim();
+    const visitBody = plainVisitNote(row?.body);
     if (visitBody) {
       return {
-        body: row!.body ?? "",
+        body: visitBody,
         updatedAt: row?.updated_at ?? null,
         updatedBy: row?.updated_by_label ?? null,
       };
@@ -1267,7 +1293,7 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
     const bookingNotes = String(appointment?.notes ?? "");
     const withoutCancel = bookingNotes.replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim();
     return {
-      body: withoutCancel,
+      body: plainVisitNote(withoutCancel),
       updatedAt: null,
       updatedBy: null,
     };
@@ -1277,7 +1303,7 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
   .validator((data: { appointment_id: string; body: string }) =>
     parseInput(schemas.SaveAppointmentNote, {
       appointment_id: String(data.appointment_id),
-      body: sanitizeNoteHtml(String(data?.body ?? "")).slice(0, 20000),
+      body: plainVisitNote(sanitizeNoteHtml(String(data?.body ?? ""))).slice(0, 20000),
     }),
   )
   .handler(async ({ data }) => {
@@ -2717,10 +2743,17 @@ export const setStaffPassword = createServerFn({ method: "POST" })
 
 /** Signed-in staff: replace temporary/reset password and clear the must-change flag. */
 export const changeOwnPassword = createServerFn({ method: "POST" })
-  .validator((data: { password: string }) => parseInput(schemas.ChangeOwnPassword, data))
+  .validator((data: { password: string; code?: string }) => parseInput(schemas.ChangeOwnPassword, data))
   .handler(async ({ data }) => {
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
     const me = identity();
+    const forced = mustChangePasswordByUser.has(me.userId);
+    if (!forced) {
+      const expected = passwordChangeCodes.get(me.userId);
+      if (!data.code) throw new Error("Enter the 6-digit code we emailed you");
+      if (!expected || data.code !== expected) throw new Error("That code was not recognised");
+      passwordChangeCodes.delete(me.userId);
+    }
     mustChangePasswordByUser.delete(me.userId);
     return { ok: true, mustChangePassword: false as const };
   });
@@ -2741,17 +2774,31 @@ export const sendLoginEmailCode = createServerFn({ method: "POST" }).handler(asy
   return { ok: true as const, email: me.email, sent: true as const };
 });
 
+export const sendPasswordEmailCode = createServerFn({ method: "POST" }).handler(async () => {
+  const me = requireStaff();
+  if (!me.email) throw new Error("Your account has no email to send a code to");
+  const last = passwordChangeCodeAt.get(me.userId);
+  if (last && Date.now() - last < EMAIL_OTP_RESEND_MS) {
+    throw new Error("Wait a moment before requesting another code");
+  }
+  const code = "246810";
+  passwordChangeCodes.set(me.userId, code);
+  passwordChangeCodeAt.set(me.userId, Date.now());
+  return { ok: true as const, email: me.email, sent: true as const, previewCode: code };
+});
+
 export const verifyLoginEmailCode = createServerFn({ method: "POST" })
   .validator((data: { code: string }) => parseInput(schemas.VerifyLoginEmailCode, data))
   .handler(async () => ({ ok: true as const }));
 
 export const listMySessions = createServerFn({ method: "GET" }).handler(async () => ({
-  sessions: [{ id: "current", current: true, createdAt: new Date().toISOString() }],
+  sessions: demoSessions.map((s) => ({ ...s })),
 }));
 
-export const revokeOtherSessions = createServerFn({ method: "POST" }).handler(async () => ({
-  ok: true as const,
-}));
+export const revokeOtherSessions = createServerFn({ method: "POST" }).handler(async () => {
+  demoSessions = demoSessions.filter((s) => s.current);
+  return { ok: true as const };
+});
 
 export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handler(async () => ({
   patients: patients
@@ -2833,15 +2880,20 @@ function earningsInputs(from: string, to: string) {
 }
 
 export const getPractitionerPerformance = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string }) => parseInput(schemas.GetPractitionerPerformance, data))
+  .validator((data: { from: string; to: string; previousFrom: string; previousTo: string }) =>
+    parseInput(schemas.GetPractitionerPerformance, data),
+  )
   .handler(async ({ data }) => {
     const me = identity();
     if (!me.isStaff) throw new Error("Staff access only");
-    if (!me.isOwner && !me.permissions.includes("reports.performance")) {
+    if (!me.isManager) {
       throw new Error("You do not have access to this area");
     }
-    const { buildStats, buildTrend } = await import("./earnings.server");
+    const { buildStats, buildTrend, moneyChanges, moneyTotals, trendViewWindows } = await import("./earnings.server");
     const inputs = earningsInputs(data.from, data.to);
+    const prevInputs = earningsInputs(data.previousFrom, data.previousTo);
+    const windows = trendViewWindows();
+    const yearInputs = earningsInputs(windows.year.from, windows.year.to);
 
     const staffIds = [
       ...new Set(
@@ -2868,6 +2920,15 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       inputs.firstSeen,
       { from: data.from, to: data.to },
     ).sort((a, b) => b.earned - a.earned);
+
+    const prevRows = buildStats(
+      staff,
+      prevInputs.treatments as never,
+      prevInputs.appointments as never,
+      prevInputs.yearTreatments as never,
+      prevInputs.firstSeen,
+      { from: data.previousFrom, to: data.previousTo },
+    );
 
     const totals = rows.reduce(
       (acc, r) => ({
@@ -2920,7 +2981,21 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       to: data.to,
     });
 
-    return { rows, totals, clinic, trend };
+    const trendViews = {
+      month: buildTrend(staff, yearInputs.treatments as never, yearInputs.appointments as never, windows.month),
+      six: buildTrend(staff, yearInputs.treatments as never, yearInputs.appointments as never, windows.six),
+      year: buildTrend(staff, yearInputs.treatments as never, yearInputs.appointments as never, windows.year),
+    };
+
+    return {
+      rows,
+      previousRows: prevRows,
+      totals,
+      clinic,
+      trend,
+      trendViews,
+      changes: moneyChanges(moneyTotals(rows), moneyTotals(prevRows)),
+    };
   });
 
 export const getMyEarnings = createServerFn({ method: "POST" })
@@ -2957,6 +3032,10 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       newPatients: stats.newPatients,
       retention: stats.retention,
       averageValue: stats.averageValue,
+      appointments: stats.appointments,
+      attendance: stats.attendance,
+      noShows: stats.noShows,
+      cancelled: stats.cancelled,
       lines: sortDesc(mine, "performed_at").map((t) => ({
         id: t.id,
         performedAt: t.performed_at,
@@ -3204,7 +3283,8 @@ export const getRetention = createServerFn({ method: "GET" }).handler(async () =
   const practitionerNames = new Map<string, string>(
     profiles.map((p) => [p.id as string, p.full_name as string]),
   );
-  const twoYearsAgo = isoDaysAgo(730);
+  // 5-year chart + 365-day rolling lookback (same cutoff as live).
+  const sixYearsAgo = isoDaysAgo(6 * 365);
 
   const result = buildRetention({
     patients: patients.map((p) => ({
@@ -3218,7 +3298,7 @@ export const getRetention = createServerFn({ method: "GET" }).handler(async () =
       created_at: p.created_at,
     })),
     treatments: treatments
-      .filter((t) => t.performed_at >= twoYearsAgo)
+      .filter((t) => t.performed_at >= sixYearsAgo)
       .map((t) => ({
         patient_id: t.patient_id,
         practitioner_id: t.practitioner_id,

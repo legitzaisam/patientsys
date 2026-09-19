@@ -343,7 +343,7 @@ function InboxView({ onPick }: { onPick: (thread: ActiveThread) => void }) {
             <button
               type="button"
               onClick={() => onPick({ patientId: t.patientId, patientName: t.name, avatarUrl: t.avatarUrl })}
-              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-glass-2"
+              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-[rgba(47,63,102,0.08)]"
             >
               <PatientAvatar patientId={t.patientId} name={t.name} photoUrl={t.avatarUrl} size="md" />
               <span className="min-w-0 flex-1">

@@ -50,8 +50,8 @@ export function DemoRoleSwitcher() {
               type="button"
               onClick={() => void choose(r.value)}
               className={cn(
-                "flex w-full flex-col items-start px-3 py-2 text-left text-sm transition-colors hover:bg-glass-2",
-                r.value === role && "bg-glass-2",
+                "flex w-full flex-col items-start rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-[rgba(47,63,102,0.08)]",
+                r.value === role && "bg-[rgba(47,63,102,0.08)]",
               )}
             >
               <span className="text-foreground">{r.label}</span>

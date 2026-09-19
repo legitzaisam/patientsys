@@ -188,7 +188,7 @@ function EditRecallDialog({
               recipients.map((m: any) => (
                 <label
                   key={m.userId}
-                  className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-edge bg-glass-2 px-3.5 py-2.5 text-xs transition-colors hover:bg-accent-wash"
+                  className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-edge bg-glass-2 px-3.5 py-2.5 text-xs transition-colors hover:bg-[rgba(47,63,102,0.08)]"
                 >
                   <Checkbox
                     checked={selected.includes(m.userId)}
@@ -302,7 +302,7 @@ function RetractRecallDialog({
             {assignees.map((a) => (
               <label
                 key={a.id}
-                className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-edge bg-glass-2 px-3.5 py-2.5 text-xs transition-colors hover:bg-accent-wash"
+                className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-edge bg-glass-2 px-3.5 py-2.5 text-xs transition-colors hover:bg-[rgba(47,63,102,0.08)]"
               >
                 <Checkbox checked={selected.includes(a.id)} onCheckedChange={() => toggle(a.id)} />
                 <span className="font-medium text-foreground">{a.label}</span>

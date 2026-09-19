@@ -68,23 +68,35 @@ export type TreatmentRetentionRow = {
   averageGapDays: number | null;
 };
 
+export type PractitionerRetentionRow = TreatmentRetentionRow;
+
 const DAY = 86400000;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function monthLabel(d: Date) {
-  return d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
+  return `${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`;
 }
 
 function pct(n: number, d: number) {
   return d ? Math.round((n / d) * 100) : 0;
 }
 
-/** Rolling 12-month retention rate: of patients seen in the window, how many came more than once. */
-function rollingRate(treatments: RetentionTreatment[], endMs: number) {
-  const startMs = endMs - 365 * DAY;
+function weekKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function weekLabel(d: Date) {
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+/** Of patients seen in the window ending at `endMs`, how many came more than once. */
+function rollingRateWindow(treatments: RetentionTreatment[], endMs: number, windowDays: number) {
+  const startMs = endMs - windowDays * DAY;
   const seen = new Map<string, number>();
   for (const t of treatments) {
     const ms = new Date(t.performed_at).getTime();
@@ -92,6 +104,38 @@ function rollingRate(treatments: RetentionTreatment[], endMs: number) {
   }
   const returning = [...seen.values()].filter((n) => n > 1).length;
   return { rate: pct(returning, seen.size), active: seen.size, returning };
+}
+
+/** Rolling 12-month retention rate. */
+function rollingRate(treatments: RetentionTreatment[], endMs: number) {
+  return rollingRateWindow(treatments, endMs, 365);
+}
+
+function groupRetention(
+  groups: Map<string, Map<string, string[]>>,
+  labelFor: (key: string) => string,
+): TreatmentRetentionRow[] {
+  return [...groups.entries()]
+    .map(([key, perPatient]) => {
+      const all = [...perPatient.values()];
+      const repeats = all.filter((d) => d.length > 1);
+      const localGaps: number[] = [];
+      for (const dates of repeats) {
+        for (let i = 1; i < dates.length; i++) {
+          localGaps.push((new Date(dates[i]!).getTime() - new Date(dates[i - 1]!).getTime()) / DAY);
+        }
+      }
+      return {
+        name: labelFor(key),
+        patients: all.length,
+        repeatPatients: repeats.length,
+        repeatRate: pct(repeats.length, all.length),
+        averageGapDays: localGaps.length
+          ? Math.round(localGaps.reduce((a, b) => a + b, 0) / localGaps.length)
+          : null,
+      };
+    })
+    .sort((a, b) => b.patients - a.patients);
 }
 
 export function buildRetention(input: {
@@ -156,13 +200,20 @@ export function buildRetention(input: {
   }
   const avgGap = gaps.length ? Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length) : null;
 
-  // ---- monthly trend (last 12 months)
+  // ---- monthly trend (last 60 months) + weekly (last 5 weeks, 30-day window)
   const monthly: MonthPoint[] = [];
   const anchor = new Date(now);
-  for (let i = 11; i >= 0; i--) {
+  for (let i = 59; i >= 0; i--) {
     const end = new Date(anchor.getFullYear(), anchor.getMonth() - i + 1, 0, 23, 59, 59);
     const r = rollingRate(treatments, Math.min(end.getTime(), now));
     monthly.push({ key: monthKey(end), label: monthLabel(end), ...r });
+  }
+
+  const weekly: MonthPoint[] = [];
+  for (let i = 4; i >= 0; i--) {
+    const end = new Date(now - i * 7 * DAY);
+    const r = rollingRateWindow(treatments, Math.min(end.getTime(), now), 30);
+    weekly.push({ key: weekKey(end), label: weekLabel(end), ...r });
   }
 
   // ---- at risk
@@ -256,40 +307,32 @@ export function buildRetention(input: {
       thirdRate: pct(r.third, r.total),
     }));
 
-  // ---- per treatment repeat rate
+  // ---- per treatment / per practitioner repeat rate
   const treatMap = new Map<string, Map<string, string[]>>();
+  const pracMap = new Map<string, Map<string, string[]>>();
   for (const t of treatments) {
     const perName = treatMap.get(t.name) ?? new Map<string, string[]>();
     const dates = perName.get(t.patient_id) ?? [];
     dates.push(t.performed_at);
     perName.set(t.patient_id, dates);
     treatMap.set(t.name, perName);
+
+    const pracKey = t.practitioner_id ?? "unassigned";
+    const perPrac = pracMap.get(pracKey) ?? new Map<string, string[]>();
+    const pracDates = perPrac.get(t.patient_id) ?? [];
+    pracDates.push(t.performed_at);
+    perPrac.set(t.patient_id, pracDates);
+    pracMap.set(pracKey, perPrac);
   }
-  const byTreatment: TreatmentRetentionRow[] = [...treatMap.entries()]
-    .map(([name, perPatient]) => {
-      const all = [...perPatient.values()];
-      const repeats = all.filter((d) => d.length > 1);
-      const localGaps: number[] = [];
-      for (const dates of repeats) {
-        for (let i = 1; i < dates.length; i++) {
-          localGaps.push((new Date(dates[i]!).getTime() - new Date(dates[i - 1]!).getTime()) / DAY);
-        }
-      }
-      return {
-        name,
-        patients: all.length,
-        repeatPatients: repeats.length,
-        repeatRate: pct(repeats.length, all.length),
-        averageGapDays: localGaps.length
-          ? Math.round(localGaps.reduce((a, b) => a + b, 0) / localGaps.length)
-          : null,
-      };
-    })
-    .sort((a, b) => b.patients - a.patients);
+  const byTreatment = groupRetention(treatMap, (name) => name);
+  const byPractitioner = groupRetention(pracMap, (id) =>
+    id === "unassigned" ? "Unassigned" : (input.practitionerNames.get(id) ?? "Unassigned"),
+  );
 
   // ---- suggested actions: delegated to the insights engine so a smarter
   // (API/model-driven) recommender can slot in without touching this report.
-  const suggestions = deriveRetentionInsights({ counts, monthly, cohorts });
+  // Last 12 months only — "dipped this month" compares the current month to the last.
+  const suggestions = deriveRetentionInsights({ counts, monthly: monthly.slice(-12), cohorts });
 
   return {
     summary: {
@@ -306,9 +349,11 @@ export function buildRetention(input: {
       revenueAtRisk,
     },
     monthly,
+    weekly,
     atRisk,
     cohorts,
     byTreatment,
+    byPractitioner,
     suggestions,
   };
 }

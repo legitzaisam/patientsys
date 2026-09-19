@@ -35,6 +35,7 @@ import { RecallTasksPanel } from "@/components/retention/recall-tasks-panel";
 import { CommsPreferencesCard } from "@/components/comms/comms-preferences";
 import { CommsLogCard } from "@/components/comms/comms-log";
 import { can } from "@/lib/permissions";
+import { plainVisitNote } from "@/lib/sanitize-note-html";
 import {
   Dialog,
   DialogContent,
@@ -928,8 +929,10 @@ function PatientRecord() {
                                 if (beforeId) setLeftId(beforeId);
                                 if (afterId) setRightId(afterId);
                               }}
-                              className={`group flex w-full gap-3 rounded-xl border p-3 text-left transition-all hover:border-accent hover:bg-accent-wash ${
-                                selectedTreatment?.id === t.id ? "border-accent bg-accent-wash" : "border-edge bg-background"
+                              className={`group flex w-full gap-3 rounded-xl border p-3 text-left transition-all hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)] ${
+                                selectedTreatment?.id === t.id
+                                  ? "border-edge-2 bg-[rgba(47,63,102,0.08)]"
+                                  : "border-edge bg-background"
                               }`}
                             >
                               <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-glass-2">
@@ -951,7 +954,7 @@ function PatientRecord() {
                       )}
                     </div>
 
-                    <div className="rounded-xl border-2 border-dashed border-edge-2 p-4 text-center transition-colors hover:border-accent hover:bg-accent-wash">
+                    <div className="rounded-xl border-2 border-dashed border-edge-2 p-4 text-center transition-colors hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)]">
                       <label className="flex cursor-pointer flex-col items-center gap-1">
                         <Upload className="h-4 w-4 text-ink-3" />
                         <span className="text-2xs font-medium text-muted-foreground">Drop photos to upload</span>
@@ -1191,7 +1194,7 @@ function VisitNoteItem({ note }: { note: VisitNoteRow }) {
           expanded ? "" : "line-clamp-4"
         }`}
       >
-        {note.body}
+        {plainVisitNote(note.body)}
       </p>
 
       {hasFooter ? (

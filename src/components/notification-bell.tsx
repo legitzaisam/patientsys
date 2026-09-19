@@ -222,7 +222,7 @@ export function NotificationBell({
             const { headline } = parseStaffAlertTitle(alert.title);
             return (
             <li key={alert.id}>
-              <div className="px-4 py-3 hover:bg-glass-2">
+              <div className="px-4 py-3 transition-colors hover:bg-[rgba(47,63,102,0.08)]">
                 <div className="flex items-start gap-2">
                   <button
                     type="button"
@@ -334,7 +334,7 @@ export function NotificationBell({
             <li key={item.patient_id}>
               <button
                 type="button"
-                className="w-full px-4 py-3 text-left hover:bg-glass-2"
+                className="w-full px-4 py-3 text-left transition-colors hover:bg-[rgba(47,63,102,0.08)]"
                 onClick={() =>
                   isStaff
                     ? navigate({ to: "/patients/$id", params: { id: item.patient_id } })

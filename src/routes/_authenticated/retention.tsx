@@ -10,8 +10,8 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { RetentionTrend } from "@/components/retention/retention-trend";
 import { AtRiskTable } from "@/components/retention/at-risk-table";
-import { SuggestedActions } from "@/components/retention/suggested-actions";
-import { RetentionBreakdown } from "@/components/retention/retention-breakdown";
+import { SuggestedActions, type Suggestion } from "@/components/retention/suggested-actions";
+import { RetentionBreakdown, type BreakdownTab } from "@/components/retention/retention-breakdown";
 import type { RiskLevel } from "@/components/retention/risk-badge";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
 import { money } from "@/components/period-picker";
@@ -64,6 +64,22 @@ function RetentionPage() {
   const queryClient = useQueryClient();
   const fetchRetention = useServerFn(getRetention);
   const [filter, setFilter] = useState<RiskLevel | "all">("all");
+  const [breakdownTab, setBreakdownTab] = useState<BreakdownTab>("cohorts");
+
+  function onInsight(suggestion: Suggestion) {
+    setFilter(suggestion.filter);
+    if (suggestion.target?.tab) setBreakdownTab(suggestion.target.tab);
+    const section = suggestion.target?.section ?? "at-risk";
+    const id =
+      section === "trend"
+        ? "retention-trend"
+        : section === "breakdown"
+          ? "retention-breakdown"
+          : "retention-at-risk";
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   const { data } = useQuery({
     queryKey: ["retention"],
@@ -113,9 +129,9 @@ function RetentionPage() {
         <Stat label="Revenue at risk" value={money(s?.revenueAtRisk ?? 0)} hint="From at-risk or lost patients" />
       </div>
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_380px]">
-        <RetentionTrend monthly={data?.monthly ?? []} />
-        <SuggestedActions suggestions={data?.suggestions ?? []} onPick={setFilter} />
+      <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-[1fr_380px]">
+        <RetentionTrend monthly={data?.monthly ?? []} weekly={data?.weekly ?? []} />
+        <SuggestedActions suggestions={data?.suggestions ?? []} onPick={onInsight} />
       </div>
 
       <div className="mb-6">
@@ -130,7 +146,13 @@ function RetentionPage() {
       </div>
 
       <div className="mb-6">
-        <RetentionBreakdown cohorts={data?.cohorts ?? []} byTreatment={data?.byTreatment ?? []} />
+        <RetentionBreakdown
+          cohorts={data?.cohorts ?? []}
+          byTreatment={data?.byTreatment ?? []}
+          byPractitioner={data?.byPractitioner ?? []}
+          tab={breakdownTab}
+          onTabChange={setBreakdownTab}
+        />
       </div>
     </AppShell>
   );

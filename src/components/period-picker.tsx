@@ -29,6 +29,27 @@ export function periodRange(period: PeriodKey): { from: string; to: string } {
   };
 }
 
+/** Same length as `periodRange`, immediately before it. */
+export function previousPeriodRange(period: PeriodKey): { from: string; to: string } {
+  const now = new Date();
+  if (period === "last") {
+    return {
+      from: new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString(),
+      to: new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59).toISOString(),
+    };
+  }
+  if (period === "year") {
+    return {
+      from: new Date(now.getFullYear() - 1, 0, 1).toISOString(),
+      to: new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59).toISOString(),
+    };
+  }
+  return {
+    from: new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString(),
+    to: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString(),
+  };
+}
+
 export function money(value: number) {
   return new Intl.NumberFormat("en-GB", {
     style: "currency",

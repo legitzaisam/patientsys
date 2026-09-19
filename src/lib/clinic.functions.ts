@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/lib/auth/session-middleware.server";
 import { clinicDayDiff, clinicDayKey, clinicDayRange } from "@/lib/clinic-time";
-import { sanitizeNoteHtml } from "@/lib/sanitize-note-html";
+import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import {
   PRACTITIONER_OVERLAP_MESSAGE,
@@ -25,6 +25,7 @@ import {
   loadIdentity,
   reloadIdentity,
   requireOwner,
+  requireManager,
   requireStaff,
   requireStepUp,
   scopeFor,
@@ -931,10 +932,10 @@ export const getPatient = createServerFn({ method: "GET" })
       .map((a: any) => {
         const embedded = a.appointment_notes;
         const noteRow = Array.isArray(embedded) ? embedded[0] : embedded;
-        const fromTable = String(noteRow?.body ?? "").trim();
-        const booking = String(a.notes ?? "")
-          .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
-          .trim();
+        const fromTable = plainVisitNote(noteRow?.body);
+        const booking = plainVisitNote(
+          String(a.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, ""),
+        );
         const body = fromTable || booking;
         if (!body) return null;
         return {
@@ -3240,9 +3241,41 @@ export const setStaffPassword = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+async function consumePasswordEmailCode(ctx: Ctx, code: string | undefined) {
+  if (!code) throw new Error("Enter the 6-digit code we emailed you");
+  const { data: row, error } = await ctx.supabase
+    .from("auth_email_otp")
+    .select("code_hash, channel, expires_at, attempts")
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!row || new Date(String(row.expires_at)).getTime() < Date.now()) {
+    throw new Error("That code has expired. Request a new one.");
+  }
+  if ((row.attempts ?? 0) >= 5) {
+    throw new Error("Too many attempts. Request a new code.");
+  }
+  await ctx.supabase
+    .from("auth_email_otp")
+    .update({ attempts: (row.attempts ?? 0) + 1 })
+    .eq("user_id", ctx.userId);
+  if (!row.code_hash || row.code_hash !== hashLoginEmailCode(ctx.userId, code)) {
+    throw new Error("That code was not recognised");
+  }
+  const { error: clearError } = await ctx.supabase.from("auth_email_otp").upsert({
+    user_id: ctx.userId,
+    code_hash: null,
+    channel: row.channel,
+    expires_at: row.expires_at,
+    verified_until: null,
+    attempts: 0,
+  });
+  if (clearError) throw new Error(clearError.message);
+}
+
 /** Signed-in staff: replace temporary/reset password and clear the must-change flag. */
 export const changeOwnPassword = createServerFn({ method: "POST" })
-  .validator((data: { password: string }) => parseInput(schemas.ChangeOwnPassword, data))
+  .validator((data: { password: string; code?: string }) => parseInput(schemas.ChangeOwnPassword, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3252,6 +3285,8 @@ export const changeOwnPassword = createServerFn({ method: "POST" })
     // Merge app_metadata so we clear the flag without wiping other Auth keys.
     const existing = await supabaseAdmin.auth.admin.getUserById(ctx.userId);
     if (existing.error) throw new Error(existing.error.message);
+    const forced = existing.data.user?.app_metadata?.["must_change_password"] === true;
+    if (!forced) await consumePasswordEmailCode(ctx, data.code);
     const res = await supabaseAdmin.auth.admin.updateUserById(ctx.userId, {
       password: data.password,
       app_metadata: {
@@ -3310,10 +3345,21 @@ function loginCodeEmailBody(code: string) {
   return `Your sign-in code is ${code}. It expires in 10 minutes.\n\nIf you did not try to sign in, ignore this email.`;
 }
 
-async function emailLoginCode(email: string, code: string): Promise<"emailed" | "preview"> {
+function passwordCodeEmailBody(code: string) {
+  return `Someone asked to change the password on your Aetheria account.\n\nApprove the change with this 6-digit code: ${code}\n\nIt expires in 10 minutes. The password will not change until you enter this code on My profile.\n\nIf you did not ask to change your password, ignore this email and sign out other devices on My profile.`;
+}
+
+async function emailLoginCode(
+  email: string,
+  code: string,
+  purpose: "login" | "password" = "login",
+): Promise<"emailed" | "preview"> {
   const delivery = emailMfaDelivery();
   const key = process.env["RESEND_API_KEY"]?.trim();
   const from = process.env["COMMS_FROM_EMAIL"]?.trim() || "Aetheria <onboarding@resend.dev>";
+  const subject =
+    purpose === "password" ? "Approve your Aetheria password change" : "Your Aetheria sign-in code";
+  const text = purpose === "password" ? passwordCodeEmailBody(code) : loginCodeEmailBody(code);
   if (delivery === "resend" && key) {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -3324,8 +3370,8 @@ async function emailLoginCode(email: string, code: string): Promise<"emailed" | 
       body: JSON.stringify({
         from,
         to: [email],
-        subject: "Your Aetheria sign-in code",
-        text: loginCodeEmailBody(code),
+        subject,
+        text,
       }),
     });
     const payload = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
@@ -3364,6 +3410,45 @@ export const sendLoginEmailCode = createServerFn({ method: "POST" })
     }
     const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
     const delivery = await emailLoginCode(identity.email, code);
+    const { error } = await ctx.supabase.from("auth_email_otp").upsert({
+      user_id: ctx.userId,
+      code_hash: hashLoginEmailCode(ctx.userId, code),
+      channel: "hashed",
+      expires_at: new Date(Date.now() + EMAIL_OTP_TTL_MS).toISOString(),
+      verified_until: null,
+      attempts: 0,
+      created_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    return {
+      ok: true as const,
+      email: identity.email,
+      sent: true as const,
+      previewCode: delivery === "preview" ? code : undefined,
+    };
+  });
+
+/** Email a 6-digit code before changing password from an existing session. */
+export const sendPasswordEmailCode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "sendPasswordEmailCode");
+    if (!identity.email) throw new Error("Your account has no email to send a code to");
+    const existing = await ctx.supabase
+      .from("auth_email_otp")
+      .select("created_at")
+      .eq("user_id", ctx.userId)
+      .maybeSingle();
+    if (existing.error) throw new Error(existing.error.message);
+    if (
+      existing.data?.created_at &&
+      Date.now() - new Date(String(existing.data.created_at)).getTime() < EMAIL_OTP_RESEND_MS
+    ) {
+      throw new Error("Wait a moment before requesting another code");
+    }
+    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    const delivery = await emailLoginCode(identity.email, code, "password");
     const { error } = await ctx.supabase.from("auth_email_otp").upsert({
       user_id: ctx.userId,
       code_hash: hashLoginEmailCode(ctx.userId, code),
@@ -3552,16 +3637,32 @@ export const setStaffEmail = createServerFn({ method: "POST" })
 
 /** Manager-only: earnings, KPIs, retention and the clinic/practitioner split per practitioner. */
 export const getPractitionerPerformance = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string }) => parseInput(schemas.GetPractitionerPerformance, data))
+  .validator((data: { from: string; to: string; previousFrom: string; previousTo: string }) =>
+    parseInput(schemas.GetPractitionerPerformance, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "getPractitionerPerformance");
+    await requireManager(ctx);
     const supabaseAdmin = await adminClient(context);
-    const { buildStats, buildTrend } = await import("./earnings.server");
+    const { buildStats, buildTrend, moneyChanges, moneyTotals, trendViewWindows } = await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
+    const previous = { from: data.previousFrom, to: data.previousTo };
+    const windows = trendViewWindows();
 
-    const [{ data: profiles }, { data: roles }, { data: treatments }, { data: appointments }, { data: yearTreatments }, { data: firstSeen }] =
+    const [
+      { data: profiles },
+      { data: roles },
+      { data: treatments },
+      { data: appointments },
+      { data: prevTreatments },
+      { data: prevAppointments },
+      { data: yearTreatments },
+      { data: firstSeen },
+      { data: yearTrendTreatments },
+      { data: yearTrendAppointments },
+    ] =
       await Promise.all([
         supabaseAdmin.from("profiles").select("id, full_name, job_title, commission_rate"),
         supabaseAdmin.from("user_roles").select("user_id, role"),
@@ -3575,8 +3676,28 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
           .select("practitioner_id, price, payment_status, status, starts_at")
           .gte("starts_at", data.from)
           .lte("starts_at", data.to),
+        supabaseAdmin
+          .from("treatments")
+          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot")
+          .gte("performed_at", previous.from)
+          .lte("performed_at", previous.to),
+        supabaseAdmin
+          .from("appointments")
+          .select("practitioner_id, price, payment_status, status, starts_at")
+          .gte("starts_at", previous.from)
+          .lte("starts_at", previous.to),
         supabaseAdmin.from("treatments").select("practitioner_id, patient_id").gte("performed_at", yearAgo),
         supabaseAdmin.from("patients").select("id, created_at"),
+        supabaseAdmin
+          .from("treatments")
+          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot")
+          .gte("performed_at", windows.year.from)
+          .lte("performed_at", windows.year.to),
+        supabaseAdmin
+          .from("appointments")
+          .select("practitioner_id, price, payment_status, status, starts_at")
+          .gte("starts_at", windows.year.from)
+          .lte("starts_at", windows.year.to),
       ]);
 
     const staffIds = (roles ?? [])
@@ -3604,6 +3725,15 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       patientFirstSeen,
       { from: data.from, to: data.to },
     ).sort((a, b) => b.earned - a.earned);
+
+    const prevRows = buildStats(
+      staff,
+      (prevTreatments ?? []) as never,
+      (prevAppointments ?? []) as never,
+      (yearTreatments ?? []) as never,
+      patientFirstSeen,
+      previous,
+    );
 
     const totals = rows.reduce(
       (acc, r) => ({
@@ -3654,7 +3784,23 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       { from: data.from, to: data.to },
     );
 
-    return { rows, totals, clinic, trend };
+    const trendSourceTreatments = (yearTrendTreatments ?? []) as never;
+    const trendSourceAppointments = (yearTrendAppointments ?? []) as never;
+    const trendViews = {
+      month: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.month),
+      six: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.six),
+      year: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.year),
+    };
+
+    return {
+      rows,
+      previousRows: prevRows,
+      totals,
+      clinic,
+      trend,
+      trendViews,
+      changes: moneyChanges(moneyTotals(rows), moneyTotals(prevRows)),
+    };
   });
 
 /** The caller's own earnings and KPIs. Never returns clinic figures or the split percentage. */
@@ -3717,7 +3863,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       { from: data.from, to: data.to },
     )[0]!;
 
-    // Only the caller's own share leaves the server — no clinic revenue, no rate.
+    // Only the caller's own figures leave the server — no clinic revenue, no rate.
     return {
       earnedShare: stats.earnedShare,
       collectedShare: stats.collectedShare,
@@ -3727,6 +3873,10 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       newPatients: stats.newPatients,
       retention: stats.retention,
       averageValue: stats.averageValue,
+      appointments: stats.appointments,
+      attendance: stats.attendance,
+      noShows: stats.noShows,
+      cancelled: stats.cancelled,
       lines: (treatments ?? []).map((t: any) => ({
         id: t.id as string,
         performedAt: t.performed_at as string,
@@ -4099,7 +4249,8 @@ export const getRetention = createServerFn({ method: "GET" })
     const identity = await authorize(ctx, "getRetention");
     const { buildRetention } = await import("./retention.server");
     const supabase = ctx.supabase;
-    const twoYearsAgo = new Date(Date.now() - 730 * 86400000).toISOString();
+    // 5-year chart + 365-day rolling lookback.
+    const sixYearsAgo = new Date(Date.now() - 6 * 365 * 86400000).toISOString();
 
     const [{ data: patients }, { data: treatments }, { data: appointments }, { data: profiles }, { data: outreach }] =
       await Promise.all([
@@ -4107,7 +4258,7 @@ export const getRetention = createServerFn({ method: "GET" })
         supabase
           .from("treatments")
           .select("patient_id, practitioner_id, name, price, performed_at, next_due_at")
-          .gte("performed_at", twoYearsAgo),
+          .gte("performed_at", sixYearsAgo),
         supabase.from("appointments").select("patient_id, practitioner_id, starts_at, status"),
         supabase.from("profiles").select("id, full_name"),
         supabase.from("retention_outreach").select("patient_id, created_at"),
@@ -5035,10 +5186,10 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
       supabase.from("appointments").select("notes").eq("id", data.appointment_id).maybeSingle(),
     ]);
     if (error) throw new Error(error.message);
-    const visitBody = ((row?.body as string) ?? "").trim();
+    const visitBody = plainVisitNote(row?.body as string);
     if (visitBody) {
       return {
-        body: row!.body as string,
+        body: visitBody,
         updatedAt: (row?.updated_at as string) ?? null,
         updatedBy: (row?.updated_by_label as string) ?? null,
       };
@@ -5047,7 +5198,7 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
     const bookingNotes = String((appt as { notes?: string | null } | null)?.notes ?? "");
     const withoutCancel = bookingNotes.replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim();
     return {
-      body: withoutCancel,
+      body: plainVisitNote(withoutCancel),
       updatedAt: null,
       updatedBy: null,
     };
@@ -5061,7 +5212,7 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
       // Visit notes render as escaped React text today, so this is not closing a
       // live XSS hole — it stops stored markup being inherited if these notes ever
       // move to the rich-text editor that `saveMyNote` already sanitises for.
-      body: sanitizeNoteHtml(String(data?.body ?? "")).slice(0, 20000),
+      body: plainVisitNote(sanitizeNoteHtml(String(data?.body ?? ""))).slice(0, 20000),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -5104,7 +5255,7 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
     await supabase.from("appointments").update({ notes: mirrored }).eq("id", data.appointment_id);
 
     return {
-      body: row.body as string,
+      body: plainVisitNote(row.body as string),
       updatedAt: row.updated_at as string,
       updatedBy: (row.updated_by_label as string) ?? null,
     };

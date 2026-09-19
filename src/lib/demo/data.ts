@@ -3198,12 +3198,12 @@ export const userNotes: Row[] = [
 export const appointmentNotes: Row[] = [];
 
 const VISIT_NOTES = [
-  "<p>Patient tolerated well. Mild erythema expected for 24 hours. Aftercare leaflet given and verbally confirmed.</p>",
-  "<p>Good result. Advised SPF 50, no actives for five days, and a two-week photo if anything feels uneven.</p>",
-  "<p>Cannula technique, no vascular concerns. Arnica gel supplied. Review at two weeks.</p>",
-  "<p>Session completed as planned. Cooling applied. Sleep on back tonight, skip the gym until Friday.</p>",
-  "<p>Peel endpoint reached. Neutralised. Strict sun avoidance discussed; next sitting booked.</p>",
-  "<p>PRP drawn and applied. Patient comfortable throughout. Iron levels noted from last bloods.</p>",
+  "Patient tolerated well. Mild erythema expected for 24 hours. Aftercare leaflet given and verbally confirmed.",
+  "Good result. Advised SPF 50, no actives for five days, and a two-week photo if anything feels uneven.",
+  "Cannula technique, no vascular concerns. Arnica gel supplied. Review at two weeks.",
+  "Session completed as planned. Cooling applied. Sleep on back tonight, skip the gym until Friday.",
+  "Peel endpoint reached. Neutralised. Strict sun avoidance discussed; next sitting booked.",
+  "PRP drawn and applied. Patient comfortable throughout. Iron levels noted from last bloods.",
 ];
 
 {

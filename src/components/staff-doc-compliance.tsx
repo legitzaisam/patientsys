@@ -14,31 +14,41 @@ export function StaffDocCompliance({
   userId,
   fullName,
   presentCategories,
+  embedded = false,
 }: {
   userId: string;
   fullName: string;
   presentCategories: string[];
+  embedded?: boolean;
 }) {
   const missing = missingEssentialDocs(presentCategories);
   const presentCount = ESSENTIAL_DOC_CATEGORIES.length - missing.length;
   const copy = remindUploadCopy(missing.map((m) => m.label));
 
-  return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="section-title">
-            Essential documents
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Status only — for UK employment, GDPR and JCCP practice. File contents stay private to
-            the team member and clinic owners.
-          </p>
-        </div>
-        <Badge variant="outline" className="rounded-xl text-2xs uppercase">
-          {presentCount}/{ESSENTIAL_DOC_CATEGORIES.length} on file
-        </Badge>
+  const header = embedded ? (
+    <div className="mb-4 flex justify-end">
+      <Badge variant="outline" className="rounded-xl text-2xs uppercase">
+        {presentCount}/{ESSENTIAL_DOC_CATEGORIES.length} on file
+      </Badge>
+    </div>
+  ) : (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="section-title">Essential documents</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Status only — for UK employment, GDPR and JCCP practice. File contents stay private to
+          the team member and clinic owners.
+        </p>
       </div>
+      <Badge variant="outline" className="rounded-xl text-2xs uppercase">
+        {presentCount}/{ESSENTIAL_DOC_CATEGORIES.length} on file
+      </Badge>
+    </div>
+  );
+
+  const body = (
+    <>
+      {header}
 
       <ul className="mt-5 space-y-2">
         {ESSENTIAL_DOC_CATEGORIES.map((c) => {
@@ -87,6 +97,9 @@ export function StaffDocCompliance({
           </StaffAlertDialog>
         </div>
       )}
-    </Card>
+    </>
   );
+
+  if (embedded) return body;
+  return <Card className="p-5">{body}</Card>;
 }

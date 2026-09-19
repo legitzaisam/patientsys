@@ -2,6 +2,11 @@ import { ChevronRight, Clock3, Lightbulb, Repeat2, TrendingDown, UserRoundSearch
 import { Card } from "@/components/ui/card";
 import type { RiskLevel } from "./risk-badge";
 
+export type SuggestionTarget = {
+  section: "at-risk" | "trend" | "breakdown";
+  tab?: "cohorts";
+};
+
 export type Suggestion = {
   id: string;
   title: string;
@@ -9,6 +14,7 @@ export type Suggestion = {
   filter: RiskLevel | "all";
   severity?: "urgent" | "attention" | "opportunity";
   icon?: "clock" | "wave" | "trend" | "repeat" | "winback";
+  target?: SuggestionTarget;
 };
 
 const ICONS = {
@@ -28,33 +34,35 @@ const SEVERITY_TILE: Record<NonNullable<Suggestion["severity"]>, string> = {
 /**
  * "Where to focus" — insight rows from the retention recommendation engine,
  * in the v3 style: severity-toned icon tile, title, detail and a chevron.
- * Clicking a row focuses the at-risk table on that band.
+ * Clicking a row takes you to the section where the task is actionable.
  */
 export function SuggestedActions({
   suggestions,
   onPick,
 }: {
   suggestions: Suggestion[];
-  onPick: (filter: RiskLevel | "all") => void;
+  onPick: (suggestion: Suggestion) => void;
 }) {
   return (
-    <Card className="p-5">
-      <div className="flex items-center gap-2">
-        <Lightbulb className="h-4 w-4 text-ink-3" aria-hidden />
-        <h2 className="section-title">Where to focus</h2>
+    <Card className="h-full p-5">
+      <div className="mb-4">
+        <div className="flex items-center gap-2">
+          <Lightbulb className="h-4 w-4 text-ink-3" aria-hidden />
+          <h2 className="section-title">Where to focus</h2>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Insights from your clinic's own patterns — the engine sharpens as more data accrues.
+        </p>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Insights from your clinic's own patterns — the engine sharpens as more data accrues.
-      </p>
-      <ul className="mt-4 space-y-2">
+      <ul className="space-y-2">
         {suggestions.map((s) => {
           const Icon = ICONS[s.icon ?? "clock"];
           return (
             <li key={s.id}>
               <button
                 type="button"
-                onClick={() => onPick(s.filter)}
-                className="glass-item flex w-full cursor-pointer items-start gap-3 p-3.5 text-left transition-colors hover:bg-glass"
+                onClick={() => onPick(s)}
+                className="glass-item flex w-full cursor-pointer items-start gap-3 p-3.5 text-left"
               >
                 <span
                   className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-inset-hi ${

@@ -48,6 +48,46 @@ function round(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+export type MoneyTotals = {
+  earned: number;
+  collected: number;
+  toPractitioners: number;
+  toClinic: number;
+};
+
+export function moneyTotals(rows: PractitionerStats[]): MoneyTotals {
+  return rows.reduce(
+    (acc, r) => ({
+      earned: acc.earned + r.earned,
+      collected: acc.collected + r.collected,
+      toPractitioners: acc.toPractitioners + r.earnedShare,
+      toClinic: acc.toClinic + r.clinicEarnedShare,
+    }),
+    { earned: 0, collected: 0, toPractitioners: 0, toClinic: 0 },
+  );
+}
+
+export type TrendViewKey = "month" | "six" | "year";
+
+/** Rolling windows for Performance trend pills (1 month / 6 months / 1 year). */
+export function trendViewWindows(now = new Date()): Record<TrendViewKey, Period> {
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
+  return {
+    month: { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), to },
+    six: { from: new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString(), to },
+    year: { from: new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString(), to },
+  };
+}
+
+export function moneyChanges(current: MoneyTotals, previous: MoneyTotals): MoneyTotals {
+  return {
+    earned: current.earned - previous.earned,
+    collected: current.collected - previous.collected,
+    toPractitioners: current.toPractitioners - previous.toPractitioners,
+    toClinic: current.toClinic - previous.toClinic,
+  };
+}
+
 /**
  * Builds per-practitioner figures for a period.
  * `rateFor` is the current rate; each treatment uses the rate stamped on it when recorded.

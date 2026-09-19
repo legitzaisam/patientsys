@@ -43,7 +43,7 @@ const SHORTCUTS: Shortcut[] = [
   },
   {
     to: "/earnings",
-    label: "My earnings",
+    label: "Earnings",
     blurb: "Your treatments delivered and total earned",
     icon: Wallet,
     roles: ["practitioner"],

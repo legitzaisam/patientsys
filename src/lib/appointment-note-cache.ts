@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { plainVisitNote } from "@/lib/sanitize-note-html";
 
 export type AppointmentNoteData = {
   body: string;
@@ -23,7 +24,7 @@ export function noteFromAppointmentEmbed(appointment: {
     return { body: "", updatedAt: null, updatedBy: null };
   }
   return {
-    body: (row.body as string) ?? "",
+    body: plainVisitNote(row.body),
     updatedAt: (row.updated_at as string) ?? null,
     updatedBy: (row.updated_by_label as string) ?? null,
   };
