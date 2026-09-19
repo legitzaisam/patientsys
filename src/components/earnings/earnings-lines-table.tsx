@@ -11,7 +11,7 @@ export type EarningsLine = {
   performedAt: string;
   name: string;
   patient: string;
-  patientId?: string;
+  patientId?: string | undefined;
   share: number;
 };
 
@@ -139,7 +139,7 @@ function GroupRow({
   total: number;
   open: boolean;
   onToggle: () => void;
-  inset?: boolean;
+  inset?: boolean | undefined;
   ariaLabel: string;
 }) {
   return (
@@ -186,7 +186,7 @@ function DayBlocks({
   days: LineGroup[];
   openDays: Set<string>;
   onToggleDay: (key: string) => void;
-  inset?: boolean;
+  inset?: boolean | undefined;
 }) {
   return (
     <>

@@ -124,11 +124,12 @@ export function SecuritySettings({
   const requestCode = useMutation({
     mutationFn: useServerFn(sendPasswordEmailCode),
     onSuccess: (result) => {
-      setSentTo(result.email || identity.email || null);
-      setPreviewCode(result.previewCode ?? null);
+      const sent = result as { email?: string | null; previewCode?: string | null };
+      setSentTo(sent.email || identity.email || null);
+      setPreviewCode(sent.previewCode ?? null);
       setCode("");
       toast.success(
-        result.previewCode
+        sent.previewCode
           ? "Approve the change with the code below"
           : "Check your email to approve the change",
       );

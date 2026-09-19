@@ -14,7 +14,7 @@ function Cell({
   label: string;
   value: string;
   hint: string;
-  tone?: "danger";
+  tone?: "danger" | undefined;
 }) {
   return (
     <div className="px-4 py-3.5 sm:px-5">

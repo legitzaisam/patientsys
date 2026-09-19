@@ -24,8 +24,8 @@ function Change({
   moneyValue = false,
 }: {
   value: number;
-  invert?: boolean;
-  moneyValue?: boolean;
+  invert?: boolean | undefined;
+  moneyValue?: boolean | undefined;
 }) {
   if (!value) return null;
   const Icon = value < 0 ? TrendingDown : TrendingUp;
@@ -54,9 +54,9 @@ function SplitCell({
   label: string;
   value: string;
   hint: string;
-  change?: number;
-  invertChange?: boolean;
-  tone?: "danger";
+  change?: number | undefined;
+  invertChange?: boolean | undefined;
+  tone?: "danger" | undefined;
 }) {
   return (
     <div className="px-4 py-3.5 sm:px-5">
@@ -88,9 +88,9 @@ function StatRow({
   label: string;
   value: string;
   hint: string;
-  change?: number;
-  invertChange?: boolean;
-  moneyChange?: boolean;
+  change?: number | undefined;
+  invertChange?: boolean | undefined;
+  moneyChange?: boolean | undefined;
 }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-2">
