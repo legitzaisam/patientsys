@@ -3040,6 +3040,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         id: t.id,
         performedAt: t.performed_at,
         name: t.name,
+        patientId: t.patient_id,
         patient: (() => {
           const p = patientById(t.patient_id);
           return p ? `${p.first_name} ${p.last_name}` : "—";

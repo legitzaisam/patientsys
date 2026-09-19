@@ -3881,6 +3881,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         id: t.id as string,
         performedAt: t.performed_at as string,
         name: t.name as string,
+        patientId: t.patient_id as string | undefined,
         patient: t.patients ? `${t.patients.first_name} ${t.patients.last_name}` : "—",
         share:
           Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,

@@ -7,6 +7,7 @@ import { getMyEarnings } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
+import { EarningsLinesTable } from "@/components/earnings/earnings-lines-table";
 import { PeriodPicker, periodRange, money, type PeriodKey } from "@/components/period-picker";
 
 export const Route = createFileRoute("/_authenticated/earnings")({
@@ -70,37 +71,7 @@ function EarningsPage() {
         <Stat label="Retention" value={`${data?.retention ?? 0}%`} hint="Returned within 12 months" />
       </div>
 
-      <Card className="overflow-x-auto p-0">
-        <table className="glass-table w-full min-w-[560px] text-sm">
-          <thead>
-            <tr>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Patient</th>
-              <th className="px-4 py-3">Treatment</th>
-              <th className="px-4 py-3 text-right">Your earnings</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.lines ?? []).map((l) => (
-              <tr key={l.id} className="border-b border-glass-line last:border-0">
-                <td className="px-4 py-3 text-muted-foreground">
-                  {new Date(l.performedAt).toLocaleDateString("en-GB")}
-                </td>
-                <td className="px-4 py-3 text-foreground">{l.patient}</td>
-                <td className="px-4 py-3">{l.name}</td>
-                <td className="px-4 py-3 text-right text-foreground">{money(l.share)}</td>
-              </tr>
-            ))}
-            {data && data.lines.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
-                  No treatments recorded in this period.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+      <EarningsLinesTable lines={data?.lines} period={period} />
     </AppShell>
   );
 }
