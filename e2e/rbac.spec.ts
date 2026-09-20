@@ -13,7 +13,7 @@ test.describe("owner", () => {
     await page.goto("/dashboard");
     const nav = page.getByRole("navigation").first();
     // /team and /settings live in the account menu, not the sidebar.
-    for (const label of ["Dashboard", "Diary", "Patients", "Retention", "Performance"]) {
+    for (const label of ["Dashboard", "Diary", "Patients", "Insights", "Retention", "Performance"]) {
       await expect(nav.getByRole("link", { name: label })).toBeVisible();
     }
     // The Team group lists colleagues with presence.
@@ -27,13 +27,19 @@ test.describe("practitioner", () => {
   test("sees earnings but not clinic performance", async ({ page }) => {
     await page.goto("/dashboard");
     const nav = page.getByRole("navigation").first();
-    await expect(nav.getByRole("link", { name: "My earnings" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Earnings" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Retention" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Insights" })).toHaveCount(0);
     await expect(nav.getByRole("link", { name: "Performance" })).toHaveCount(0);
   });
 
   test("a direct URL to /performance bounces to the dashboard", async ({ page }) => {
     await page.goto("/performance");
+    await expect(page).toHaveURL(/\/dashboard/);
+  });
+
+  test("a direct URL to /insights bounces to the dashboard", async ({ page }) => {
+    await page.goto("/insights");
     await expect(page).toHaveURL(/\/dashboard/);
   });
 });
@@ -45,13 +51,19 @@ test.describe("front desk", () => {
     await page.goto("/dashboard");
     const nav = page.getByRole("navigation").first();
     await expect(nav.getByRole("link", { name: "Patients" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Insights" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Performance" })).toHaveCount(0);
-    await expect(nav.getByRole("link", { name: "My earnings" })).toHaveCount(0);
+    await expect(nav.getByRole("link", { name: "Earnings" })).toHaveCount(0);
   });
 
   test("a direct URL to /performance bounces to the dashboard", async ({ page }) => {
     await page.goto("/performance");
     await expect(page).toHaveURL(/\/dashboard/);
+  });
+
+  test("can open Insights", async ({ page }) => {
+    await page.goto("/insights");
+    await expect(page.getByRole("heading", { level: 1, name: "Insights" })).toBeVisible();
   });
 });
 

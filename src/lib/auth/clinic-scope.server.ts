@@ -23,7 +23,9 @@ export const CLINIC_SCOPED_TABLES = [
   "messages",
   "patients",
   "plan_milestones",
+  "product_sales",
   "profile_change_requests",
+  "retail_products",
   "profiles",
   "recall_tasks",
   "retention_outreach",
@@ -37,6 +39,7 @@ export const CLINIC_SCOPED_TABLES = [
   "treatment_photos",
   "treatment_plans",
   "treatments",
+  "website_leads",
 ] as const;
 
 /**

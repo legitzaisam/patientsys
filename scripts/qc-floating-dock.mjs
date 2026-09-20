@@ -317,7 +317,7 @@ await scenario(browser, "record-dock", {}, async (page) => {
 
 /* 6 ── Staff pages beyond the dashboard get the dock too */
 await scenario(browser, "staff-pages", {}, async (page) => {
-  for (const path of ["/patients?tab=metrics", "/patients?tab=board", "/retention", "/schedule"]) {
+  for (const path of ["/insights", "/patients?tab=board", "/retention", "/schedule"]) {
     await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
     const has = await page
       .waitForSelector(`${chatBubble}`, { timeout: 15000 })

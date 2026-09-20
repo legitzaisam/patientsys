@@ -230,6 +230,8 @@ export type Database = {
           created_at: string;
           email: string | null;
           id: string;
+          insights_ingest_key_hash: string | null;
+          insights_ingest_key_last4: string | null;
           name: string;
           phone: string | null;
           reminder_offsets: number[];
@@ -240,6 +242,8 @@ export type Database = {
           created_at?: string;
           email?: string | null;
           id?: string;
+          insights_ingest_key_hash?: string | null;
+          insights_ingest_key_last4?: string | null;
           name: string;
           phone?: string | null;
           reminder_offsets?: number[];
@@ -250,6 +254,8 @@ export type Database = {
           created_at?: string;
           email?: string | null;
           id?: string;
+          insights_ingest_key_hash?: string | null;
+          insights_ingest_key_last4?: string | null;
           name?: string;
           phone?: string | null;
           reminder_offsets?: number[];
@@ -703,6 +709,7 @@ export type Database = {
           phone: string | null;
           reminders_opt_in: boolean;
           sms_opt_in: boolean;
+          source: string | null;
           reference: string | null;
           status: Database["public"]["Enums"]["patient_status"];
           title: string | null;
@@ -733,6 +740,7 @@ export type Database = {
           phone?: string | null;
           reminders_opt_in?: boolean;
           sms_opt_in?: boolean;
+          source?: string | null;
           reference?: string | null;
           status?: Database["public"]["Enums"]["patient_status"];
           title?: string | null;
@@ -763,6 +771,7 @@ export type Database = {
           phone?: string | null;
           reminders_opt_in?: boolean;
           sms_opt_in?: boolean;
+          source?: string | null;
           reference?: string | null;
           status?: Database["public"]["Enums"]["patient_status"];
           title?: string | null;
@@ -1690,6 +1699,180 @@ export type Database = {
             columns: ["practitioner_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      product_sales: {
+        Row: {
+          amount: number;
+          clinic_id: string;
+          created_at: string;
+          external_id: string | null;
+          id: string;
+          occurred_at: string;
+          patient_id: string | null;
+          product_id: string | null;
+          qty: number;
+          source: string;
+        };
+        Insert: {
+          amount?: number;
+          clinic_id: string;
+          created_at?: string;
+          external_id?: string | null;
+          id?: string;
+          occurred_at?: string;
+          patient_id?: string | null;
+          product_id?: string | null;
+          qty?: number;
+          source?: string;
+        };
+        Update: {
+          amount?: number;
+          clinic_id?: string;
+          created_at?: string;
+          external_id?: string | null;
+          id?: string;
+          occurred_at?: string;
+          patient_id?: string | null;
+          product_id?: string | null;
+          qty?: number;
+          source?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_sales_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_sales_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_sales_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "retail_products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      retail_products: {
+        Row: {
+          active: boolean;
+          clinic_id: string;
+          created_at: string;
+          featured_on_portal: boolean;
+          id: string;
+          image_url: string | null;
+          name: string;
+          price: number | null;
+          sku: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          active?: boolean;
+          clinic_id: string;
+          created_at?: string;
+          featured_on_portal?: boolean;
+          id?: string;
+          image_url?: string | null;
+          name: string;
+          price?: number | null;
+          sku?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          active?: boolean;
+          clinic_id?: string;
+          created_at?: string;
+          featured_on_portal?: boolean;
+          id?: string;
+          image_url?: string | null;
+          name?: string;
+          price?: number | null;
+          sku?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "retail_products_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      website_leads: {
+        Row: {
+          campaign: string | null;
+          clinic_id: string;
+          created_at: string;
+          email: string | null;
+          external_id: string | null;
+          first_name: string | null;
+          id: string;
+          interest: string | null;
+          last_name: string | null;
+          occurred_at: string;
+          patient_id: string | null;
+          phone: string | null;
+          source: string;
+          updated_at: string;
+        };
+        Insert: {
+          campaign?: string | null;
+          clinic_id: string;
+          created_at?: string;
+          email?: string | null;
+          external_id?: string | null;
+          first_name?: string | null;
+          id?: string;
+          interest?: string | null;
+          last_name?: string | null;
+          occurred_at?: string;
+          patient_id?: string | null;
+          phone?: string | null;
+          source?: string;
+          updated_at?: string;
+        };
+        Update: {
+          campaign?: string | null;
+          clinic_id?: string;
+          created_at?: string;
+          email?: string | null;
+          external_id?: string | null;
+          first_name?: string | null;
+          id?: string;
+          interest?: string | null;
+          last_name?: string | null;
+          occurred_at?: string;
+          patient_id?: string | null;
+          phone?: string | null;
+          source?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "website_leads_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "website_leads_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
             referencedColumns: ["id"];
           },
         ];

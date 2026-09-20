@@ -283,6 +283,20 @@ export const GetPractitionerPerformance = z.object({
 
 export const GetMyEarnings = z.object({ from: dateString, to: dateString });
 
+export const GetInsights = z.object({ from: dateString, to: dateString });
+
+export const SaveRetailProduct = z.object({
+  id: optionalId,
+  name: requiredText(200),
+  sku: optionalText(80),
+  price: optionalMoney,
+  featured_on_portal: z.boolean().optional(),
+  image_url: optionalText(500),
+  active: z.boolean().optional(),
+});
+
+export const SetRetailProductActive = z.object({ id, active: z.boolean() });
+
 /* Profile, avatar and personal documents */
 
 export const SubmitProfileChange = z.object({

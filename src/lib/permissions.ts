@@ -6,6 +6,7 @@ export const PERMISSION_KEYS = [
   "appointments.edit",
   "comms.send",
   "notifications.delete",
+  "reports.insights",
   "reports.retention",
   "reports.performance",
   "team.view",
@@ -45,6 +46,10 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
     label: "Clear notifications",
     description: "Dismiss and complete alerts in the notification bell.",
   },
+  "reports.insights": {
+    label: "Insights",
+    description: "See the marketing and sales insights page, website funnel and product bestsellers.",
+  },
   "reports.retention": {
     label: "Retention report",
     description: "See the retention dashboard, at-risk patients and recall tools.",
@@ -80,7 +85,7 @@ export const PERMISSION_GROUPS: { label: string; keys: PermissionKey[] }[] = [
   },
   { label: "Diary", keys: ["appointments.edit"] },
   { label: "Communication", keys: ["comms.send", "notifications.delete"] },
-  { label: "Reports", keys: ["reports.retention", "reports.performance"] },
+  { label: "Reports", keys: ["reports.insights", "reports.retention", "reports.performance"] },
   { label: "Team", keys: ["team.view", "team.approve_changes"] },
   { label: "Clinic settings", keys: ["settings.treatments", "tasks.delete"] },
 ];

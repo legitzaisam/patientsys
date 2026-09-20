@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CommsPreferencesCard } from "@/components/comms/comms-preferences";
 import { CommsLogCard } from "@/components/comms/comms-log";
+import { PortalProducts } from "@/components/portal-products";
 
 export const Route = createFileRoute("/_authenticated/my-record")({
   head: () => ({
@@ -110,6 +111,11 @@ function PortalPage() {
 
       <div className="relative grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-[26px]">
         <div className="space-y-6">
+          <PortalProducts
+            featured={data.products?.featured ?? []}
+            purchased={data.products?.purchased ?? []}
+          />
+
           <Card className="p-5">
             <h2 className="section-title">Forms to complete</h2>
             <ul className="mt-3 divide-y divide-glass-line">

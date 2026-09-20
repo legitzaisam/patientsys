@@ -109,9 +109,13 @@ export const clinic: Row = {
   phone: "020 7946 0812",
   email: "hello@aetheria.clinic",
   reminder_offsets: [168, 24],
+  insights_ingest_key_hash: "5e32b7c1034fe10f127852c3b2b47b1ca9b4fff862a47440a2d79505de198682",
+  insights_ingest_key_last4: "ghts",
   created_at: iso(-720),
   updated_at: iso(-14),
 };
+
+export { DEMO_INSIGHTS_INGEST_KEY } from "@/lib/insights-constants";
 
 export const profiles: Row[] = [
   {
@@ -192,6 +196,7 @@ export const staffEmails: Record<string, string> = {
 };
 
 export const rolePermissions: Row[] = [
+  { role: "manager", permission: "reports.insights", enabled: true },
   { role: "manager", permission: "reports.retention", enabled: true },
   { role: "manager", permission: "reports.performance", enabled: true },
   { role: "manager", permission: "team.view", enabled: true },
@@ -205,6 +210,7 @@ export const rolePermissions: Row[] = [
   { role: "manager", permission: "photos.manage", enabled: true },
   { role: "manager", permission: "appointments.edit", enabled: true },
   { role: "manager", permission: "comms.send", enabled: true },
+  { role: "practitioner", permission: "reports.insights", enabled: false },
   { role: "practitioner", permission: "reports.retention", enabled: true },
   { role: "practitioner", permission: "reports.performance", enabled: false },
   { role: "practitioner", permission: "team.view", enabled: true },
@@ -218,6 +224,7 @@ export const rolePermissions: Row[] = [
   { role: "practitioner", permission: "photos.manage", enabled: true },
   { role: "practitioner", permission: "appointments.edit", enabled: true },
   { role: "practitioner", permission: "comms.send", enabled: true },
+  { role: "front_desk", permission: "reports.insights", enabled: true },
   { role: "front_desk", permission: "reports.retention", enabled: true },
   { role: "front_desk", permission: "reports.performance", enabled: false },
   { role: "front_desk", permission: "team.view", enabled: true },
@@ -390,6 +397,7 @@ type PatientSpec = {
   allergies?: string;
   medications?: string;
   conditions?: string;
+  source?: "website" | "instagram" | "referral" | "walk_in" | "other";
 };
 
 const PATIENT_SPECS: PatientSpec[] = [
@@ -407,6 +415,7 @@ const PATIENT_SPECS: PatientSpec[] = [
     allergies: "Penicillin",
     medications: "None",
     conditions: "Mild rosacea",
+    source: "instagram",
   },
   {
     title: "Mrs",
@@ -950,7 +959,40 @@ for (let i = 0; i < 600; i++) {
     ]),
     favourite: item.name,
     status: lastVisit > 300 ? "inactive" : "active",
+    source: i % 7 === 0 ? "website" : i % 11 === 0 ? "instagram" : i % 5 === 0 ? "referral" : i % 13 === 0 ? "other" : "walk_in",
     ...(upcoming ? { upcoming } : {}),
+  });
+}
+
+const INSIGHTS_SPECS: Array<
+  Pick<PatientSpec, "title" | "first" | "last" | "joined" | "visits" | "source"> & {
+    favourite?: string;
+    lastVisit?: number;
+  }
+> = [
+  { title: "Ms", first: "Isla", last: "Hartley", joined: 11, visits: 0, source: "website" },
+  { title: "Mrs", first: "Maya", last: "Quayle", joined: 18, visits: 0, source: "website" },
+  { title: "Ms", first: "Noor", last: "El-Amin", joined: 6, visits: 0, source: "instagram" },
+  { title: "Mr", first: "Theo", last: "Langford", joined: 22, visits: 0, source: "website" },
+  { title: "Ms", first: "Freya", last: "Nielsen", joined: 28, visits: 1, lastVisit: 16, source: "website", favourite: "Skin Consultation" },
+  { title: "Mrs", first: "Aisha", last: "Rahman", joined: 34, visits: 1, lastVisit: 21, source: "website", favourite: "Skin Consultation" },
+  { title: "Ms", first: "Bea", last: "Moreau", joined: 19, visits: 1, lastVisit: 9, source: "referral", favourite: "Skin Consultation" },
+  { title: "Mr", first: "Callum", last: "West", joined: 40, visits: 2, lastVisit: 12, source: "website", favourite: "Anti-Wrinkle Injections" },
+];
+
+for (const extra of INSIGHTS_SPECS) {
+  PATIENT_SPECS.push({
+    title: extra.title,
+    first: extra.first,
+    last: extra.last,
+    dob: `${between(1978, 1999)}-${String(between(1, 12)).padStart(2, "0")}-${String(between(1, 28)).padStart(2, "0")}`,
+    joined: extra.joined,
+    lastVisit: extra.lastVisit ?? extra.joined,
+    visits: extra.visits,
+    practitioner: USERS.practitioner,
+    favourite: extra.favourite ?? "Skin Consultation",
+    status: "active",
+    source: extra.source,
   });
 }
 
@@ -971,7 +1013,10 @@ export const patients: Row[] = PATIENT_SPECS.map((spec, index) => ({
   conditions: spec.conditions ?? null,
   notes: null,
   avatar_url: null,
-  last_visit_at: iso(-spec.lastVisit, 11, 0),
+  last_visit_at: spec.visits === 0 ? null : iso(-spec.lastVisit, 11, 0),
+  source:
+    spec.source ??
+    (index % 7 === 0 ? "website" : index % 11 === 0 ? "instagram" : index % 5 === 0 ? "referral" : "walk_in"),
   email_opt_in: false,
   sms_opt_in: false,
   reminders_opt_in: true,
@@ -3760,6 +3805,137 @@ userNotes.push(
   },
 );
 
+function patientByName(first: string, last: string) {
+  return patients.find((p) => p["first_name"] === first && p["last_name"] === last) ?? null;
+}
+
+export const retailProducts: Row[] = [
+  {
+    id: id("r1"),
+    clinic_id: CLINIC_ID,
+    name: "Alumier MD Moisture Matte SPF 40",
+    sku: "ALU-MM-40",
+    price: 48,
+    active: true,
+    featured_on_portal: true,
+    image_url: null,
+    created_at: iso(-120),
+    updated_at: iso(-12),
+  },
+  {
+    id: id("r1"),
+    clinic_id: CLINIC_ID,
+    name: "SkinCeuticals C E Ferulic",
+    sku: "SC-CEF-30",
+    price: 166,
+    active: true,
+    featured_on_portal: true,
+    image_url: null,
+    created_at: iso(-200),
+    updated_at: iso(-20),
+  },
+  {
+    id: id("r1"),
+    clinic_id: CLINIC_ID,
+    name: "Obagi Medical Nu-Derm Toner",
+    sku: "OB-ND-TON",
+    price: 52,
+    active: true,
+    featured_on_portal: true,
+    image_url: null,
+    created_at: iso(-90),
+    updated_at: iso(-8),
+  },
+  {
+    id: id("r1"),
+    clinic_id: CLINIC_ID,
+    name: "iS Clinical Cleansing Complex",
+    sku: "IS-CC-180",
+    price: 44,
+    active: true,
+    featured_on_portal: false,
+    image_url: null,
+    created_at: iso(-60),
+    updated_at: iso(-6),
+  },
+];
+
+export const websiteLeads: Row[] = [];
+export const productSales: Row[] = [];
+
+{
+  const named = [
+    { first: "Isla", last: "Hartley", source: "website", interest: "Skin Consultation", days: 11 },
+    { first: "Maya", last: "Quayle", source: "website", interest: "Lip Filler", days: 18 },
+    { first: "Noor", last: "El-Amin", source: "instagram", interest: "Skin Consultation", days: 6 },
+    { first: "Theo", last: "Langford", source: "website", interest: "Anti-Wrinkle Injections", days: 22 },
+    { first: "Freya", last: "Nielsen", source: "website", interest: "Skin Consultation", days: 28 },
+    { first: "Aisha", last: "Rahman", source: "website", interest: "Chemical Peel", days: 34 },
+    { first: "Bea", last: "Moreau", source: "referral", interest: "Skin Consultation", days: 19 },
+    { first: "Callum", last: "West", source: "website", interest: "Anti-Wrinkle Injections", days: 40 },
+  ];
+  for (const lead of named) {
+    const patient = patientByName(lead.first, lead.last);
+    websiteLeads.push({
+      id: id("w1"),
+      clinic_id: CLINIC_ID,
+      patient_id: patient?.["id"] ?? null,
+      external_id: `web-${lead.first.toLowerCase()}-${lead.last.toLowerCase()}`,
+      first_name: lead.first,
+      last_name: lead.last,
+      email: patient?.["email"] ?? `${lead.first.toLowerCase()}.${lead.last.toLowerCase()}@example.com`,
+      phone: patient?.["phone"] ?? null,
+      source: lead.source,
+      campaign: lead.source === "instagram" ? "stories-sept" : "homepage-consult",
+      interest: lead.interest,
+      occurred_at: iso(-lead.days, 10, 15),
+      created_at: iso(-lead.days, 10, 15),
+      updated_at: iso(-lead.days, 10, 15),
+    });
+  }
+  websiteLeads.push({
+    id: id("w1"),
+    clinic_id: CLINIC_ID,
+    patient_id: null,
+    external_id: "web-standalone-harper",
+    first_name: "Harper",
+    last_name: "Voss",
+    email: "harper.voss@example.com",
+    phone: "07700 900118",
+    source: "website",
+    campaign: "homepage-consult",
+    interest: "Skin Consultation",
+    occurred_at: iso(-8, 14, 0),
+    created_at: iso(-8, 14, 0),
+    updated_at: iso(-8, 14, 0),
+  });
+
+  const olivia = patientByName("Olivia", "Bennett");
+  const productBySku = new Map(retailProducts.map((p) => [p["sku"] as string, p]));
+  const saleSpecs = [
+    { sku: "SC-CEF-30", days: 21, qty: 1, amount: 166, patient: olivia },
+    { sku: "ALU-MM-40", days: 14, qty: 1, amount: 48, patient: olivia },
+    { sku: "ALU-MM-40", days: 9, qty: 2, amount: 96, patient: patientByName("Callum", "West") },
+    { sku: "OB-ND-TON", days: 5, qty: 1, amount: 52, patient: null },
+    { sku: "IS-CC-180", days: 3, qty: 1, amount: 44, patient: patientByName("Freya", "Nielsen") },
+  ];
+  for (const sale of saleSpecs) {
+    const product = productBySku.get(sale.sku);
+    productSales.push({
+      id: id("s8"),
+      clinic_id: CLINIC_ID,
+      product_id: product?.["id"] ?? null,
+      patient_id: sale.patient?.["id"] ?? null,
+      external_id: `shop-${sale.sku}-${sale.days}`,
+      source: "website",
+      qty: sale.qty,
+      amount: sale.amount,
+      occurred_at: iso(-sale.days, 13, 20),
+      created_at: iso(-sale.days, 13, 20),
+    });
+  }
+}
+
 export const db = {
   clinic,
   profiles,
@@ -3790,6 +3966,9 @@ export const db = {
   staffDocuments,
   userNotes,
   staffEmails,
+  websiteLeads,
+  retailProducts,
+  productSales,
 };
 
 export function newId(prefix = "z1") {

@@ -36,6 +36,7 @@ import { clinicScoped } from "@/lib/auth/clinic-scope.server";
 import { EMAIL_MFA_SESSION_MS, EMAIL_OTP_RESEND_MS, EMAIL_OTP_TTL_MS } from "@/lib/auth/constants";
 import { emailMfaDelivery } from "@/lib/auth/email-mfa.server";
 import { createHash, randomInt } from "node:crypto";
+import { generateInsightsIngestKey } from "@/lib/insights-ingest.server";
 
 export { PERMISSION_KEYS, type PermissionKey };
 
@@ -780,69 +781,18 @@ export const getPatientMetrics = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await authorize(context as Ctx, "getPatientMetrics");
     const supabase = (context as Ctx).supabase;
-    const now = new Date();
-    const yearAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-
-    const [{ data: patients }, { data: treatments }] = await Promise.all([
-      supabase.from("patients").select("id, status, created_at").is("deleted_at", null),
-      supabase.from("treatments").select("patient_id, name, performed_at, next_due_at"),
+    const { buildBookMetrics } = await import("./insights.server");
+    const [{ data: patients }, { data: treatments }, { data: appointments }] = await Promise.all([
+      supabase.from("patients").select("id, status, created_at, source, last_visit_at").is("deleted_at", null),
+      supabase.from("treatments").select("patient_id, name, price, performed_at"),
+      supabase.from("appointments").select("patient_id, starts_at, status"),
     ]);
-    const all = patients ?? [];
-    const tx = (treatments ?? []) as any[];
 
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const active = all.filter((p: any) => p.status === "active").length;
-    const newThisMonth = all.filter((p: any) => p.created_at >= monthStart).length;
-
-    // New patients per month, last 12 months.
-    const monthlyNew: { key: string; label: string; count: number }[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-      monthlyNew.push({
-        key: d.toISOString().slice(0, 7),
-        label: d.toLocaleDateString("en-GB", { month: "short" }),
-        count: all.filter((p: any) => p.created_at >= d.toISOString() && p.created_at < next.toISOString()).length,
-      });
-    }
-
-    // Top treatments by volume over the last 12 months.
-    const counts = new Map<string, number>();
-    for (const t of tx) {
-      if (t.performed_at >= yearAgo.toISOString()) counts.set(t.name, (counts.get(t.name) ?? 0) + 1);
-    }
-    const topTreatments = [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, count]) => ({ name, count }));
-
-    // Treatments falling due, next six months, plus the overdue backlog.
-    const todayKey = clinicDayKey(now);
-    const dueByMonth: { key: string; label: string; due: number }[] = [];
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const next = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
-      dueByMonth.push({
-        key: d.toISOString().slice(0, 7),
-        label: d.toLocaleDateString("en-GB", { month: "short" }),
-        due: tx.filter(
-          (t) =>
-            t.next_due_at &&
-            t.next_due_at >= d.toISOString().slice(0, 10) &&
-            t.next_due_at < next.toISOString().slice(0, 10) &&
-            t.next_due_at >= todayKey,
-        ).length,
-      });
-    }
-    const overdue = tx.filter((t) => t.next_due_at && t.next_due_at < todayKey).length;
-
-    return {
-      totals: { total: all.length, active, inactive: all.length - active, newThisMonth },
-      monthlyNew,
-      topTreatments,
-      dueByMonth,
-      overdue,
-    };
+    return buildBookMetrics({
+      patients: (patients ?? []) as any,
+      treatments: (treatments ?? []) as any,
+      appointments: (appointments ?? []) as any,
+    });
   });
 
 export const getPatient = createServerFn({ method: "GET" })
@@ -2745,6 +2695,12 @@ export const getMyRecord = createServerFn({ method: "GET" })
       withUrls.push({ ...photo, url: url?.signedUrl ?? null });
     }
 
+    const [{ data: products }, { data: sales }] = await Promise.all([
+      supabase.from("retail_products").select("id, name, sku, price, active, featured_on_portal, image_url"),
+      supabase.from("product_sales").select("product_id, patient_id, occurred_at").eq("patient_id", patient.id),
+    ]);
+    const { portalProductsFor } = await import("./insights.server");
+
     return {
       patient,
       treatments: treatments.data ?? [],
@@ -2752,6 +2708,11 @@ export const getMyRecord = createServerFn({ method: "GET" })
       messages: messages.data ?? [],
       history: history.data ?? [],
       photos: withUrls,
+      products: portalProductsFor({
+        patientId: patient.id,
+        products: products ?? [],
+        sales: sales ?? [],
+      }),
     };
   });
 
@@ -5732,4 +5693,146 @@ export const updatePlanMilestone = createServerFn({ method: "POST" })
       status: data.status,
     });
     return { ok: true };
+  });
+
+export const getInsights = createServerFn({ method: "GET" })
+  .validator((data: { from: string; to: string }) => parseInput(schemas.GetInsights, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    await authorize(context as Ctx, "getInsights");
+    const supabase = (context as Ctx).supabase;
+    const { buildInsights } = await import("./insights.server");
+    const [
+      { data: patients },
+      { data: treatments },
+      { data: appointments },
+      { data: catalogue },
+      { data: leads },
+      { data: products },
+      { data: sales },
+    ] = await Promise.all([
+      supabase
+        .from("patients")
+        .select("id, title, first_name, last_name, email, phone, avatar_url, source, created_at")
+        .is("deleted_at", null),
+      supabase.from("treatments").select("patient_id, name, price, performed_at, catalogue_id"),
+      supabase.from("appointments").select("patient_id, starts_at, status, treatment_name, catalogue_id"),
+      supabase.from("treatment_catalogue").select("id, name, category"),
+      supabase
+        .from("website_leads")
+        .select("id, patient_id, first_name, last_name, email, phone, source, interest, occurred_at"),
+      supabase.from("retail_products").select("id, name, sku"),
+      supabase.from("product_sales").select("product_id, qty, amount, occurred_at"),
+    ]);
+
+    return buildInsights({
+      from: data.from,
+      to: data.to,
+      patients: (patients ?? []) as any,
+      treatments: (treatments ?? []) as any,
+      appointments: (appointments ?? []) as any,
+      catalogue: (catalogue ?? []) as any,
+      leads: (leads ?? []) as any,
+      products: (products ?? []) as any,
+      sales: (sales ?? []) as any,
+    });
+  });
+
+export const listRetailProducts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await authorize(context as Ctx, "listRetailProducts");
+    const { data, error } = await (context as Ctx).supabase
+      .from("retail_products")
+      .select("*")
+      .order("active", { ascending: false })
+      .order("name", { ascending: true });
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
+
+export type RetailProductInput = {
+  id?: string | null;
+  name: string;
+  sku?: string | null;
+  price?: number | null;
+  featured_on_portal?: boolean;
+  image_url?: string | null;
+  active?: boolean;
+};
+
+export const saveRetailProduct = createServerFn({ method: "POST" })
+  .validator((data: RetailProductInput) => parseInput(schemas.SaveRetailProduct, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "saveRetailProduct");
+    const name = (data.name ?? "").trim();
+    if (!name) throw new Error("Product name is required");
+    const row: Record<string, unknown> = {
+      clinic_id: clinicIdOf(context),
+      name,
+      sku: data.sku?.trim() || null,
+      price: data.price ?? null,
+      featured_on_portal: data.featured_on_portal ?? false,
+      image_url: data.image_url?.trim() || null,
+    };
+    if (!data.id) row.active = data.active ?? true;
+    else if (data.active !== undefined) row.active = data.active;
+    if (data.id) {
+      const { error } = await ctx.supabase.from("retail_products").update(row).eq("id", data.id);
+      if (error) throw new Error(error.message);
+      await audit(ctx, "update", "retail_products", data.id, null, { name });
+      return { ok: true, id: data.id };
+    }
+    const { data: created, error } = await ctx.supabase.from("retail_products").insert(row).select("id").single();
+    if (error) throw new Error(error.message);
+    await audit(ctx, "create", "retail_products", created?.id ?? null, null, { name });
+    return { ok: true, id: created?.id ?? null };
+  });
+
+export const setRetailProductActive = createServerFn({ method: "POST" })
+  .validator((data: { id: string; active: boolean }) => parseInput(schemas.SetRetailProductActive, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "setRetailProductActive");
+    const { error } = await ctx.supabase
+      .from("retail_products")
+      .update({ active: data.active })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await audit(ctx, data.active ? "restore" : "archive", "retail_products", data.id, null, {});
+    return { ok: true };
+  });
+
+export const getInsightsIngestKeyStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await authorize(context as Ctx, "getInsightsIngestKeyStatus");
+    const { data } = await (context as Ctx).supabase
+      .from("clinics")
+      .select("insights_ingest_key_last4")
+      .eq("id", clinicIdOf(context))
+      .maybeSingle();
+    const last4 = data?.insights_ingest_key_last4 ?? null;
+    return { configured: Boolean(last4), last4 };
+  });
+
+export const rotateInsightsIngestKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "rotateInsightsIngestKey");
+    const generated = generateInsightsIngestKey();
+    const { error } = await ctx.supabase
+      .from("clinics")
+      .update({
+        insights_ingest_key_hash: generated.hash,
+        insights_ingest_key_last4: generated.last4,
+      })
+      .eq("id", clinicIdOf(context));
+    if (error) throw new Error(error.message);
+    await audit(ctx, "update", "clinic", clinicIdOf(context), null, { insights_ingest_key: "rotated" });
+    return { raw: generated.raw, last4: generated.last4 };
   });

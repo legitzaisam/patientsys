@@ -17,6 +17,7 @@ const ROLE_PAGES: Record<DemoRole, { path: string; heading: string | RegExp }[]>
   owner: [
     ...STAFF_PAGES,
     { path: "/retention", heading: "Retention" },
+    { path: "/insights", heading: "Insights" },
     { path: "/performance", heading: "Performance" },
   ],
   practitioner: [
@@ -24,7 +25,11 @@ const ROLE_PAGES: Record<DemoRole, { path: string; heading: string | RegExp }[]>
     { path: "/retention", heading: "Retention" },
     { path: "/earnings", heading: "My earnings" },
   ],
-  front_desk: [...STAFF_PAGES, { path: "/retention", heading: "Retention" }],
+  front_desk: [
+    ...STAFF_PAGES,
+    { path: "/retention", heading: "Retention" },
+    { path: "/insights", heading: "Insights" },
+  ],
   patient: [{ path: "/my-record", heading: /Hello / }],
 };
 

@@ -8,7 +8,7 @@ import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { EarningsLinesTable } from "@/components/earnings/earnings-lines-table";
-import { PeriodPicker, periodRange, money, type PeriodKey } from "@/components/period-picker";
+import { PeriodPicker, periodRange, money, type PeriodSelection } from "@/components/period-picker";
 
 export const Route = createFileRoute("/_authenticated/earnings")({
   head: () => ({
@@ -28,12 +28,12 @@ export const Route = createFileRoute("/_authenticated/earnings")({
 
 function EarningsPage() {
   const { data: identity } = useIdentity();
-  const [period, setPeriod] = useState<PeriodKey>("month");
+  const [period, setPeriod] = useState<PeriodSelection>({ key: "month", offset: 0 });
   const range = useMemo(() => periodRange(period), [period]);
   const fetchEarnings = useServerFn(getMyEarnings);
 
   const { data } = useQuery({
-    queryKey: ["my-earnings", period],
+    queryKey: ["my-earnings", range.from, range.to],
     queryFn: () => fetchEarnings({ data: range }),
     enabled: !!identity?.isStaff,
   });
@@ -71,7 +71,7 @@ function EarningsPage() {
         <Stat label="Retention" value={`${data?.retention ?? 0}%`} hint="Returned within 12 months" />
       </div>
 
-      <EarningsLinesTable lines={data?.lines} period={period} />
+      <EarningsLinesTable lines={data?.lines} period={period.key} />
     </AppShell>
   );
 }

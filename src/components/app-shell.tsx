@@ -14,6 +14,7 @@ import {
   IdCard,
   ChevronDown,
   Repeat,
+  Lightbulb,
   Megaphone,
   PanelLeft,
   PanelLeftClose,
@@ -421,6 +422,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   });
   const diaryCount = (todayAppointments ?? []).length;
 
+  const canInsights = can(identity, "reports.insights");
   const canRetention = can(identity, "reports.retention");
   const canPerformance = can(identity, "reports.performance");
   const canTeam = can(identity, "team.view");
@@ -436,6 +438,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     : [{ to: "/my-record", label: "My record", icon: HeartPulse }];
 
   const reportLinks: NavLink[] = [
+    ...(canInsights ? [{ to: "/insights", label: "Insights", icon: Lightbulb }] : []),
     ...(canRetention ? [{ to: "/retention", label: "Retention", icon: Repeat }] : []),
     ...(canPerformance ? [{ to: "/performance", label: "Performance", icon: TrendingUp }] : []),
     ...(identity.isStaff && isPractitioner && !identity.isManager

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { Calendar, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { listPatients, savePatient } from "@/lib/clinic.functions";
 import { PatientAvatar } from "@/components/patient-avatar";
-import { PatientMetrics } from "@/components/patients/patient-metrics";
 import { JourneyBoard } from "@/components/patients/journey-board";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { SavePatient } from "@/lib/validation/schemas";
@@ -39,7 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 type SortColumn = "status";
 type SortDirection = "asc" | "desc";
 type PatientView = "all" | "active" | "inactive" | "due";
-type PatientsTab = "records" | "metrics" | "board";
+type PatientsTab = "records" | "board";
 
 /**
  * Derived from the schema the savePatient server function validates against, so
@@ -78,10 +77,14 @@ export const Route = createFileRoute("/_authenticated/patients/")({
     };
     if (typeof search?.["q"] === "string" && search["q"]) parsed.q = search["q"];
     const tab = String(search?.["tab"] ?? "records");
-    if (["records", "metrics", "board"].includes(tab) && tab !== "records") {
-      parsed.tab = tab as PatientsTab;
-    }
+    if (tab === "board") parsed.tab = "board";
+    if (tab === "metrics") (parsed as { tab?: string }).tab = "metrics";
     return parsed;
+  },
+  beforeLoad: ({ search }) => {
+    if (String((search as { tab?: string }).tab ?? "") === "metrics") {
+      throw redirect({ to: "/insights", search: { tab: "book" } });
+    }
   },
   head: () => ({
     meta: [
@@ -177,18 +180,13 @@ function PatientsPage() {
         <div>
           <h1 className="page-title">Patients</h1>
           <p className="page-subtitle">
-            {tab === "records"
-              ? `${rows.length} records`
-              : tab === "metrics"
-                ? "The patient base at a glance."
-                : "Every active treatment plan by phase."}
+            {tab === "records" ? `${rows.length} records` : "Every active treatment plan by phase."}
           </p>
         </div>
         <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
           {(
             [
               { key: "records", label: "Records" },
-              { key: "metrics", label: "Metrics" },
               { key: "board", label: "Journey board" },
             ] as { key: PatientsTab; label: string }[]
           ).map((t) => (
@@ -211,7 +209,6 @@ function PatientsPage() {
         </div>
       </div>
 
-      {tab === "metrics" && <PatientMetrics />}
       {tab === "board" && <JourneyBoard identity={identity} />}
       {tab === "records" && (
       <>

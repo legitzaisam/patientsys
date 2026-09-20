@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PortalRouteImport } from './routes/portal'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedEarningsRouteImport } from './routes/_authenticated/earnings'
+import { Route as AuthenticatedInsightsRouteImport } from './routes/_authenticated/insights'
 import { Route as AuthenticatedMyRecordRouteImport } from './routes/_authenticated/my-record'
 import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
@@ -31,6 +32,7 @@ import { Route as AuthenticatedPatientsIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedTeamIndexRouteImport } from './routes/_authenticated/team.index'
 import { Route as AuthenticatedTeamIdRouteImport } from './routes/_authenticated/team.$id'
 import { Route as ApiCommsDrainRouteImport } from './routes/api.comms.drain'
+import { Route as ApiInsightsEventsRouteImport } from './routes/api.insights.events'
 import { Route as ApiCommsUnsubscribeTokenRouteImport } from './routes/api.comms.unsubscribe.$token'
 import { Route as ApiCommsWebhooksResendRouteImport } from './routes/api.comms.webhooks.resend'
 import { Route as ApiCommsWebhooksTwilioRouteImport } from './routes/api.comms.webhooks.twilio'
@@ -63,6 +65,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 const AuthenticatedEarningsRoute = AuthenticatedEarningsRouteImport.update({
   id: '/earnings',
   path: '/earnings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedInsightsRoute = AuthenticatedInsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedMyRecordRoute = AuthenticatedMyRecordRouteImport.update({
@@ -147,6 +154,11 @@ const ApiCommsDrainRoute = ApiCommsDrainRouteImport.update({
   path: '/api/comms/drain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInsightsEventsRoute = ApiInsightsEventsRouteImport.update({
+  id: '/api/insights/events',
+  path: '/api/insights/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCommsUnsubscribeTokenRoute =
   ApiCommsUnsubscribeTokenRouteImport.update({
     id: '/api/comms/unsubscribe/$token',
@@ -175,6 +187,7 @@ export interface FileRoutesByFullPath {
   '/portal': typeof PortalRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/earnings': typeof AuthenticatedEarningsRoute
+  '/insights': typeof AuthenticatedInsightsRoute
   '/my-record': typeof AuthenticatedMyRecordRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -189,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
+  '/api/insights/events': typeof ApiInsightsEventsRoute
   '/patients/': typeof AuthenticatedPatientsIndexRoute
   '/team/': typeof AuthenticatedTeamIndexRoute
   '/api/comms/unsubscribe/$token': typeof ApiCommsUnsubscribeTokenRoute
@@ -202,6 +216,7 @@ export interface FileRoutesByTo {
   '/portal': typeof PortalRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/earnings': typeof AuthenticatedEarningsRoute
+  '/insights': typeof AuthenticatedInsightsRoute
   '/my-record': typeof AuthenticatedMyRecordRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -215,6 +230,7 @@ export interface FileRoutesByTo {
   '/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
+  '/api/insights/events': typeof ApiInsightsEventsRoute
   '/patients': typeof AuthenticatedPatientsIndexRoute
   '/team': typeof AuthenticatedTeamIndexRoute
   '/api/comms/unsubscribe/$token': typeof ApiCommsUnsubscribeTokenRoute
@@ -230,6 +246,7 @@ export interface FileRoutesById {
   '/portal': typeof PortalRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/earnings': typeof AuthenticatedEarningsRoute
+  '/_authenticated/insights': typeof AuthenticatedInsightsRoute
   '/_authenticated/my-record': typeof AuthenticatedMyRecordRoute
   '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
@@ -244,6 +261,7 @@ export interface FileRoutesById {
   '/_authenticated/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/_authenticated/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
+  '/api/insights/events': typeof ApiInsightsEventsRoute
   '/_authenticated/patients/': typeof AuthenticatedPatientsIndexRoute
   '/_authenticated/team/': typeof AuthenticatedTeamIndexRoute
   '/api/comms/unsubscribe/$token': typeof ApiCommsUnsubscribeTokenRoute
@@ -259,6 +277,7 @@ export interface FileRouteTypes {
     | '/portal'
     | '/dashboard'
     | '/earnings'
+    | '/insights'
     | '/my-record'
     | '/performance'
     | '/profile'
@@ -273,6 +292,7 @@ export interface FileRouteTypes {
     | '/patients/$id'
     | '/team/$id'
     | '/api/comms/drain'
+    | '/api/insights/events'
     | '/patients/'
     | '/team/'
     | '/api/comms/unsubscribe/$token'
@@ -286,6 +306,7 @@ export interface FileRouteTypes {
     | '/portal'
     | '/dashboard'
     | '/earnings'
+    | '/insights'
     | '/my-record'
     | '/performance'
     | '/profile'
@@ -299,6 +320,7 @@ export interface FileRouteTypes {
     | '/patients/$id'
     | '/team/$id'
     | '/api/comms/drain'
+    | '/api/insights/events'
     | '/patients'
     | '/team'
     | '/api/comms/unsubscribe/$token'
@@ -313,6 +335,7 @@ export interface FileRouteTypes {
     | '/portal'
     | '/_authenticated/dashboard'
     | '/_authenticated/earnings'
+    | '/_authenticated/insights'
     | '/_authenticated/my-record'
     | '/_authenticated/performance'
     | '/_authenticated/profile'
@@ -327,6 +350,7 @@ export interface FileRouteTypes {
     | '/_authenticated/patients/$id'
     | '/_authenticated/team/$id'
     | '/api/comms/drain'
+    | '/api/insights/events'
     | '/_authenticated/patients/'
     | '/_authenticated/team/'
     | '/api/comms/unsubscribe/$token'
@@ -343,6 +367,7 @@ export interface RootRouteChildren {
   DTokenRoute: typeof DTokenRoute
   UTokenRoute: typeof UTokenRoute
   ApiCommsDrainRoute: typeof ApiCommsDrainRoute
+  ApiInsightsEventsRoute: typeof ApiInsightsEventsRoute
   ApiCommsUnsubscribeTokenRoute: typeof ApiCommsUnsubscribeTokenRoute
   ApiCommsWebhooksResendRoute: typeof ApiCommsWebhooksResendRoute
   ApiCommsWebhooksTwilioRoute: typeof ApiCommsWebhooksTwilioRoute
@@ -391,6 +416,13 @@ declare module '@tanstack/react-router' {
       path: '/earnings'
       fullPath: '/earnings'
       preLoaderRoute: typeof AuthenticatedEarningsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/insights': {
+      id: '/_authenticated/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof AuthenticatedInsightsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/my-record': {
@@ -505,6 +537,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCommsDrainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/insights/events': {
+      id: '/api/insights/events'
+      path: '/api/insights/events'
+      fullPath: '/api/insights/events'
+      preLoaderRoute: typeof ApiInsightsEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/comms/unsubscribe/$token': {
       id: '/api/comms/unsubscribe/$token'
       path: '/api/comms/unsubscribe/$token'
@@ -552,6 +591,7 @@ const AuthenticatedTeamRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedEarningsRoute: typeof AuthenticatedEarningsRoute
+  AuthenticatedInsightsRoute: typeof AuthenticatedInsightsRoute
   AuthenticatedMyRecordRoute: typeof AuthenticatedMyRecordRoute
   AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
@@ -566,6 +606,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedEarningsRoute: AuthenticatedEarningsRoute,
+  AuthenticatedInsightsRoute: AuthenticatedInsightsRoute,
   AuthenticatedMyRecordRoute: AuthenticatedMyRecordRoute,
   AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
@@ -600,6 +641,7 @@ const rootRouteChildren: RootRouteChildren = {
   DTokenRoute: DTokenRoute,
   UTokenRoute: UTokenRoute,
   ApiCommsDrainRoute: ApiCommsDrainRoute,
+  ApiInsightsEventsRoute: ApiInsightsEventsRoute,
   ApiCommsUnsubscribeTokenRoute: ApiCommsUnsubscribeTokenRoute,
   ApiCommsWebhooksResendRoute: ApiCommsWebhooksResendRoute,
   ApiCommsWebhooksTwilioRoute: ApiCommsWebhooksTwilioRoute,

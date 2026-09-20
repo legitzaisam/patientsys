@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { getPractitionerPerformance } from "@/lib/clinic.functions";
-import { PeriodPicker, periodRange, previousPeriodRange, money, type PeriodKey } from "@/components/period-picker";
+import { PeriodPicker, periodRange, previousPeriodRange, money, type PeriodSelection } from "@/components/period-picker";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -129,7 +129,7 @@ export function StaffPerformanceKpis({
   role: string;
 }) {
   const fetchPerformance = useServerFn(getPractitionerPerformance);
-  const [period, setPeriod] = useState<PeriodKey>("month");
+  const [period, setPeriod] = useState<PeriodSelection>({ key: "month", offset: 0 });
   const range = useMemo(() => periodRange(period), [period]);
   const previous = useMemo(() => previousPeriodRange(period), [period]);
 
@@ -137,7 +137,7 @@ export function StaffPerformanceKpis({
   const clinical = role === "practitioner" || role === "owner";
 
   const { data } = useQuery({
-    queryKey: ["performance", period],
+    queryKey: ["performance", range.from, range.to],
     queryFn: () =>
       fetchPerformance({
         data: { ...range, previousFrom: previous.from, previousTo: previous.to },

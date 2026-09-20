@@ -81,6 +81,9 @@ const colourThemes = db.colourThemes as any[];
 const profileChangeRequests = db.profileChangeRequests as any[];
 const staffDocuments = db.staffDocuments as any[];
 const userNotes = db.userNotes as any[];
+const websiteLeads = db.websiteLeads as any[];
+const retailProducts = db.retailProducts as any[];
+const productSales = db.productSales as any[];
 
 /* ---------------------------------------------------------------- */
 /* identity — driven by the demo_role cookie                          */
@@ -722,61 +725,16 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
 });
 
 export const getPatientMetrics = createServerFn({ method: "GET" }).handler(async () => {
-  const now = new Date();
-  const yearAgoIso = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-  const active = patients.filter((p) => p.status === "active").length;
-  const newThisMonth = patients.filter((p) => p.created_at >= monthStart).length;
-
-  const monthlyNew: { key: string; label: string; count: number }[] = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-    monthlyNew.push({
-      key: d.toISOString().slice(0, 7),
-      label: d.toLocaleDateString("en-GB", { month: "short" }),
-      count: patients.filter(
-        (p) => p.created_at >= d.toISOString() && p.created_at < next.toISOString(),
-      ).length,
-    });
+  const me = requireStaff();
+  if (!me.isOwner && !me.permissions.includes("reports.insights")) {
+    throw new Error("You do not have access to insights reports");
   }
-
-  const counts = new Map<string, number>();
-  for (const t of treatments) {
-    if (t.performed_at >= yearAgoIso) counts.set(t.name, (counts.get(t.name) ?? 0) + 1);
-  }
-  const topTreatments = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([name, count]) => ({ name, count }));
-
-  const todayKey = clinicDayKey(now);
-  const dueByMonth: { key: string; label: string; due: number }[] = [];
-  for (let i = 0; i < 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const next = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
-    dueByMonth.push({
-      key: d.toISOString().slice(0, 7),
-      label: d.toLocaleDateString("en-GB", { month: "short" }),
-      due: treatments.filter(
-        (t) =>
-          t.next_due_at &&
-          t.next_due_at >= d.toISOString().slice(0, 10) &&
-          t.next_due_at < next.toISOString().slice(0, 10) &&
-          t.next_due_at >= todayKey,
-      ).length,
-    });
-  }
-  const overdue = treatments.filter((t) => t.next_due_at && t.next_due_at < todayKey).length;
-
-  return {
-    totals: { total: patients.length, active, inactive: patients.length - active, newThisMonth },
-    monthlyNew,
-    topTreatments,
-    dueByMonth,
-    overdue,
-  };
+  const { buildBookMetrics } = await import("./insights.server");
+  return buildBookMetrics({
+    patients,
+    treatments,
+    appointments,
+  });
 });
 
 export const getPatient = createServerFn({ method: "GET" })
@@ -2424,6 +2382,7 @@ export const getMyRecord = createServerFn({ method: "GET" }).handler(async () =>
   const me = identity();
   const patient = patients.find((p) => p.user_id === me.userId) ?? null;
   if (!patient) return null;
+  const { portalProductsFor } = await import("./insights.server");
   return {
     patient,
     treatments: sortDesc(
@@ -2445,6 +2404,11 @@ export const getMyRecord = createServerFn({ method: "GET" }).handler(async () =>
     photos: photos
       .filter((p) => p.patient_id === patient.id && p.visible_to_patient)
       .map((p) => ({ ...p, url: p.storage_path })),
+    products: portalProductsFor({
+      patientId: patient.id,
+      products: retailProducts,
+      sales: productSales,
+    }),
   };
 });
 
@@ -4205,3 +4169,131 @@ export const updatePlanMilestone = createServerFn({ method: "POST" })
     }
     return { ok: true };
   });
+
+export const getInsights = createServerFn({ method: "GET" })
+  .validator((data: { from: string; to: string }) => parseInput(schemas.GetInsights, data))
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!me.isOwner && !me.permissions.includes("reports.insights")) {
+      throw new Error("You do not have access to insights reports");
+    }
+    const { buildInsights } = await import("./insights.server");
+    return buildInsights({
+      from: data.from,
+      to: data.to,
+      patients: patients.map((p) => ({
+        id: p.id,
+        title: p.title,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        email: p.email,
+        phone: p.phone,
+        avatar_url: p.avatar_url,
+        source: p.source,
+        created_at: p.created_at,
+      })),
+      appointments: appointments.map((a) => ({
+        patient_id: a.patient_id,
+        starts_at: a.starts_at,
+        status: a.status,
+        treatment_name: a.treatment_name,
+        catalogue_id: a.catalogue_id,
+      })),
+      treatments: treatments.map((t) => ({
+        patient_id: t.patient_id,
+        name: t.name,
+        price: t.price,
+        performed_at: t.performed_at,
+        catalogue_id: t.catalogue_id,
+      })),
+      catalogue: catalogue.map((c) => ({ id: c.id, name: c.name, category: c.category })),
+      leads: websiteLeads.map((l) => ({
+        id: l.id,
+        patient_id: l.patient_id,
+        first_name: l.first_name,
+        last_name: l.last_name,
+        email: l.email,
+        phone: l.phone,
+        source: l.source,
+        interest: l.interest,
+        occurred_at: l.occurred_at,
+      })),
+      products: retailProducts.map((p) => ({ id: p.id, name: p.name, sku: p.sku })),
+      sales: productSales.map((s) => ({
+        product_id: s.product_id,
+        qty: s.qty,
+        amount: s.amount,
+        occurred_at: s.occurred_at,
+      })),
+    });
+  });
+
+export type RetailProductInput = {
+  id?: string | null;
+  name: string;
+  sku?: string | null;
+  price?: number | null;
+  featured_on_portal?: boolean;
+  image_url?: string | null;
+  active?: boolean;
+};
+
+export const listRetailProducts = createServerFn({ method: "GET" }).handler(async () => {
+  requireStaff();
+  return [...retailProducts].sort(
+    (a, b) => Number(b.active) - Number(a.active) || String(a.name).localeCompare(String(b.name)),
+  );
+});
+
+export const saveRetailProduct = createServerFn({ method: "POST" })
+  .validator((data: RetailProductInput) => parseInput(schemas.SaveRetailProduct, data))
+  .handler(async ({ data }) => {
+    requireSettings();
+    const name = (data.name ?? "").trim();
+    if (!name) throw new Error("Product name is required");
+    const row: Record<string, unknown> = {
+      clinic_id: CLINIC_ID,
+      name,
+      sku: data.sku?.trim() || null,
+      price: data.price ?? null,
+      featured_on_portal: data.featured_on_portal ?? false,
+      image_url: data.image_url?.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (!data.id) row.active = data.active ?? true;
+    else if (data.active !== undefined) row.active = data.active;
+    if (data.id) {
+      const existing = retailProducts.find((p) => p.id === data.id);
+      if (existing) Object.assign(existing, row);
+      return { ok: true, id: data.id };
+    }
+    const created = { id: newId("r9"), created_at: new Date().toISOString(), ...row };
+    retailProducts.push(created);
+    return { ok: true, id: created.id };
+  });
+
+export const setRetailProductActive = createServerFn({ method: "POST" })
+  .validator((data: { id: string; active: boolean }) => parseInput(schemas.SetRetailProductActive, data))
+  .handler(async ({ data }) => {
+    requireSettings();
+    const row = retailProducts.find((p) => p.id === data.id);
+    if (row) row.active = data.active;
+    return { ok: true };
+  });
+
+export const getInsightsIngestKeyStatus = createServerFn({ method: "GET" }).handler(async () => {
+  const me = identity();
+  if (!me.isOwner) throw new Error("Clinic owner access only");
+  const last4 = (db.clinic["insights_ingest_key_last4"] as string | null) ?? null;
+  return { configured: Boolean(last4), last4 };
+});
+
+export const rotateInsightsIngestKey = createServerFn({ method: "POST" }).handler(async () => {
+  const me = identity();
+  if (!me.isOwner) throw new Error("Clinic owner access only");
+  const { generateInsightsIngestKey } = await import("./insights-ingest.server");
+  const generated = generateInsightsIngestKey();
+  db.clinic["insights_ingest_key_hash"] = generated.hash;
+  db.clinic["insights_ingest_key_last4"] = generated.last4;
+  return { raw: generated.raw, last4: generated.last4 };
+});

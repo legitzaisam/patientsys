@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyEarnings } from "@/lib/clinic.functions";
-import { PeriodPicker, periodRange, money, type PeriodKey } from "@/components/period-picker";
+import { PeriodPicker, periodRange, money, type PeriodSelection } from "@/components/period-picker";
 import { Card } from "@/components/ui/card";
 
 function Cell({
@@ -45,11 +45,11 @@ function Row({ label, value, hint }: { label: string; value: string; hint: strin
 
 export function MyPerformanceKpis() {
   const fetchEarnings = useServerFn(getMyEarnings);
-  const [period, setPeriod] = useState<PeriodKey>("month");
+  const [period, setPeriod] = useState<PeriodSelection>({ key: "month", offset: 0 });
   const range = useMemo(() => periodRange(period), [period]);
 
   const { data } = useQuery({
-    queryKey: ["my-earnings", period],
+    queryKey: ["my-earnings", range.from, range.to],
     queryFn: () => fetchEarnings({ data: range }),
   });
 

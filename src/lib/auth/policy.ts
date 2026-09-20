@@ -52,7 +52,7 @@ export const POLICY = {
   /* Dashboard and patient reads */
   getDashboard: { kind: "staff" },
   listPatients: { kind: "staff" },
-  getPatientMetrics: { kind: "staff" },
+  getPatientMetrics: { kind: "capability", key: "reports.insights" },
   getPatient: { kind: "staffOrOwnPatient" },
   getCatalogue: { kind: "staff" },
   listPractitioners: { kind: "staff" },
@@ -155,6 +155,7 @@ export const POLICY = {
   saveMyNote: { kind: "self" },
 
   /* Reports */
+  getInsights: { kind: "capability", key: "reports.insights" },
   getPractitionerPerformance: { kind: "capability", key: "reports.performance" },
   getMyEarnings: { kind: "staff" },
   getRetention: { kind: "capability", key: "reports.retention" },
@@ -183,6 +184,11 @@ export const POLICY = {
   updateClinicDetails: { kind: "capability", key: "settings.treatments" },
   listRolePermissions: { kind: "staff" },
   setRolePermission: { kind: "owner" },
+  listRetailProducts: { kind: "staff" },
+  saveRetailProduct: { kind: "capability", key: "settings.treatments" },
+  setRetailProductActive: { kind: "capability", key: "settings.treatments" },
+  getInsightsIngestKeyStatus: { kind: "owner" },
+  rotateInsightsIngestKey: { kind: "owner" },
 } as const satisfies Record<string, Access>;
 
 export type HandlerName = keyof typeof POLICY;

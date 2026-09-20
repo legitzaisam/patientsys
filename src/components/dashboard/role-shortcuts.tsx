@@ -3,6 +3,7 @@ import {
   CalendarDays,
   Users,
   Repeat,
+  Lightbulb,
   TrendingUp,
   Wallet,
   UserCog,
@@ -27,6 +28,13 @@ type Shortcut = {
 const SHORTCUTS: Shortcut[] = [
   { to: "/schedule", label: "Diary", blurb: "Today's planner, bookings and arrivals", icon: CalendarDays },
   { to: "/patients", label: "Patients", blurb: "Records, photos, consent and messaging", icon: Users },
+  {
+    to: "/insights",
+    label: "Insights",
+    blurb: "Website funnel, consultations and bestsellers",
+    icon: Lightbulb,
+    permission: "reports.insights",
+  },
   {
     to: "/retention",
     label: "Retention",
