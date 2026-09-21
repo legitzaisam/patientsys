@@ -18,6 +18,7 @@ import { PERMISSION_KEYS, type PermissionKey } from "@/lib/permissions";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
+import * as portal from "@/lib/portal/shape";
 import {
   type Ctx,
   authorize,
@@ -2714,6 +2715,831 @@ export const getMyRecord = createServerFn({ method: "GET" })
         sales: sales ?? [],
       }),
     };
+  });
+
+/* ---------------------------------------------------------------- patient portal
+
+   Reads are one function per page, shaped to exactly what that page renders:
+   the portal is the slowest surface to load over mobile data, so pages must
+   not pull the whole record the way the staff `getPatient` does.
+
+   Every handler resolves the caller's own patient row first; none of them
+   accept a patient_id, so there is no object to tamper with. ------------ */
+
+/** The caller's patient row, or null when their login is not linked yet. */
+async function portalPatient(ctx: Ctx) {
+  const { data } = await ctx.supabase
+    .from("patients")
+    .select("*")
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  return data;
+}
+
+/** The plan the portal talks about: the active one, else the newest. */
+async function portalPlan(ctx: Ctx, patientId: string) {
+  const { data } = await ctx.supabase
+    .from("treatment_plans")
+    .select("*")
+    .eq("patient_id", patientId)
+    .order("status", { ascending: true })
+    .order("started_at", { ascending: false });
+  const plans = data ?? [];
+  return plans.find((p: any) => p.status === "active" || p.status === "paused") ?? plans[0] ?? null;
+}
+
+async function portalMilestones(ctx: Ctx, planId: string) {
+  const { data } = await ctx.supabase
+    .from("plan_milestones")
+    .select("*")
+    .eq("plan_id", planId);
+  return data ?? [];
+}
+
+function clinicianView(profile: any) {
+  if (!profile) return null;
+  return {
+    name: profile.full_name ?? "Your clinician",
+    initials: String(profile.full_name ?? "?")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w: string) => w[0]?.toUpperCase() ?? "")
+      .join(""),
+    title: profile.job_title ?? "Clinician",
+    avatarUrl: profile.avatar_url ?? null,
+  };
+}
+
+function appointmentView(a: any) {
+  const starts = new Date(a.starts_at);
+  return {
+    id: a.id,
+    treatment: a.treatment_name,
+    startsAt: a.starts_at,
+    endsAt: a.ends_at ?? null,
+    weekday: starts.toLocaleDateString("en-GB", { weekday: "short" }),
+    day: String(starts.getDate()),
+    monthYear: starts.toLocaleDateString("en-GB", { month: "short", year: "numeric" }),
+    date: starts.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+    time: starts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+    status: a.status,
+    stage: a.stage ?? null,
+  };
+}
+
+export const getPortalHome = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "getPortalHome");
+    const patient = await portalPatient(ctx);
+    if (!patient) return null;
+
+    const plan = await portalPlan(ctx, patient.id);
+    const milestones = plan ? await portalMilestones(ctx, plan.id) : [];
+
+    const [{ data: appts }, { data: news }, { data: offers }, { data: messages }] = await Promise.all([
+      ctx.supabase
+        .from("appointments")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .gte("starts_at", new Date().toISOString())
+        .neq("status", "cancelled")
+        .order("starts_at", { ascending: true })
+        .limit(1),
+      ctx.supabase
+        .from("clinic_news")
+        .select("*")
+        .not("published_at", "is", null)
+        .order("published_at", { ascending: false })
+        .limit(1),
+      ctx.supabase
+        .from("clinic_offers")
+        .select("*")
+        .not("published_at", "is", null)
+        .order("published_at", { ascending: false })
+        .limit(1),
+      ctx.supabase
+        .from("messages")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("created_at", { ascending: false })
+        .limit(1),
+    ]);
+
+    let clinician = null;
+    if (plan?.practitioner_id) {
+      const { data } = await ctx.supabase
+        .from("profiles")
+        .select("full_name, job_title, avatar_url")
+        .eq("id", plan.practitioner_id)
+        .maybeSingle();
+      clinician = clinicianView(data);
+    }
+
+    const last = (messages ?? [])[0];
+    let lastFrom: string | null = null;
+    if (last?.author === "staff" && last.author_id) {
+      const { data } = await ctx.supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", last.author_id)
+        .maybeSingle();
+      lastFrom = data?.full_name ?? null;
+    }
+
+    const progress = portal.planProgress(milestones as any);
+    const live = (offers ?? []).filter((o: any) => !o.expires_at || new Date(o.expires_at) > new Date());
+
+    return {
+      patient: { id: patient.id, firstName: patient.first_name, name: `${patient.first_name} ${patient.last_name}`.trim() },
+      clinician,
+      plan: plan
+        ? {
+            id: plan.id,
+            name: plan.name,
+            strapline: plan.strapline ?? null,
+            completion: progress.pct,
+            milestonesDone: progress.done,
+            milestonesTotal: progress.total,
+          }
+        : null,
+      progressSteps: portal.progressTrack(milestones as any),
+      nextAppointment: (appts ?? [])[0] ? appointmentView((appts ?? [])[0]) : null,
+      news: (news ?? [])[0] ?? null,
+      offer: live[0] ?? null,
+      latestMessage: last
+        ? { body: last.body, createdAt: last.created_at, author: last.author, from: lastFrom }
+        : null,
+    };
+  });
+
+export const getPortalPlan = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "getPortalPlan");
+    const patient = await portalPatient(ctx);
+    if (!patient) return null;
+
+    const plan = await portalPlan(ctx, patient.id);
+    const milestones = plan ? await portalMilestones(ctx, plan.id) : [];
+    const ids = milestones.map((m: any) => m.id);
+
+    const [{ data: checklist }, { data: checkins }, { data: photos }, { data: appts }] = await Promise.all([
+      ids.length
+        ? ctx.supabase.from("plan_milestone_checklist").select("*").in("milestone_id", ids)
+        : Promise.resolve({ data: [] as any[] }),
+      ctx.supabase
+        .from("recovery_checkins")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("checkin_date", { ascending: false })
+        .limit(1),
+      ctx.supabase
+        .from("treatment_photos")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .eq("visible_to_patient", true)
+        .order("taken_at", { ascending: true }),
+      ctx.supabase
+        .from("appointments")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .gte("starts_at", new Date().toISOString())
+        .neq("status", "cancelled")
+        .order("starts_at", { ascending: true })
+        .limit(1),
+    ]);
+
+    let clinician = null;
+    if (plan?.practitioner_id) {
+      const { data } = await ctx.supabase
+        .from("profiles")
+        .select("full_name, job_title, avatar_url")
+        .eq("id", plan.practitioner_id)
+        .maybeSingle();
+      clinician = clinicianView(data);
+    }
+
+    const current = portal.currentMilestone(milestones as any);
+    const currentChecklist = (checklist ?? []).filter((c: any) => c.milestone_id === current?.id);
+
+    const before = (photos ?? []).find((p: any) => p.kind === "before") ?? null;
+    const after = [...(photos ?? [])].reverse().find((p: any) => p.kind === "after") ?? null;
+    const signed = async (photo: any) => {
+      if (!photo) return null;
+      const { data } = await ctx.supabase.storage.from("patient-photos").createSignedUrl(photo.storage_path, 3600);
+      return { ...photo, url: data?.signedUrl ?? null };
+    };
+
+    const latest = (checkins ?? [])[0];
+    const progress = portal.planProgress(milestones as any);
+
+    return {
+      plan: plan
+        ? {
+            id: plan.id,
+            name: plan.name,
+            strapline: plan.strapline ?? null,
+            phase: plan.phase,
+            status: plan.status,
+            completion: progress.pct,
+            milestonesDone: progress.done,
+            milestonesTotal: progress.total,
+            totalSessions: plan.total_sessions,
+            ...(portal.planDay(plan.started_at, plan.duration_days) ?? {}),
+          }
+        : null,
+      clinician,
+      nextAppointment: (appts ?? [])[0] ? appointmentView((appts ?? [])[0]) : null,
+      todayAction: current
+        ? {
+            id: current.id,
+            title: current.title,
+            detail: current.detail ?? "",
+            dueDate: current.due_date ?? null,
+            icon: current.icon ?? "doc",
+          }
+        : null,
+      checkIn: latest
+        ? {
+            date: latest.checkin_date,
+            rows: [
+              { label: "Redness", value: latest.redness, reading: portal.severityLabel(latest.redness) },
+              { label: "Sensitivity", value: latest.sensitivity, reading: portal.severityLabel(latest.sensitivity) },
+              { label: "Dryness", value: latest.dryness, reading: portal.severityLabel(latest.dryness) },
+            ],
+            needsAttention: portal.checkinNeedsAttention(latest),
+            note: latest.note ?? null,
+          }
+        : null,
+      beforeAfter: { before: await signed(before), after: await signed(after) },
+      // "Visible improvements" are the captions the clinic wrote on the
+      // after photos — real clinical observations, not marketing copy.
+      improvements: (photos ?? [])
+        .filter((p: any) => p.kind === "after" && p.caption)
+        .map((p: any) => p.caption as string)
+        .slice(0, 4),
+      journeySnapshot: portal.roadmapFor(milestones as any, (checklist ?? []) as any).map((g) => ({
+        month: g.month,
+        title: g.title,
+        steps: g.steps.map((s: any) => ({ label: s.title, done: s.status === "done" || s.status === "skipped" })),
+      })),
+      safeToProceed: currentChecklist
+        .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
+        .map((c: any) => ({ id: c.id, label: c.label, done: c.done, byClinic: c.clinic_owned })),
+    };
+  });
+
+export const getPortalTimeline = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "getPortalTimeline");
+    const patient = await portalPatient(ctx);
+    if (!patient) return null;
+
+    const plan = await portalPlan(ctx, patient.id);
+    if (!plan) return { plan: null, roadmap: [], pendingPause: null };
+    const milestones = await portalMilestones(ctx, plan.id);
+    const ids = milestones.map((m: any) => m.id);
+
+    const [{ data: checklist }, { data: pauses }] = await Promise.all([
+      ids.length
+        ? ctx.supabase.from("plan_milestone_checklist").select("*").in("milestone_id", ids)
+        : Promise.resolve({ data: [] as any[] }),
+      ctx.supabase
+        .from("plan_pause_requests")
+        .select("*")
+        .eq("plan_id", plan.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1),
+    ]);
+
+    const progress = portal.planProgress(milestones as any);
+    return {
+      plan: {
+        id: plan.id,
+        name: plan.name,
+        strapline: plan.strapline ?? null,
+        status: plan.status,
+        milestonesDone: progress.done,
+        milestonesTotal: progress.total,
+        completion: progress.pct,
+      },
+      roadmap: portal.roadmapFor(milestones as any, (checklist ?? []) as any),
+      pendingPause: (pauses ?? [])[0] ?? null,
+    };
+  });
+
+export const getPortalJournal = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "getPortalJournal");
+    const patient = await portalPatient(ctx);
+    if (!patient) return null;
+
+    const { data: entries } = await ctx.supabase
+      .from("journal_entries")
+      .select("*")
+      .eq("patient_id", patient.id)
+      .order("entry_date", { ascending: false })
+      .limit(60);
+
+    const ids = (entries ?? []).map((e: any) => e.id);
+    const { data: attachments } = ids.length
+      ? await ctx.supabase.from("journal_attachments").select("*").in("entry_id", ids)
+      : { data: [] as any[] };
+
+    const signedFor = new Map<string, any[]>();
+    for (const a of attachments ?? []) {
+      const { data } = await ctx.supabase.storage.from("patient-photos").createSignedUrl(a.storage_path, 3600);
+      const list = signedFor.get(a.entry_id) ?? [];
+      list.push({ ...a, url: data?.signedUrl ?? null });
+      signedFor.set(a.entry_id, list);
+    }
+
+    return {
+      entries: (entries ?? []).map((e: any) => ({
+        id: e.id,
+        date: e.entry_date,
+        title: e.title,
+        body: e.body,
+        kind: e.kind,
+        sharedWithClinic: e.shared_with_clinic,
+        attachments: signedFor.get(e.id) ?? [],
+      })),
+    };
+  });
+
+export const getPortalRoutine = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "getPortalRoutine");
+    const patient = await portalPatient(ctx);
+    if (!patient) return null;
+
+    const { data: routine } = await ctx.supabase
+      .from("skincare_routines")
+      .select("*")
+      .eq("patient_id", patient.id)
+      .maybeSingle();
+
+    const { data: items } = routine
+      ? await ctx.supabase.from("routine_items").select("*").eq("routine_id", routine.id)
+      : { data: [] as any[] };
+
+    const since = new Date();
+    since.setDate(since.getDate() - 13);
+    const { data: completions } = await ctx.supabase
+      .from("routine_completions")
+      .select("*")
+      .eq("patient_id", patient.id)
+      .gte("completed_on", since.toISOString().slice(0, 10));
+
+    let clinician = null;
+    if (routine?.practitioner_id) {
+      const { data } = await ctx.supabase
+        .from("profiles")
+        .select("full_name, job_title, avatar_url")
+        .eq("id", routine.practitioner_id)
+        .maybeSingle();
+      clinician = clinicianView(data);
+    }
+
+    const order = (list: any[]) => [...list].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const today = new Date().toISOString().slice(0, 10);
+    const reminder = portal.nextRoutineReminder();
+    const doneToday = (completions ?? []).some(
+      (c: any) => c.completed_on === today && c.period === reminder.period && !c.snoozed_until,
+    );
+    const snoozed = (completions ?? []).find(
+      (c: any) => c.completed_on === today && c.period === reminder.period && c.snoozed_until,
+    );
+
+    return {
+      routine: routine
+        ? {
+            id: routine.id,
+            headline: routine.headline,
+            body: routine.body,
+            practitionerNote: routine.practitioner_note,
+            noteDatedOn: routine.note_dated_on,
+          }
+        : null,
+      clinician,
+      morning: order((items ?? []).filter((i: any) => i.period === "morning")),
+      evening: order((items ?? []).filter((i: any) => i.period === "evening")),
+      adherence: portal.adherenceFor((completions ?? []) as any),
+      reminder: { ...reminder, done: doneToday, snoozedUntil: snoozed?.snoozed_until ?? null },
+    };
+  });
+
+export const getPortalClinic = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "getPortalClinic");
+    const patient = await portalPatient(ctx);
+    if (!patient) return null;
+
+    const plan = await portalPlan(ctx, patient.id);
+    const now = new Date().toISOString();
+
+    const [{ data: clinic }, { data: upcoming }, { data: completed }, { data: external }] = await Promise.all([
+      ctx.supabase.from("clinics").select("*").maybeSingle(),
+      ctx.supabase
+        .from("appointments")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .gte("starts_at", now)
+        .neq("status", "cancelled")
+        .order("starts_at", { ascending: true })
+        .limit(6),
+      ctx.supabase
+        .from("treatments")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("performed_at", { ascending: false })
+        .limit(6),
+      ctx.supabase
+        .from("external_treatments")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("performed_on", { ascending: false, nullsFirst: false }),
+    ]);
+
+    let clinician = null;
+    if (plan?.practitioner_id) {
+      const { data } = await ctx.supabase
+        .from("profiles")
+        .select("full_name, job_title, avatar_url")
+        .eq("id", plan.practitioner_id)
+        .maybeSingle();
+      clinician = clinicianView(data);
+    }
+
+    return {
+      clinician,
+      clinic: clinic ?? null,
+      upcoming: (upcoming ?? []).map(appointmentView),
+      completed: (completed ?? []).map((t: any) => ({ id: t.id, name: t.name, performedAt: t.performed_at })),
+      external: external ?? [],
+    };
+  });
+
+export const getPortalRecords = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "getPortalRecords");
+    const patient = await portalPatient(ctx);
+    if (!patient) return null;
+
+    const [{ data: treatments }, { data: documents }, { data: photos }, { data: history }] = await Promise.all([
+      ctx.supabase
+        .from("treatments")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("performed_at", { ascending: false })
+        .limit(8),
+      ctx.supabase
+        .from("documents")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("created_at", { ascending: false }),
+      ctx.supabase
+        .from("treatment_photos")
+        .select("id")
+        .eq("patient_id", patient.id)
+        .eq("visible_to_patient", true),
+      ctx.supabase
+        .from("medical_history_versions")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("created_at", { ascending: false })
+        .limit(1),
+    ]);
+
+    const docs = documents ?? [];
+    return {
+      patient,
+      treatments: treatments ?? [],
+      // Consultations and "other" documents read as results in the portal;
+      // consents and plans are paperwork.
+      labs: docs.filter((d: any) => d.kind === "consultation" || d.kind === "other"),
+      documents: docs.filter((d: any) => d.kind !== "consultation" && d.kind !== "other"),
+      photoCount: (photos ?? []).length,
+      latestHistory: (history ?? [])[0] ?? null,
+    };
+  });
+
+/* ---------------------------------------------------- patient portal writes
+
+   The only clinical writes a patient may make. Each one resolves the caller's
+   own patient row and stamps it server-side, so the request body never
+   carries a patient_id to tamper with. --------------------------------- */
+
+/** The caller's patient row, or a refusal — writes cannot proceed without it. */
+async function requirePortalPatient(ctx: Ctx) {
+  const patient = await portalPatient(ctx);
+  if (!patient) throw new Error("No patient record is linked to your account");
+  return patient;
+}
+
+export const createJournalEntry = createServerFn({ method: "POST" })
+  .validator(
+    (data: { title: string; body?: string; kind?: string; entry_date?: string; shared_with_clinic?: boolean }) =>
+      parseInput(schemas.CreateJournalEntry, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "createJournalEntry");
+    const patient = await requirePortalPatient(ctx);
+    const { data: row, error } = await ctx.supabase
+      .from("journal_entries")
+      .insert({
+        patient_id: patient.id,
+        title: data.title.trim().slice(0, 140),
+        body: data.body?.trim().slice(0, 4000) ?? null,
+        kind: (data.kind ?? "skincare") as any,
+        entry_date: data.entry_date ?? new Date().toISOString().slice(0, 10),
+        shared_with_clinic: data.shared_with_clinic ?? true,
+      } as any)
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    await audit(ctx, "create", "journal_entries", row.id, patient.id, { title: data.title });
+    return { ok: true, id: row.id };
+  });
+
+export const deleteJournalEntry = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.DeleteJournalEntry, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "deleteJournalEntry");
+    const patient = await requirePortalPatient(ctx);
+    const { error } = await ctx.supabase
+      .from("journal_entries")
+      .delete()
+      .eq("id", data.id)
+      .eq("patient_id", patient.id);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "delete", "journal_entries", data.id, patient.id);
+    return { ok: true };
+  });
+
+export const submitRecoveryCheckin = createServerFn({ method: "POST" })
+  .validator((data: { redness: number; sensitivity: number; dryness: number; note?: string }) =>
+    parseInput(schemas.SubmitRecoveryCheckin, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "submitRecoveryCheckin");
+    const patient = await requirePortalPatient(ctx);
+    // One reading per day: re-submitting corrects today rather than stacking.
+    const { error } = await ctx.supabase
+      .from("recovery_checkins")
+      .upsert(
+        {
+          patient_id: patient.id,
+          checkin_date: new Date().toISOString().slice(0, 10),
+          redness: data.redness,
+          sensitivity: data.sensitivity,
+          dryness: data.dryness,
+          note: data.note?.trim().slice(0, 1000) ?? null,
+        } as any,
+        { onConflict: "patient_id,checkin_date" },
+      );
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const requestPlanPause = createServerFn({ method: "POST" })
+  .validator((data: { plan_id: string; reason: string; notes?: string }) =>
+    parseInput(schemas.RequestPlanPause, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "requestPlanPause");
+    const patient = await requirePortalPatient(ctx);
+
+    // The plan must be the caller's own, and one open request is enough.
+    const { data: plan } = await ctx.supabase
+      .from("treatment_plans")
+      .select("id, patient_id")
+      .eq("id", data.plan_id)
+      .maybeSingle();
+    if (!plan || plan.patient_id !== patient.id) throw new Error("Plan not found");
+
+    const { data: open } = await ctx.supabase
+      .from("plan_pause_requests")
+      .select("id")
+      .eq("plan_id", data.plan_id)
+      .eq("status", "pending")
+      .maybeSingle();
+    if (open) return { ok: true, id: open.id, alreadyOpen: true };
+
+    const { data: row, error } = await ctx.supabase
+      .from("plan_pause_requests")
+      .insert({
+        plan_id: data.plan_id,
+        patient_id: patient.id,
+        reason: data.reason,
+        notes: data.notes?.trim().slice(0, 500) ?? null,
+      } as any)
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    await audit(ctx, "create", "plan_pause_requests", row.id, patient.id, { reason: data.reason });
+    return { ok: true, id: row.id, alreadyOpen: false };
+  });
+
+export const markRoutineComplete = createServerFn({ method: "POST" })
+  .validator((data: { period: string }) => parseInput(schemas.MarkRoutineComplete, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "markRoutineComplete");
+    const patient = await requirePortalPatient(ctx);
+    const { error } = await ctx.supabase
+      .from("routine_completions")
+      .upsert(
+        {
+          patient_id: patient.id,
+          period: data.period as any,
+          completed_on: new Date().toISOString().slice(0, 10),
+          snoozed_until: null,
+        } as any,
+        { onConflict: "patient_id,period,completed_on" },
+      );
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const snoozeRoutineReminder = createServerFn({ method: "POST" })
+  .validator((data: { period: string; minutes?: number }) =>
+    parseInput(schemas.SnoozeRoutineReminder, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "snoozeRoutineReminder");
+    const patient = await requirePortalPatient(ctx);
+    const until = new Date(Date.now() + (data.minutes ?? 60) * 60_000).toISOString();
+    const { error } = await ctx.supabase
+      .from("routine_completions")
+      .upsert(
+        {
+          patient_id: patient.id,
+          period: data.period as any,
+          completed_on: new Date().toISOString().slice(0, 10),
+          snoozed_until: until,
+        } as any,
+        { onConflict: "patient_id,period,completed_on" },
+      );
+    if (error) throw new Error(error.message);
+    return { ok: true, snoozedUntil: until };
+  });
+
+export const toggleChecklistItem = createServerFn({ method: "POST" })
+  .validator((data: { id: string; done: boolean }) => parseInput(schemas.ToggleChecklistItem, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "toggleChecklistItem");
+    await requirePortalPatient(ctx);
+    // Clinic-owned steps are the clinic's to complete, never the patient's.
+    const { data: item } = await ctx.supabase
+      .from("plan_milestone_checklist")
+      .select("id, clinic_owned")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (!item) throw new Error("Checklist item not found");
+    if (item.clinic_owned) throw new Error("This step is completed by your clinic");
+
+    const { error } = await ctx.supabase
+      .from("plan_milestone_checklist")
+      .update({ done: data.done, done_at: data.done ? new Date().toISOString() : null })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const updatePortalProfile = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      address_line1?: string;
+      address_line2?: string;
+      city?: string;
+      postcode?: string;
+      emergency_contact_name?: string;
+      emergency_contact_relationship?: string;
+      emergency_contact_phone?: string;
+    }) => parseInput(schemas.UpdatePortalProfile, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "updatePortalProfile");
+    const patient = await requirePortalPatient(ctx);
+    const { error } = await ctx.supabase
+      .from("patients")
+      .update({
+        address_line1: data.address_line1 ?? null,
+        address_line2: data.address_line2 ?? null,
+        city: data.city ?? null,
+        postcode: data.postcode ?? null,
+        emergency_contact_name: data.emergency_contact_name ?? null,
+        emergency_contact_relationship: data.emergency_contact_relationship ?? null,
+        emergency_contact_phone: data.emergency_contact_phone ?? null,
+      })
+      .eq("id", patient.id);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "update", "patients", patient.id, patient.id, { portalProfile: true });
+    return { ok: true };
+  });
+
+export const addExternalTreatment = createServerFn({ method: "POST" })
+  .validator((data: { treatment: string; clinic_name: string; performed_label: string; notes?: string }) =>
+    parseInput(schemas.AddExternalTreatment, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "addExternalTreatment");
+    const patient = await requirePortalPatient(ctx);
+    const { data: row, error } = await ctx.supabase
+      .from("external_treatments")
+      .insert({
+        patient_id: patient.id,
+        treatment: data.treatment.trim().slice(0, 140),
+        clinic_name: data.clinic_name.trim().slice(0, 140),
+        performed_label: data.performed_label.trim().slice(0, 40),
+        notes: data.notes?.trim().slice(0, 500) ?? null,
+      } as any)
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    await audit(ctx, "create", "external_treatments", row.id, patient.id, { treatment: data.treatment });
+    return { ok: true, id: row.id };
+  });
+
+export const deleteExternalTreatment = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.DeleteExternalTreatment, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "deleteExternalTreatment");
+    const patient = await requirePortalPatient(ctx);
+    const { error } = await ctx.supabase
+      .from("external_treatments")
+      .delete()
+      .eq("id", data.id)
+      .eq("patient_id", patient.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const askCareAssistant = createServerFn({ method: "POST" })
+  .validator((data: { question: string }) => parseInput(schemas.AskCareAssistant, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "askCareAssistant");
+    const patient = await requirePortalPatient(ctx);
+
+    const plan = await portalPlan(ctx, patient.id);
+    const milestones = plan ? await portalMilestones(ctx, plan.id) : [];
+    const current = portal.currentMilestone(milestones as any);
+    const { data: appt } = await ctx.supabase
+      .from("appointments")
+      .select("treatment_name, starts_at")
+      .eq("patient_id", patient.id)
+      .gte("starts_at", new Date().toISOString())
+      .neq("status", "cancelled")
+      .order("starts_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const { answerCareQuestion } = await import("@/lib/ai/care-assistant.server");
+    const answer = await answerCareQuestion({
+      question: data.question,
+      firstName: patient.first_name,
+      planName: plan?.name ?? null,
+      currentStep: current ? { title: current.title, detail: current.detail ?? "" } : null,
+      nextAppointment: appt ? { treatment: appt.treatment_name, startsAt: appt.starts_at } : null,
+    });
+    return answer;
   });
 
 export const submitHistoryUpdate = createServerFn({ method: "POST" })

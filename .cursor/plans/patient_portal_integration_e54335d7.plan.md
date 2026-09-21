@@ -4,40 +4,40 @@ overview: On a new `e2e` branch, integrate the V4 wireframes into the live clini
 todos:
   - id: p0-branch
     content: "Phase 0: Cut branch `e2e` from the current tip (5ae7d4e) and confirm a clean working tree"
-    status: in_progress
+    status: completed
   - id: p0-bubbles
     content: "Phase 0: Add the missing chat + AI circular bubbles bottom-right in the V4 wireframes (butter gradient, chat panel + assistant panel) and re-run scripts/capture.mjs"
-    status: pending
+    status: completed
   - id: a1-plan-migration
     content: "Phase A: Migration - plan strapline/duration_days, milestone detail/guidance/month_group/icon, plan_milestone_checklist, plan_pause_requests + paused status"
-    status: pending
+    status: completed
   - id: a2-selfcare-migration
     content: "Phase A: Migration - journal_entries + journal_attachments, recovery_checkins, routine_completions (patient-writable, RLS)"
-    status: pending
+    status: completed
   - id: a3-content-migration
     content: "Phase A: Migration - skincare_routines + routine_items, clinic_news, clinic_offers (clinic-managed, seeded)"
-    status: pending
+    status: completed
   - id: a4-profile-migration
     content: "Phase A: Migration - patients address + emergency contact columns, external_treatments table"
-    status: pending
+    status: completed
   - id: a5-types-tenancy
     content: "Phase A: Regenerate supabase types, add new tables to CLINIC_SCOPED_TABLES, get check:tenancy green"
-    status: pending
+    status: completed
   - id: b1-read-fns
     content: "Phase B: Portal read fns - getPortalHome/Plan/Timeline/Journal/Routine/Clinic/Records shaped per page"
-    status: pending
+    status: completed
   - id: b2-write-fns
     content: "Phase B: Portal write fns - journal create/delete, recovery check-in, pause request, routine complete/snooze, emergency contact, external treatments, checklist toggle"
-    status: pending
+    status: completed
   - id: b3-ai-fn
     content: "Phase B: askCareAssistant + care-assistant.server.ts (Cohere, plan context, refuses diagnosis, canned fallback)"
-    status: pending
+    status: completed
   - id: b4-staff-sync
     content: "Phase B: Staff-side surfacing - pause requests in attention list with approve/decline, patient journal + check-ins on the staff record page"
     status: pending
   - id: b5-policy-schemas-demo
     content: "Phase B: POLICY entries, zod schemas and demo twins for every new fn; check:policy and check:validators green"
-    status: pending
+    status: in_progress
   - id: c1-routes-shell
     content: "Phase C: Route tree (my-record layout + index + 11 siblings), relax the non-staff redirect to /my-record/*, patient sidebar and top bar per V4"
     status: pending

@@ -25,6 +25,7 @@ import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voic
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
+import * as portal from "@/lib/portal/shape";
 import { EMAIL_OTP_RESEND_MS } from "@/lib/auth/constants";
 import {
   findPractitionerOverlap,
@@ -69,6 +70,17 @@ const photos = db.photos as any[];
 const recallTasks = db.recallTasks as any[];
 const treatmentPlans = db.treatmentPlans as any[];
 const planMilestones = db.planMilestones as any[];
+const planMilestoneChecklist = db.planMilestoneChecklist as any[];
+const planPauseRequests = db.planPauseRequests as any[];
+const journalEntries = db.journalEntries as any[];
+const journalAttachments = db.journalAttachments as any[];
+const recoveryCheckins = db.recoveryCheckins as any[];
+const routineCompletions = db.routineCompletions as any[];
+const skincareRoutines = db.skincareRoutines as any[];
+const routineItems = db.routineItems as any[];
+const clinicNews = db.clinicNews as any[];
+const clinicOffers = db.clinicOffers as any[];
+const externalTreatments = db.externalTreatments as any[];
 const retentionOutreach = db.retentionOutreach as any[];
 const staffNotifications = db.staffNotifications as any[];
 const staffConversations = db.staffConversations as any[];
@@ -2411,6 +2423,504 @@ export const getMyRecord = createServerFn({ method: "GET" }).handler(async () =>
     }),
   };
 });
+
+/* ------------------------------------------------- patient portal (demo twins)
+
+   Same shapes as production; the row source is the in-memory fixture set. */
+
+function demoPortalPatient() {
+  const me = identity();
+  return patients.find((p) => p.user_id === me.userId) ?? null;
+}
+
+function demoRequirePortalPatient() {
+  const patient = demoPortalPatient();
+  if (!patient) throw new Error("No patient record is linked to your account");
+  return patient;
+}
+
+function demoPortalPlan(patientId: string) {
+  const mine = treatmentPlans.filter((p) => p.patient_id === patientId);
+  return mine.find((p) => p.status === "active" || p.status === "paused") ?? mine[0] ?? null;
+}
+
+function demoClinician(profileId: string | null) {
+  if (!profileId) return null;
+  const profile = profiles.find((p) => p.id === profileId);
+  if (!profile) return null;
+  return {
+    name: profile.full_name ?? "Your clinician",
+    initials: String(profile.full_name ?? "?")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w: string) => w[0]?.toUpperCase() ?? "")
+      .join(""),
+    title: profile.job_title ?? "Clinician",
+    avatarUrl: profile.avatar_url ?? null,
+  };
+}
+
+function demoAppointmentView(a: any) {
+  const starts = new Date(a.starts_at);
+  return {
+    id: a.id,
+    treatment: a.treatment_name,
+    startsAt: a.starts_at,
+    endsAt: a.ends_at ?? null,
+    weekday: starts.toLocaleDateString("en-GB", { weekday: "short" }),
+    day: String(starts.getDate()),
+    monthYear: starts.toLocaleDateString("en-GB", { month: "short", year: "numeric" }),
+    date: starts.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+    time: starts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+    status: a.status,
+    stage: a.stage ?? null,
+  };
+}
+
+function demoUpcomingAppointments(patientId: string, limit: number) {
+  const now = Date.now();
+  return appointments
+    .filter((a) => a.patient_id === patientId && a.status !== "cancelled" && new Date(a.starts_at).getTime() >= now)
+    .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
+    .slice(0, limit);
+}
+
+export const getPortalHome = createServerFn({ method: "GET" }).handler(async () => {
+  const patient = demoPortalPatient();
+  if (!patient) return null;
+  const plan = demoPortalPlan(patient.id);
+  const milestones = plan ? planMilestones.filter((m) => m.plan_id === plan.id) : [];
+  const progress = portal.planProgress(milestones as any);
+  const upcoming = demoUpcomingAppointments(patient.id, 1)[0];
+  const last = sortDesc(messages.filter((m) => m.patient_id === patient.id), "created_at")[0];
+  const live = clinicOffers.filter((o) => !o.expires_at || new Date(o.expires_at) > new Date());
+
+  return {
+    patient: { id: patient.id, firstName: patient.first_name, name: `${patient.first_name} ${patient.last_name}`.trim() },
+    clinician: demoClinician(plan?.practitioner_id ?? null),
+    plan: plan
+      ? {
+          id: plan.id,
+          name: plan.name,
+          strapline: plan.strapline ?? null,
+          completion: progress.pct,
+          milestonesDone: progress.done,
+          milestonesTotal: progress.total,
+        }
+      : null,
+    progressSteps: portal.progressTrack(milestones as any),
+    nextAppointment: upcoming ? demoAppointmentView(upcoming) : null,
+    news: sortDesc(clinicNews.filter((n) => n.published_at), "published_at")[0] ?? null,
+    offer: sortDesc(live, "published_at")[0] ?? null,
+    latestMessage: last
+      ? {
+          body: last.body,
+          createdAt: last.created_at,
+          author: last.author,
+          from: last.author === "staff" ? profileName(last.author_id) : null,
+        }
+      : null,
+  };
+});
+
+export const getPortalPlan = createServerFn({ method: "GET" }).handler(async () => {
+  const patient = demoPortalPatient();
+  if (!patient) return null;
+  const plan = demoPortalPlan(patient.id);
+  const milestones = plan ? planMilestones.filter((m) => m.plan_id === plan.id) : [];
+  const ids = new Set(milestones.map((m) => m.id));
+  const checklist = planMilestoneChecklist.filter((c) => ids.has(c.milestone_id));
+  const current = portal.currentMilestone(milestones as any);
+  const latest = sortDesc(recoveryCheckins.filter((c) => c.patient_id === patient.id), "checkin_date")[0];
+  const visible = photos.filter((p: any) => p.patient_id === patient.id && p.visible_to_patient);
+  const upcoming = demoUpcomingAppointments(patient.id, 1)[0];
+  const progress = portal.planProgress(milestones as any);
+
+  return {
+    plan: plan
+      ? {
+          id: plan.id,
+          name: plan.name,
+          strapline: plan.strapline ?? null,
+          phase: plan.phase,
+          status: plan.status,
+          completion: progress.pct,
+          milestonesDone: progress.done,
+          milestonesTotal: progress.total,
+          totalSessions: plan.total_sessions,
+          ...(portal.planDay(plan.started_at, plan.duration_days) ?? {}),
+        }
+      : null,
+    clinician: demoClinician(plan?.practitioner_id ?? null),
+    nextAppointment: upcoming ? demoAppointmentView(upcoming) : null,
+    todayAction: current
+      ? {
+          id: current.id,
+          title: current.title,
+          detail: current.detail ?? "",
+          dueDate: current.due_date ?? null,
+          icon: current.icon ?? "doc",
+        }
+      : null,
+    checkIn: latest
+      ? {
+          date: latest.checkin_date,
+          rows: [
+            { label: "Redness", value: latest.redness, reading: portal.severityLabel(latest.redness) },
+            { label: "Sensitivity", value: latest.sensitivity, reading: portal.severityLabel(latest.sensitivity) },
+            { label: "Dryness", value: latest.dryness, reading: portal.severityLabel(latest.dryness) },
+          ],
+          needsAttention: portal.checkinNeedsAttention(latest),
+          note: latest.note ?? null,
+        }
+      : null,
+    beforeAfter: {
+      before: visible.find((p: any) => p.kind === "before") ?? null,
+      after: [...visible].reverse().find((p: any) => p.kind === "after") ?? null,
+    },
+    improvements: visible.filter((p: any) => p.kind === "after" && p.caption).map((p: any) => p.caption as string).slice(0, 4),
+    journeySnapshot: portal.roadmapFor(milestones as any, checklist as any).map((g) => ({
+      month: g.month,
+      title: g.title,
+      steps: g.steps.map((st: any) => ({ label: st.title, done: st.status === "done" || st.status === "skipped" })),
+    })),
+    safeToProceed: checklist
+      .filter((c) => c.milestone_id === current?.id)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((c) => ({ id: c.id, label: c.label, done: c.done, byClinic: c.clinic_owned })),
+  };
+});
+
+export const getPortalTimeline = createServerFn({ method: "GET" }).handler(async () => {
+  const patient = demoPortalPatient();
+  if (!patient) return null;
+  const plan = demoPortalPlan(patient.id);
+  if (!plan) return { plan: null, roadmap: [], pendingPause: null };
+  const milestones = planMilestones.filter((m) => m.plan_id === plan.id);
+  const ids = new Set(milestones.map((m) => m.id));
+  const checklist = planMilestoneChecklist.filter((c) => ids.has(c.milestone_id));
+  const progress = portal.planProgress(milestones as any);
+
+  return {
+    plan: {
+      id: plan.id,
+      name: plan.name,
+      strapline: plan.strapline ?? null,
+      status: plan.status,
+      milestonesDone: progress.done,
+      milestonesTotal: progress.total,
+      completion: progress.pct,
+    },
+    roadmap: portal.roadmapFor(milestones as any, checklist as any),
+    pendingPause:
+      sortDesc(
+        planPauseRequests.filter((r) => r.plan_id === plan.id && r.status === "pending"),
+        "created_at",
+      )[0] ?? null,
+  };
+});
+
+export const getPortalJournal = createServerFn({ method: "GET" }).handler(async () => {
+  const patient = demoPortalPatient();
+  if (!patient) return null;
+  const entries = sortDesc(journalEntries.filter((e) => e.patient_id === patient.id), "entry_date");
+  return {
+    entries: entries.map((e) => ({
+      id: e.id,
+      date: e.entry_date,
+      title: e.title,
+      body: e.body,
+      kind: e.kind,
+      sharedWithClinic: e.shared_with_clinic,
+      attachments: journalAttachments
+        .filter((a) => a.entry_id === e.id)
+        .map((a) => ({ ...a, url: a.storage_path })),
+    })),
+  };
+});
+
+export const getPortalRoutine = createServerFn({ method: "GET" }).handler(async () => {
+  const patient = demoPortalPatient();
+  if (!patient) return null;
+  const routine = skincareRoutines.find((r) => r.patient_id === patient.id) ?? null;
+  const items = routine ? routineItems.filter((i) => i.routine_id === routine.id) : [];
+  const completions = routineCompletions.filter((c) => c.patient_id === patient.id);
+  const order = (list: any[]) => [...list].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const today = new Date().toISOString().slice(0, 10);
+  const reminder = portal.nextRoutineReminder();
+  const doneToday = completions.some(
+    (c) => c.completed_on === today && c.period === reminder.period && !c.snoozed_until,
+  );
+  const snoozed = completions.find(
+    (c) => c.completed_on === today && c.period === reminder.period && c.snoozed_until,
+  );
+
+  return {
+    routine: routine
+      ? {
+          id: routine.id,
+          headline: routine.headline,
+          body: routine.body,
+          practitionerNote: routine.practitioner_note,
+          noteDatedOn: routine.note_dated_on,
+        }
+      : null,
+    clinician: demoClinician(routine?.practitioner_id ?? null),
+    morning: order(items.filter((i) => i.period === "morning")),
+    evening: order(items.filter((i) => i.period === "evening")),
+    adherence: portal.adherenceFor(completions as any),
+    reminder: { ...reminder, done: doneToday, snoozedUntil: snoozed?.snoozed_until ?? null },
+  };
+});
+
+export const getPortalClinic = createServerFn({ method: "GET" }).handler(async () => {
+  const patient = demoPortalPatient();
+  if (!patient) return null;
+  const plan = demoPortalPlan(patient.id);
+  return {
+    clinician: demoClinician(plan?.practitioner_id ?? null),
+    clinic: db.clinic ?? null,
+    upcoming: demoUpcomingAppointments(patient.id, 6).map(demoAppointmentView),
+    completed: sortDesc(treatments.filter((t) => t.patient_id === patient.id), "performed_at")
+      .slice(0, 6)
+      .map((t) => ({ id: t.id, name: t.name, performedAt: t.performed_at })),
+    external: sortDesc(externalTreatments.filter((e) => e.patient_id === patient.id), "performed_on"),
+  };
+});
+
+export const getPortalRecords = createServerFn({ method: "GET" }).handler(async () => {
+  const patient = demoPortalPatient();
+  if (!patient) return null;
+  const docs = sortDesc(documents.filter((d) => d.patient_id === patient.id), "created_at");
+  return {
+    patient,
+    treatments: sortDesc(treatments.filter((t) => t.patient_id === patient.id), "performed_at").slice(0, 8),
+    labs: docs.filter((d) => d.kind === "consultation" || d.kind === "other"),
+    documents: docs.filter((d) => d.kind !== "consultation" && d.kind !== "other"),
+    photoCount: photos.filter((p: any) => p.patient_id === patient.id && p.visible_to_patient).length,
+    latestHistory:
+      sortDesc(medicalHistory.filter((h: any) => h.patient_id === patient.id), "created_at")[0] ?? null,
+  };
+});
+
+export const createJournalEntry = createServerFn({ method: "POST" })
+  .validator(
+    (data: { title: string; body?: string; kind?: string; entry_date?: string; shared_with_clinic?: boolean }) =>
+      parseInput(schemas.CreateJournalEntry, data),
+  )
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const id = newId("e2");
+    journalEntries.push({
+      id,
+      clinic_id: CLINIC_ID,
+      patient_id: patient.id,
+      kind: data.kind ?? "skincare",
+      title: data.title.trim().slice(0, 140),
+      body: data.body?.trim().slice(0, 4000) ?? null,
+      entry_date: data.entry_date ?? new Date().toISOString().slice(0, 10),
+      shared_with_clinic: data.shared_with_clinic ?? true,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true, id };
+  });
+
+export const deleteJournalEntry = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.DeleteJournalEntry, data))
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const index = journalEntries.findIndex((e) => e.id === data.id && e.patient_id === patient.id);
+    if (index >= 0) journalEntries.splice(index, 1);
+    return { ok: true };
+  });
+
+export const submitRecoveryCheckin = createServerFn({ method: "POST" })
+  .validator((data: { redness: number; sensitivity: number; dryness: number; note?: string }) =>
+    parseInput(schemas.SubmitRecoveryCheckin, data),
+  )
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const today = new Date().toISOString().slice(0, 10);
+    const existing = recoveryCheckins.find((c) => c.patient_id === patient.id && c.checkin_date === today);
+    const row = {
+      redness: data.redness,
+      sensitivity: data.sensitivity,
+      dryness: data.dryness,
+      note: data.note?.trim().slice(0, 1000) ?? null,
+    };
+    if (existing) Object.assign(existing, row);
+    else
+      recoveryCheckins.push({
+        id: newId("e4"),
+        clinic_id: CLINIC_ID,
+        patient_id: patient.id,
+        checkin_date: today,
+        ...row,
+        created_at: new Date().toISOString(),
+      });
+    return { ok: true };
+  });
+
+export const requestPlanPause = createServerFn({ method: "POST" })
+  .validator((data: { plan_id: string; reason: string; notes?: string }) =>
+    parseInput(schemas.RequestPlanPause, data),
+  )
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const plan = treatmentPlans.find((p) => p.id === data.plan_id);
+    if (!plan || plan.patient_id !== patient.id) throw new Error("Plan not found");
+    const open = planPauseRequests.find((r) => r.plan_id === data.plan_id && r.status === "pending");
+    if (open) return { ok: true, id: open.id, alreadyOpen: true };
+    const id = newId("f2");
+    planPauseRequests.push({
+      id,
+      clinic_id: CLINIC_ID,
+      plan_id: data.plan_id,
+      patient_id: patient.id,
+      reason: data.reason,
+      notes: data.notes?.trim().slice(0, 500) ?? null,
+      status: "pending",
+      decided_by: null,
+      decided_at: null,
+      decision_note: null,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true, id, alreadyOpen: false };
+  });
+
+export const markRoutineComplete = createServerFn({ method: "POST" })
+  .validator((data: { period: string }) => parseInput(schemas.MarkRoutineComplete, data))
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const today = new Date().toISOString().slice(0, 10);
+    const existing = routineCompletions.find(
+      (c) => c.patient_id === patient.id && c.period === data.period && c.completed_on === today,
+    );
+    if (existing) existing.snoozed_until = null;
+    else
+      routineCompletions.push({
+        id: newId("e5"),
+        clinic_id: CLINIC_ID,
+        patient_id: patient.id,
+        period: data.period,
+        completed_on: today,
+        snoozed_until: null,
+        created_at: new Date().toISOString(),
+      });
+    return { ok: true };
+  });
+
+export const snoozeRoutineReminder = createServerFn({ method: "POST" })
+  .validator((data: { period: string; minutes?: number }) =>
+    parseInput(schemas.SnoozeRoutineReminder, data),
+  )
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const today = new Date().toISOString().slice(0, 10);
+    const until = new Date(Date.now() + (data.minutes ?? 60) * 60_000).toISOString();
+    const existing = routineCompletions.find(
+      (c) => c.patient_id === patient.id && c.period === data.period && c.completed_on === today,
+    );
+    if (existing) existing.snoozed_until = until;
+    else
+      routineCompletions.push({
+        id: newId("e5"),
+        clinic_id: CLINIC_ID,
+        patient_id: patient.id,
+        period: data.period,
+        completed_on: today,
+        snoozed_until: until,
+        created_at: new Date().toISOString(),
+      });
+    return { ok: true, snoozedUntil: until };
+  });
+
+export const toggleChecklistItem = createServerFn({ method: "POST" })
+  .validator((data: { id: string; done: boolean }) => parseInput(schemas.ToggleChecklistItem, data))
+  .handler(async ({ data }) => {
+    demoRequirePortalPatient();
+    const item = planMilestoneChecklist.find((c) => c.id === data.id);
+    if (!item) throw new Error("Checklist item not found");
+    if (item.clinic_owned) throw new Error("This step is completed by your clinic");
+    item.done = data.done;
+    item.done_at = data.done ? new Date().toISOString() : null;
+    return { ok: true };
+  });
+
+export const updatePortalProfile = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      address_line1?: string;
+      address_line2?: string;
+      city?: string;
+      postcode?: string;
+      emergency_contact_name?: string;
+      emergency_contact_relationship?: string;
+      emergency_contact_phone?: string;
+    }) => parseInput(schemas.UpdatePortalProfile, data),
+  )
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    patient.address_line1 = data.address_line1 ?? null;
+    patient.address_line2 = data.address_line2 ?? null;
+    patient.city = data.city ?? null;
+    patient.postcode = data.postcode ?? null;
+    patient.emergency_contact_name = data.emergency_contact_name ?? null;
+    patient.emergency_contact_relationship = data.emergency_contact_relationship ?? null;
+    patient.emergency_contact_phone = data.emergency_contact_phone ?? null;
+    return { ok: true };
+  });
+
+export const addExternalTreatment = createServerFn({ method: "POST" })
+  .validator((data: { treatment: string; clinic_name: string; performed_label: string; notes?: string }) =>
+    parseInput(schemas.AddExternalTreatment, data),
+  )
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const id = newId("f1");
+    externalTreatments.push({
+      id,
+      clinic_id: CLINIC_ID,
+      patient_id: patient.id,
+      treatment: data.treatment.trim().slice(0, 140),
+      clinic_name: data.clinic_name.trim().slice(0, 140),
+      performed_label: data.performed_label.trim().slice(0, 40),
+      performed_on: null,
+      notes: data.notes?.trim().slice(0, 500) ?? null,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true, id };
+  });
+
+export const deleteExternalTreatment = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.DeleteExternalTreatment, data))
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const index = externalTreatments.findIndex((e) => e.id === data.id && e.patient_id === patient.id);
+    if (index >= 0) externalTreatments.splice(index, 1);
+    return { ok: true };
+  });
+
+export const askCareAssistant = createServerFn({ method: "POST" })
+  .validator((data: { question: string }) => parseInput(schemas.AskCareAssistant, data))
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const plan = demoPortalPlan(patient.id);
+    const milestones = plan ? planMilestones.filter((m) => m.plan_id === plan.id) : [];
+    const current = portal.currentMilestone(milestones as any);
+    const upcoming = demoUpcomingAppointments(patient.id, 1)[0];
+    const { answerCareQuestion } = await import("@/lib/ai/care-assistant.server");
+    return answerCareQuestion({
+      question: data.question,
+      firstName: patient.first_name,
+      planName: plan?.name ?? null,
+      currentStep: current ? { title: current.title, detail: current.detail ?? "" } : null,
+      nextAppointment: upcoming
+        ? { treatment: upcoming.treatment_name, startsAt: upcoming.starts_at }
+        : null,
+    });
+  });
 
 export const submitHistoryUpdate = createServerFn({ method: "POST" })
   .validator(

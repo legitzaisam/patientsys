@@ -3577,8 +3577,45 @@ const PLAN_RECIPES: PlanRecipe[] = [
   },
 ];
 
+const PLAN_STRAPLINES = [
+  "Smoother texture. Brighter tone. A stronger, healthier you.",
+  "Firmer, better-hydrated skin, session by session.",
+  "Calmer skin and a barrier that holds up.",
+  "Even tone and fewer marks, step by step.",
+];
+
+const MONTH_TITLES = ["Foundation", "Build & Support", "Results & Confidence"];
+const MONTH_BLURBS = [
+  "Prepare, assess and begin your skin renewal journey.",
+  "Continue treatment and reinforce your results.",
+  "Complete your plan and assess your progress.",
+];
+
+const PORTAL_STEP_DETAIL = {
+  task: "A short step that keeps your plan on track. Your clinic will confirm once it is done.",
+  session:
+    "Your treatment appointment. Arrive with clean skin and no make-up, and allow an hour for the visit.",
+  conditional:
+    "Only needed if your clinician asks for it after reviewing your progress.",
+};
+
+const PORTAL_STEP_GUIDANCE = [
+  "Please complete this at least 3 days before your next treatment. Message the clinic if anything is unclear.",
+  "Pause retinoids, acids and exfoliants for 48 hours beforehand.",
+  "Keep your routine consistent between sessions — that is what carries the result.",
+  "Log anything unusual in your journal so we can see it before your visit.",
+];
+
+/** Small checklists; the third item on each is always the clinic's to tick. */
+const PORTAL_CHECKLISTS = [
+  ["Book your appointment", "Complete pre-treatment prep", "Reviewed by clinic"],
+  ["Pause retinoids 2 days before", "Arrive with clean skin", "Session confirmed by clinic"],
+  ["Take your progress photo", "Complete your check-in", "Photos filed by clinic"],
+];
+
 export const treatmentPlans: Row[] = [];
 export const planMilestones: Row[] = [];
+export const planMilestoneChecklist: Row[] = [];
 for (const recipe of PLAN_RECIPES) {
   const patient = patients[recipe.patient];
   if (!patient) continue;
@@ -3592,6 +3629,8 @@ for (const recipe of PLAN_RECIPES) {
     practitioner_id: spec.practitioner ?? USERS.practitioner,
     catalogue_id: null,
     name: recipe.name,
+    strapline: PLAN_STRAPLINES[recipe.patient % PLAN_STRAPLINES.length],
+    duration_days: 90,
     phase: recipe.phase,
     status: "active",
     total_sessions: Math.max(1, sessions),
@@ -3601,16 +3640,40 @@ for (const recipe of PLAN_RECIPES) {
     created_at: iso(-45 + recipe.patient, 10, 0),
     updated_at: iso(-2, 9, 0),
   });
+  const perMonth = Math.ceil(recipe.steps.length / 3);
   recipe.steps.forEach((step, i) => {
     const status = i < recipe.done ? "done" : i === recipe.done ? "current" : "upcoming";
+    const group = Math.min(3, Math.floor(i / perMonth) + 1);
+    const milestoneId = id("d8");
+    // Patient-facing detail: the portal timeline explains every step, and
+    // each one carries a short checklist the patient can work through.
+    PORTAL_CHECKLISTS[(i + recipe.patient) % PORTAL_CHECKLISTS.length]!.forEach((label, ci) => {
+      planMilestoneChecklist.push({
+        id: id("e1"),
+        clinic_id: CLINIC_ID,
+        milestone_id: milestoneId,
+        label,
+        position: ci,
+        done: status === "done",
+        clinic_owned: ci === 2,
+        done_at: status === "done" ? iso(-((recipe.done - i) * 9), 15, 0) : null,
+        created_at: iso(-45 + recipe.patient, 10, 0),
+      });
+    });
     planMilestones.push({
-      id: id("d8"),
+      id: milestoneId,
       clinic_id: CLINIC_ID,
       plan_id: planId,
       idx: i + 1,
       title: step.t,
       kind: step.k ?? "task",
       status,
+      detail: PORTAL_STEP_DETAIL[(step.k ?? "task") as "task" | "session" | "conditional"],
+      guidance: PORTAL_STEP_GUIDANCE[(i + recipe.patient) % PORTAL_STEP_GUIDANCE.length],
+      month_group: group,
+      month_title: MONTH_TITLES[group - 1],
+      month_blurb: MONTH_BLURBS[group - 1],
+      icon: (step.k ?? "task") === "session" ? "cal" : i % 3 === 0 ? "drop" : "shield",
       due_date:
         status === "current" && recipe.nextDueIn != null
           ? iso(recipe.nextDueIn).slice(0, 10)
@@ -3936,6 +3999,224 @@ export const productSales: Row[] = [];
   }
 }
 
+/* ------------------------------------------------------------ patient portal
+
+   Everything the portal renders for the demo patient (Olivia, patients[0]):
+   her journal, her recovery readings, the routine her practitioner set, and
+   the clinic-wide news and offer cards. ------------------------------- */
+
+export const journalEntries: Row[] = [];
+export const journalAttachments: Row[] = [];
+export const recoveryCheckins: Row[] = [];
+export const routineCompletions: Row[] = [];
+export const skincareRoutines: Row[] = [];
+export const routineItems: Row[] = [];
+export const clinicNews: Row[] = [];
+export const clinicOffers: Row[] = [];
+export const externalTreatments: Row[] = [];
+export const planPauseRequests: Row[] = [];
+
+{
+  const portalPatient = patients[0]!;
+  const pid = portalPatient["id"] as string;
+
+  const JOURNAL: { daysAgo: number; kind: string; title: string; body: string | null; photos?: number; voice?: number }[] = [
+    {
+      daysAgo: 4,
+      kind: "skincare",
+      title: "Skincare product change",
+      body: "Started using a new gentle cleanser as recommended by my clinician.",
+      photos: 1,
+    },
+    {
+      daysAgo: 7,
+      kind: "appointment",
+      title: "Microneedling Session 1",
+      body: "Felt a little red afterwards but overall good. Skin feels smoother today.",
+      photos: 2,
+    },
+    { daysAgo: 10, kind: "vitamins", title: "Vitamin D", body: "Took 1000 IU with breakfast." },
+    {
+      daysAgo: 12,
+      kind: "skin_change",
+      title: "Noticed some dryness",
+      body: "Skin feels a bit drier around my cheeks. Increased moisturiser and hydration.",
+      photos: 1,
+    },
+    { daysAgo: 17, kind: "voice_note", title: "Voice note", body: null, voice: 32 },
+  ];
+
+  for (const entry of JOURNAL) {
+    const entryId = id("e2");
+    journalEntries.push({
+      id: entryId,
+      clinic_id: CLINIC_ID,
+      patient_id: pid,
+      kind: entry.kind,
+      title: entry.title,
+      body: entry.body,
+      entry_date: iso(-entry.daysAgo).slice(0, 10),
+      shared_with_clinic: true,
+      created_at: iso(-entry.daysAgo, 19, 0),
+    });
+    for (let i = 0; i < (entry.photos ?? 0); i++) {
+      journalAttachments.push({
+        id: id("e3"),
+        clinic_id: CLINIC_ID,
+        entry_id: entryId,
+        kind: "photo",
+        storage_path: PHOTO_ASSETS[(entry.daysAgo + i) % PHOTO_ASSETS.length],
+        duration_seconds: null,
+        created_at: iso(-entry.daysAgo, 19, 0),
+      });
+    }
+    if (entry.voice) {
+      journalAttachments.push({
+        id: id("e3"),
+        clinic_id: CLINIC_ID,
+        entry_id: entryId,
+        kind: "voice",
+        storage_path: "/demo-photos/skin-progress-2.png",
+        duration_seconds: entry.voice,
+        created_at: iso(-entry.daysAgo, 19, 0),
+      });
+    }
+  }
+
+  // A fortnight of readings, easing off as the skin settles.
+  for (let d = 0; d < 14; d++) {
+    recoveryCheckins.push({
+      id: id("e4"),
+      clinic_id: CLINIC_ID,
+      patient_id: pid,
+      checkin_date: iso(-d).slice(0, 10),
+      redness: Math.min(100, 30 + d * 3),
+      sensitivity: Math.min(100, 24 + d * 2),
+      dryness: Math.min(100, 18 + d * 2),
+      note: d === 0 ? null : null,
+      created_at: iso(-d, 20, 0),
+    });
+  }
+
+  // Five of the last seven days for each routine — the 71% in the mockup.
+  for (let d = 0; d < 7; d++) {
+    if (d === 2) continue;
+    routineCompletions.push({
+      id: id("e5"),
+      clinic_id: CLINIC_ID,
+      patient_id: pid,
+      period: "morning",
+      completed_on: iso(-d).slice(0, 10),
+      snoozed_until: null,
+      created_at: iso(-d, 8, 0),
+    });
+    if (d === 4) continue;
+    routineCompletions.push({
+      id: id("e5"),
+      clinic_id: CLINIC_ID,
+      patient_id: pid,
+      period: "evening",
+      completed_on: iso(-d).slice(0, 10),
+      snoozed_until: null,
+      created_at: iso(-d, 21, 0),
+    });
+  }
+
+  const routineId = id("e6");
+  skincareRoutines.push({
+    id: routineId,
+    clinic_id: CLINIC_ID,
+    patient_id: pid,
+    practitioner_id: USERS.practitioner,
+    headline: "Your Practitioner recommends this skincare routine for you",
+    body: "This routine has been created by your care team to support your treatment, skin health and long-term results.",
+    practitioner_note:
+      "Your routine is supporting your treatment really well. Keep going with the current plan and let us know if you experience any irritation or have questions.",
+    note_dated_on: iso(-3).slice(0, 10),
+    created_at: iso(-30, 10, 0),
+    updated_at: iso(-3, 10, 0),
+  });
+
+  const ROUTINE: { period: string; step: string; product: string; how: string; optional?: boolean }[] = [
+    { period: "morning", step: "Cleanser", product: "Aetheria Gentle Cleanser", how: "Use a pea-sized amount on damp skin, massage, then rinse." },
+    { period: "morning", step: "Antioxidant", product: "Aetheria Vitamin C Serum", how: "Apply 2–3 drops to clean, dry skin." },
+    { period: "morning", step: "Moisturiser", product: "Aetheria Daily Moisturiser", how: "Apply evenly to face and neck." },
+    { period: "morning", step: "SPF", product: "Aetheria Mineral SPF 50", how: "Apply generously as the last step. Reapply throughout the day." },
+    { period: "evening", step: "Cleanser", product: "Aetheria Gentle Cleanser", how: "Use a pea-sized amount on damp skin, massage, then rinse." },
+    { period: "evening", step: "Treatment", product: "Aetheria Retinol+ Serum", how: "Apply a pea-sized amount to dry skin (2–3 nights per week)." },
+    { period: "evening", step: "Moisturiser", product: "Aetheria Recovery Cream", how: "Apply evenly to face and neck." },
+    { period: "evening", step: "Optional", product: "Aetheria Eye Renewal", how: "Gently pat a small amount around the eye area.", optional: true },
+  ];
+  ROUTINE.forEach((item, i) => {
+    routineItems.push({
+      id: id("e7"),
+      clinic_id: CLINIC_ID,
+      routine_id: routineId,
+      period: item.period,
+      step: item.step,
+      product_name: item.product,
+      how_to: item.how,
+      position: i % 4,
+      optional: item.optional ?? false,
+      created_at: iso(-30, 10, 0),
+    });
+  });
+
+  clinicNews.push({
+    id: id("e8"),
+    clinic_id: CLINIC_ID,
+    title: "Introducing our new city clinic",
+    body: "We're excited to announce the opening of our new clinic space, designed with your comfort in mind.",
+    cta_label: "Learn more",
+    cta_url: "#",
+    image_path: null,
+    published_at: iso(-6, 9, 0),
+    created_at: iso(-6, 9, 0),
+  });
+
+  clinicOffers.push({
+    id: id("e9"),
+    clinic_id: CLINIC_ID,
+    flag: "LIMITED TIME",
+    title: "10% off your next skincare product",
+    body: "Support your results with clinic-recommended skincare.",
+    cta_label: "Shop now",
+    cta_url: "#",
+    image_path: null,
+    published_at: iso(-4, 9, 0),
+    expires_at: iso(30, 9, 0),
+    created_at: iso(-4, 9, 0),
+  });
+
+  const EXTERNAL = [
+    { treatment: "Lip Filler", clinic: "The Private Clinic, London", label: "Jan 2024", daysAgo: 620 },
+    { treatment: "Botox", clinic: "Rejuvenate Aesthetics, Dubai", label: "Jun 2023", daysAgo: 830 },
+    { treatment: "Chemical Peel", clinic: "SkinLab, London", label: "Mar 2023", daysAgo: 920 },
+  ];
+  for (const e of EXTERNAL) {
+    externalTreatments.push({
+      id: id("f1"),
+      clinic_id: CLINIC_ID,
+      patient_id: pid,
+      treatment: e.treatment,
+      clinic_name: e.clinic,
+      performed_label: e.label,
+      performed_on: iso(-e.daysAgo).slice(0, 10),
+      notes: null,
+      created_at: iso(-40, 10, 0),
+    });
+  }
+
+  // Address and next of kin, so the Records page is fully populated.
+  portalPatient["address_line1"] = "123 Miller Street";
+  portalPatient["address_line2"] = null;
+  portalPatient["city"] = "Melbourne";
+  portalPatient["postcode"] = "VIC 3000";
+  portalPatient["emergency_contact_name"] = "James Bennett";
+  portalPatient["emergency_contact_relationship"] = "Partner";
+  portalPatient["emergency_contact_phone"] = "+61 418 765 432";
+}
+
 export const db = {
   clinic,
   profiles,
@@ -3952,6 +4233,17 @@ export const db = {
   photos,
   recallTasks,
   treatmentPlans,
+  planMilestoneChecklist,
+  planPauseRequests,
+  journalEntries,
+  journalAttachments,
+  recoveryCheckins,
+  routineCompletions,
+  skincareRoutines,
+  routineItems,
+  clinicNews,
+  clinicOffers,
+  externalTreatments,
   planMilestones,
   communications,
   retentionOutreach,

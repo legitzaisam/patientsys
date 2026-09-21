@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Icon, type IconName } from "./Icon";
 import { Avatar } from "./ui";
+import { PortalDock } from "./PortalDock";
 import { messagesUnread, notificationsUnread, patient } from "../mock/seed";
 
 const MAIN: { to: string; icon: IconName; label: string }[] = [
@@ -119,6 +120,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </header>
         <main className="content">{children}</main>
       </div>
+      <PortalDock />
     </div>
   );
 }

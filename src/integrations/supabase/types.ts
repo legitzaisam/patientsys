@@ -224,6 +224,100 @@ export type Database = {
         };
         Relationships: [];
       };
+      clinic_news: {
+        Row: {
+          body: string;
+          clinic_id: string;
+          created_at: string;
+          cta_label: string | null;
+          cta_url: string | null;
+          id: string;
+          image_path: string | null;
+          published_at: string | null;
+          title: string;
+        };
+        Insert: {
+          body: string;
+          clinic_id: string;
+          created_at?: string;
+          cta_label?: string | null;
+          cta_url?: string | null;
+          id?: string;
+          image_path?: string | null;
+          published_at?: string | null;
+          title: string;
+        };
+        Update: {
+          body?: string;
+          clinic_id?: string;
+          created_at?: string;
+          cta_label?: string | null;
+          cta_url?: string | null;
+          id?: string;
+          image_path?: string | null;
+          published_at?: string | null;
+          title?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinic_news_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      clinic_offers: {
+        Row: {
+          body: string | null;
+          clinic_id: string;
+          created_at: string;
+          cta_label: string | null;
+          cta_url: string | null;
+          expires_at: string | null;
+          flag: string | null;
+          id: string;
+          image_path: string | null;
+          published_at: string | null;
+          title: string;
+        };
+        Insert: {
+          body?: string | null;
+          clinic_id: string;
+          created_at?: string;
+          cta_label?: string | null;
+          cta_url?: string | null;
+          expires_at?: string | null;
+          flag?: string | null;
+          id?: string;
+          image_path?: string | null;
+          published_at?: string | null;
+          title: string;
+        };
+        Update: {
+          body?: string | null;
+          clinic_id?: string;
+          created_at?: string;
+          cta_label?: string | null;
+          cta_url?: string | null;
+          expires_at?: string | null;
+          flag?: string | null;
+          id?: string;
+          image_path?: string | null;
+          published_at?: string | null;
+          title?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinic_offers_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       clinics: {
         Row: {
           address: string | null;
@@ -538,6 +632,153 @@ export type Database = {
           },
         ];
       };
+      external_treatments: {
+        Row: {
+          clinic_id: string;
+          clinic_name: string;
+          created_at: string;
+          id: string;
+          notes: string | null;
+          patient_id: string;
+          performed_label: string;
+          performed_on: string | null;
+          treatment: string;
+        };
+        Insert: {
+          clinic_id: string;
+          clinic_name: string;
+          created_at?: string;
+          id?: string;
+          notes?: string | null;
+          patient_id: string;
+          performed_label: string;
+          performed_on?: string | null;
+          treatment: string;
+        };
+        Update: {
+          clinic_id?: string;
+          clinic_name?: string;
+          created_at?: string;
+          id?: string;
+          notes?: string | null;
+          patient_id?: string;
+          performed_label?: string;
+          performed_on?: string | null;
+          treatment?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "external_treatments_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "external_treatments_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      journal_attachments: {
+        Row: {
+          clinic_id: string;
+          created_at: string;
+          duration_seconds: number | null;
+          entry_id: string;
+          id: string;
+          kind: Database["public"]["Enums"]["journal_attachment_kind"];
+          storage_path: string;
+        };
+        Insert: {
+          clinic_id: string;
+          created_at?: string;
+          duration_seconds?: number | null;
+          entry_id: string;
+          id?: string;
+          kind?: Database["public"]["Enums"]["journal_attachment_kind"];
+          storage_path: string;
+        };
+        Update: {
+          clinic_id?: string;
+          created_at?: string;
+          duration_seconds?: number | null;
+          entry_id?: string;
+          id?: string;
+          kind?: Database["public"]["Enums"]["journal_attachment_kind"];
+          storage_path?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "journal_attachments_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "journal_attachments_entry_id_fkey";
+            columns: ["entry_id"];
+            isOneToOne: false;
+            referencedRelation: "journal_entries";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      journal_entries: {
+        Row: {
+          body: string | null;
+          clinic_id: string;
+          created_at: string;
+          entry_date: string;
+          id: string;
+          kind: Database["public"]["Enums"]["journal_entry_kind"];
+          patient_id: string;
+          shared_with_clinic: boolean;
+          title: string;
+        };
+        Insert: {
+          body?: string | null;
+          clinic_id: string;
+          created_at?: string;
+          entry_date?: string;
+          id?: string;
+          kind?: Database["public"]["Enums"]["journal_entry_kind"];
+          patient_id: string;
+          shared_with_clinic?: boolean;
+          title: string;
+        };
+        Update: {
+          body?: string | null;
+          clinic_id?: string;
+          created_at?: string;
+          entry_date?: string;
+          id?: string;
+          kind?: Database["public"]["Enums"]["journal_entry_kind"];
+          patient_id?: string;
+          shared_with_clinic?: boolean;
+          title?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "journal_entries_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "journal_entries_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       medical_history_versions: {
         Row: {
           changed_by: string | null;
@@ -687,10 +928,16 @@ export type Database = {
       };
       patients: {
         Row: {
+          address_line1: string | null;
+          address_line2: string | null;
           allergies: string | null;
           avatar_url: string | null;
+          city: string | null;
           clinic_id: string;
           conditions: string | null;
+          emergency_contact_name: string | null;
+          emergency_contact_phone: string | null;
+          emergency_contact_relationship: string | null;
           created_at: string;
           date_of_birth: string | null;
           deleted_at: string | null;
@@ -707,6 +954,7 @@ export type Database = {
           medications: string | null;
           notes: string | null;
           phone: string | null;
+          postcode: string | null;
           reminders_opt_in: boolean;
           sms_opt_in: boolean;
           source: string | null;
@@ -718,10 +966,16 @@ export type Database = {
           user_id: string | null;
         };
         Insert: {
+          address_line1?: string | null;
+          address_line2?: string | null;
           allergies?: string | null;
           avatar_url?: string | null;
+          city?: string | null;
           clinic_id: string;
           conditions?: string | null;
+          emergency_contact_name?: string | null;
+          emergency_contact_phone?: string | null;
+          emergency_contact_relationship?: string | null;
           created_at?: string;
           date_of_birth?: string | null;
           deleted_at?: string | null;
@@ -738,6 +992,7 @@ export type Database = {
           medications?: string | null;
           notes?: string | null;
           phone?: string | null;
+          postcode?: string | null;
           reminders_opt_in?: boolean;
           sms_opt_in?: boolean;
           source?: string | null;
@@ -749,10 +1004,16 @@ export type Database = {
           user_id?: string | null;
         };
         Update: {
+          address_line1?: string | null;
+          address_line2?: string | null;
           allergies?: string | null;
           avatar_url?: string | null;
+          city?: string | null;
           clinic_id?: string;
           conditions?: string | null;
+          emergency_contact_name?: string | null;
+          emergency_contact_phone?: string | null;
+          emergency_contact_relationship?: string | null;
           created_at?: string;
           date_of_birth?: string | null;
           deleted_at?: string | null;
@@ -769,6 +1030,7 @@ export type Database = {
           medications?: string | null;
           notes?: string | null;
           phone?: string | null;
+          postcode?: string | null;
           reminders_opt_in?: boolean;
           sms_opt_in?: boolean;
           source?: string | null;
@@ -795,10 +1057,16 @@ export type Database = {
           clinic_id: string;
           completed_at: string | null;
           created_at: string;
+          detail: string | null;
           due_date: string | null;
+          guidance: string | null;
+          icon: string | null;
           id: string;
           idx: number;
           kind: Database["public"]["Enums"]["plan_milestone_kind"];
+          month_blurb: string | null;
+          month_group: number | null;
+          month_title: string | null;
           plan_id: string;
           status: Database["public"]["Enums"]["plan_milestone_status"];
           title: string;
@@ -808,10 +1076,16 @@ export type Database = {
           clinic_id: string;
           completed_at?: string | null;
           created_at?: string;
+          detail?: string | null;
           due_date?: string | null;
+          guidance?: string | null;
+          icon?: string | null;
           id?: string;
           idx: number;
           kind?: Database["public"]["Enums"]["plan_milestone_kind"];
+          month_blurb?: string | null;
+          month_group?: number | null;
+          month_title?: string | null;
           plan_id: string;
           status?: Database["public"]["Enums"]["plan_milestone_status"];
           title: string;
@@ -821,10 +1095,16 @@ export type Database = {
           clinic_id?: string;
           completed_at?: string | null;
           created_at?: string;
+          detail?: string | null;
           due_date?: string | null;
+          guidance?: string | null;
+          icon?: string | null;
           id?: string;
           idx?: number;
           kind?: Database["public"]["Enums"]["plan_milestone_kind"];
+          month_blurb?: string | null;
+          month_group?: number | null;
+          month_title?: string | null;
           plan_id?: string;
           status?: Database["public"]["Enums"]["plan_milestone_status"];
           title?: string;
@@ -846,6 +1126,121 @@ export type Database = {
           },
           {
             foreignKeyName: "plan_milestones_plan_id_fkey";
+            columns: ["plan_id"];
+            isOneToOne: false;
+            referencedRelation: "treatment_plans";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      plan_milestone_checklist: {
+        Row: {
+          clinic_id: string;
+          clinic_owned: boolean;
+          created_at: string;
+          done: boolean;
+          done_at: string | null;
+          id: string;
+          label: string;
+          milestone_id: string;
+          position: number;
+        };
+        Insert: {
+          clinic_id: string;
+          clinic_owned?: boolean;
+          created_at?: string;
+          done?: boolean;
+          done_at?: string | null;
+          id?: string;
+          label: string;
+          milestone_id: string;
+          position?: number;
+        };
+        Update: {
+          clinic_id?: string;
+          clinic_owned?: boolean;
+          created_at?: string;
+          done?: boolean;
+          done_at?: string | null;
+          id?: string;
+          label?: string;
+          milestone_id?: string;
+          position?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "plan_milestone_checklist_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "plan_milestone_checklist_milestone_id_fkey";
+            columns: ["milestone_id"];
+            isOneToOne: false;
+            referencedRelation: "plan_milestones";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      plan_pause_requests: {
+        Row: {
+          clinic_id: string;
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          decision_note: string | null;
+          id: string;
+          notes: string | null;
+          patient_id: string;
+          plan_id: string;
+          reason: string;
+          status: Database["public"]["Enums"]["plan_pause_status"];
+        };
+        Insert: {
+          clinic_id: string;
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          decision_note?: string | null;
+          id?: string;
+          notes?: string | null;
+          patient_id: string;
+          plan_id: string;
+          reason: string;
+          status?: Database["public"]["Enums"]["plan_pause_status"];
+        };
+        Update: {
+          clinic_id?: string;
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          decision_note?: string | null;
+          id?: string;
+          notes?: string | null;
+          patient_id?: string;
+          plan_id?: string;
+          reason?: string;
+          status?: Database["public"]["Enums"]["plan_pause_status"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "plan_pause_requests_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "plan_pause_requests_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "plan_pause_requests_plan_id_fkey";
             columns: ["plan_id"];
             isOneToOne: false;
             referencedRelation: "treatment_plans";
@@ -1034,6 +1429,57 @@ export type Database = {
           },
         ];
       };
+      recovery_checkins: {
+        Row: {
+          checkin_date: string;
+          clinic_id: string;
+          created_at: string;
+          dryness: number;
+          id: string;
+          note: string | null;
+          patient_id: string;
+          redness: number;
+          sensitivity: number;
+        };
+        Insert: {
+          checkin_date?: string;
+          clinic_id: string;
+          created_at?: string;
+          dryness: number;
+          id?: string;
+          note?: string | null;
+          patient_id: string;
+          redness: number;
+          sensitivity: number;
+        };
+        Update: {
+          checkin_date?: string;
+          clinic_id?: string;
+          created_at?: string;
+          dryness?: number;
+          id?: string;
+          note?: string | null;
+          patient_id?: string;
+          redness?: number;
+          sensitivity?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "recovery_checkins_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "recovery_checkins_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       retention_outreach: {
         Row: {
           channel: string;
@@ -1082,6 +1528,105 @@ export type Database = {
           },
         ];
       };
+      routine_completions: {
+        Row: {
+          clinic_id: string;
+          completed_on: string;
+          created_at: string;
+          id: string;
+          patient_id: string;
+          period: Database["public"]["Enums"]["routine_period"];
+          snoozed_until: string | null;
+        };
+        Insert: {
+          clinic_id: string;
+          completed_on?: string;
+          created_at?: string;
+          id?: string;
+          patient_id: string;
+          period: Database["public"]["Enums"]["routine_period"];
+          snoozed_until?: string | null;
+        };
+        Update: {
+          clinic_id?: string;
+          completed_on?: string;
+          created_at?: string;
+          id?: string;
+          patient_id?: string;
+          period?: Database["public"]["Enums"]["routine_period"];
+          snoozed_until?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "routine_completions_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "routine_completions_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      routine_items: {
+        Row: {
+          clinic_id: string;
+          created_at: string;
+          how_to: string | null;
+          id: string;
+          optional: boolean;
+          period: Database["public"]["Enums"]["routine_period"];
+          position: number;
+          product_name: string;
+          routine_id: string;
+          step: string;
+        };
+        Insert: {
+          clinic_id: string;
+          created_at?: string;
+          how_to?: string | null;
+          id?: string;
+          optional?: boolean;
+          period: Database["public"]["Enums"]["routine_period"];
+          position?: number;
+          product_name: string;
+          routine_id: string;
+          step: string;
+        };
+        Update: {
+          clinic_id?: string;
+          created_at?: string;
+          how_to?: string | null;
+          id?: string;
+          optional?: boolean;
+          period?: Database["public"]["Enums"]["routine_period"];
+          position?: number;
+          product_name?: string;
+          routine_id?: string;
+          step?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "routine_items_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "routine_items_routine_id_fkey";
+            columns: ["routine_id"];
+            isOneToOne: false;
+            referencedRelation: "skincare_routines";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       role_permissions: {
         Row: {
           clinic_id: string;
@@ -1119,6 +1664,67 @@ export type Database = {
             columns: ["clinic_id"];
             isOneToOne: false;
             referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      skincare_routines: {
+        Row: {
+          body: string | null;
+          clinic_id: string;
+          created_at: string;
+          headline: string | null;
+          id: string;
+          note_dated_on: string | null;
+          patient_id: string;
+          practitioner_id: string | null;
+          practitioner_note: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          body?: string | null;
+          clinic_id: string;
+          created_at?: string;
+          headline?: string | null;
+          id?: string;
+          note_dated_on?: string | null;
+          patient_id: string;
+          practitioner_id?: string | null;
+          practitioner_note?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          body?: string | null;
+          clinic_id?: string;
+          created_at?: string;
+          headline?: string | null;
+          id?: string;
+          note_dated_on?: string | null;
+          patient_id?: string;
+          practitioner_id?: string | null;
+          practitioner_note?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "skincare_routines_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "skincare_routines_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "skincare_routines_practitioner_id_fkey";
+            columns: ["practitioner_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -1531,6 +2137,7 @@ export type Database = {
           completed_at: string | null;
           created_at: string;
           created_by: string | null;
+          duration_days: number | null;
           id: string;
           name: string;
           patient_id: string;
@@ -1538,6 +2145,7 @@ export type Database = {
           practitioner_id: string | null;
           started_at: string;
           status: Database["public"]["Enums"]["treatment_plan_status"];
+          strapline: string | null;
           total_sessions: number;
           updated_at: string;
         };
@@ -1547,6 +2155,7 @@ export type Database = {
           completed_at?: string | null;
           created_at?: string;
           created_by?: string | null;
+          duration_days?: number | null;
           id?: string;
           name: string;
           patient_id: string;
@@ -1554,6 +2163,7 @@ export type Database = {
           practitioner_id?: string | null;
           started_at?: string;
           status?: Database["public"]["Enums"]["treatment_plan_status"];
+          strapline?: string | null;
           total_sessions?: number;
           updated_at?: string;
         };
@@ -1563,6 +2173,7 @@ export type Database = {
           completed_at?: string | null;
           created_at?: string;
           created_by?: string | null;
+          duration_days?: number | null;
           id?: string;
           name?: string;
           patient_id?: string;
@@ -1570,6 +2181,7 @@ export type Database = {
           practitioner_id?: string | null;
           started_at?: string;
           status?: Database["public"]["Enums"]["treatment_plan_status"];
+          strapline?: string | null;
           total_sessions?: number;
           updated_at?: string;
         };
@@ -2043,6 +2655,14 @@ export type Database = {
       communication_purpose: "transactional" | "reminder" | "marketing";
       communication_status: "queued" | "sending" | "sent" | "failed" | "bounced" | "cancelled";
       document_kind: "consent" | "treatment_plan" | "consultation" | "aftercare" | "other";
+      journal_attachment_kind: "photo" | "voice";
+      journal_entry_kind:
+        | "skincare"
+        | "photos"
+        | "vitamins"
+        | "appointment"
+        | "skin_change"
+        | "voice_note";
       document_status: "draft" | "sent" | "viewed" | "signed" | "expired";
       message_author: "staff" | "patient";
       patient_status: "active" | "inactive" | "archived";
@@ -2050,9 +2670,11 @@ export type Database = {
       photo_kind: "before" | "after";
       plan_milestone_kind: "session" | "task" | "conditional";
       plan_milestone_status: "upcoming" | "current" | "done" | "skipped";
+      plan_pause_status: "pending" | "approved" | "declined";
       recall_task_status: "open" | "contacted" | "completed";
+      routine_period: "morning" | "evening";
       treatment_plan_phase: "consult" | "foundation" | "build" | "results";
-      treatment_plan_status: "active" | "completed" | "cancelled";
+      treatment_plan_status: "active" | "completed" | "cancelled" | "paused";
       visit_stage:
         "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
     };

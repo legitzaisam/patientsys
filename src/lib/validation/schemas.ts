@@ -452,6 +452,67 @@ export const SetRolePermission = z.object({
 
 export const GetPatientMessages = z.object({ patient_id: id });
 
+/* Patient portal writes. Ceilings sit above what the handlers truncate to,
+   so a long entry is shortened rather than rejected (see the note above). */
+export const CreateJournalEntry = z.object({
+  title: requiredText(200),
+  body: optionalText(6000),
+  kind: z
+    .enum(["skincare", "photos", "vitamins", "appointment", "skin_change", "voice_note"])
+    .optional(),
+  entry_date: optionalDateString,
+  shared_with_clinic: z.boolean().optional(),
+});
+
+export const DeleteJournalEntry = z.object({ id });
+
+const sliderReading = z.number().int().min(0).max(100);
+
+export const SubmitRecoveryCheckin = z.object({
+  redness: sliderReading,
+  sensitivity: sliderReading,
+  dryness: sliderReading,
+  note: optionalText(2000),
+});
+
+export const RequestPlanPause = z.object({
+  plan_id: id,
+  reason: requiredText(120),
+  notes: optionalText(1000),
+});
+
+const routinePeriod = z.enum(["morning", "evening"]);
+
+export const MarkRoutineComplete = z.object({ period: routinePeriod });
+
+export const SnoozeRoutineReminder = z.object({
+  period: routinePeriod,
+  minutes: z.number().int().min(5).max(720).optional(),
+});
+
+export const ToggleChecklistItem = z.object({ id, done: z.boolean() });
+
+export const UpdatePortalProfile = z.object({
+  address_line1: optionalText(200),
+  address_line2: optionalText(200),
+  city: optionalText(120),
+  postcode: optionalText(32),
+  emergency_contact_name: optionalText(160),
+  emergency_contact_relationship: optionalText(80),
+  emergency_contact_phone: optionalText(40),
+});
+
+export const AddExternalTreatment = z.object({
+  treatment: requiredText(200),
+  clinic_name: requiredText(200),
+  performed_label: requiredText(60),
+  notes: optionalText(1000),
+});
+
+export const DeleteExternalTreatment = z.object({ id });
+
+export const AskCareAssistant = z.object({ question: requiredText(600) });
+
 export const GetVoiceCallTarget = z.object({ patient_id: id });
 
 /* Treatment plans (journeys) */

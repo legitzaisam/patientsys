@@ -106,6 +106,26 @@ export const POLICY = {
 
   /* Patient portal */
   getMyRecord: { kind: "self" },
+  /* Patient portal. Reads resolve the caller's own patient row, so "self" is
+     the whole boundary — none of them accept a patient_id. */
+  getPortalHome: { kind: "self" },
+  getPortalPlan: { kind: "self" },
+  getPortalTimeline: { kind: "self" },
+  getPortalJournal: { kind: "self" },
+  getPortalRoutine: { kind: "self" },
+  getPortalClinic: { kind: "self" },
+  getPortalRecords: { kind: "self" },
+  createJournalEntry: { kind: "self" },
+  deleteJournalEntry: { kind: "self" },
+  submitRecoveryCheckin: { kind: "self" },
+  requestPlanPause: { kind: "self" },
+  markRoutineComplete: { kind: "self" },
+  snoozeRoutineReminder: { kind: "self" },
+  toggleChecklistItem: { kind: "self" },
+  updatePortalProfile: { kind: "self" },
+  addExternalTreatment: { kind: "self" },
+  deleteExternalTreatment: { kind: "self" },
+  askCareAssistant: { kind: "self" },
   submitHistoryUpdate: { kind: "self" },
   signDocument: { kind: "patientSelf" },
 

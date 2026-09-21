@@ -645,3 +645,112 @@ textarea.field { height: auto; padding: 9px 11px; resize: vertical; }
   inset: 0;
   background: radial-gradient(120px 80px at 30% 20%, rgba(255, 255, 255, 0.7), transparent 70%);
 }
+
+/* ------------------------------------------------------------ portal dock
+   Two circular launchers bottom-right (chat + AI), matching the clinic
+   portal's dock: one row, surfaces grow upward, nothing else owns the corner. */
+.portal-dock {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.dock-bubble {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--edge);
+  box-shadow: var(--shadow-bloom), var(--shadow-lift);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.dock-bubble:hover { transform: scale(1.05); filter: brightness(1.05); }
+.dock-bubble:active { transform: scale(0.95); }
+.dock-bubble--chat {
+  background: linear-gradient(140deg, var(--accent-hi), var(--accent) 75%);
+  color: var(--accent-ink);
+}
+.dock-bubble--ai {
+  background: linear-gradient(140deg, #ffffff, var(--sky-bg) 80%);
+  color: var(--sky-ink);
+}
+.dock-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--destructive);
+  color: #fff;
+  box-shadow: var(--shadow-lift);
+}
+.dock-panel {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  width: 330px;
+  max-width: calc(100vw - 40px);
+  border-radius: 20px;
+  border: 1px solid var(--edge);
+  background: var(--popover);
+  backdrop-filter: blur(var(--blur-glass)) saturate(1.5);
+  box-shadow: var(--shadow-popover);
+  overflow: hidden;
+}
+.dock-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--edge-2);
+}
+.dock-panel-body {
+  padding: 12px 13px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.dock-panel-foot {
+  display: flex;
+  gap: 7px;
+  padding: 10px 13px;
+  border-top: 1px solid var(--edge-2);
+}
+.dock-bubble-in,
+.dock-bubble-out {
+  border-radius: 13px;
+  padding: 8px 11px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  max-width: 86%;
+}
+.dock-bubble-in {
+  margin-top: 5px;
+  background: var(--glass-2);
+  box-shadow: inset 0 0 0 1px var(--edge-2);
+}
+.dock-bubble-out {
+  margin: 8px 0 0 auto;
+  background: var(--accent-soft);
+  color: var(--foreground);
+}
+.dock-suggestion {
+  text-align: left;
+  border-radius: 11px;
+  padding: 7px 10px;
+  font-size: 11px;
+  color: var(--accent-ink);
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.dock-suggestion:hover { background: var(--accent-soft); }
