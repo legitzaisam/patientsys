@@ -46,7 +46,7 @@ todos:
     status: completed
   - id: d3-commit
     content: "Phase D: Commit to patient0 and push with Zaisam's token (URL push, keychain untouched)"
-    status: in_progress
+    status: completed
 isProject: false
 ---
 
