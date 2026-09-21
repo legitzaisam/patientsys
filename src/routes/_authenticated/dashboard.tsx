@@ -13,6 +13,7 @@ import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TodaySnapshot } from "@/components/dashboard/today-snapshot";
 import { AttentionList } from "@/components/dashboard/attention-list";
 import { FollowUpTasks } from "@/components/dashboard/follow-up-tasks";
+import { PauseRequests } from "@/components/dashboard/pause-requests";
 import { TreatmentJourneys } from "@/components/dashboard/treatment-journeys";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -203,7 +204,8 @@ function DashboardPage() {
           </div>
           <AttentionList items={[...(data?.attentionItems ?? []), ...incompleteItems]} />
         </div>
-        <div>
+        <div className="space-y-4">
+          <PauseRequests />
           <FollowUpTasks />
         </div>
       </section>

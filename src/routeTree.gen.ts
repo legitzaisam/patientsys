@@ -27,12 +27,24 @@ import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthResetRouteImport } from './routes/auth.reset'
 import { Route as DTokenRouteImport } from './routes/d.$token'
 import { Route as UTokenRouteImport } from './routes/u.$token'
+import { Route as AuthenticatedMyRecordIndexRouteImport } from './routes/_authenticated/my-record.index'
+import { Route as AuthenticatedMyRecordAppointmentsRouteImport } from './routes/_authenticated/my-record.appointments'
+import { Route as AuthenticatedMyRecordBillingRouteImport } from './routes/_authenticated/my-record.billing'
+import { Route as AuthenticatedMyRecordClinicRouteImport } from './routes/_authenticated/my-record.clinic'
+import { Route as AuthenticatedMyRecordMessagesRouteImport } from './routes/_authenticated/my-record.messages'
+import { Route as AuthenticatedMyRecordRecordsRouteImport } from './routes/_authenticated/my-record.records'
+import { Route as AuthenticatedMyRecordResourcesRouteImport } from './routes/_authenticated/my-record.resources'
+import { Route as AuthenticatedMyRecordSettingsRouteImport } from './routes/_authenticated/my-record.settings'
 import { Route as AuthenticatedPatientsIndexRouteImport } from './routes/_authenticated/patients.index'
 import { Route as AuthenticatedPatientsIdRouteImport } from './routes/_authenticated/patients.$id'
 import { Route as AuthenticatedTeamIndexRouteImport } from './routes/_authenticated/team.index'
 import { Route as AuthenticatedTeamIdRouteImport } from './routes/_authenticated/team.$id'
 import { Route as ApiCommsDrainRouteImport } from './routes/api.comms.drain'
 import { Route as ApiInsightsEventsRouteImport } from './routes/api.insights.events'
+import { Route as AuthenticatedMyRecordPlanIndexRouteImport } from './routes/_authenticated/my-record.plan.index'
+import { Route as AuthenticatedMyRecordPlanJournalRouteImport } from './routes/_authenticated/my-record.plan.journal'
+import { Route as AuthenticatedMyRecordPlanRoutineRouteImport } from './routes/_authenticated/my-record.plan.routine'
+import { Route as AuthenticatedMyRecordPlanTimelineRouteImport } from './routes/_authenticated/my-record.plan.timeline'
 import { Route as ApiCommsUnsubscribeTokenRouteImport } from './routes/api.comms.unsubscribe.$token'
 import { Route as ApiCommsWebhooksResendRouteImport } from './routes/api.comms.webhooks.resend'
 import { Route as ApiCommsWebhooksTwilioRouteImport } from './routes/api.comms.webhooks.twilio'
@@ -128,6 +140,54 @@ const UTokenRoute = UTokenRouteImport.update({
   path: '/u/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedMyRecordIndexRoute =
+  AuthenticatedMyRecordIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordAppointmentsRoute =
+  AuthenticatedMyRecordAppointmentsRouteImport.update({
+    id: '/appointments',
+    path: '/appointments',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordBillingRoute =
+  AuthenticatedMyRecordBillingRouteImport.update({
+    id: '/billing',
+    path: '/billing',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordClinicRoute =
+  AuthenticatedMyRecordClinicRouteImport.update({
+    id: '/clinic',
+    path: '/clinic',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordMessagesRoute =
+  AuthenticatedMyRecordMessagesRouteImport.update({
+    id: '/messages',
+    path: '/messages',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordRecordsRoute =
+  AuthenticatedMyRecordRecordsRouteImport.update({
+    id: '/records',
+    path: '/records',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordResourcesRoute =
+  AuthenticatedMyRecordResourcesRouteImport.update({
+    id: '/resources',
+    path: '/resources',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordSettingsRoute =
+  AuthenticatedMyRecordSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
 const AuthenticatedPatientsIndexRoute =
   AuthenticatedPatientsIndexRouteImport.update({
     id: '/patients/',
@@ -159,6 +219,30 @@ const ApiInsightsEventsRoute = ApiInsightsEventsRouteImport.update({
   path: '/api/insights/events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedMyRecordPlanIndexRoute =
+  AuthenticatedMyRecordPlanIndexRouteImport.update({
+    id: '/plan/',
+    path: '/plan/',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordPlanJournalRoute =
+  AuthenticatedMyRecordPlanJournalRouteImport.update({
+    id: '/plan/journal',
+    path: '/plan/journal',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordPlanRoutineRoute =
+  AuthenticatedMyRecordPlanRoutineRouteImport.update({
+    id: '/plan/routine',
+    path: '/plan/routine',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
+const AuthenticatedMyRecordPlanTimelineRoute =
+  AuthenticatedMyRecordPlanTimelineRouteImport.update({
+    id: '/plan/timeline',
+    path: '/plan/timeline',
+    getParentRoute: () => AuthenticatedMyRecordRoute,
+  } as any)
 const ApiCommsUnsubscribeTokenRoute =
   ApiCommsUnsubscribeTokenRouteImport.update({
     id: '/api/comms/unsubscribe/$token',
@@ -188,7 +272,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/earnings': typeof AuthenticatedEarningsRoute
   '/insights': typeof AuthenticatedInsightsRoute
-  '/my-record': typeof AuthenticatedMyRecordRoute
+  '/my-record': typeof AuthenticatedMyRecordRouteWithChildren
   '/performance': typeof AuthenticatedPerformanceRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/retention': typeof AuthenticatedRetentionRoute
@@ -199,16 +283,28 @@ export interface FileRoutesByFullPath {
   '/auth/reset': typeof AuthResetRoute
   '/d/$token': typeof DTokenRoute
   '/u/$token': typeof UTokenRoute
+  '/my-record/appointments': typeof AuthenticatedMyRecordAppointmentsRoute
+  '/my-record/billing': typeof AuthenticatedMyRecordBillingRoute
+  '/my-record/clinic': typeof AuthenticatedMyRecordClinicRoute
+  '/my-record/messages': typeof AuthenticatedMyRecordMessagesRoute
+  '/my-record/records': typeof AuthenticatedMyRecordRecordsRoute
+  '/my-record/resources': typeof AuthenticatedMyRecordResourcesRoute
+  '/my-record/settings': typeof AuthenticatedMyRecordSettingsRoute
   '/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
   '/api/insights/events': typeof ApiInsightsEventsRoute
+  '/my-record/': typeof AuthenticatedMyRecordIndexRoute
   '/patients/': typeof AuthenticatedPatientsIndexRoute
   '/team/': typeof AuthenticatedTeamIndexRoute
+  '/my-record/plan/journal': typeof AuthenticatedMyRecordPlanJournalRoute
+  '/my-record/plan/routine': typeof AuthenticatedMyRecordPlanRoutineRoute
+  '/my-record/plan/timeline': typeof AuthenticatedMyRecordPlanTimelineRoute
   '/api/comms/unsubscribe/$token': typeof ApiCommsUnsubscribeTokenRoute
   '/api/comms/webhooks/resend': typeof ApiCommsWebhooksResendRoute
   '/api/comms/webhooks/twilio': typeof ApiCommsWebhooksTwilioRoute
   '/api/documents/access/$token': typeof ApiDocumentsAccessTokenRoute
+  '/my-record/plan/': typeof AuthenticatedMyRecordPlanIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -217,7 +313,6 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/earnings': typeof AuthenticatedEarningsRoute
   '/insights': typeof AuthenticatedInsightsRoute
-  '/my-record': typeof AuthenticatedMyRecordRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/retention': typeof AuthenticatedRetentionRoute
@@ -227,16 +322,28 @@ export interface FileRoutesByTo {
   '/auth/reset': typeof AuthResetRoute
   '/d/$token': typeof DTokenRoute
   '/u/$token': typeof UTokenRoute
+  '/my-record/appointments': typeof AuthenticatedMyRecordAppointmentsRoute
+  '/my-record/billing': typeof AuthenticatedMyRecordBillingRoute
+  '/my-record/clinic': typeof AuthenticatedMyRecordClinicRoute
+  '/my-record/messages': typeof AuthenticatedMyRecordMessagesRoute
+  '/my-record/records': typeof AuthenticatedMyRecordRecordsRoute
+  '/my-record/resources': typeof AuthenticatedMyRecordResourcesRoute
+  '/my-record/settings': typeof AuthenticatedMyRecordSettingsRoute
   '/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
   '/api/insights/events': typeof ApiInsightsEventsRoute
+  '/my-record': typeof AuthenticatedMyRecordIndexRoute
   '/patients': typeof AuthenticatedPatientsIndexRoute
   '/team': typeof AuthenticatedTeamIndexRoute
+  '/my-record/plan/journal': typeof AuthenticatedMyRecordPlanJournalRoute
+  '/my-record/plan/routine': typeof AuthenticatedMyRecordPlanRoutineRoute
+  '/my-record/plan/timeline': typeof AuthenticatedMyRecordPlanTimelineRoute
   '/api/comms/unsubscribe/$token': typeof ApiCommsUnsubscribeTokenRoute
   '/api/comms/webhooks/resend': typeof ApiCommsWebhooksResendRoute
   '/api/comms/webhooks/twilio': typeof ApiCommsWebhooksTwilioRoute
   '/api/documents/access/$token': typeof ApiDocumentsAccessTokenRoute
+  '/my-record/plan': typeof AuthenticatedMyRecordPlanIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -247,7 +354,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/earnings': typeof AuthenticatedEarningsRoute
   '/_authenticated/insights': typeof AuthenticatedInsightsRoute
-  '/_authenticated/my-record': typeof AuthenticatedMyRecordRoute
+  '/_authenticated/my-record': typeof AuthenticatedMyRecordRouteWithChildren
   '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/retention': typeof AuthenticatedRetentionRoute
@@ -258,16 +365,28 @@ export interface FileRoutesById {
   '/auth/reset': typeof AuthResetRoute
   '/d/$token': typeof DTokenRoute
   '/u/$token': typeof UTokenRoute
+  '/_authenticated/my-record/appointments': typeof AuthenticatedMyRecordAppointmentsRoute
+  '/_authenticated/my-record/billing': typeof AuthenticatedMyRecordBillingRoute
+  '/_authenticated/my-record/clinic': typeof AuthenticatedMyRecordClinicRoute
+  '/_authenticated/my-record/messages': typeof AuthenticatedMyRecordMessagesRoute
+  '/_authenticated/my-record/records': typeof AuthenticatedMyRecordRecordsRoute
+  '/_authenticated/my-record/resources': typeof AuthenticatedMyRecordResourcesRoute
+  '/_authenticated/my-record/settings': typeof AuthenticatedMyRecordSettingsRoute
   '/_authenticated/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/_authenticated/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
   '/api/insights/events': typeof ApiInsightsEventsRoute
+  '/_authenticated/my-record/': typeof AuthenticatedMyRecordIndexRoute
   '/_authenticated/patients/': typeof AuthenticatedPatientsIndexRoute
   '/_authenticated/team/': typeof AuthenticatedTeamIndexRoute
+  '/_authenticated/my-record/plan/journal': typeof AuthenticatedMyRecordPlanJournalRoute
+  '/_authenticated/my-record/plan/routine': typeof AuthenticatedMyRecordPlanRoutineRoute
+  '/_authenticated/my-record/plan/timeline': typeof AuthenticatedMyRecordPlanTimelineRoute
   '/api/comms/unsubscribe/$token': typeof ApiCommsUnsubscribeTokenRoute
   '/api/comms/webhooks/resend': typeof ApiCommsWebhooksResendRoute
   '/api/comms/webhooks/twilio': typeof ApiCommsWebhooksTwilioRoute
   '/api/documents/access/$token': typeof ApiDocumentsAccessTokenRoute
+  '/_authenticated/my-record/plan/': typeof AuthenticatedMyRecordPlanIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -289,16 +408,28 @@ export interface FileRouteTypes {
     | '/auth/reset'
     | '/d/$token'
     | '/u/$token'
+    | '/my-record/appointments'
+    | '/my-record/billing'
+    | '/my-record/clinic'
+    | '/my-record/messages'
+    | '/my-record/records'
+    | '/my-record/resources'
+    | '/my-record/settings'
     | '/patients/$id'
     | '/team/$id'
     | '/api/comms/drain'
     | '/api/insights/events'
+    | '/my-record/'
     | '/patients/'
     | '/team/'
+    | '/my-record/plan/journal'
+    | '/my-record/plan/routine'
+    | '/my-record/plan/timeline'
     | '/api/comms/unsubscribe/$token'
     | '/api/comms/webhooks/resend'
     | '/api/comms/webhooks/twilio'
     | '/api/documents/access/$token'
+    | '/my-record/plan/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -307,7 +438,6 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/earnings'
     | '/insights'
-    | '/my-record'
     | '/performance'
     | '/profile'
     | '/retention'
@@ -317,16 +447,28 @@ export interface FileRouteTypes {
     | '/auth/reset'
     | '/d/$token'
     | '/u/$token'
+    | '/my-record/appointments'
+    | '/my-record/billing'
+    | '/my-record/clinic'
+    | '/my-record/messages'
+    | '/my-record/records'
+    | '/my-record/resources'
+    | '/my-record/settings'
     | '/patients/$id'
     | '/team/$id'
     | '/api/comms/drain'
     | '/api/insights/events'
+    | '/my-record'
     | '/patients'
     | '/team'
+    | '/my-record/plan/journal'
+    | '/my-record/plan/routine'
+    | '/my-record/plan/timeline'
     | '/api/comms/unsubscribe/$token'
     | '/api/comms/webhooks/resend'
     | '/api/comms/webhooks/twilio'
     | '/api/documents/access/$token'
+    | '/my-record/plan'
   id:
     | '__root__'
     | '/'
@@ -347,16 +489,28 @@ export interface FileRouteTypes {
     | '/auth/reset'
     | '/d/$token'
     | '/u/$token'
+    | '/_authenticated/my-record/appointments'
+    | '/_authenticated/my-record/billing'
+    | '/_authenticated/my-record/clinic'
+    | '/_authenticated/my-record/messages'
+    | '/_authenticated/my-record/records'
+    | '/_authenticated/my-record/resources'
+    | '/_authenticated/my-record/settings'
     | '/_authenticated/patients/$id'
     | '/_authenticated/team/$id'
     | '/api/comms/drain'
     | '/api/insights/events'
+    | '/_authenticated/my-record/'
     | '/_authenticated/patients/'
     | '/_authenticated/team/'
+    | '/_authenticated/my-record/plan/journal'
+    | '/_authenticated/my-record/plan/routine'
+    | '/_authenticated/my-record/plan/timeline'
     | '/api/comms/unsubscribe/$token'
     | '/api/comms/webhooks/resend'
     | '/api/comms/webhooks/twilio'
     | '/api/documents/access/$token'
+    | '/_authenticated/my-record/plan/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -502,6 +656,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/my-record/': {
+      id: '/_authenticated/my-record/'
+      path: '/'
+      fullPath: '/my-record/'
+      preLoaderRoute: typeof AuthenticatedMyRecordIndexRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/appointments': {
+      id: '/_authenticated/my-record/appointments'
+      path: '/appointments'
+      fullPath: '/my-record/appointments'
+      preLoaderRoute: typeof AuthenticatedMyRecordAppointmentsRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/billing': {
+      id: '/_authenticated/my-record/billing'
+      path: '/billing'
+      fullPath: '/my-record/billing'
+      preLoaderRoute: typeof AuthenticatedMyRecordBillingRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/clinic': {
+      id: '/_authenticated/my-record/clinic'
+      path: '/clinic'
+      fullPath: '/my-record/clinic'
+      preLoaderRoute: typeof AuthenticatedMyRecordClinicRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/messages': {
+      id: '/_authenticated/my-record/messages'
+      path: '/messages'
+      fullPath: '/my-record/messages'
+      preLoaderRoute: typeof AuthenticatedMyRecordMessagesRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/records': {
+      id: '/_authenticated/my-record/records'
+      path: '/records'
+      fullPath: '/my-record/records'
+      preLoaderRoute: typeof AuthenticatedMyRecordRecordsRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/resources': {
+      id: '/_authenticated/my-record/resources'
+      path: '/resources'
+      fullPath: '/my-record/resources'
+      preLoaderRoute: typeof AuthenticatedMyRecordResourcesRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/settings': {
+      id: '/_authenticated/my-record/settings'
+      path: '/settings'
+      fullPath: '/my-record/settings'
+      preLoaderRoute: typeof AuthenticatedMyRecordSettingsRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
     '/_authenticated/patients/': {
       id: '/_authenticated/patients/'
       path: '/patients'
@@ -544,6 +754,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInsightsEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/my-record/plan/': {
+      id: '/_authenticated/my-record/plan/'
+      path: '/plan'
+      fullPath: '/my-record/plan/'
+      preLoaderRoute: typeof AuthenticatedMyRecordPlanIndexRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/plan/journal': {
+      id: '/_authenticated/my-record/plan/journal'
+      path: '/plan/journal'
+      fullPath: '/my-record/plan/journal'
+      preLoaderRoute: typeof AuthenticatedMyRecordPlanJournalRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/plan/routine': {
+      id: '/_authenticated/my-record/plan/routine'
+      path: '/plan/routine'
+      fullPath: '/my-record/plan/routine'
+      preLoaderRoute: typeof AuthenticatedMyRecordPlanRoutineRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
+    '/_authenticated/my-record/plan/timeline': {
+      id: '/_authenticated/my-record/plan/timeline'
+      path: '/plan/timeline'
+      fullPath: '/my-record/plan/timeline'
+      preLoaderRoute: typeof AuthenticatedMyRecordPlanTimelineRouteImport
+      parentRoute: typeof AuthenticatedMyRecordRoute
+    }
     '/api/comms/unsubscribe/$token': {
       id: '/api/comms/unsubscribe/$token'
       path: '/api/comms/unsubscribe/$token'
@@ -575,6 +813,43 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedMyRecordRouteChildren {
+  AuthenticatedMyRecordAppointmentsRoute: typeof AuthenticatedMyRecordAppointmentsRoute
+  AuthenticatedMyRecordBillingRoute: typeof AuthenticatedMyRecordBillingRoute
+  AuthenticatedMyRecordClinicRoute: typeof AuthenticatedMyRecordClinicRoute
+  AuthenticatedMyRecordMessagesRoute: typeof AuthenticatedMyRecordMessagesRoute
+  AuthenticatedMyRecordRecordsRoute: typeof AuthenticatedMyRecordRecordsRoute
+  AuthenticatedMyRecordResourcesRoute: typeof AuthenticatedMyRecordResourcesRoute
+  AuthenticatedMyRecordSettingsRoute: typeof AuthenticatedMyRecordSettingsRoute
+  AuthenticatedMyRecordIndexRoute: typeof AuthenticatedMyRecordIndexRoute
+  AuthenticatedMyRecordPlanJournalRoute: typeof AuthenticatedMyRecordPlanJournalRoute
+  AuthenticatedMyRecordPlanRoutineRoute: typeof AuthenticatedMyRecordPlanRoutineRoute
+  AuthenticatedMyRecordPlanTimelineRoute: typeof AuthenticatedMyRecordPlanTimelineRoute
+  AuthenticatedMyRecordPlanIndexRoute: typeof AuthenticatedMyRecordPlanIndexRoute
+}
+
+const AuthenticatedMyRecordRouteChildren: AuthenticatedMyRecordRouteChildren = {
+  AuthenticatedMyRecordAppointmentsRoute:
+    AuthenticatedMyRecordAppointmentsRoute,
+  AuthenticatedMyRecordBillingRoute: AuthenticatedMyRecordBillingRoute,
+  AuthenticatedMyRecordClinicRoute: AuthenticatedMyRecordClinicRoute,
+  AuthenticatedMyRecordMessagesRoute: AuthenticatedMyRecordMessagesRoute,
+  AuthenticatedMyRecordRecordsRoute: AuthenticatedMyRecordRecordsRoute,
+  AuthenticatedMyRecordResourcesRoute: AuthenticatedMyRecordResourcesRoute,
+  AuthenticatedMyRecordSettingsRoute: AuthenticatedMyRecordSettingsRoute,
+  AuthenticatedMyRecordIndexRoute: AuthenticatedMyRecordIndexRoute,
+  AuthenticatedMyRecordPlanJournalRoute: AuthenticatedMyRecordPlanJournalRoute,
+  AuthenticatedMyRecordPlanRoutineRoute: AuthenticatedMyRecordPlanRoutineRoute,
+  AuthenticatedMyRecordPlanTimelineRoute:
+    AuthenticatedMyRecordPlanTimelineRoute,
+  AuthenticatedMyRecordPlanIndexRoute: AuthenticatedMyRecordPlanIndexRoute,
+}
+
+const AuthenticatedMyRecordRouteWithChildren =
+  AuthenticatedMyRecordRoute._addFileChildren(
+    AuthenticatedMyRecordRouteChildren,
+  )
+
 interface AuthenticatedTeamRouteChildren {
   AuthenticatedTeamIdRoute: typeof AuthenticatedTeamIdRoute
   AuthenticatedTeamIndexRoute: typeof AuthenticatedTeamIndexRoute
@@ -592,7 +867,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedEarningsRoute: typeof AuthenticatedEarningsRoute
   AuthenticatedInsightsRoute: typeof AuthenticatedInsightsRoute
-  AuthenticatedMyRecordRoute: typeof AuthenticatedMyRecordRoute
+  AuthenticatedMyRecordRoute: typeof AuthenticatedMyRecordRouteWithChildren
   AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedRetentionRoute: typeof AuthenticatedRetentionRoute
@@ -607,7 +882,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedEarningsRoute: AuthenticatedEarningsRoute,
   AuthenticatedInsightsRoute: AuthenticatedInsightsRoute,
-  AuthenticatedMyRecordRoute: AuthenticatedMyRecordRoute,
+  AuthenticatedMyRecordRoute: AuthenticatedMyRecordRouteWithChildren,
   AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedRetentionRoute: AuthenticatedRetentionRoute,

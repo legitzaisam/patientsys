@@ -34,61 +34,61 @@ todos:
     status: completed
   - id: b4-staff-sync
     content: "Phase B: Staff-side surfacing - pause requests in attention list with approve/decline, patient journal + check-ins on the staff record page"
-    status: pending
+    status: completed
   - id: b5-policy-schemas-demo
     content: "Phase B: POLICY entries, zod schemas and demo twins for every new fn; check:policy and check:validators green"
-    status: in_progress
+    status: completed
   - id: c1-routes-shell
     content: "Phase C: Route tree (my-record layout + index + 11 siblings), relax the non-staff redirect to /my-record/*, patient sidebar and top bar per V4"
-    status: pending
+    status: completed
   - id: c2-primitives
     content: "Phase C: Port V4 UI primitives into src/components/portal/ (stat tile, ring, pill tabs, milestone track, sliders, photo block, banner, note)"
-    status: pending
+    status: completed
   - id: c3-home
     content: "Phase C: Home page wired to getPortalHome"
-    status: pending
+    status: completed
   - id: c4-overview
     content: "Phase C: Plan Overview (KPI strip, today/next action, check-in sliders, before/after, journey snapshot, safe to proceed)"
-    status: pending
+    status: completed
   - id: c5-timeline
     content: "Phase C: Timeline (month roadmap, step details panel, pause modal wired to requestPlanPause)"
-    status: pending
+    status: completed
   - id: c6-journal
     content: "Phase C: Journal (filters, entries with photos/voice, calendar, new entry, share)"
-    status: pending
+    status: completed
   - id: c7-routine
     content: "Phase C: Skincare Routine (AM/PM items, adherence from routine_completions, reminder mark-complete/snooze)"
-    status: pending
+    status: completed
   - id: c8-clinic
     content: "Phase C: My Clinic (clinician, clinic details, upcoming/completed, external history add/delete)"
-    status: pending
+    status: completed
   - id: c9-records
     content: "Phase C: Records (personal, emergency contact edit, medical history, treatment timeline, labs, documents, gallery)"
-    status: pending
+    status: completed
   - id: c10-folded
     content: "Phase C: Fold existing features in - signing + health update into Records, comms prefs + log into Settings, products into Resources; Appointments/Billing/Messages content"
-    status: pending
+    status: completed
   - id: c11-dock
     content: "Phase C: Patient floating dock - chat bubble (PatientChatThread) + AI bubble (askCareAssistant), reusing staff dock behaviour"
-    status: pending
+    status: completed
   - id: d1-e2e-pages
     content: "Phase D: Playwright per-page specs asserting every V4 element + zero console/page errors"
-    status: pending
+    status: completed
   - id: d2-e2e-controls
     content: "Phase D: Playwright every-control specs + no-dead-control sweep (every button/link/input acts)"
-    status: pending
+    status: completed
   - id: d3-e2e-nav-roles
     content: "Phase D: Playwright navigation (all nav items, tabs, deep links, active state) + role isolation both ways"
-    status: pending
+    status: completed
   - id: d4-e2e-sync
     content: "Phase D: Playwright cross-portal sync (staff message/milestone -> patient; patient pause/journal -> staff)"
-    status: pending
+    status: completed
   - id: d5-visual-parity
     content: "Phase D: Screenshot the live portal at 1672x941 and diff against the V4 comparison shots"
-    status: pending
+    status: completed
   - id: d6-checks-commit
     content: "Phase D: Fix findings; run policy/validators/tenancy, unit, full e2e, tsc delta, lints; fill work logs; commit and push the e2e branch"
-    status: pending
+    status: in_progress
 isProject: false
 ---
 

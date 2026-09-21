@@ -1,20 +1,29 @@
 import { expect, test } from "./fixtures";
 
 /**
- * The patient portal (/my-record) as Olivia Bennett: signing a form,
- * messages from the clinic, and the health update composer.
+ * The patient portal's core promises, at their new homes.
+ *
+ * The portal used to be a single /my-record page; it is now a subtree, and
+ * signing, the health-update composer and contact preferences moved onto
+ * Records and Settings. Page-by-page and control-by-control coverage lives
+ * in e2e/patient-portal/ — this file keeps the original guarantees pinned to
+ * wherever they now live, so a future reshuffle that loses one is caught.
  */
 
 test.use({ role: "patient" });
 
-test("greets the patient and lists their forms", async ({ page }) => {
+test("greets the patient on the portal home", async ({ page }) => {
   await page.goto("/my-record");
-  await expect(page.getByRole("heading", { level: 1, name: /Hello Olivia/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Forms to complete" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /Good (morning|afternoon|evening), Olivia/ })).toBeVisible();
+});
+
+test("lists their forms on the records page", async ({ page }) => {
+  await page.goto("/my-record/records");
+  await expect(page.getByRole("heading", { name: "Clinic documents" })).toBeVisible();
 });
 
 test("signs an outstanding form with a typed name", async ({ page }) => {
-  await page.goto("/my-record");
+  await page.goto("/my-record/records");
 
   const signName = page.getByPlaceholder("Type your full name to sign").first();
   await expect(signName).toBeVisible();
@@ -26,11 +35,16 @@ test("signs an outstanding form with a typed name", async ({ page }) => {
 });
 
 test("shows the health information update composer", async ({ page }) => {
-  await page.goto("/my-record");
+  await page.goto("/my-record/records");
   await expect(page.getByRole("heading", { name: "Update your health information" })).toBeVisible();
 });
 
 test("shows how the clinic contacts them", async ({ page }) => {
-  await page.goto("/my-record");
+  await page.goto("/my-record/settings");
   await expect(page.getByRole("heading", { name: "How we contact you" })).toBeVisible();
+});
+
+test("keeps their clinic conversation reachable", async ({ page }) => {
+  await page.goto("/my-record/messages");
+  await expect(page.getByRole("heading", { level: 1, name: "Messages" })).toBeVisible();
 });

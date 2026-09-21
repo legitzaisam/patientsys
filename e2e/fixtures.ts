@@ -30,12 +30,15 @@ export const test = base.extend<Options>({
     await context.addCookies([
       { name: "demo_role", value: role, url: baseURL ?? "http://localhost:8091" },
     ]);
-    // Hide the demo persona switcher: it floats bottom-right and would
-    // otherwise intercept clicks on controls near the page corner.
+    // Keep the page corners clear of chrome that would intercept clicks:
+    // the demo persona switcher (bottom-left) and the staff floating dock.
+    // The patient portal's own dock stays visible — its two bubbles are
+    // under test.
     await context.addInitScript(() => {
       const hide = () => {
         const style = document.createElement("style");
-        style.textContent = ".fixed.bottom-5.right-5 { display: none !important; }";
+        style.textContent =
+          '.fixed.bottom-5.left-5, [data-qc="floating-dock"] { display: none !important; }';
         document.head.appendChild(style);
       };
       if (document.readyState === "loading") {

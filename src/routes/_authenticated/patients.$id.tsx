@@ -607,6 +607,7 @@ function PatientRecord() {
               <TabsTrigger value="photos">Before and after</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="history">History updates</TabsTrigger>
+              <TabsTrigger value="portal">From the patient</TabsTrigger>
             </TabsList>
 
             <TabsContent value="treatments" className="space-y-4">
@@ -1019,6 +1020,60 @@ function PatientRecord() {
                   ))}
                   {data.documents.length === 0 && (
                     <li className="py-6 text-sm text-muted-foreground">Nothing sent yet.</li>
+                  )}
+                </ul>
+              </Card>
+            </TabsContent>
+
+            {/* What the patient wrote in their portal: their journal and the
+                recovery readings they submit between visits. */}
+            <TabsContent value="portal" className="space-y-4">
+              <Card className="p-5">
+                <h2 className="section-title">Recovery check-ins</h2>
+                <p className="text-xs text-muted-foreground">
+                  Self-reported between visits. Anything moderate or worse is flagged.
+                </p>
+                <ul className="mt-3 divide-y divide-glass-line">
+                  {((data as any).checkins ?? []).map((c: any) => (
+                    <li key={c.id} className="flex items-center gap-3 py-2.5">
+                      <span className="w-24 shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {new Date(c.checkin_date).toLocaleDateString("en-GB")}
+                      </span>
+                      <span className="flex-1 text-xs">
+                        Redness {c.redness} · Sensitivity {c.sensitivity} · Dryness {c.dryness}
+                      </span>
+                      {c.needsAttention && (
+                        <Badge variant="outline" className="rounded-xl text-2xs uppercase text-destructive">
+                          Review
+                        </Badge>
+                      )}
+                    </li>
+                  ))}
+                  {((data as any).checkins ?? []).length === 0 && (
+                    <li className="py-5 text-sm text-muted-foreground">No check-ins submitted yet.</li>
+                  )}
+                </ul>
+              </Card>
+
+              <Card className="p-5">
+                <h2 className="section-title">Patient journal</h2>
+                <p className="text-xs text-muted-foreground">
+                  Entries the patient chose to share with the clinic.
+                </p>
+                <ul className="mt-3 divide-y divide-glass-line">
+                  {((data as any).journal ?? []).map((j: any) => (
+                    <li key={j.id} className="py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-foreground">{j.title}</p>
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {new Date(j.entry_date).toLocaleDateString("en-GB")}
+                        </span>
+                      </div>
+                      {j.body && <p className="mt-1 text-xs text-muted-foreground">{j.body}</p>}
+                    </li>
+                  ))}
+                  {((data as any).journal ?? []).length === 0 && (
+                    <li className="py-5 text-sm text-muted-foreground">No journal entries shared yet.</li>
                   )}
                 </ul>
               </Card>

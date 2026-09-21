@@ -513,6 +513,12 @@ export const DeleteExternalTreatment = z.object({ id });
 
 export const AskCareAssistant = z.object({ question: requiredText(600) });
 
+export const DecidePlanPause = z.object({
+  id,
+  approve: z.boolean(),
+  note: optionalText(1000),
+});
+
 export const GetVoiceCallTarget = z.object({ patient_id: id });
 
 /* Treatment plans (journeys) */

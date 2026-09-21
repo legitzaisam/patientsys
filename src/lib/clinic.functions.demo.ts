@@ -842,6 +842,16 @@ export const getPatient = createServerFn({ method: "GET" })
         mine.map((t) => ({ performed_at: t.performed_at, next_due_at: t.next_due_at })),
         upcoming.length > 0,
       ),
+      journal: sortDesc(
+        journalEntries.filter((e) => e.patient_id === data.id && e.shared_with_clinic),
+        "entry_date",
+      ).slice(0, 20),
+      checkins: sortDesc(
+        recoveryCheckins.filter((c) => c.patient_id === data.id),
+        "checkin_date",
+      )
+        .slice(0, 14)
+        .map((c) => ({ ...c, needsAttention: portal.checkinNeedsAttention(c as any) })),
       nextAppointmentAt: sortAsc(upcoming, "starts_at")[0]?.starts_at ?? null,
     };
   });
@@ -917,6 +927,47 @@ export const archivePatient = createServerFn({ method: "POST" })
 /* ---------------------------------------------------------------- */
 /* catalogue, practitioners, appointments                             */
 /* ---------------------------------------------------------------- */
+
+export const listPlanPauseRequests = createServerFn({ method: "GET" }).handler(async () => {
+  return sortDesc(
+    planPauseRequests.filter((r) => r.status === "pending"),
+    "created_at",
+  ).map((r) => {
+    const patient = patientById(r.patient_id);
+    const plan = treatmentPlans.find((p) => p.id === r.plan_id);
+    return {
+      id: r.id,
+      planId: r.plan_id,
+      planName: plan?.name ?? "Treatment plan",
+      patientId: r.patient_id,
+      patientName: patient ? `${patient.first_name} ${patient.last_name}`.trim() : "Patient",
+      avatarUrl: patient?.avatar_url ?? null,
+      reason: r.reason,
+      notes: r.notes,
+      createdAt: r.created_at,
+    };
+  });
+});
+
+export const decidePlanPause = createServerFn({ method: "POST" })
+  .validator((data: { id: string; approve: boolean; note?: string }) =>
+    parseInput(schemas.DecidePlanPause, data),
+  )
+  .handler(async ({ data }) => {
+    const me = identity();
+    const request = planPauseRequests.find((r) => r.id === data.id);
+    if (!request) throw new Error("Request not found");
+    if (request.status !== "pending") return { ok: true, alreadyDecided: true };
+    request.status = data.approve ? "approved" : "declined";
+    request.decided_by = me.userId;
+    request.decided_at = new Date().toISOString();
+    request.decision_note = data.note?.trim().slice(0, 500) ?? null;
+    if (data.approve) {
+      const plan = treatmentPlans.find((p) => p.id === request.plan_id);
+      if (plan) plan.status = "paused";
+    }
+    return { ok: true, alreadyDecided: false };
+  });
 
 export const getCatalogue = createServerFn({ method: "GET" }).handler(async () =>
   catalogue

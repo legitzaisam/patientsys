@@ -922,6 +922,24 @@ export const getPatient = createServerFn({ method: "GET" })
       })
       .filter((b) => b.issues.length > 0);
 
+    // What the patient wrote in their portal. Journal entries they kept
+    // private are excluded at the query, not filtered in the UI.
+    const [{ data: journal }, { data: checkins }] = await Promise.all([
+      supabase
+        .from("journal_entries")
+        .select("*")
+        .eq("patient_id", data.id)
+        .eq("shared_with_clinic", true)
+        .order("entry_date", { ascending: false })
+        .limit(20),
+      supabase
+        .from("recovery_checkins")
+        .select("*")
+        .eq("patient_id", data.id)
+        .order("checkin_date", { ascending: false })
+        .limit(14),
+    ]);
+
     return {
       patient,
       treatments: treatments.data ?? [],
@@ -932,8 +950,73 @@ export const getPatient = createServerFn({ method: "GET" })
       visitNotes,
       bookingChase,
       retention,
+      journal: journal ?? [],
+      checkins: (checkins ?? []).map((c: any) => ({
+        ...c,
+        needsAttention: portal.checkinNeedsAttention(c),
+      })),
       nextAppointmentAt: (upcoming.data ?? [])[0]?.starts_at ?? null,
     };
+  });
+
+/* Pause requests raised from the patient portal. The clinic decides; only an
+   approval actually pauses the plan. */
+
+export const listPlanPauseRequests = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "listPlanPauseRequests");
+    const { data } = await ctx.supabase
+      .from("plan_pause_requests")
+      .select("*, patients(first_name, last_name, avatar_url), treatment_plans(name)")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+    return (data ?? []).map((r: any) => ({
+      id: r.id,
+      planId: r.plan_id,
+      planName: r.treatment_plans?.name ?? "Treatment plan",
+      patientId: r.patient_id,
+      patientName: `${r.patients?.first_name ?? ""} ${r.patients?.last_name ?? ""}`.trim() || "Patient",
+      avatarUrl: r.patients?.avatar_url ?? null,
+      reason: r.reason,
+      notes: r.notes,
+      createdAt: r.created_at,
+    }));
+  });
+
+export const decidePlanPause = createServerFn({ method: "POST" })
+  .validator((data: { id: string; approve: boolean; note?: string }) =>
+    parseInput(schemas.DecidePlanPause, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "decidePlanPause");
+    const { data: request } = await ctx.supabase
+      .from("plan_pause_requests")
+      .select("id, plan_id, patient_id, status")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (!request) throw new Error("Request not found");
+    if (request.status !== "pending") return { ok: true, alreadyDecided: true };
+
+    const { error } = await ctx.supabase
+      .from("plan_pause_requests")
+      .update({
+        status: data.approve ? "approved" : "declined",
+        decided_by: ctx.userId,
+        decided_at: new Date().toISOString(),
+        decision_note: data.note?.trim().slice(0, 500) ?? null,
+      })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+
+    if (data.approve) {
+      await ctx.supabase.from("treatment_plans").update({ status: "paused" }).eq("id", request.plan_id);
+    }
+    await audit(ctx, data.approve ? "approve" : "decline", "plan_pause_requests", data.id, request.patient_id);
+    return { ok: true, alreadyDecided: false };
   });
 
 export const getCatalogue = createServerFn({ method: "GET" })

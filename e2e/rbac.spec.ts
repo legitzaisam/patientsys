@@ -70,12 +70,17 @@ test.describe("front desk", () => {
 test.describe("patient", () => {
   test.use({ role: "patient" });
 
-  test("navigation offers only their own record", async ({ page }) => {
+  test("navigation offers only their own care, never the clinic's", async ({ page }) => {
     await page.goto("/my-record");
     const nav = page.getByRole("navigation").first();
-    await expect(nav.getByRole("link", { name: "My record" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Patients" })).toHaveCount(0);
-    await expect(nav.getByRole("link", { name: "Diary" })).toHaveCount(0);
-    await expect(nav.getByRole("link", { name: "Team" })).toHaveCount(0);
+
+    // Their own portal.
+    await expect(nav.getByRole("link", { name: "Home", exact: true })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "My Profile / Records" })).toBeVisible();
+
+    // Never the clinic's.
+    for (const staffOnly of ["Patients", "Diary", "Team", "Dashboard", "Retention", "Performance", "Insights"]) {
+      await expect(nav.getByRole("link", { name: staffOnly, exact: true })).toHaveCount(0);
+    }
   });
 });

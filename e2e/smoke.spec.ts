@@ -30,7 +30,7 @@ const ROLE_PAGES: Record<DemoRole, { path: string; heading: string | RegExp }[]>
     { path: "/retention", heading: "Retention" },
     { path: "/insights", heading: "Insights" },
   ],
-  patient: [{ path: "/my-record", heading: /Hello / }],
+  patient: [{ path: "/my-record", heading: /Good (morning|afternoon|evening), / }],
 };
 
 for (const role of ["owner", "practitioner", "front_desk", "patient"] as const) {

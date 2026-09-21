@@ -126,6 +126,8 @@ export const POLICY = {
   addExternalTreatment: { kind: "self" },
   deleteExternalTreatment: { kind: "self" },
   askCareAssistant: { kind: "self" },
+  listPlanPauseRequests: { kind: "staff" },
+  decidePlanPause: { kind: "capability", key: "treatments.record" },
   submitHistoryUpdate: { kind: "self" },
   signDocument: { kind: "patientSelf" },
 

@@ -139,7 +139,8 @@ function IdentityGate() {
 
   useEffect(() => {
     if (!identity || identity.isStaff) return;
-    if (pathname === "/my-record") return;
+    // The patient portal is a subtree now, not a single page.
+    if (pathname === "/my-record" || pathname.startsWith("/my-record/")) return;
     navigate({ to: "/my-record", replace: true });
   }, [identity, navigate, pathname]);
 

@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Repeat,
   Lightbulb,
+  MessageSquare,
   Megaphone,
   PanelLeft,
   PanelLeftClose,
@@ -40,7 +41,7 @@ import { StaffAlertDialog } from "@/components/staff-alert-dialog";
 import { FloatingNotes } from "@/components/dashboard/floating-notes";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
-import { listAppointments, listTeam } from "@/lib/clinic.functions";
+import { getUnreadMessages, listAppointments, listTeam } from "@/lib/clinic.functions";
 import { clinicDayRange } from "@/lib/clinic-time";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { can } from "@/lib/permissions";
@@ -68,6 +69,51 @@ function toolbarScrollBlend(scrollTop: number) {
   const t = Math.min(1, Math.max(0, scrollTop / TOOLBAR_SCROLL_BLEND_RANGE));
   // Ease-out so the glass fades in gently over the first ~72px of scroll.
   return 1 - (1 - t) ** 2;
+}
+
+/** Indented sub-items under a nav entry (the portal's plan sections). */
+const PLAN_SUBNAV = [
+  { to: "/my-record/plan", label: "Overview", exact: true },
+  { to: "/my-record/plan/timeline", label: "Timeline" },
+  { to: "/my-record/plan/journal", label: "Journal" },
+  { to: "/my-record/plan/routine", label: "Skincare Routine" },
+];
+
+function SubNav({
+  items,
+  pathname,
+  onNavigate,
+}: {
+  items: { to: string; label: string; exact?: boolean }[];
+  pathname: string;
+  onNavigate?: (() => void) | undefined;
+}) {
+  return (
+    <div className="flex flex-col gap-px py-0.5 pl-6">
+      {items.map((item) => {
+        const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
+        return (
+          <Link
+            key={item.to}
+            to={item.to}
+            onClick={onNavigate}
+            className={cn(
+              "flex items-center gap-2 rounded-[9px] px-2.5 py-1.5 text-[11.5px] transition-colors",
+              active ? "font-semibold text-foreground" : "text-ink-3 hover:text-foreground",
+            )}
+          >
+            <span
+              className={cn(
+                "h-1 w-1 shrink-0 rounded-full",
+                active ? "bg-accent-deep" : "bg-[var(--bar)]",
+              )}
+            />
+            {item.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
 }
 
 function NavItem({
@@ -224,6 +270,7 @@ function SidebarChrome({
   pathname,
   clinicLinks,
   reportLinks,
+  supportLinks,
   teamMembers,
   onlineIds,
   canTeam,
@@ -238,6 +285,7 @@ function SidebarChrome({
   pathname: string;
   clinicLinks: NavLink[];
   reportLinks: NavLink[];
+  supportLinks: NavLink[];
   teamMembers: { id: string; fullName: string }[];
   onlineIds: Set<string>;
   canTeam: boolean;
@@ -280,13 +328,30 @@ function SidebarChrome({
       <nav className="scrollbar-none mt-1 min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain pb-5">
         <NavGroup label={identity.isStaff ? "Clinic" : "Care"}>
           {clinicLinks.map((item) => (
-            <NavItem key={item.to} item={item} active={pathname.startsWith(item.to)} onNavigate={onNavigate} />
+            <div key={item.to}>
+              <NavItem
+                item={item}
+                active={item.to === "/my-record" ? pathname === item.to : pathname.startsWith(item.to)}
+                onNavigate={onNavigate}
+              />
+              {item.to === "/my-record/plan" && pathname.startsWith("/my-record/plan") && (
+                <SubNav items={PLAN_SUBNAV} pathname={pathname} onNavigate={onNavigate} />
+              )}
+            </div>
           ))}
         </NavGroup>
 
         {reportLinks.length > 0 && (
           <NavGroup label="Reports">
             {reportLinks.map((item) => (
+              <NavItem key={item.to} item={item} active={pathname.startsWith(item.to)} onNavigate={onNavigate} />
+            ))}
+          </NavGroup>
+        )}
+
+        {supportLinks.length > 0 && (
+          <NavGroup label="Support">
+            {supportLinks.map((item) => (
               <NavItem key={item.to} item={item} active={pathname.startsWith(item.to)} onNavigate={onNavigate} />
             ))}
           </NavGroup>
@@ -414,6 +479,17 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     });
   }, [teamMembers, onlineIds]);
 
+  // Patients see an unread badge on their Messages nav item; the bell uses
+  // the same query key, so one fetch serves both.
+  const fetchPortalUnread = useServerFn(getUnreadMessages);
+  const { data: portalUnreadData } = useQuery({
+    queryKey: ["unread-messages"],
+    queryFn: () => fetchPortalUnread(),
+    refetchInterval: 60_000,
+    enabled: !identity.isStaff && sessionReady,
+  });
+  const portalUnread = portalUnreadData?.total ?? 0;
+
   const { data: todayAppointments } = useQuery({
     queryKey: ["sidebar-diary-count", startISO],
     queryFn: () => fetchAppointments({ data: { from: startISO, to: endISO } }),
@@ -435,7 +511,23 @@ export function AppShell({ identity, children }: { identity: Identity; children:
         { to: "/schedule", label: "Diary", icon: CalendarDays, badge: diaryCount },
         { to: "/patients", label: "Patients", icon: Users },
       ]
-    : [{ to: "/my-record", label: "My record", icon: HeartPulse }];
+    : [
+        { to: "/my-record", label: "Home", icon: LayoutDashboard },
+        { to: "/my-record/plan", label: "Skin Plan & Journey", icon: TrendingUp },
+        { to: "/my-record/clinic", label: "My Clinic", icon: HeartPulse },
+        { to: "/my-record/records", label: "My Profile / Records", icon: Users },
+        { to: "/my-record/appointments", label: "Appointments", icon: CalendarDays },
+        { to: "/my-record/billing", label: "Billing", icon: Wallet },
+        { to: "/my-record/settings", label: "Settings", icon: SettingsIcon },
+      ];
+
+  /** Support group, mirroring the V4 wireframes' second nav block. */
+  const supportLinks: NavLink[] = identity.isStaff
+    ? []
+    : [
+        { to: "/my-record/resources", label: "Resources", icon: Lightbulb },
+        { to: "/my-record/messages", label: "Messages", icon: MessageSquare, badge: portalUnread },
+      ];
 
   const reportLinks: NavLink[] = [
     ...(canInsights ? [{ to: "/insights", label: "Insights", icon: Lightbulb }] : []),
@@ -553,6 +645,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     pathname,
     clinicLinks,
     reportLinks,
+    supportLinks,
     teamMembers: teamMembersForNav,
     onlineIds,
     canTeam,
