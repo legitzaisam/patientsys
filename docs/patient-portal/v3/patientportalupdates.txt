@@ -1,0 +1,58 @@
+Patient Portal
+Keeping Vivara and Radiant, taking patient plan roadmap from lumina into Vivara’s timeline, and Radiant’s skin planning journey. 
+Patient portal roadmap is triggered once the consultation process has been done via clinic.
+The treatment plan gets approved and this shows up in the patient’s records & skin plan/journey page in the patient portal.
+Once the skin plan is generated after consultation (1) & treatment plan (2) approval, the downstream steps are based on the data inputed from the first two steps. 
+These downstream steps are gated behind the approval coming from the clinic portal, and is only editable via a pause button pop-up message sent by the patient. 
+
+
+VIVARA
+Pages:
+1. Home —> Clinic News, Offers, Next appointment, 
+2. Skin Plan & Journey
+    * Overview > Timeline > Journal > Skincare Routine
+    * Remove ’Today’ page & replace it with Skincare Page
+3. My Profile/Records
+
+Under profile drop-down —> Payments, Settings, Sign-Out
+
+
+PAGE TWO: Skin Plan & Journey
+Tab: Overview
+
+* Message bubble and AI button next to it
+* Urgent note adding above recovery check in
+* Recovery check in slider (if it goes above ‘severe’ for the system to make a note of this on their record to be referred to in-appointment
+* Remove product routine adherence 
+* Safe to proceed: have the to-list show up there naturally, rather than pressing ‘view checklist’
+
+ 
+Tab: Timeline
+Uneditable - set by clinic - changes must be requested via clinic - Pause must be authorised by clinic
+
+* Input ‘Your plan roadmap’ from Lumina
+* Expandable card based on each step
+* Add ‘pause’ button - when clicking, the pop-up will have ‘Reason’, and then ‘Notes’. Reason MUST be filled before submitting.
+
+
+Tab: Journal (shareable document)
+Should be able to pick and choose what they want to share
+
+* Entry page for changes in skincare products,
+* Photos to track
+* Vitamins taken
+* Other appointments
+* Any changes in skin
+* Voicenotes
+
+
+Tab: Skincare Routine
+Title: Your Practitioner recommends this skincare routine
+
+Default:
+Your morning routine:
+￼
+Be the same for evening routine.
+
+Customisable:
+Edit tool on the right side beside the type of product —> add product (with link)
