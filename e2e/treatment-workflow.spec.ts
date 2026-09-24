@@ -46,7 +46,6 @@ test("arrived with signed consent goes straight to waiting, and the practitioner
   await openStageMenu(page, "Freya Sundqvist");
   await page.locator('[data-stage-option="arrived"]').first().click();
   await expect(stageOf(page, "Freya Sundqvist")).toHaveText(/Waiting/, { timeout: 10_000 });
-  await expect(diaryCard(page, "Freya Sundqvist").locator('[data-qc="waiting-since"]')).toBeVisible();
 
   // Her practitioner sees it in the bell and the dock.
   await become(page, "practitioner");

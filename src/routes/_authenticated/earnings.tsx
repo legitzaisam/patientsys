@@ -8,7 +8,7 @@ import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { EarningsLinesTable } from "@/components/earnings/earnings-lines-table";
-import { CURRENT_YEAR, PeriodPicker, periodRange, money, type PeriodSelection } from "@/components/period-picker";
+import { CURRENT_YEAR, PeriodPicker, periodGroupsByMonth, periodRange, money, type PeriodSelection } from "@/components/period-picker";
 
 export const Route = createFileRoute("/_authenticated/earnings")({
   head: () => ({
@@ -71,7 +71,7 @@ function EarningsPage() {
         <Stat label="Retention" value={`${data?.retention ?? 0}%`} hint="Returned within 12 months" />
       </div>
 
-      <EarningsLinesTable lines={data?.lines} period={period.key} />
+      <EarningsLinesTable lines={data?.lines} period={periodGroupsByMonth(period) ? "year" : "month"} />
     </AppShell>
   );
 }

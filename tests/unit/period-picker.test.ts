@@ -55,6 +55,29 @@ describe("periodWindowLabel", () => {
   });
 });
 
+describe("custom dates", () => {
+  it("uses the chosen from and to, then the window just before", () => {
+    const range = periodRange({ key: "month", offset: 0, preset: "custom", from: "2026-08-01", to: "2026-08-15" }, NOW);
+    expect(new Date(range.from)).toEqual(new Date(2026, 7, 1));
+    expect(new Date(range.to).getDate()).toBe(15);
+    const previous = previousPeriodRange(
+      { key: "month", offset: 0, preset: "custom", from: "2026-08-01", to: "2026-08-15" },
+      NOW,
+    );
+    expect(new Date(previous.to).getTime()).toBeLessThan(new Date(range.from).getTime());
+    expect(periodHeading({ key: "month", offset: 0, preset: "custom", from: "2026-08-01", to: "2026-08-15" }, NOW)).toMatch(
+      /1–15 Aug/,
+    );
+  });
+
+  it("looks back seven days for 1 week", () => {
+    const range = periodRange({ key: "week", offset: 0, preset: "1w" }, NOW);
+    expect(new Date(range.from).getDate()).toBe(14);
+    expect(new Date(range.to).getDate()).toBe(20);
+    expect(periodHeading({ key: "week", offset: 0, preset: "1w" }, NOW)).toBe("1 week");
+  });
+});
+
 describe("periodHeading", () => {
   it("uses Today / Last week / a dated window", () => {
     expect(periodHeading({ key: "day", offset: 0 }, NOW)).toBe("Today");

@@ -467,11 +467,6 @@ function TodayCard({
   const navigate = useNavigate();
   const consent: ConsentState = a.consentState ?? (consentSigned ? "signed" : "outstanding");
   const [consentOpen, setConsentOpen] = useState(false);
-  // "Since" reads from the last state change; good enough for a waiting room.
-  const waitingSince =
-    stage === "waiting" && a.updated_at
-      ? new Date(a.updated_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-      : null;
   const needsConsentInClinic = stage === "arrived" && consent === "outstanding" && !isCancelled;
   const openTreatmentForm = () => {
     setDetailOpen(false);
@@ -574,11 +569,6 @@ function TodayCard({
                   consent={consent}
                   locked={detailOpen}
                 />
-                {waitingSince ? (
-                  <span className="text-[10px] leading-none tabular-nums text-warning-ink" data-qc="waiting-since">
-                    since {waitingSince}
-                  </span>
-                ) : null}
               </div>
             </div>
             <div className="flex items-center gap-2.5">

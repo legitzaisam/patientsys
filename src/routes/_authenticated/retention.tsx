@@ -91,7 +91,7 @@ function RetentionPage() {
   }
 
   const { data } = useQuery({
-    queryKey: ["retention", period.key, period.offset],
+    queryKey: ["retention", range.from, range.to, period.key],
     queryFn: () => fetchRetention({ data: { from: range.from, to: range.to, key: period.key } }),
     enabled: !!identity?.isStaff,
   });
