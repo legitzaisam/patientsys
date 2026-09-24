@@ -239,6 +239,10 @@ export const rolePermissions: Row[] = [
   { role: "front_desk", permission: "photos.manage", enabled: false },
   { role: "front_desk", permission: "appointments.edit", enabled: true },
   { role: "front_desk", permission: "comms.send", enabled: true },
+  // Offers and marketing stay with the owner until granted from the Team page.
+  { role: "manager", permission: "offers.manage", enabled: false },
+  { role: "practitioner", permission: "offers.manage", enabled: false },
+  { role: "front_desk", permission: "offers.manage", enabled: false },
 ].map((r) => ({ ...r, id: id("b1"), updated_by: USERS.owner, updated_at: iso(-12) }));
 
 /* ---------------------------------------------------------------- */
@@ -4485,6 +4489,245 @@ export const planPauseRequests: Row[] = [];
   portalPatient["emergency_contact_phone"] = "+61 418 765 432";
 }
 
+/* ---------------------------------------------------------------- */
+/* offers and marketing                                              */
+/* ---------------------------------------------------------------- */
+
+export const offerTemplates: Row[] = [];
+export const patientOffers: Row[] = [];
+
+{
+  const byName = (first: string, last: string) =>
+    patients.find((p) => p["first_name"] === first && p["last_name"] === last);
+
+  // The automation cohorts need at least one consented patient per stage so
+  // the preview and Process queue have someone to send to.
+  for (const [first, last] of [
+    ["Isla", "Hartley"],
+    ["Freya", "Nielsen"],
+    ["Bea", "Moreau"],
+  ]) {
+    const p = byName(first!, last!);
+    if (p) {
+      p["marketing_opt_in"] = true;
+      p["email_opt_in"] = true;
+    }
+  }
+
+  const template = (
+    stage: string,
+    fields: {
+      name: string;
+      subject: string;
+      headline: string;
+      body: string;
+      value_text: string | null;
+      code: string | null;
+      cta_label: string;
+      valid_days?: number;
+      send_sms?: boolean;
+      automation_enabled?: boolean;
+      automation_delay_days?: number;
+      last_automation_at?: string | null;
+    },
+  ) => {
+    const row: Row = {
+      id: id("f5"),
+      clinic_id: CLINIC_ID,
+      stage,
+      name: fields.name,
+      subject: fields.subject,
+      headline: fields.headline,
+      body: fields.body,
+      value_text: fields.value_text,
+      code: fields.code,
+      cta_label: fields.cta_label,
+      valid_days: fields.valid_days ?? 30,
+      send_email: true,
+      send_sms: fields.send_sms ?? false,
+      show_in_portal: true,
+      automation_enabled: fields.automation_enabled ?? false,
+      automation_delay_days: fields.automation_delay_days ?? 0,
+      last_automation_at: fields.last_automation_at ?? null,
+      created_by: USERS.owner,
+      archived_at: null,
+      created_at: iso(-30, 9, 0),
+      updated_at: iso(-3, 9, 0),
+    };
+    offerTemplates.push(row);
+    return row;
+  };
+
+  const preConsult = template("pre_consultation", {
+    name: "Welcome consultation",
+    subject: "Your complimentary consultation at {{clinic}}",
+    headline: "Let's talk about your skin",
+    body: "You signed up with us but we haven't met yet. Book a consultation this month and it's on us: a relaxed thirty minutes with one of our practitioners to talk through what you'd like to change and what would suit you.\n\nNo pressure and nothing to buy on the day.",
+    value_text: "Complimentary consultation",
+    code: "WELCOME",
+    cta_label: "Book my consultation",
+    automation_enabled: true,
+    automation_delay_days: 0,
+    last_automation_at: iso(-1, 6, 0),
+  });
+  const postConsult = template("post_consultation", {
+    name: "After your consultation",
+    subject: "{{first_name}}, a little something towards your first treatment",
+    headline: "Ready when you are",
+    body: "It was lovely to meet you. If you've been thinking about the plan we discussed, here's a small thank-you to help you take the first step.\n\nBook your first treatment in the next few weeks and we'll take the amount below off the price.",
+    value_text: "£25 off your first treatment",
+    code: "FIRST25",
+    cta_label: "Book my first treatment",
+    automation_enabled: true,
+    automation_delay_days: 7,
+    last_automation_at: iso(-1, 6, 0),
+  });
+  template("single_treatment", {
+    name: "Keep the results going",
+    subject: "Keep your results going, {{first_name}}",
+    headline: "Your skin is just getting started",
+    body: "Most treatments work best as a course, and the results from your first session build with each one. To make the next step easier, here's an offer on your follow-up.\n\nWe'd also love to hear how you've found things so far.",
+    value_text: "15% off your next session",
+    code: "NEXT15",
+    cta_label: "Book my next session",
+    automation_delay_days: 21,
+  });
+  const planEnding = template("plan_ending", {
+    name: "Your plan is nearly complete",
+    subject: "You're nearly there, {{first_name}}",
+    headline: "Nearly at the end of your plan",
+    body: "You've almost finished your skin plan, and the difference shows. To keep your results where they are, here's an offer on a maintenance session or your next course.\n\nAsk your practitioner what they'd recommend at your final appointment.",
+    value_text: "20% off a maintenance course",
+    code: "MAINTAIN20",
+    cta_label: "Plan what's next",
+    valid_days: 45,
+  });
+  const autumn = template("custom", {
+    name: "Autumn skin reset",
+    subject: "An autumn skin reset, just for you",
+    headline: "Autumn skin reset",
+    body: "The season for peels and resurfacing is here. Book a chemical peel or microneedling session before the end of the month and we'll add a complimentary LED session.",
+    value_text: "Complimentary LED session with any peel",
+    code: "AUTUMNLED",
+    cta_label: "Claim this offer",
+    valid_days: 21,
+  });
+
+  const offer = (
+    patient: Row | undefined,
+    tmpl: Row,
+    fields: {
+      status: string;
+      source: string;
+      daysAgo: number;
+      viewedDaysAgo?: number;
+      claimedDaysAgo?: number;
+      sentBy?: string | null;
+      withEmail?: boolean;
+    },
+  ) => {
+    if (!patient) return;
+    const sentAt = iso(-fields.daysAgo, 9, 30);
+    let communicationId: string | null = null;
+    if (fields.withEmail !== false && patient["email"]) {
+      communicationId = id("m1");
+      communications.push({
+        id: communicationId,
+        clinic_id: CLINIC_ID,
+        patient_id: patient["id"],
+        channel: "email",
+        purpose: "marketing",
+        to_address: patient["email"],
+        template_key: "offer",
+        subject: String(tmpl["subject"]).replace("{{first_name}}", patient["first_name"]).replace("{{clinic}}", clinic["name"]),
+        body: `Hi ${patient["first_name"]},\n\n${tmpl["headline"]}\n\n${tmpl["body"]}\n\nYour offer: ${tmpl["value_text"]}\nQuote code ${tmpl["code"]} when you book.\n\n${tmpl["cta_label"]}: (link)\n\n${clinic["name"]}`,
+        body_html: null,
+        status: "sent",
+        provider: "sandbox",
+        provider_message_id: `sandbox:${id("m2")}`,
+        error: null,
+        attempts: 1,
+        scheduled_for: sentAt,
+        sent_at: sentAt,
+        created_by: fields.sentBy ?? null,
+        related_entity: "patient_offers",
+        related_id: null,
+        created_at: sentAt,
+      });
+    }
+    const row: Row = {
+      id: id("f6"),
+      clinic_id: CLINIC_ID,
+      patient_id: patient["id"],
+      template_id: tmpl["id"],
+      stage: tmpl["stage"],
+      headline: tmpl["headline"],
+      body: tmpl["body"],
+      value_text: tmpl["value_text"],
+      code: tmpl["code"],
+      cta_label: tmpl["cta_label"],
+      status: fields.status,
+      source: fields.source,
+      communication_id: communicationId,
+      sent_by: fields.sentBy ?? null,
+      sent_at: sentAt,
+      viewed_at: fields.viewedDaysAgo != null ? iso(-fields.viewedDaysAgo, 18, 10) : null,
+      claimed_at: fields.claimedDaysAgo != null ? iso(-fields.claimedDaysAgo, 18, 12) : null,
+      expires_at: new Date(new Date(sentAt).getTime() + Number(tmpl["valid_days"]) * DAY).toISOString(),
+      created_at: sentAt,
+    };
+    if (communicationId) {
+      const comm = communications.find((c) => c["id"] === communicationId);
+      if (comm) comm["related_id"] = row["id"];
+    }
+    patientOffers.push(row);
+    return row;
+  };
+
+  // Olivia (the portal patient): one claimed offer so the record, the diary
+  // and the portal all show a live claim, and one still open to claim.
+  offer(patients[0], autumn, {
+    status: "claimed",
+    source: "one_off",
+    daysAgo: 5,
+    viewedDaysAgo: 4,
+    claimedDaysAgo: 4,
+    sentBy: USERS.frontDesk,
+  });
+  offer(patients[0], planEnding, {
+    status: "sent",
+    source: "one_off",
+    daysAgo: 1,
+    sentBy: USERS.owner,
+  });
+  // Yesterday's automation run.
+  offer(byName("Freya", "Nielsen"), postConsult, {
+    status: "viewed",
+    source: "automation",
+    daysAgo: 1,
+    viewedDaysAgo: 0,
+  });
+  offer(byName("Aisha", "Rahman"), postConsult, {
+    status: "sent",
+    source: "automation",
+    daysAgo: 1,
+    withEmail: false,
+  });
+  // An older bulk send that has run out, and one front desk withdrew.
+  offer(patients[5], autumn, {
+    status: "expired",
+    source: "bulk",
+    daysAgo: 40,
+    sentBy: USERS.frontDesk,
+  });
+  offer(patients[10], preConsult, {
+    status: "cancelled",
+    source: "insights",
+    daysAgo: 12,
+    sentBy: USERS.owner,
+  });
+}
+
 export const db = {
   clinic,
   profiles,
@@ -4531,6 +4774,8 @@ export const db = {
   websiteLeads,
   retailProducts,
   productSales,
+  offerTemplates,
+  patientOffers,
 };
 
 export function newId(prefix = "z1") {

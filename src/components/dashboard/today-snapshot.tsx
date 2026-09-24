@@ -10,6 +10,7 @@ import {
   CreditCard,
   DoorOpen,
   FileSignature,
+  Gift,
   Heart,
   Hourglass,
   Mail,
@@ -617,6 +618,7 @@ function TodayCard({
             <ConsentChip appointment={a} signed={consentSigned} />
             <PaymentChip appointment={a} status={paymentStatus} />
             <VisitNoteChip appointmentId={a.id} variant="chip" compact preRead={isPreAppointmentNote(a)} />
+            {a.claimedOffer ? <ClaimedOfferChip offer={a.claimedOffer} /> : null}
           </div>
         </div>
       </div>
@@ -1034,6 +1036,35 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
             <Phone className="h-3 w-3" /> Text
           </Button>
         </div>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+/** The patient has claimed an offer that is still valid: apply it at the desk. */
+function ClaimedOfferChip({ offer }: { offer: { id: string; headline: string; code: string | null } }) {
+  return (
+    <HoverCard openDelay={80} closeDelay={140}>
+      <HoverCardTrigger asChild>
+        <span
+          className="inline-flex h-5 cursor-default items-center gap-1 rounded-full bg-accent-soft px-2 text-2xs font-semibold leading-none text-accent-ink shadow-inset-hi"
+          data-qc="claimed-offer-chip"
+        >
+          <Gift className="h-3 w-3 shrink-0" />
+          Offer claimed
+        </span>
+      </HoverCardTrigger>
+      <HoverCardContent align="start" className="w-64 rounded-2xl p-3.5 text-sm">
+        <p className="font-semibold text-foreground">{offer.headline}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {offer.code ? (
+            <>
+              Code <span className="font-semibold text-foreground">{offer.code}</span> — apply it when taking payment.
+            </>
+          ) : (
+            "Apply the offer when taking payment."
+          )}
+        </p>
       </HoverCardContent>
     </HoverCard>
   );

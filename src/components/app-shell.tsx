@@ -200,6 +200,7 @@ function AccountMenu({
   roleLabel,
   canTeam,
   canSettings,
+  canOffers,
   signOut,
 }: {
   identity: Identity;
@@ -207,6 +208,7 @@ function AccountMenu({
   roleLabel: string;
   canTeam: boolean;
   canSettings: boolean;
+  canOffers: boolean;
   signOut: () => void;
 }) {
   const navigate = useNavigate();
@@ -239,6 +241,12 @@ function AccountMenu({
               <DropdownMenuItem onClick={() => navigate({ to: "/team" })}>
                 <UserCog className="h-4 w-4" />
                 Team
+              </DropdownMenuItem>
+            )}
+            {canOffers && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/offers" })} data-qc="menu-offers">
+                <Megaphone className="h-4 w-4" />
+                Offer templates
               </DropdownMenuItem>
             )}
             {(identity.isManager || canSettings) && (
@@ -503,6 +511,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   const canPerformance = can(identity, "reports.performance");
   const canTeam = can(identity, "team.view");
   const canSettings = can(identity, "settings.treatments");
+  const canOffers = can(identity, "offers.manage");
   const isPractitioner = identity.roles.includes("practitioner");
 
   const clinicLinks: NavLink[] = identity.isStaff
@@ -714,6 +723,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
                 roleLabel={roleLabel}
                 canTeam={canTeam}
                 canSettings={canSettings}
+                canOffers={canOffers}
                 signOut={signOut}
               />
             </div>

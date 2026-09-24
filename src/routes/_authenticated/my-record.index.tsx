@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { confirmAppointment, getPortalHome } from "@/lib/clinic.functions";
 import { openPortalChat } from "@/components/portal/portal-dock";
+import { PortalOffer } from "@/components/portal/portal-offers";
 import {
   PortalCard,
   PortalHead,
@@ -42,6 +43,10 @@ const DRAFTS = {
 };
 
 export const Route = createFileRoute("/_authenticated/my-record/")({
+  // `?offer=<id>` is the landing point of the button in an offer email: the
+  // card is scrolled into view and marked as opened.
+  validateSearch: (search: Record<string, unknown>): { offer?: string } =>
+    typeof search["offer"] === "string" && search["offer"] ? { offer: search["offer"] } : {},
   component: PortalHome,
 });
 
@@ -65,6 +70,7 @@ function PortalHome() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fetchHome = useServerFn(getPortalHome);
+  const { offer: highlightedOfferId } = Route.useSearch();
   const { data, isLoading } = useQuery({ queryKey: ["portal-home"], queryFn: () => fetchHome() });
 
   const confirm = useMutation({
@@ -81,6 +87,7 @@ function PortalHome() {
   if (!data) return <p className="p-6 text-sm text-muted-foreground">No record linked yet.</p>;
 
   const { plan, clinician, nextAppointment, news, offer, latestMessage, progressSteps } = data;
+  const patientOffers = data.patientOffers ?? [];
   // The home only presents a booking as "your next appointment" once the
   // patient has confirmed it; until then it asks them to.
   const confirmed = Boolean(nextAppointment?.confirmedAt);
@@ -228,13 +235,24 @@ function PortalHome() {
 
         {/* ------------------------------------------------- column 2 */}
         <div className="grid gap-3.5">
-          <PortalCard>
+          <PortalCard data-qc="portal-offers-card">
             <PortalHead
               icon={Tag}
               title="Special offers"
               action={<PortalLink onClick={() => navigate({ to: "/my-record/resources" })}>See all</PortalLink>}
             />
-            {offer ? (
+            {patientOffers.length > 0 ? (
+              <div className="grid gap-2.5">
+                {patientOffers.slice(0, 2).map((po) => (
+                  <PortalOffer key={po.id} offer={po} highlighted={po.id === highlightedOfferId} />
+                ))}
+                {patientOffers.length > 2 ? (
+                  <PortalLink onClick={() => navigate({ to: "/my-record/resources" })}>
+                    {patientOffers.length - 2} more {patientOffers.length - 2 === 1 ? "offer" : "offers"}
+                  </PortalLink>
+                ) : null}
+              </div>
+            ) : offer ? (
               <div className="flex items-center gap-2.5 rounded-[14px] bg-rose-bg px-3.5 py-3">
                 <div className="min-w-0 flex-1">
                   {offer.flag && (

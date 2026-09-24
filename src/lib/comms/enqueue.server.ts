@@ -11,6 +11,8 @@ export type EnqueueInput = {
   channel: CommsChannel;
   purpose: CommsPurpose;
   body: string;
+  /** Optional HTML rendering sent alongside the text (offers carry a button). */
+  bodyHtml?: string | null;
   subject?: string | null;
   templateKey?: string | null;
   toAddress?: string | null;
@@ -63,6 +65,7 @@ export async function enqueueCommunication(
       template_key: input.templateKey ?? null,
       subject: input.subject?.trim() || null,
       body: input.body,
+      body_html: input.bodyHtml ?? null,
       status: "queued",
       attempts: 0,
       scheduled_for: input.scheduledFor || new Date().toISOString(),

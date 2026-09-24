@@ -6,8 +6,11 @@ import { useForm, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import { toast } from "sonner";
-import { Calendar, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Calendar, X, ChevronUp, ChevronDown, ChevronsUpDown, Send } from "lucide-react";
 import { listPatients, savePatient } from "@/lib/clinic.functions";
+import { can } from "@/lib/permissions";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SendOfferDialog } from "@/components/offers/send-offer-dialog";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { JourneyBoard } from "@/components/patients/journey-board";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
@@ -109,6 +112,13 @@ function PatientsPage() {
     column: null,
     direction: "asc",
   });
+  // Row selection for the bulk offer send. Cleared when the view changes so a
+  // hidden selection cannot be sent by accident.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [offerOpen, setOfferOpen] = useState(false);
+  useEffect(() => {
+    setSelected(new Set());
+  }, [view, q]);
 
   useEffect(() => {
     setSearch(q ?? "");
@@ -141,6 +151,7 @@ function PatientsPage() {
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
   if (!identity.isStaff) return <div className="p-12 text-sm text-muted-foreground">Staff access only.</div>;
 
+  const canSendOffers = can(identity, "comms.send");
   const term = search.trim().toLowerCase();
   const dobTerm = dobSearch.trim();
   const dueCutoff = Date.now() + 30 * 24 * 60 * 60 * 1000;
@@ -235,6 +246,19 @@ function PatientsPage() {
         ))}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {canSendOffers && selected.size > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-[34px]"
+              onClick={() => setOfferOpen(true)}
+              aria-label={`Send an offer to ${selected.size} selected`}
+              data-qc="bulk-send-offer"
+            >
+              <Send className="h-4 w-4" />
+              Send offer · {selected.size}
+            </Button>
+          ) : null}
           <Input
             id="name-search"
             placeholder="Name or reference"
@@ -389,6 +413,18 @@ function PatientsPage() {
         <table className="glass-table w-full text-sm">
           <thead>
             <tr>
+              {canSendOffers ? (
+                <th className="w-[1%] px-4 py-3">
+                  <Checkbox
+                    aria-label="Select all patients in this view"
+                    checked={rows.length > 0 && rows.every((p: any) => selected.has(p.id))}
+                    onCheckedChange={(checked) =>
+                      setSelected(checked ? new Set(rows.map((p: any) => p.id as string)) : new Set())
+                    }
+                    data-qc="select-all-patients"
+                  />
+                </th>
+              ) : null}
               <th className="px-4 py-3">Patient</th>
               <th className="px-4 py-3">Last treatment</th>
               <th className="px-4 py-3">Next treatment</th>
@@ -399,7 +435,24 @@ function PatientsPage() {
           </thead>
           <tbody>
             {rows.map((p: any) => (
-              <tr key={p.id}>
+              <tr key={p.id} data-selected={selected.has(p.id) ? "true" : undefined}>
+                {canSendOffers ? (
+                  <td className="w-[1%] px-4 py-3">
+                    <Checkbox
+                      aria-label={`Select ${p.first_name} ${p.last_name}`}
+                      checked={selected.has(p.id)}
+                      onCheckedChange={(checked) =>
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (checked) next.add(p.id);
+                          else next.delete(p.id);
+                          return next;
+                        })
+                      }
+                      data-qc="select-patient"
+                    />
+                  </td>
+                ) : null}
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2.5">
                     <PatientAvatar patientId={p.id} name={`${p.first_name} ${p.last_name}`} photoUrl={p.avatar_url} size="sm" />
@@ -444,7 +497,7 @@ function PatientsPage() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={canSendOffers ? 7 : 6} className="px-4 py-10 text-center text-muted-foreground">
                   No patients yet — add your first record.
                 </td>
               </tr>
@@ -452,6 +505,17 @@ function PatientsPage() {
           </tbody>
         </table>
       </Card>
+      {canSendOffers ? (
+        <SendOfferDialog
+          open={offerOpen}
+          onOpenChange={setOfferOpen}
+          patients={rows
+            .filter((p: any) => selected.has(p.id))
+            .map((p: any) => ({ id: p.id, first_name: p.first_name, last_name: p.last_name }))}
+          source="bulk"
+          onSent={() => setSelected(new Set())}
+        />
+      ) : null}
       </>
       )}
     </AppShell>

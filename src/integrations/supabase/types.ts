@@ -364,6 +364,7 @@ export type Database = {
         Row: {
           attempts: number;
           body: string;
+          body_html: string | null;
           channel: Database["public"]["Enums"]["communication_channel"];
           clinic_id: string;
           created_at: string;
@@ -386,6 +387,7 @@ export type Database = {
         Insert: {
           attempts?: number;
           body: string;
+          body_html?: string | null;
           channel: Database["public"]["Enums"]["communication_channel"];
           clinic_id: string;
           created_at?: string;
@@ -408,6 +410,7 @@ export type Database = {
         Update: {
           attempts?: number;
           body?: string;
+          body_html?: string | null;
           channel?: Database["public"]["Enums"]["communication_channel"];
           clinic_id?: string;
           created_at?: string;
@@ -928,6 +931,167 @@ export type Database = {
             columns: ["patient_id"];
             isOneToOne: false;
             referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      offer_templates: {
+        Row: {
+          archived_at: string | null;
+          automation_delay_days: number;
+          automation_enabled: boolean;
+          body: string;
+          clinic_id: string;
+          code: string | null;
+          created_at: string;
+          created_by: string | null;
+          cta_label: string;
+          headline: string;
+          id: string;
+          last_automation_at: string | null;
+          name: string;
+          send_email: boolean;
+          send_sms: boolean;
+          show_in_portal: boolean;
+          stage: string;
+          subject: string;
+          updated_at: string;
+          valid_days: number;
+          value_text: string | null;
+        };
+        Insert: {
+          archived_at?: string | null;
+          automation_delay_days?: number;
+          automation_enabled?: boolean;
+          body: string;
+          clinic_id: string;
+          code?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          cta_label?: string;
+          headline: string;
+          id?: string;
+          last_automation_at?: string | null;
+          name: string;
+          send_email?: boolean;
+          send_sms?: boolean;
+          show_in_portal?: boolean;
+          stage?: string;
+          subject: string;
+          updated_at?: string;
+          valid_days?: number;
+          value_text?: string | null;
+        };
+        Update: {
+          archived_at?: string | null;
+          automation_delay_days?: number;
+          automation_enabled?: boolean;
+          body?: string;
+          clinic_id?: string;
+          code?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          cta_label?: string;
+          headline?: string;
+          id?: string;
+          last_automation_at?: string | null;
+          name?: string;
+          send_email?: boolean;
+          send_sms?: boolean;
+          show_in_portal?: boolean;
+          stage?: string;
+          subject?: string;
+          updated_at?: string;
+          valid_days?: number;
+          value_text?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offer_templates_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      patient_offers: {
+        Row: {
+          body: string;
+          claimed_at: string | null;
+          clinic_id: string;
+          code: string | null;
+          communication_id: string | null;
+          created_at: string;
+          cta_label: string;
+          expires_at: string | null;
+          headline: string;
+          id: string;
+          patient_id: string;
+          sent_at: string;
+          sent_by: string | null;
+          source: string;
+          stage: string;
+          status: string;
+          template_id: string | null;
+          value_text: string | null;
+          viewed_at: string | null;
+        };
+        Insert: {
+          body: string;
+          claimed_at?: string | null;
+          clinic_id: string;
+          code?: string | null;
+          communication_id?: string | null;
+          created_at?: string;
+          cta_label?: string;
+          expires_at?: string | null;
+          headline: string;
+          id?: string;
+          patient_id: string;
+          sent_at?: string;
+          sent_by?: string | null;
+          source?: string;
+          stage: string;
+          status?: string;
+          template_id?: string | null;
+          value_text?: string | null;
+          viewed_at?: string | null;
+        };
+        Update: {
+          body?: string;
+          claimed_at?: string | null;
+          clinic_id?: string;
+          code?: string | null;
+          communication_id?: string | null;
+          created_at?: string;
+          cta_label?: string;
+          expires_at?: string | null;
+          headline?: string;
+          id?: string;
+          patient_id?: string;
+          sent_at?: string;
+          sent_by?: string | null;
+          source?: string;
+          stage?: string;
+          status?: string;
+          template_id?: string | null;
+          value_text?: string | null;
+          viewed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "patient_offers_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "patient_offers_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "offer_templates";
             referencedColumns: ["id"];
           },
         ];

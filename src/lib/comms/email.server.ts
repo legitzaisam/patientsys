@@ -7,6 +7,8 @@ export async function sendEmail(input: {
   to: string;
   subject: string;
   body: string;
+  /** Optional HTML alternative; the text body is always sent. */
+  html?: string | null;
   fromEmail?: string | null;
   fromName?: string | null;
 }): Promise<ProviderResult> {
@@ -15,7 +17,7 @@ export async function sendEmail(input: {
   const subject = input.subject.trim() || "Message from your clinic";
 
   if (commsSandbox("email")) {
-    console.info("[comms:sandbox] email", { to: input.to, subject });
+    console.info("[comms:sandbox] email", { to: input.to, subject, html: Boolean(input.html) });
     return { ok: true, provider: "sandbox", messageId: `sandbox:${crypto.randomUUID()}` };
   }
   if (!fromEmail) return { ok: false, error: "COMMS_FROM_EMAIL is not set." };
@@ -33,6 +35,7 @@ export async function sendEmail(input: {
       to: [input.to],
       subject,
       text: input.body,
+      ...(input.html ? { html: input.html } : {}),
     }),
   });
   const payload = (await response.json().catch(() => null)) as {

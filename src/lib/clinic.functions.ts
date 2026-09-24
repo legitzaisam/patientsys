@@ -457,6 +457,22 @@ export const getDashboard = createServerFn({ method: "GET" })
       unpaidDeposits = unpaidDeposits.filter((a: any) => a.practitioner_id === scoped);
     }
 
+    // Claimed offers for today's patients, so the diary card can flag them.
+    const claimedOfferByPatient = new Map<string, { id: string; headline: string; code: string | null }>();
+    const todayPatientIds = [...new Set(todayAppts.map((a: any) => a.patient_id as string).filter(Boolean))];
+    if (todayPatientIds.length > 0) {
+      const { data: claimedRows } = await supabase
+        .from("patient_offers")
+        .select("id, patient_id, headline, code, status, expires_at, claimed_at")
+        .in("patient_id", todayPatientIds)
+        .eq("status", "claimed");
+      const { liveClaimedOffer } = await import("./offers/shape");
+      for (const pid of todayPatientIds) {
+        const live = liveClaimedOffer(((claimedRows ?? []) as any[]).filter((r) => r.patient_id === pid));
+        if (live) claimedOfferByPatient.set(pid, { id: live.id, headline: live.headline, code: live.code });
+      }
+    }
+
     const active = all.filter((p: { status: string }) => p.status === "active").length;
     const inactive = all.filter((p: { status: string }) => p.status !== "active").length;
 
@@ -692,8 +708,13 @@ export const getDashboard = createServerFn({ method: "GET" })
         patientChange,
       },
       // Every diary card carries its consent state so the stage menu and the
-      // dock can gate "waiting" without a second lookup.
-      todayAppointments: todayAppts.map((a: any) => ({ ...a, consentState: consentStateOf(a) })),
+      // dock can gate "waiting" without a second lookup, and the claimed
+      // offer front desk should apply at the desk.
+      todayAppointments: todayAppts.map((a: any) => ({
+        ...a,
+        consentState: consentStateOf(a),
+        claimedOffer: claimedOfferByPatient.get(a.patient_id) ?? null,
+      })),
       attentionItems,
       journeys,
       safeToProceed,
@@ -3128,7 +3149,7 @@ export const getPortalHome = createServerFn({ method: "GET" })
     const plan = await portalPlan(ctx, patient.id);
     const milestones = plan ? await portalMilestones(ctx, plan.id) : [];
 
-    const [{ data: appts }, { data: news }, { data: offers }, { data: messages }] = await Promise.all([
+    const [{ data: appts }, { data: news }, { data: offers }, { data: messages }, { data: myOffers }] = await Promise.all([
       ctx.supabase
         .from("appointments")
         .select("*")
@@ -3155,6 +3176,12 @@ export const getPortalHome = createServerFn({ method: "GET" })
         .eq("patient_id", patient.id)
         .order("created_at", { ascending: false })
         .limit(1),
+      ctx.supabase
+        .from("patient_offers")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .neq("status", "cancelled")
+        .order("sent_at", { ascending: false }),
     ]);
 
     let clinician = null;
@@ -3180,9 +3207,16 @@ export const getPortalHome = createServerFn({ method: "GET" })
 
     const progress = portal.planProgress(milestones as any);
     const live = (offers ?? []).filter((o: any) => !o.expires_at || new Date(o.expires_at) > new Date());
+    const { patientOfferView } = await import("./offers/shape");
+    // The patient's own offers, live ones first, then claimed; expired drop off.
+    const patientOffers = ((myOffers ?? []) as any[])
+      .map((o) => patientOfferView(o))
+      .filter((o) => o.live || o.status === "claimed")
+      .sort((a, b) => Number(b.live) - Number(a.live));
 
     return {
       patient: { id: patient.id, firstName: patient.first_name, name: `${patient.first_name} ${patient.last_name}`.trim() },
+      patientOffers,
       clinician,
       plan: plan
         ? {
@@ -7684,4 +7718,410 @@ export const rotateInsightsIngestKey = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     await audit(ctx, "update", "clinic", clinicIdOf(context), null, { insights_ingest_key: "rotated" });
     return { raw: generated.raw, last4: generated.last4 };
+  });
+
+/* ---------------------------------------------------------------- */
+/* offers and marketing                                              */
+/* ---------------------------------------------------------------- */
+
+const OFFER_PATIENT_COLUMNS =
+  "id, first_name, last_name, email, phone, status, created_at, marketing_opt_in, email_opt_in, sms_opt_in, reminders_opt_in, unsubscribed_at";
+
+/** Everything `buildStageCohorts` needs, read once per request. */
+async function offerCohortInput(ctx: Ctx) {
+  const supabase = ctx.supabase;
+  const [patients, appointments, treatments, catalogue, plans, offers] = await Promise.all([
+    supabase.from("patients").select(OFFER_PATIENT_COLUMNS),
+    supabase.from("appointments").select("patient_id, starts_at, status, treatment_name, catalogue_id"),
+    supabase.from("treatments").select("patient_id, performed_at, name, catalogue_id"),
+    supabase.from("treatment_catalogue").select("id, category"),
+    supabase
+      .from("treatment_plans")
+      .select("id, patient_id, status, started_at, duration_days, total_sessions")
+      .eq("status", "active"),
+    supabase.from("patient_offers").select("patient_id, stage, status, source"),
+  ]);
+  for (const r of [patients, appointments, treatments, catalogue, plans, offers]) {
+    if (r.error) throw new Error(r.error.message);
+  }
+  const planIds = (plans.data ?? []).map((p: any) => p.id as string);
+  const milestones = planIds.length
+    ? await supabase.from("plan_milestones").select("plan_id, kind, status").in("plan_id", planIds)
+    : { data: [], error: null };
+  if (milestones.error) throw new Error(milestones.error.message);
+  return {
+    patients: (patients.data ?? []) as any[],
+    appointments: (appointments.data ?? []) as any[],
+    treatments: (treatments.data ?? []) as any[],
+    catalogue: (catalogue.data ?? []) as any[],
+    plans: (plans.data ?? []) as any[],
+    milestones: (milestones.data ?? []) as any[],
+    offers: (offers.data ?? []) as any[],
+  };
+}
+
+async function offerStoreFor(ctx: Ctx, origin: string | null | undefined) {
+  const { enqueueCommunication: enqueue } = await import("./comms/enqueue.server");
+  const { data: clinicRow } = await ctx.supabase
+    .from("clinics")
+    .select("name")
+    .eq("id", clinicIdOf(ctx))
+    .maybeSingle();
+  const resolvedOrigin = (origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(/\/$/, "");
+  const store: import("./offers/send").OfferStore = {
+    clinicId: clinicIdOf(ctx),
+    clinicName: clinicRow?.name ?? "Your clinic",
+    origin: resolvedOrigin,
+    async getPatients(ids) {
+      const { data, error } = await ctx.supabase.from("patients").select(OFFER_PATIENT_COLUMNS).in("id", ids);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as any[];
+    },
+    async insertOffer(row) {
+      const { data, error } = await ctx.supabase.from("patient_offers").insert(row).select("id").single();
+      if (error) throw new Error(error.message);
+      return data.id as string;
+    },
+    async linkCommunication(offerId, communicationId) {
+      const { error } = await ctx.supabase
+        .from("patient_offers")
+        .update({ communication_id: communicationId })
+        .eq("id", offerId);
+      if (error) throw new Error(error.message);
+    },
+    enqueue: (input) => enqueue(ctx.supabase, input),
+  };
+  return store;
+}
+
+export const listOfferTemplates = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "listOfferTemplates");
+    const { data, error } = await ctx.supabase
+      .from("offer_templates")
+      .select("*")
+      .is("archived_at", null)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    const { data: sends } = await ctx.supabase
+      .from("patient_offers")
+      .select("template_id, status, expires_at");
+    const { effectiveOfferStatus } = await import("./offers/shape");
+    const now = new Date();
+    const counts = new Map<string, Record<string, number>>();
+    for (const s of (sends ?? []) as any[]) {
+      if (!s.template_id) continue;
+      const bucket = counts.get(s.template_id) ?? { sent: 0, viewed: 0, claimed: 0, expired: 0, cancelled: 0 };
+      bucket[effectiveOfferStatus(s, now)] = (bucket[effectiveOfferStatus(s, now)] ?? 0) + 1;
+      counts.set(s.template_id, bucket);
+    }
+    return (data ?? []).map((t: any) => ({
+      ...t,
+      counts: counts.get(t.id) ?? { sent: 0, viewed: 0, claimed: 0, expired: 0, cancelled: 0 },
+    }));
+  });
+
+export const saveOfferTemplate = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      id?: string;
+      name: string;
+      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
+      subject: string;
+      headline: string;
+      body: string;
+      value_text?: string;
+      code?: string;
+      cta_label?: string;
+      valid_days: number;
+      send_email: boolean;
+      send_sms: boolean;
+      show_in_portal: boolean;
+    }) => parseInput(schemas.SaveOfferTemplate, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "saveOfferTemplate");
+    const payload = {
+      clinic_id: clinicIdOf(context),
+      name: data.name,
+      stage: data.stage,
+      subject: data.subject,
+      headline: data.headline,
+      body: data.body,
+      value_text: data.value_text?.trim() || null,
+      code: data.code?.trim().toUpperCase() || null,
+      cta_label: data.cta_label?.trim() || "Claim this offer",
+      valid_days: data.valid_days,
+      send_email: data.send_email,
+      send_sms: data.send_sms,
+      show_in_portal: data.show_in_portal,
+    };
+    if (data.stage !== "custom") {
+      // One live template per stage: a second one for the same stage would
+      // race the automation.
+      let q = ctx.supabase
+        .from("offer_templates")
+        .select("id")
+        .eq("stage", data.stage)
+        .is("archived_at", null);
+      if (data.id) q = q.neq("id", data.id);
+      const { data: clash } = await q.limit(1);
+      if ((clash ?? []).length > 0) {
+        const { STAGE_LABEL } = await import("./offers/stages");
+        throw new Error(`There is already a ${STAGE_LABEL[data.stage]} template. Edit that one or archive it first.`);
+      }
+    }
+    let id = data.id ?? null;
+    if (id) {
+      const { error } = await ctx.supabase.from("offer_templates").update(payload).eq("id", id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { data: created, error } = await ctx.supabase
+        .from("offer_templates")
+        .insert({ ...payload, created_by: ctx.userId })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      id = created.id as string;
+    }
+    await audit(ctx, data.id ? "update" : "create", "offer_templates", id, null, { stage: data.stage });
+    return { id };
+  });
+
+export const archiveOfferTemplate = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.ArchiveOfferTemplate, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "archiveOfferTemplate");
+    const { error } = await ctx.supabase
+      .from("offer_templates")
+      .update({ archived_at: new Date().toISOString(), automation_enabled: false })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "archive", "offer_templates", data.id, null, {});
+    return { ok: true };
+  });
+
+export const setOfferAutomation = createServerFn({ method: "POST" })
+  .validator(
+    (data: { id: string; enabled: boolean; delay_days: number }) =>
+      parseInput(schemas.SetOfferAutomation, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "setOfferAutomation");
+    const { data: tmpl, error: readError } = await ctx.supabase
+      .from("offer_templates")
+      .select("stage")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!tmpl) throw new Error("Template not found");
+    if (tmpl.stage === "custom" && data.enabled) throw new Error("One-off templates cannot run automatically.");
+    const { error } = await ctx.supabase
+      .from("offer_templates")
+      .update({ automation_enabled: data.enabled, automation_delay_days: data.delay_days })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await audit(ctx, data.enabled ? "offers.automation_on" : "offers.automation_off", "offer_templates", data.id, null, {
+      delay_days: data.delay_days,
+    });
+    return { ok: true };
+  });
+
+export const draftOfferTemplate = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
+      brief: string;
+      tone: "warm" | "playful" | "clinical";
+    }) => parseInput(schemas.DraftOfferTemplate, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "draftOfferTemplate");
+    const { data: clinicRow } = await ctx.supabase
+      .from("clinics")
+      .select("name")
+      .eq("id", clinicIdOf(context))
+      .maybeSingle();
+    const { draftOffer } = await import("./offers/draft.server");
+    return draftOffer({ stage: data.stage, brief: data.brief, tone: data.tone, clinicName: clinicRow?.name ?? "the clinic" });
+  });
+
+export const previewOfferStage = createServerFn({ method: "GET" })
+  .validator(
+    (data: {
+      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending";
+      delay_days?: number;
+    }) => parseInput(schemas.PreviewOfferStage, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "previewOfferStage");
+    const { buildStageCohorts, previewStage, stageCounts } = await import("./offers/cohorts");
+    const { STAGE_META } = await import("./offers/stages");
+    const input = await offerCohortInput(ctx);
+    const members = buildStageCohorts(input);
+    let delay: number | undefined = data.delay_days;
+    if (delay == null) {
+      const { data: tmpl } = await ctx.supabase
+        .from("offer_templates")
+        .select("automation_delay_days")
+        .eq("stage", data.stage)
+        .is("archived_at", null)
+        .maybeSingle();
+      delay = Number(tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays);
+    }
+    return {
+      ...previewStage(members, input.patients, input.offers, data.stage, delay),
+      counts: stageCounts(members),
+      delay_days: delay,
+    };
+  });
+
+export const listOfferSends = createServerFn({ method: "GET" })
+  .validator((data: { template_id: string }) => parseInput(schemas.ListOfferSends, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "listOfferSends");
+    const { data: rows, error } = await ctx.supabase
+      .from("patient_offers")
+      .select("*, patients(first_name, last_name)")
+      .eq("template_id", data.template_id)
+      .order("sent_at", { ascending: false })
+      .limit(200);
+    if (error) throw new Error(error.message);
+    const { patientOfferView } = await import("./offers/shape");
+    return (rows ?? []).map((r: any) => ({
+      ...patientOfferView(r),
+      patient_name: `${r.patients?.first_name ?? ""} ${r.patients?.last_name ?? ""}`.trim() || "Patient",
+    }));
+  });
+
+export const sendOffer = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      template_id: string;
+      patient_ids: string[];
+      message?: string;
+      source: "one_off" | "bulk" | "insights";
+      app_origin?: string;
+    }) => parseInput(schemas.SendOffer, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "sendOffer");
+    const { data: tmpl, error } = await ctx.supabase
+      .from("offer_templates")
+      .select("*")
+      .eq("id", data.template_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!tmpl) throw new Error("Template not found");
+    const { sendOfferToPatients } = await import("./offers/send");
+    const store = await offerStoreFor(ctx, data.app_origin);
+    const result = await sendOfferToPatients(store, tmpl as any, data.patient_ids, {
+      source: data.source,
+      sentBy: ctx.userId,
+      personalLine: data.message ?? null,
+      portalOnlyWhenNoConsent: true,
+    });
+    await audit(ctx, "offers.sent", "offer_templates", data.template_id, data.patient_ids.length === 1 ? data.patient_ids[0]! : null, {
+      source: data.source,
+      sent: result.sent.length,
+      skipped: result.skipped.length,
+    });
+    return result;
+  });
+
+export const listPatientOffers = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.ListPatientOffers, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "listPatientOffers");
+    const { data: rows, error } = await ctx.supabase
+      .from("patient_offers")
+      .select("*, offer_templates(name)")
+      .eq("patient_id", data.patient_id)
+      .order("sent_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    const { patientOfferView } = await import("./offers/shape");
+    return (rows ?? []).map((r: any) => ({ ...patientOfferView(r), template_name: r.offer_templates?.name ?? null }));
+  });
+
+async function loadOwnOffer(ctx: Ctx, id: string) {
+  const { data, error } = await ctx.supabase.from("patient_offers").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Offer not found");
+  return data;
+}
+
+export const markOfferViewed = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.MarkOfferViewed, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const offer = await loadOwnOffer(ctx, data.id);
+    await authorize(ctx, "markOfferViewed", { patientId: offer.patient_id });
+    if (offer.status !== "sent") return { ok: true, status: offer.status };
+    const { error } = await ctx.supabase
+      .from("patient_offers")
+      .update({ status: "viewed", viewed_at: new Date().toISOString() })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true, status: "viewed" };
+  });
+
+export const claimOffer = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.ClaimOffer, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const offer = await loadOwnOffer(ctx, data.id);
+    await authorize(ctx, "claimOffer", { patientId: offer.patient_id });
+    const { effectiveOfferStatus } = await import("./offers/shape");
+    const status = effectiveOfferStatus(offer);
+    if (status === "claimed") return { ok: true, claimed_at: offer.claimed_at };
+    if (status === "expired") throw new Error("This offer has expired.");
+    if (status === "cancelled") throw new Error("This offer is no longer available.");
+    const now = new Date().toISOString();
+    const { error } = await ctx.supabase
+      .from("patient_offers")
+      .update({ status: "claimed", claimed_at: now, viewed_at: offer.viewed_at ?? now })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+
+    // Front desk and managers hear about the claim so it is applied at booking.
+    const [{ data: patient }, { data: roles }] = await Promise.all([
+      ctx.supabase.from("patients").select("first_name, last_name").eq("id", offer.patient_id).maybeSingle(),
+      ctx.supabase.from("user_roles").select("user_id").in("role", ["owner", "manager", "front_desk"]),
+    ]);
+    const recipients = [...new Set(((roles ?? []) as { user_id: string }[]).map((r) => r.user_id))];
+    if (recipients.length > 0) {
+      const name = `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "A patient";
+      await ctx.supabase.from("staff_notifications").insert(
+        recipients.map((recipient_id) => ({
+          clinic_id: clinicIdOf(context),
+          recipient_id,
+          kind: "offer_claimed",
+          title: "Offer claimed",
+          body: `${name} claimed "${offer.headline}"${offer.code ? ` (code ${offer.code})` : ""}. Apply it when they book.`,
+          patient_id: offer.patient_id,
+        })),
+      );
+    }
+    await audit(ctx, "offers.claimed", "patient_offers", data.id, offer.patient_id, { stage: offer.stage });
+    return { ok: true, claimed_at: now };
   });

@@ -26,6 +26,8 @@ export const CLINIC_SCOPED_TABLES = [
   "medical_history_versions",
   "message_templates",
   "messages",
+  "offer_templates",
+  "patient_offers",
   "patients",
   "plan_milestone_checklist",
   "plan_milestones",

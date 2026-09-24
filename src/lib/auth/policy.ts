@@ -196,6 +196,20 @@ export const POLICY = {
   logRetentionOutreach: { kind: "staff" },
   sendRecall: { kind: "capability", key: "comms.send" },
 
+  /* Offers and marketing. Designing and automating is its own capability;
+     putting an offer in front of a patient is a send like any other. */
+  listOfferTemplates: { kind: "staff" },
+  saveOfferTemplate: { kind: "capability", key: "offers.manage" },
+  archiveOfferTemplate: { kind: "capability", key: "offers.manage" },
+  setOfferAutomation: { kind: "capability", key: "offers.manage" },
+  draftOfferTemplate: { kind: "capability", key: "offers.manage" },
+  previewOfferStage: { kind: "capability", key: "offers.manage" },
+  listOfferSends: { kind: "capability", key: "offers.manage" },
+  sendOffer: { kind: "capability", key: "comms.send" },
+  listPatientOffers: { kind: "staff" },
+  markOfferViewed: { kind: "patientSelf" },
+  claimOffer: { kind: "patientSelf" },
+
   /* Recall tasks */
   createRecallTask: { kind: "staff" },
   updateRecallTask: { kind: "manager" },

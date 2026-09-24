@@ -33,6 +33,7 @@ const ABOUT: Record<string, string> = {
   payment_request: "payment request",
   payment_receipt: "receipt",
   recall: "recall",
+  offer: "offer",
 };
 
 function rowTitle(row: Row) {

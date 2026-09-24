@@ -18,6 +18,7 @@ export type OutboxRow = {
   to_address: string;
   subject: string | null;
   body: string;
+  body_html?: string | null;
   status: string;
   attempts: number;
   scheduled_for: string;
@@ -32,17 +33,32 @@ export async function deliverRow(row: OutboxRow, clinic?: ClinicFrom) {
   // PECR: marketing and reminder email must carry a working opt-out. Appended
   // at dispatch so the outbox row itself stays the message staff composed.
   let body = row.body;
+  let html = row.body_html ?? null;
   if (row.purpose && row.purpose !== "transactional" && row.patient_id) {
     const footer = unsubscribeFooter(row.patient_id);
-    if (footer) body = `${body}\n\n${footer}`;
+    if (footer) {
+      body = `${body}\n\n${footer}`;
+      if (html) html = withHtmlFooter(html, footer);
+    }
   }
   return sendEmail({
     to: row.to_address,
     subject: row.subject || "Message from your clinic",
     body,
+    html,
     fromEmail: commsFromEmail() || clinic?.email || null,
     fromName: clinic?.name ?? null,
   });
+}
+
+/** Append the opt-out line inside the HTML body so it is visible in both renderings. */
+function withHtmlFooter(html: string, footer: string) {
+  const link = footer.match(/https?:\/\/\S+/)?.[0];
+  const escaped = footer.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const block = `<p style="margin:24px auto 0;max-width:560px;font-size:12px;color:#7a8199;text-align:center">${
+    link ? escaped.replace(link, `<a href="${link}" style="color:#7a8199">${link}</a>`) : escaped
+  }</p>`;
+  return html.includes("</body>") ? html.replace("</body>", `${block}</body>`) : `${html}${block}`;
 }
 
 export function applyDelivery(
@@ -146,7 +162,7 @@ async function claimDueOnDb(
   const now = new Date();
   const stale = new Date(now.getTime() - COMMS_STALE_SENDING_MS).toISOString();
   const COLUMNS =
-    "id, clinic_id, patient_id, channel, purpose, to_address, subject, body, status, attempts, scheduled_for";
+    "id, clinic_id, patient_id, channel, purpose, to_address, subject, body, body_html, status, attempts, scheduled_for";
   let query = db
     .from("communications")
     .select(COLUMNS)
@@ -181,6 +197,14 @@ export async function drainDueCommunications(
   db: Db,
   opts?: { clinicId?: string; limit?: number },
 ): Promise<DrainSummary> {
+  // Stage offers first, so anything automation queues goes out in this run.
+  // A failure here must not stop reminders and confirmations from leaving.
+  try {
+    const { runOfferAutomation } = await import("@/lib/offers/automation.server");
+    await runOfferAutomation(db, opts?.clinicId ? { clinicId: opts.clinicId } : {});
+  } catch (err) {
+    console.error("[offers] automation failed:", err instanceof Error ? err.message : err);
+  }
   const claimed = await claimDueOnDb(db, {
     ...(opts?.clinicId ? { clinicId: opts.clinicId } : {}),
     limit: opts?.limit ?? COMMS_CLAIM_LIMIT,

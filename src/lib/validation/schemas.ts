@@ -636,5 +636,60 @@ export const SaveTreatmentSessionDraft = z.object({
 
 export const GetTreatmentRecord = z.object({ treatment_id: id });
 
+/* Offers and marketing */
+const offerStage = z.enum(["pre_consultation", "post_consultation", "single_treatment", "plan_ending"]);
+const templateStage = z.enum(["pre_consultation", "post_consultation", "single_treatment", "plan_ending", "custom"]);
+
+export const SaveOfferTemplate = z.object({
+  id: optionalId,
+  name: requiredText(120),
+  stage: templateStage,
+  subject: requiredText(200),
+  headline: requiredText(160),
+  body: requiredText(5_000),
+  value_text: optionalText(120),
+  code: optionalText(40),
+  cta_label: optionalText(60),
+  valid_days: z.number().int().min(1).max(365),
+  send_email: z.boolean(),
+  send_sms: z.boolean(),
+  show_in_portal: z.boolean(),
+});
+
+export const ArchiveOfferTemplate = z.object({ id });
+
+export const SetOfferAutomation = z.object({
+  id,
+  enabled: z.boolean(),
+  delay_days: z.number().int().min(0).max(365),
+});
+
+export const DraftOfferTemplate = z.object({
+  stage: templateStage,
+  brief: text(600),
+  tone: z.enum(["warm", "playful", "clinical"]),
+});
+
+export const PreviewOfferStage = z.object({
+  stage: offerStage,
+  delay_days: z.number().int().min(0).max(365).optional(),
+});
+
+export const ListOfferSends = z.object({ template_id: id });
+
+export const SendOffer = z.object({
+  template_id: id,
+  patient_ids: z.array(id).min(1).max(500),
+  message: optionalText(600),
+  source: z.enum(["one_off", "bulk", "insights"]),
+  app_origin: optionalText(300),
+});
+
+export const ListPatientOffers = z.object({ patient_id: id });
+
+export const MarkOfferViewed = z.object({ id });
+
+export const ClaimOffer = z.object({ id });
+
 /** Kept for the `money` re-export used by callers building numeric form fields. */
 export { money };

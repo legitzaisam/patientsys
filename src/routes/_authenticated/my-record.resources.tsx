@@ -5,6 +5,7 @@ import { BookOpen, Megaphone, Tag } from "lucide-react";
 import { getMyRecord, getPortalHome } from "@/lib/clinic.functions";
 import { PortalCard, PortalHead, PortalPhoto } from "@/components/portal/ui";
 import { PortalProducts } from "@/components/portal-products";
+import { PortalOffer } from "@/components/portal/portal-offers";
 
 export const Route = createFileRoute("/_authenticated/my-record/resources")({
   component: Resources,
@@ -43,8 +44,19 @@ function Resources() {
           )}
         </PortalCard>
 
-        <PortalCard>
-          <PortalHead icon={Tag} title="Current offers" />
+        <PortalCard data-qc="resources-offers">
+          <PortalHead
+            icon={Tag}
+            title="Your offers"
+            sub={(home?.patientOffers ?? []).length > 0 ? "Offers sent to you; claimed ones are marked." : undefined}
+          />
+          {(home?.patientOffers ?? []).length > 0 ? (
+            <div className="mb-3 grid gap-2.5">
+              {(home?.patientOffers ?? []).map((po) => (
+                <PortalOffer key={po.id} offer={po} compact />
+              ))}
+            </div>
+          ) : null}
           {home?.offer ? (
             <div className="rounded-[14px] bg-rose-bg px-3.5 py-3">
               {home.offer.flag && (

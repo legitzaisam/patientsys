@@ -34,6 +34,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RecallTasksPanel } from "@/components/retention/recall-tasks-panel";
 import { CommsPreferencesCard } from "@/components/comms/comms-preferences";
 import { CommsLogCard } from "@/components/comms/comms-log";
+import { SendOfferDialog } from "@/components/offers/send-offer-dialog";
+import { PatientOffersCard } from "@/components/offers/patient-offers-card";
 import { TreatmentFormDialog } from "@/components/treatment-form-dialog";
 import { TreatmentRecordDialog } from "@/components/treatment-record-view";
 import { STAGE_LABEL } from "@/lib/visit-stage";
@@ -122,6 +124,7 @@ function PatientRecord() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["patient", id] });
   const [treatmentOpen, setTreatmentOpen] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
+  const [offerOpen, setOfferOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [leftId, setLeftId] = useState<string>("");
@@ -548,6 +551,15 @@ function PatientRecord() {
                   </DialogContent>
                 </Dialog>
 
+                {can(identity, "comms.send") && !p.deleted_at ? (
+                  <>
+                    <Button variant="outline" onClick={() => setOfferOpen(true)} data-qc="send-offer-open">
+                      Send offer
+                    </Button>
+                    <SendOfferDialog open={offerOpen} onOpenChange={setOfferOpen} patients={[p]} source="one_off" />
+                  </>
+                ) : null}
+
                 {identity?.isOwner &&
                   (p.deleted_at ? (
                     <Button
@@ -657,6 +669,16 @@ function PatientRecord() {
                   invalidate();
                   void queryClient.invalidateQueries({ queryKey: ["communications", id] });
                 }}
+              />
+              <PatientOffersCard
+                patientId={id}
+                action={
+                  can(identity, "comms.send") && !p.deleted_at ? (
+                    <Button variant="outline" size="sm" onClick={() => setOfferOpen(true)}>
+                      Send offer
+                    </Button>
+                  ) : null
+                }
               />
               {can(identity, "comms.send") ? (
                 <CommsLogCard patientId={id} enabled canDrain={can(identity, "comms.send")} />

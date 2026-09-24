@@ -15,6 +15,7 @@ import {
   db,
   formerTeamSeed,
   newId,
+  patientName,
   profileName,
   type DemoRole,
 } from "@/lib/demo/data";
@@ -47,6 +48,10 @@ import { assertEmail } from "@/lib/email";
 // capabilities than production.
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { assertCanSend, nextUnsubscribedAt, prefsFromPatient } from "@/lib/comms/preferences";
+import { buildStageCohorts, previewStage, stageCounts } from "@/lib/offers/cohorts";
+import { sendOfferToPatients, type OfferStore } from "@/lib/offers/send";
+import { effectiveOfferStatus, liveClaimedOffer, patientOfferView } from "@/lib/offers/shape";
+import { STAGE_LABEL, STAGE_META } from "@/lib/offers/stages";
 import {
   appointmentReminderMessage,
   bookingUpdatedMessage,
@@ -101,6 +106,8 @@ const userNotes = db.userNotes as any[];
 const websiteLeads = db.websiteLeads as any[];
 const retailProducts = db.retailProducts as any[];
 const productSales = db.productSales as any[];
+const offerTemplates = db.offerTemplates as any[];
+const patientOffers = db.patientOffers as any[];
 
 /* ---------------------------------------------------------------- */
 /* identity — driven by the demo_role cookie                          */
@@ -597,7 +604,16 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
       planByPatient.set(p.patient_id, { name: p.name, totalSessions: p.total_sessions });
     }
   }
-  todayAppts = todayAppts.map((a: any) => ({ ...a, plan: planByPatient.get(a.patient_id) ?? null }));
+  todayAppts = todayAppts.map((a: any) => {
+    const claimed = liveClaimedOffer(
+      patientOffers.filter((o) => o.patient_id === a.patient_id && o.status === "claimed"),
+    );
+    return {
+      ...a,
+      plan: planByPatient.get(a.patient_id) ?? null,
+      claimedOffer: claimed ? { id: claimed.id, headline: claimed.headline, code: claimed.code } : null,
+    };
+  });
 
   // ---- Safe to proceed: today/tomorrow bookings with pre-visit blockers.
   const horizonEnd = new Date(
@@ -1603,6 +1619,7 @@ function queueCommunication(input: {
   relatedEntity?: string | null;
   relatedId?: string | null;
   createdBy?: string | null;
+  bodyHtml?: string | null;
 }): { id: string } {
   const patient = patientById(input.patientId);
   if (!patient) throw new Error("Patient not found");
@@ -1623,6 +1640,7 @@ function queueCommunication(input: {
     template_key: input.templateKey ?? null,
     subject: input.subject?.trim() || null,
     body: input.body,
+    body_html: input.bodyHtml ?? null,
     status: "queued",
     provider: null,
     provider_message_id: null,
@@ -2351,6 +2369,7 @@ export const drainCommunications = createServerFn({ method: "POST" }).handler(as
   if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
   const { drainInMemory } = await import("./comms/dispatch.server");
   const { clinic } = await import("@/lib/demo/data");
+  await runDemoOfferAutomation();
   return drainInMemory(
     communications,
     new Map([[CLINIC_ID, { name: clinic["name"] ?? null, email: clinic["email"] ?? null }]]),
@@ -2724,9 +2743,17 @@ export const getPortalHome = createServerFn({ method: "GET" }).handler(async () 
   const upcoming = demoUpcomingAppointments(patient.id, 1)[0];
   const last = sortDesc(messages.filter((m) => m.patient_id === patient.id), "created_at")[0];
   const live = clinicOffers.filter((o) => !o.expires_at || new Date(o.expires_at) > new Date());
+  const myOffers = sortDesc(
+    patientOffers.filter((o) => o.patient_id === patient.id && o.status !== "cancelled"),
+    "sent_at",
+  )
+    .map((o) => patientOfferView(o))
+    .filter((o) => o.live || o.status === "claimed")
+    .sort((a, b) => Number(b.live) - Number(a.live));
 
   return {
     patient: { id: patient.id, firstName: patient.first_name, name: `${patient.first_name} ${patient.last_name}`.trim() },
+    patientOffers: myOffers,
     clinician: demoClinician(plan?.practitioner_id ?? null),
     plan: plan
       ? {
@@ -5571,3 +5598,341 @@ export const rotateInsightsIngestKey = createServerFn({ method: "POST" }).handle
   db.clinic["insights_ingest_key_last4"] = generated.last4;
   return { raw: generated.raw, last4: generated.last4 };
 });
+
+/* ---------------------------------------------------------------- */
+/* offers and marketing                                              */
+/* ---------------------------------------------------------------- */
+
+function demoOfferCohortInput() {
+  const activePlans = treatmentPlans.filter((p) => p.status === "active");
+  const planIds = new Set(activePlans.map((p) => p.id));
+  return {
+    patients,
+    appointments,
+    treatments,
+    catalogue,
+    plans: activePlans,
+    milestones: planMilestones.filter((m) => planIds.has(m.plan_id)),
+    offers: patientOffers,
+  };
+}
+
+function demoOfferStore(origin?: string | null): OfferStore {
+  const resolvedOrigin = (origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(/\/$/, "");
+  return {
+    clinicId: CLINIC_ID,
+    clinicName: db.clinic["name"] ?? "Your clinic",
+    origin: resolvedOrigin,
+    async getPatients(ids) {
+      const wanted = new Set(ids);
+      return patients.filter((p) => wanted.has(p.id));
+    },
+    async insertOffer(row) {
+      const created = {
+        id: newId("f6"),
+        ...row,
+        communication_id: null,
+        viewed_at: null,
+        claimed_at: null,
+        created_at: row.sent_at,
+      };
+      patientOffers.unshift(created);
+      return created.id;
+    },
+    async linkCommunication(offerId, communicationId) {
+      const row = patientOffers.find((o) => o.id === offerId);
+      if (row) row.communication_id = communicationId;
+    },
+    async enqueue(input) {
+      return queueCommunication({
+        patientId: input.patientId,
+        channel: input.channel,
+        purpose: input.purpose,
+        body: input.body,
+        bodyHtml: input.bodyHtml ?? null,
+        subject: input.subject ?? null,
+        templateKey: input.templateKey ?? null,
+        toAddress: input.toAddress ?? null,
+        scheduledFor: input.scheduledFor ?? null,
+        relatedEntity: input.relatedEntity ?? null,
+        relatedId: input.relatedId ?? null,
+        createdBy: input.createdBy ?? null,
+      });
+    },
+  };
+}
+
+/** The demo twin of runOfferAutomation, over the in-memory arrays. */
+async function runDemoOfferAutomation() {
+  const summary = { templates: 0, sent: 0, skipped: 0 };
+  const enabled = offerTemplates.filter((t) => t.automation_enabled && !t.archived_at && t.stage !== "custom");
+  if (enabled.length === 0) return summary;
+  const input = demoOfferCohortInput();
+  const members = buildStageCohorts(input);
+  const store = demoOfferStore();
+  const now = new Date();
+  for (const tmpl of enabled) {
+    summary.templates += 1;
+    const preview = previewStage(members, patients, patientOffers, tmpl.stage, Number(tmpl.automation_delay_days ?? 0), now);
+    summary.skipped += preview.skipped.length;
+    if (preview.willSend.length > 0) {
+      const result = await sendOfferToPatients(store, tmpl, preview.willSend.map((r) => r.patient_id), {
+        source: "automation",
+        sentBy: null,
+        portalOnlyWhenNoConsent: false,
+        now,
+      });
+      summary.sent += result.sent.length;
+      summary.skipped += result.skipped.length;
+    }
+    tmpl.last_automation_at = now.toISOString();
+  }
+  return summary;
+}
+
+function requireOffersManage() {
+  const me = requireStaff();
+  if (!can(me, "offers.manage")) throw new Error("You do not have access to this area");
+  return me;
+}
+
+export const listOfferTemplates = createServerFn({ method: "GET" }).handler(async () => {
+  requireStaff();
+  const now = new Date();
+  return sortAsc(
+    offerTemplates.filter((t) => !t.archived_at),
+    "created_at",
+  ).map((t) => {
+    const counts: Record<string, number> = { sent: 0, viewed: 0, claimed: 0, expired: 0, cancelled: 0 };
+    for (const o of patientOffers.filter((o) => o.template_id === t.id)) {
+      const status = effectiveOfferStatus(o, now);
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+    return { ...t, counts };
+  });
+});
+
+export const saveOfferTemplate = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      id?: string;
+      name: string;
+      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
+      subject: string;
+      headline: string;
+      body: string;
+      value_text?: string;
+      code?: string;
+      cta_label?: string;
+      valid_days: number;
+      send_email: boolean;
+      send_sms: boolean;
+      show_in_portal: boolean;
+    }) => parseInput(schemas.SaveOfferTemplate, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireOffersManage();
+    if (data.stage !== "custom") {
+      const clash = offerTemplates.find((t) => t.stage === data.stage && !t.archived_at && t.id !== data.id);
+      if (clash) throw new Error(`There is already a ${STAGE_LABEL[data.stage]} template. Edit that one or archive it first.`);
+    }
+    const payload = {
+      name: data.name,
+      stage: data.stage,
+      subject: data.subject,
+      headline: data.headline,
+      body: data.body,
+      value_text: data.value_text?.trim() || null,
+      code: data.code?.trim().toUpperCase() || null,
+      cta_label: data.cta_label?.trim() || "Claim this offer",
+      valid_days: data.valid_days,
+      send_email: data.send_email,
+      send_sms: data.send_sms,
+      show_in_portal: data.show_in_portal,
+      updated_at: new Date().toISOString(),
+    };
+    if (data.id) {
+      const row = offerTemplates.find((t) => t.id === data.id);
+      if (!row) throw new Error("Template not found");
+      Object.assign(row, payload);
+      return { id: row.id };
+    }
+    const row = {
+      id: newId("f5"),
+      clinic_id: CLINIC_ID,
+      ...payload,
+      automation_enabled: false,
+      automation_delay_days: data.stage === "custom" ? 0 : STAGE_META[data.stage].defaultDelayDays,
+      last_automation_at: null,
+      created_by: me.userId,
+      archived_at: null,
+      created_at: new Date().toISOString(),
+    };
+    offerTemplates.push(row);
+    return { id: row.id };
+  });
+
+export const archiveOfferTemplate = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.ArchiveOfferTemplate, data))
+  .handler(async ({ data }) => {
+    requireOffersManage();
+    const row = offerTemplates.find((t) => t.id === data.id);
+    if (!row) throw new Error("Template not found");
+    row.archived_at = new Date().toISOString();
+    row.automation_enabled = false;
+    return { ok: true };
+  });
+
+export const setOfferAutomation = createServerFn({ method: "POST" })
+  .validator(
+    (data: { id: string; enabled: boolean; delay_days: number }) =>
+      parseInput(schemas.SetOfferAutomation, data),
+  )
+  .handler(async ({ data }) => {
+    requireOffersManage();
+    const row = offerTemplates.find((t) => t.id === data.id);
+    if (!row) throw new Error("Template not found");
+    if (row.stage === "custom" && data.enabled) throw new Error("One-off templates cannot run automatically.");
+    row.automation_enabled = data.enabled;
+    row.automation_delay_days = data.delay_days;
+    row.updated_at = new Date().toISOString();
+    return { ok: true };
+  });
+
+export const draftOfferTemplate = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
+      brief: string;
+      tone: "warm" | "playful" | "clinical";
+    }) => parseInput(schemas.DraftOfferTemplate, data),
+  )
+  .handler(async ({ data }) => {
+    requireOffersManage();
+    const { draftOffer } = await import("./offers/draft.server");
+    return draftOffer({ stage: data.stage, brief: data.brief, tone: data.tone, clinicName: db.clinic["name"] ?? "the clinic" });
+  });
+
+export const previewOfferStage = createServerFn({ method: "GET" })
+  .validator(
+    (data: {
+      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending";
+      delay_days?: number;
+    }) => parseInput(schemas.PreviewOfferStage, data),
+  )
+  .handler(async ({ data }) => {
+    requireOffersManage();
+    const input = demoOfferCohortInput();
+    const members = buildStageCohorts(input);
+    const tmpl = offerTemplates.find((t) => t.stage === data.stage && !t.archived_at);
+    const delay = Number(data.delay_days ?? tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays);
+    return {
+      ...previewStage(members, patients, patientOffers, data.stage, delay),
+      counts: stageCounts(members),
+      delay_days: delay,
+    };
+  });
+
+export const listOfferSends = createServerFn({ method: "GET" })
+  .validator((data: { template_id: string }) => parseInput(schemas.ListOfferSends, data))
+  .handler(async ({ data }) => {
+    requireOffersManage();
+    return sortDesc(
+      patientOffers.filter((o) => o.template_id === data.template_id),
+      "sent_at",
+    )
+      .slice(0, 200)
+      .map((o) => ({ ...patientOfferView(o), patient_name: patientName(o.patient_id) }));
+  });
+
+export const sendOffer = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      template_id: string;
+      patient_ids: string[];
+      message?: string;
+      source: "one_off" | "bulk" | "insights";
+      app_origin?: string;
+    }) => parseInput(schemas.SendOffer, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
+    const tmpl = offerTemplates.find((t) => t.id === data.template_id);
+    if (!tmpl) throw new Error("Template not found");
+    return sendOfferToPatients(demoOfferStore(data.app_origin), tmpl, data.patient_ids, {
+      source: data.source,
+      sentBy: me.userId,
+      personalLine: data.message ?? null,
+      portalOnlyWhenNoConsent: true,
+    });
+  });
+
+export const listPatientOffers = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.ListPatientOffers, data))
+  .handler(async ({ data }) => {
+    requireStaff();
+    return sortDesc(
+      patientOffers.filter((o) => o.patient_id === data.patient_id),
+      "sent_at",
+    ).map((o) => ({
+      ...patientOfferView(o),
+      template_name: offerTemplates.find((t) => t.id === o.template_id)?.name ?? null,
+    }));
+  });
+
+function demoOwnOffer(id: string) {
+  const patient = demoRequirePortalPatient();
+  const offer = patientOffers.find((o) => o.id === id);
+  if (!offer || offer.patient_id !== patient.id) throw new Error("Offer not found");
+  return { patient, offer };
+}
+
+export const markOfferViewed = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.MarkOfferViewed, data))
+  .handler(async ({ data }) => {
+    const { offer } = demoOwnOffer(data.id);
+    if (offer.status !== "sent") return { ok: true, status: offer.status };
+    offer.status = "viewed";
+    offer.viewed_at = new Date().toISOString();
+    return { ok: true, status: "viewed" };
+  });
+
+export const claimOffer = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.ClaimOffer, data))
+  .handler(async ({ data }) => {
+    const { patient, offer } = demoOwnOffer(data.id);
+    const status = effectiveOfferStatus(offer);
+    if (status === "claimed") return { ok: true, claimed_at: offer.claimed_at };
+    if (status === "expired") throw new Error("This offer has expired.");
+    if (status === "cancelled") throw new Error("This offer is no longer available.");
+    const now = new Date().toISOString();
+    offer.status = "claimed";
+    offer.claimed_at = now;
+    offer.viewed_at = offer.viewed_at ?? now;
+    const recipients = [
+      ...new Set(
+        userRoles
+          .filter((r) => r.role === "owner" || r.role === "manager" || r.role === "front_desk")
+          .map((r) => r.user_id as string),
+      ),
+    ];
+    const name = `${patient.first_name ?? ""} ${patient.last_name ?? ""}`.trim() || "A patient";
+    for (const recipient_id of recipients) {
+      staffNotifications.unshift({
+        id: newId("l9"),
+        clinic_id: CLINIC_ID,
+        recipient_id,
+        sender_id: null,
+        urgent: false,
+        kind: "offer_claimed",
+        title: "Offer claimed",
+        body: `${name} claimed "${offer.headline}"${offer.code ? ` (code ${offer.code})` : ""}. Apply it when they book.`,
+        patient_id: patient.id,
+        appointment_id: null,
+        read_at: null,
+        created_at: now,
+      });
+    }
+    return { ok: true, claimed_at: now };
+  });

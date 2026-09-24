@@ -37,4 +37,12 @@ describe("permission key registry", () => {
       expect(grouped.has(key)).toBe(true);
     }
   });
+
+  it("keeps offers.manage separate from comms.send so marketing can be delegated on its own", () => {
+    expect(can({ permissions: ["comms.send"] }, "offers.manage")).toBe(false);
+    expect(can({ permissions: ["offers.manage"] }, "comms.send")).toBe(false);
+    expect(PERMISSION_GROUPS.find((g) => g.keys.includes("offers.manage"))?.label).toBe(
+      "Marketing",
+    );
+  });
 });

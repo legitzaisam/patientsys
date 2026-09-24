@@ -13,6 +13,7 @@ export const PERMISSION_KEYS = [
   "team.approve_changes",
   "settings.treatments",
   "tasks.delete",
+  "offers.manage",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -75,6 +76,11 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
     label: "Delete tasks",
     description: "Remove recall and follow-up tasks from the task lists.",
   },
+  "offers.manage": {
+    label: "Design and automate offers",
+    description:
+      "Design offer templates, switch stage automation on or off and see who each offer went to. Sending an offer to a patient needs Send messages.",
+  },
 };
 
 /** Display grouping for the owner's access grid and the effective-permissions panel. */
@@ -85,6 +91,7 @@ export const PERMISSION_GROUPS: { label: string; keys: PermissionKey[] }[] = [
   },
   { label: "Diary", keys: ["appointments.edit"] },
   { label: "Communication", keys: ["comms.send", "notifications.delete"] },
+  { label: "Marketing", keys: ["offers.manage"] },
   { label: "Reports", keys: ["reports.insights", "reports.retention", "reports.performance"] },
   { label: "Team", keys: ["team.view", "team.approve_changes"] },
   { label: "Clinic settings", keys: ["settings.treatments", "tasks.delete"] },

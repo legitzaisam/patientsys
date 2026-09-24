@@ -17,6 +17,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedEarningsRouteImport } from './routes/_authenticated/earnings'
 import { Route as AuthenticatedInsightsRouteImport } from './routes/_authenticated/insights'
 import { Route as AuthenticatedMyRecordRouteImport } from './routes/_authenticated/my-record'
+import { Route as AuthenticatedOffersRouteImport } from './routes/_authenticated/offers'
 import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedRetentionRouteImport } from './routes/_authenticated/retention'
@@ -86,6 +87,11 @@ const AuthenticatedInsightsRoute = AuthenticatedInsightsRouteImport.update({
 const AuthenticatedMyRecordRoute = AuthenticatedMyRecordRouteImport.update({
   id: '/my-record',
   path: '/my-record',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedOffersRoute = AuthenticatedOffersRouteImport.update({
+  id: '/offers',
+  path: '/offers',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedPerformanceRoute =
@@ -266,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/earnings': typeof AuthenticatedEarningsRoute
   '/insights': typeof AuthenticatedInsightsRoute
   '/my-record': typeof AuthenticatedMyRecordRouteWithChildren
+  '/offers': typeof AuthenticatedOffersRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/retention': typeof AuthenticatedRetentionRoute
@@ -305,6 +312,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/earnings': typeof AuthenticatedEarningsRoute
   '/insights': typeof AuthenticatedInsightsRoute
+  '/offers': typeof AuthenticatedOffersRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/retention': typeof AuthenticatedRetentionRoute
@@ -346,6 +354,7 @@ export interface FileRoutesById {
   '/_authenticated/earnings': typeof AuthenticatedEarningsRoute
   '/_authenticated/insights': typeof AuthenticatedInsightsRoute
   '/_authenticated/my-record': typeof AuthenticatedMyRecordRouteWithChildren
+  '/_authenticated/offers': typeof AuthenticatedOffersRoute
   '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/retention': typeof AuthenticatedRetentionRoute
@@ -388,6 +397,7 @@ export interface FileRouteTypes {
     | '/earnings'
     | '/insights'
     | '/my-record'
+    | '/offers'
     | '/performance'
     | '/profile'
     | '/retention'
@@ -427,6 +437,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/earnings'
     | '/insights'
+    | '/offers'
     | '/performance'
     | '/profile'
     | '/retention'
@@ -467,6 +478,7 @@ export interface FileRouteTypes {
     | '/_authenticated/earnings'
     | '/_authenticated/insights'
     | '/_authenticated/my-record'
+    | '/_authenticated/offers'
     | '/_authenticated/performance'
     | '/_authenticated/profile'
     | '/_authenticated/retention'
@@ -571,6 +583,13 @@ declare module '@tanstack/react-router' {
       path: '/my-record'
       fullPath: '/my-record'
       preLoaderRoute: typeof AuthenticatedMyRecordRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/offers': {
+      id: '/_authenticated/offers'
+      path: '/offers'
+      fullPath: '/offers'
+      preLoaderRoute: typeof AuthenticatedOffersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/performance': {
@@ -846,6 +865,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedEarningsRoute: typeof AuthenticatedEarningsRoute
   AuthenticatedInsightsRoute: typeof AuthenticatedInsightsRoute
   AuthenticatedMyRecordRoute: typeof AuthenticatedMyRecordRouteWithChildren
+  AuthenticatedOffersRoute: typeof AuthenticatedOffersRoute
   AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedRetentionRoute: typeof AuthenticatedRetentionRoute
@@ -861,6 +881,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEarningsRoute: AuthenticatedEarningsRoute,
   AuthenticatedInsightsRoute: AuthenticatedInsightsRoute,
   AuthenticatedMyRecordRoute: AuthenticatedMyRecordRouteWithChildren,
+  AuthenticatedOffersRoute: AuthenticatedOffersRoute,
   AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedRetentionRoute: AuthenticatedRetentionRoute,

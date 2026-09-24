@@ -261,7 +261,9 @@ export function NotificationBell({
                               ? { chat: true }
                               : alert.kind === "patient_waiting" && alert.appointment_id
                                 ? { treat: alert.appointment_id }
-                                : {},
+                                : alert.kind === "offer_claimed"
+                                  ? { tab: "contact" }
+                                  : {},
                         });
                       } else if (alert.kind === "appointment") {
                         navigate({ to: "/schedule" });

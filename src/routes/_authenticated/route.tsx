@@ -40,6 +40,19 @@ function consumeWasStaff(userId: string) {
   }
 }
 
+/**
+ * Where a signed-out visitor goes. Portal paths carry the full path through the
+ * patient login as `?next=`, so a link in an offer email lands on the offer
+ * after sign-in instead of on the portal home. Staff paths go to /auth as
+ * before.
+ */
+export function loggedOutDestination(location: { pathname: string; search: string }) {
+  if (location.pathname === "/my-record" || location.pathname.startsWith("/my-record/")) {
+    return `/portal?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
+  }
+  return "/auth";
+}
+
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   component: AuthenticatedLayout,
@@ -58,7 +71,7 @@ function AuthenticatedLayout() {
       if (!data.session) {
         // Use a hard navigation to avoid a client-side route transition that
         // triggers a hydration mismatch on /auth.
-        window.location.replace("/auth");
+        window.location.replace(loggedOutDestination(window.location));
       } else {
         setReady(true);
       }

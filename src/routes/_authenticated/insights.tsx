@@ -58,6 +58,7 @@ function InsightsPage() {
 
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
   if (!can(identity, "reports.insights")) return null;
+  const canSendOffers = can(identity, "comms.send");
 
   return (
     <AppShell identity={identity}>
@@ -121,22 +122,27 @@ function InsightsPage() {
               <h2 className="section-title">Needs a next step</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 People who signed up in this window and still need a first booking or a first treatment.
+                {canSendOffers
+                  ? " Send offer uses the Pre-consultation and Post-consultation templates from Offers, or any one-off template."
+                  : ""}
               </p>
             </div>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ActionList
                 title="Waiting for a first booking"
-                subtitle="Signed up in this window and have no appointment yet."
+                subtitle="Signed up in this window and have no appointment yet. Maps to the Pre-consultation offer."
                 rows={data?.waiting ?? []}
                 empty="Everyone who signed up in this window has a booking."
                 kind="waiting"
+                canSendOffers={canSendOffers}
               />
               <ActionList
                 title="Consulted, no treatment yet"
-                subtitle="Had a consultation but no treatment on file."
+                subtitle="Had a consultation but no treatment on file. Maps to the Post-consultation offer."
                 rows={data?.consultedNoTreatment ?? []}
                 empty="No consulted patients are waiting on a first treatment."
                 kind="consulted"
+                canSendOffers={canSendOffers}
               />
             </div>
           </section>
