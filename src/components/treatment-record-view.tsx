@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Camera, Check, ClipboardList, FileText, Heart, Printer, ShieldCheck, Sparkles, X } from "lucide-react";
 import { getTreatmentRecord } from "@/lib/clinic.functions";
+import { fieldsFor } from "@/lib/treatment-results";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -140,11 +141,12 @@ export function TreatmentRecordView({ data }: { data: any }) {
           )}
         </Block>
         <Block title="Results" icon={Sparkles}>
-          <div className="grid grid-cols-3 gap-3">
-            <Row label="Area" value={data.treatment.area} />
-            <Row label="Product" value={data.treatment.product} />
-            <Row label="Dose" value={data.treatment.dose} />
-          </div>
+          <ResultRows
+            name={data.treatment.name}
+            template={data.treatment.resultTemplate}
+            stored={s?.results ?? {}}
+            fallback={{ area: data.treatment.area, product: data.treatment.product, dose: data.treatment.dose }}
+          />
           {data.treatment.nextDueAt ? (
             <p className="mt-2 text-xs text-muted-foreground">Next due {formatDate(data.treatment.nextDueAt)}</p>
           ) : null}
@@ -152,7 +154,7 @@ export function TreatmentRecordView({ data }: { data: any }) {
       </div>
 
       {s ? (
-        <Block title="Pre-treatment checks" icon={ClipboardList}>
+        <Block title="Confirm before starting" icon={ClipboardList}>
           {answered.length === 0 ? (
             <p className="text-sm text-muted-foreground">No checks recorded.</p>
           ) : (
@@ -165,7 +167,7 @@ export function TreatmentRecordView({ data }: { data: any }) {
                     <span
                       className={cn(
                         "mt-0.5 inline-flex h-5 min-w-[2.4rem] shrink-0 items-center justify-center rounded-full px-1.5 text-2xs font-semibold",
-                        a.answer === "no" ? "bg-destructive-bg text-destructive-ink" : "bg-success-bg text-success-ink",
+                        a.answer === "yes" ? "bg-destructive-bg text-destructive-ink" : "bg-success-bg text-success-ink",
                       )}
                     >
                       {a.answer === "yes" ? "Yes" : a.answer === "no" ? "No" : "N/A"}
@@ -237,5 +239,38 @@ export function TreatmentRecordView({ data }: { data: any }) {
         <p className="text-xs text-muted-foreground">This treatment was recorded directly, without the treatment form.</p>
       )}
     </article>
+  );
+}
+
+function ResultRows({
+  name,
+  template,
+  stored,
+  fallback,
+}: {
+  name: string;
+  template?: string | null;
+  stored: Record<string, string | undefined>;
+  fallback: { area?: string | null; product?: string | null; dose?: string | null };
+}) {
+  const fields = fieldsFor(name, template);
+  const specific = fields.filter((f) => f.key !== "area" && f.key !== "product" && f.key !== "dose");
+  const hasSpecific = specific.some((f) => stored[f.key]?.trim());
+  if (!hasSpecific) {
+    return (
+      <div className="grid grid-cols-3 gap-3">
+        <Row label="Area" value={fallback.area} />
+        <Row label="Product" value={fallback.product} />
+        <Row label="Dose" value={fallback.dose} />
+      </div>
+    );
+  }
+  const filled = fields.filter((f) => stored[f.key]?.trim());
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {filled.map((f) => (
+        <Row key={f.key} label={f.label} value={stored[f.key]} />
+      ))}
+    </div>
   );
 }

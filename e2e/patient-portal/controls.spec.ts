@@ -416,6 +416,10 @@ test("records: profile edits save, and health updates and signing work", async (
   // Any unsigned document can be signed here now.
   const signField = page.getByPlaceholder("Type your full name to sign").first();
   if (await signField.count()) {
+    const form = signField.locator("xpath=ancestor::form");
+    const nos = form.getByRole("radio", { name: "No" });
+    const questionCount = await nos.count();
+    for (let i = 0; i < questionCount; i++) await nos.nth(i).click();
     await signField.fill("Olivia Bennett");
     await signField.locator("xpath=ancestor::form").getByRole("button", { name: "Sign" }).click();
     await expect(page.getByText(/Signed — thank you/i)).toBeVisible();

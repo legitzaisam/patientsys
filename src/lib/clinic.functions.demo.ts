@@ -27,7 +27,8 @@ import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
-import { CONSENT_BODY_DEFAULT, PRE_TREATMENT_CHECKS, canStartTreatment, consentReady } from "@/lib/visit-stage";
+import { CONSENT_BODY_DEFAULT, PRE_TREATMENT_CHECKS, canStartTreatment, consentReady, stageHeldForConsent } from "@/lib/visit-stage";
+import { fieldsFor, foldResults } from "@/lib/treatment-results";
 import { aftercarePointsFor } from "@/lib/aftercare-defaults";
 import { advanceToWaitingIfReadyDemo, demoConsentStateOf } from "@/lib/visit-stage.demo";
 import { EMAIL_OTP_RESEND_MS } from "@/lib/auth/constants";
@@ -301,6 +302,12 @@ function patientJoin(id: string) {
 }
 
 function appointmentView(a: any) {
+  const consent = demoConsentStateOf(a);
+  // A visit already marked waiting without a signed form is held at arrived.
+  if (a.stage === "waiting" && !consentReady(consent)) {
+    a.stage = "arrived";
+    a.updated_at = new Date().toISOString();
+  }
   const doc = a.consent_document_id ? documents.find((d) => d.id === a.consent_document_id) : null;
   const note = appointmentNotes.find((n) => n.appointment_id === a.id);
   const item = a.catalogue_id ? catalogue.find((c) => c.id === a.catalogue_id) : null;
@@ -310,7 +317,7 @@ function appointmentView(a: any) {
     profiles: a.practitioner_id ? { full_name: profileName(a.practitioner_id) } : null,
     documents: doc ? { status: doc.status, title: doc.title } : null,
     treatment_catalogue: item ? { requires_consent: Boolean(item.requires_consent) } : null,
-    consentState: demoConsentStateOf(a),
+    consentState: consent,
     appointment_notes: note
       ? {
           body: plainVisitNote(note.body),
@@ -822,11 +829,7 @@ export const getPatient = createServerFn({ method: "GET" })
     )
       .map((a) => {
         const view = appointmentView(a);
-        const fromTable = plainVisitNote(view.appointment_notes?.body);
-        const booking = plainVisitNote(
-          String(a.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, ""),
-        );
-        const body = fromTable || booking;
+        const body = plainVisitNote(view.appointment_notes?.body);
         if (!body) return null;
         return {
           appointmentId: a.id as string,
@@ -917,7 +920,7 @@ export const getPatient = createServerFn({ method: "GET" })
               id: visit.id,
               startsAt: visit.starts_at,
               treatment: visit.treatment_name,
-              stage: visit.stage ?? "booked",
+              stage: stageHeldForConsent(visit.stage ?? "booked", demoConsentStateOf(visit)),
               practitionerName: visit.practitioner_id ? profileName(visit.practitioner_id) : null,
               consentState: demoConsentStateOf(visit),
             }
@@ -1337,17 +1340,28 @@ export const getAppointmentConsent = createServerFn({ method: "GET" })
         status: doc?.status ?? null,
         signedAt: doc?.signed_at ?? null,
         signedName: doc?.signed_name ?? null,
+        signatureData:
+          typeof doc?.signature_data === "string" && String(doc.signature_data).startsWith("data:image/")
+            ? doc.signature_data
+            : null,
       },
     };
   });
 
 export const completeConsentInClinic = createServerFn({ method: "POST" })
-  .validator((data: { appointment_id: string; signed_name: string }) =>
-    parseInput(schemas.CompleteConsentInClinic, data),
-  )
+  .validator((data: {
+    appointment_id: string;
+    signed_name: string;
+    signature_data?: string;
+    contraindications?: Record<string, "yes" | "no" | "na">;
+  }) => parseInput(schemas.CompleteConsentInClinic, data))
   .handler(async ({ data }) => {
     const me = requireStaff();
     const name = data.signed_name.trim().slice(0, 240);
+    const signature =
+      typeof data.signature_data === "string" && data.signature_data.startsWith("data:image/")
+        ? data.signature_data
+        : name;
     const appt = appointments.find((a) => a.id === data.appointment_id);
     if (!appt) throw new Error("Appointment not found");
     const now = new Date().toISOString();
@@ -1384,9 +1398,10 @@ export const completeConsentInClinic = createServerFn({ method: "POST" })
       doc.status = "signed";
       doc.signed_at = now;
       doc.signed_name = name;
-      doc.signature_data = name;
+      doc.signature_data = signature;
       doc.viewed_at = doc.viewed_at ?? now;
       doc.witnessed_by = me.userId;
+      doc.responses = data.contraindications ? { contraindications: data.contraindications } : doc.responses;
       doc.updated_at = now;
     }
     const advanced = advanceToWaitingIfReadyDemo({ appointmentId: appt.id });
@@ -1457,15 +1472,6 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
     parseInput(schemas.GetAppointmentNote, { appointment_id: String(data.appointment_id) }),
   )
   .handler(async ({ data }) => {
-    const row = appointmentNotes.find((n) => n.appointment_id === data.appointment_id);
-    const visitBody = plainVisitNote(row?.body);
-    if (visitBody) {
-      return {
-        body: visitBody,
-        updatedAt: row?.updated_at ?? null,
-        updatedBy: row?.updated_by_label ?? null,
-      };
-    }
     const appointment = appointments.find((a) => a.id === data.appointment_id);
     const bookingNotes = String(appointment?.notes ?? "");
     const withoutCancel = bookingNotes.replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim();
@@ -1483,9 +1489,20 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
       body: plainVisitNote(sanitizeNoteHtml(String(data?.body ?? ""))).slice(0, 20000),
     }),
   )
-  .handler(async ({ data }) => demoWriteVisitNote(data.appointment_id, data.body));
+  .handler(async ({ data }) => demoWriteBookingNote(data.appointment_id, data.body));
 
-/** Demo twin of writeVisitNote: upsert the note and mirror it onto the booking. */
+/** Booking notes stay on the appointment. The diary card reads only these. */
+function demoWriteBookingNote(appointmentId: string, body: string) {
+  const appointment = appointments.find((a) => a.id === appointmentId);
+  if (!appointment) throw new Error("Appointment not found");
+  const prior = String(appointment.notes ?? "");
+  const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
+  appointment.notes = cancelLine ? (body.trim() ? `${cancelLine}\n\n${body}` : cancelLine) : body || null;
+  appointment.updated_at = new Date().toISOString();
+  return { body, updatedAt: appointment.updated_at, updatedBy: null };
+}
+
+/** Demo twin of writeVisitNote: the treatment-form note, kept off the diary card. */
 function demoWriteVisitNote(appointmentId: string, body: string) {
   const me = identity();
   const appointment = appointments.find((a) => a.id === appointmentId);
@@ -1505,13 +1522,6 @@ function demoWriteVisitNote(appointmentId: string, body: string) {
   row.updated_by = me.userId;
   row.updated_by_label = me.profile?.full_name ?? null;
   row.updated_at = now;
-
-  if (appointment) {
-    const prior = String(appointment.notes ?? "");
-    const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
-    appointment.notes = cancelLine ? (body.trim() ? `${cancelLine}\n\n${body}` : cancelLine) : body || null;
-    appointment.updated_at = now;
-  }
 
   return { body: row.body, updatedAt: row.updated_at, updatedBy: row.updated_by_label };
 }
@@ -1926,7 +1936,9 @@ export const resendDocument = createServerFn({ method: "POST" })
   });
 
 export const signDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; signed_name: string }) => parseInput(schemas.SignDocument, data))
+  .validator((data: { id: string; signed_name: string; contraindications?: Record<string, "yes" | "no" | "na"> }) =>
+    parseInput(schemas.SignDocument, data),
+  )
   .handler(async ({ data }) => {
     const name = data.signed_name.trim().slice(0, 120);
     if (!name) throw new Error("Please type your full name to sign");
@@ -1936,6 +1948,7 @@ export const signDocument = createServerFn({ method: "POST" })
       row.signed_at = new Date().toISOString();
       row.signed_name = name;
       row.signature_data = name;
+      if (data.contraindications) row.responses = { contraindications: data.contraindications };
       // Mirrors production: signing moves an arrived patient on to waiting.
       advanceToWaitingIfReadyDemo({ consentDocumentId: row.id });
     }
@@ -4627,6 +4640,7 @@ export type CatalogueInput = {
   requires_consent?: boolean;
   active?: boolean;
   aftercare_points?: string[];
+  result_template?: string;
 };
 
 export const saveCatalogueItem = createServerFn({ method: "POST" })
@@ -4646,6 +4660,7 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
       cooling_off_hours: data.cooling_off_hours ?? 0,
       requires_consent: data.requires_consent ?? true,
       active: data.active ?? true,
+      result_template: data.result_template?.trim() || null,
       ...(data.aftercare_points
         ? { aftercare_points: data.aftercare_points.map((x) => x.trim()).filter(Boolean) }
         : {}),
@@ -5192,22 +5207,6 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
     const session = treatmentSessions.find((s) => s.appointment_id === appt.id) ?? null;
     const milestone = demoMilestoneForVisit(appt);
     const starts = new Date(appt.starts_at);
-    const prevNotes = sortDesc(
-      appointmentNotes.filter((n) => n.patient_id === appt.patient_id && n.appointment_id !== appt.id),
-      "updated_at",
-    )
-      .filter((n) => plainVisitNote(n.body).trim())
-      .slice(0, 5)
-      .map((n) => {
-        const a = appointments.find((x) => x.id === n.appointment_id);
-        return {
-          appointmentId: n.appointment_id,
-          startsAt: a?.starts_at ?? n.updated_at,
-          treatment: a?.treatment_name ?? null,
-          body: plainVisitNote(n.body),
-          by: n.updated_by_label ?? null,
-        };
-      });
     const lastSame = sortDesc(
       treatments.filter((t) => t.patient_id === appt.patient_id && t.name === appt.treatment_name),
       "performed_at",
@@ -5252,7 +5251,8 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
       },
       canStart: canStartTreatment({ stage: appt.stage ?? "booked", consent }),
       session: demoSessionView(session),
-      previousNotes: prevNotes,
+      bookingNote: String(appt.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim(),
+      resultFields: fieldsFor(appt.treatment_name, item?.result_template ?? null),
       lastSameTreatment: lastSame
         ? {
             performedAt: lastSame.performed_at,
@@ -5336,9 +5336,10 @@ export const completeTreatment = createServerFn({ method: "POST" })
     if (!session) throw new Error("Start the treatment form before completing it");
     if (session.treatment_id) return { ok: true, treatmentId: session.treatment_id as string, stage: "complete" as const };
     const now = new Date().toISOString();
-    const results = (session.results ?? {}) as { area?: string; product?: string; dose?: string };
     const practitionerId = appt.practitioner_id ?? me.userId;
     const item = appt.catalogue_id ? catalogue.find((c) => c.id === appt.catalogue_id) : null;
+    const results = (session.results ?? {}) as Record<string, string>;
+    const folded = foldResults(fieldsFor(appt.treatment_name, item?.result_template ?? null), results);
     const interval = (item?.interval_days as number | null | undefined) ?? null;
     const treatmentId = newId("e9");
     treatments.push({
@@ -5349,9 +5350,9 @@ export const completeTreatment = createServerFn({ method: "POST" })
       practitioner_id: practitionerId,
       appointment_id: appt.id,
       name: appt.treatment_name,
-      product: results.product?.trim() || null,
-      dose: results.dose?.trim() || null,
-      area: results.area?.trim() || null,
+      product: folded.product,
+      dose: folded.dose,
+      area: folded.area,
       notes: session.treatment_notes ?? null,
       price: appt.price ?? null,
       performed_at: appt.starts_at,
@@ -5432,6 +5433,7 @@ export const getTreatmentRecord = createServerFn({ method: "GET" })
         id: t.id,
         name: t.name,
         category: item?.category ?? null,
+        resultTemplate: item?.result_template ?? null,
         performedAt: t.performed_at,
         nextDueAt: t.next_due_at ?? null,
         product: t.product ?? null,

@@ -25,6 +25,11 @@ import {
 } from "@/lib/clinic.functions";
 import { PortalCard, PortalHead, PortalLink, PortalNote, formatPortalDate } from "@/components/portal/ui";
 import { Badge } from "@/components/ui/badge";
+import {
+  ConsentContraindications,
+  contraindicationsComplete,
+  type ContraindicationAnswer,
+} from "@/components/consent-contraindications";
 
 export const Route = createFileRoute("/_authenticated/my-record/records")({
   component: MyRecords,
@@ -160,27 +165,13 @@ function MyRecords() {
               </div>
               {/* Signing lives here now that the portal has a Records page. */}
               {d.status !== "signed" && (
-                <form
-                  className="mt-2 flex gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const f = new FormData(e.currentTarget as HTMLFormElement);
-                    sign.mutate({ data: { id: d.id, signed_name: String(f.get("signed_name")) } });
-                  }}
-                >
-                  <input
-                    name="signed_name"
-                    required
-                    placeholder="Type your full name to sign"
-                    className="h-[30px] min-w-0 flex-1 rounded-[11px] border border-edge-2 bg-glass-2 px-2.5 text-xs shadow-inset-hi"
-                  />
-                  <button
-                    type="submit"
-                    className="inline-flex h-[30px] shrink-0 cursor-pointer items-center rounded-full bg-accent px-3 text-xs font-semibold text-accent-foreground shadow-bloom"
-                  >
-                    Sign
-                  </button>
-                </form>
+                <ConsentSignRow
+                  kind={d.kind}
+                  pending={sign.isPending}
+                  onSign={(signedName, contraindications) =>
+                    sign.mutate({ data: { id: d.id, signed_name: signedName, contraindications } })
+                  }
+                />
               )}
             </div>
           ))}
@@ -531,5 +522,58 @@ function EditProfileModal({ patient, onClose }: { patient: any; onClose: () => v
         </div>
       </form>
     </div>
+  );
+}
+
+function ConsentSignRow({
+  kind,
+  pending,
+  onSign,
+}: {
+  kind: string;
+  pending: boolean;
+  onSign: (signedName: string, contraindications?: Record<string, ContraindicationAnswer>) => void;
+}) {
+  const [answers, setAnswers] = useState<Record<string, ContraindicationAnswer | undefined>>({});
+  const isConsent = kind === "consent";
+  const ready = !isConsent || contraindicationsComplete(answers);
+
+  return (
+    <form
+      className="mt-2 space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!ready) return;
+        const signedName = String(new FormData(e.currentTarget).get("signed_name") ?? "");
+        const contraindications = isConsent
+          ? (Object.fromEntries(
+              Object.entries(answers).filter((entry): entry is [string, ContraindicationAnswer] => Boolean(entry[1])),
+            ) as Record<string, ContraindicationAnswer>)
+          : undefined;
+        onSign(signedName, contraindications);
+      }}
+    >
+      {isConsent ? (
+        <ConsentContraindications
+          value={answers}
+          onChange={(key, answer) => setAnswers((prev) => ({ ...prev, [key]: answer }))}
+        />
+      ) : null}
+      <div className="flex gap-2">
+        <input
+          name="signed_name"
+          required
+          placeholder="Type your full name to sign"
+          className="h-[30px] min-w-0 flex-1 rounded-[11px] border border-edge-2 bg-glass-2 px-2.5 text-xs shadow-inset-hi"
+        />
+        <button
+          type="submit"
+          disabled={pending || !ready}
+          className="inline-flex h-[30px] shrink-0 cursor-pointer items-center rounded-full bg-accent px-3 text-xs font-semibold text-accent-foreground shadow-bloom disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Sign
+        </button>
+      </div>
+    </form>
   );
 }

@@ -117,6 +117,7 @@ export async function signDocumentByToken(
   token: string,
   signedName: string,
   meta: { ip?: string | null; userAgent?: string | null } = {},
+  contraindications?: Record<string, "yes" | "no" | "na">,
 ): Promise<SignOutcome> {
   if (await tooManyTokenRequests(db, meta.ip)) return { outcome: "not_found" };
 
@@ -138,6 +139,7 @@ export async function signDocumentByToken(
       signed_name: name,
       signature_data: name,
       signed_ip: meta.ip ?? null,
+      ...(contraindications ? { responses: { contraindications } } : {}),
     })
     .eq("id", classified.document.id)
     .neq("status", "signed");

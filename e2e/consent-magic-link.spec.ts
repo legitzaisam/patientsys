@@ -36,6 +36,10 @@ test("the emailed link renders the form and takes a signature", async ({ page })
   await page.goto(`/d/${TOKEN}`);
   await expect(page.getByRole("heading", { name: "Lip filler — consent form" })).toBeVisible();
   await expect(page.getByText("I confirm the risks")).toBeVisible();
+  await expect(page.getByText("Contraindications")).toBeVisible();
+  const questions = page.locator('[data-qc^="contraindication-"]');
+  const questionCount = await questions.count();
+  for (let i = 0; i < questionCount; i++) await questions.nth(i).getByRole("radio", { name: "No" }).click();
 
   await page.getByLabel("Type your full name to sign").fill("Olivia Bennett");
   await page.getByRole("button", { name: "Sign form" }).click();

@@ -35,7 +35,7 @@ import { checkEmail } from "@/lib/email";
 import { useIdentity } from "@/lib/use-identity";
 import { useStaffPresence } from "@/lib/use-staff-presence";
 import { cn } from "@/lib/utils";
-import { manualStageOptions, type ConsentState } from "@/lib/visit-stage";
+import { manualStageOptions, stageHeldForConsent, type ConsentState } from "@/lib/visit-stage";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -114,7 +114,9 @@ const STAGES: { key: Stage; label: string; short: string }[] = [
 ];
 
 function stageOf(a: any): Stage {
-  return (a.stage ?? (a.status === "no_show" ? "no_show" : a.status === "attended" ? "complete" : "booked")) as Stage;
+  const raw = (a.stage ?? (a.status === "no_show" ? "no_show" : a.status === "attended" ? "complete" : "booked")) as Stage;
+  const consent: ConsentState = a.consentState ?? (a.documents?.status === "signed" ? "signed" : "outstanding");
+  return stageHeldForConsent(raw, consent) as Stage;
 }
 
 const STAGE_META: Record<
@@ -2591,7 +2593,7 @@ function SelectField({
       value={value}
       required={required}
       onChange={onChange}
-      className="h-10 w-full rounded-md border border-edge bg-glass-2 px-3 text-sm shadow-inset-hi"
+      className="flex h-9 w-full rounded-xl border border-edge bg-glass-2 px-3 text-[13.5px] shadow-inset-hi outline-none transition-colors hover:border-edge-2 focus-visible:border-accent-deep focus-visible:ring-1 focus-visible:ring-ring md:text-[13px]"
     >
       {children}
     </select>

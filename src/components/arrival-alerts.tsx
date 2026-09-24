@@ -5,7 +5,6 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
   BellRing,
   CalendarClock,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
@@ -101,13 +100,13 @@ const phaseMeta: Record<
   },
   // Arrived, but consent is still outstanding: reception has them sign here.
   consent: {
-    label: "Consent needed",
+    label: "Arrived",
     icon: ShieldAlert,
     wash: "bg-[rgba(232,196,154,0.52)]",
     ring: "ring-[rgba(224,154,92,0.45)]",
     badge: "bg-[#e8c49a] text-[#7a4518]",
     pill: "bg-[#e8c49a] text-[#7a4518] ring-[rgba(224,154,92,0.45)]",
-    hint: "Arrived without signed consent. Have them sign on this device to move to waiting.",
+    hint: "Arrived without signed consent.",
   },
   // Checked in and consented: the practitioner's nudge to start.
   waiting: {
@@ -246,7 +245,7 @@ export function ArrivalAlerts({
     const canConsent = Boolean(identity?.isStaff);
     const consents = canConsent
       ? list
-          .filter((a) => (a.stage ?? "booked") === "arrived" && a.status !== "cancelled" && a.consentState === "outstanding")
+          .filter((a) => (a.stage ?? "booked") === "arrived" && a.status !== "cancelled" && a.consentState !== "signed")
           .map((a) => ({ appt: a, phase: "consent" as Phase }))
           .sort(byStart)
       : [];
@@ -425,14 +424,6 @@ export function ArrivalAlerts({
                 className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"
               >
                 <Clock className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                aria-label="Collapse arrivals"
-                onClick={() => (variant === "panel" ? onRequestCollapse?.() : setCollapsed(true))}
-                className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"
-              >
-                <ChevronDown className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>

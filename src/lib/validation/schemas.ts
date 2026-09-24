@@ -147,14 +147,22 @@ export const ResendDocument = z.object({
   channel: z.enum(["email", "sms"]).optional(),
 });
 
-export const SignDocument = z.object({ id, signed_name: text(240) });
+export const ContraindicationAnswers = z.record(z.string().max(64), z.enum(["yes", "no", "na"]));
+
+export const SignDocument = z.object({
+  id,
+  signed_name: text(240),
+  contraindications: ContraindicationAnswers.optional(),
+});
 
 export const GetAppointmentConsent = z.object({ appointment_id: id });
 
-/** Consent completed on the clinic's device: the patient types their name, staff witness. */
+/** Consent completed on the clinic's device: the patient draws a signature, staff witness. */
 export const CompleteConsentInClinic = z.object({
   appointment_id: id,
   signed_name: requiredText(240),
+  signature_data: z.string().max(120_000).optional(),
+  contraindications: ContraindicationAnswers.optional(),
 });
 
 export const SendMessage = z.object({
@@ -447,6 +455,7 @@ export const SaveCatalogueItem = z.object({
   requires_consent: z.boolean().optional(),
   active: z.boolean().optional(),
   aftercare_points: z.array(requiredText(400)).max(20).optional(),
+  result_template: z.string().trim().max(64).optional(),
 });
 
 export const SetCatalogueItemActive = z.object({ id, active: z.boolean() });
@@ -600,11 +609,7 @@ export const SaveAppointmentNote = z.object({
 /* ---- the treatment form ---- */
 const preCheckAnswer = z.object({ answer: z.enum(["yes", "no", "na"]), note: optionalText(500) });
 const preChecks = z.record(z.string().max(64), preCheckAnswer);
-const treatmentResults = z.object({
-  area: optionalText(200),
-  product: optionalText(200),
-  dose: optionalText(120),
-});
+const treatmentResults = z.record(z.string().max(64), optionalText(200));
 const aftercarePoint = z.object({ label: requiredText(400), covered: z.boolean() });
 
 export const GetTreatmentSession = z.object({ appointment_id: id });

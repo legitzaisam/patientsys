@@ -41,6 +41,7 @@ export async function resolveDocumentByTokenDemo(token: string): Promise<Resolve
 export async function signDocumentByTokenDemo(
   token: string,
   signedName: string,
+  contraindications?: Record<string, "yes" | "no" | "na">,
 ): Promise<SignOutcome> {
   const name = signedName.trim();
   if (!name || name.length > 200) return { outcome: "not_found" };
@@ -55,6 +56,7 @@ export async function signDocumentByTokenDemo(
   row["signed_at"] = new Date().toISOString();
   row["signed_name"] = name;
   row["signature_data"] = name;
+  if (contraindications) row["responses"] = { contraindications };
   const { advanceToWaitingIfReadyDemo } = await import("@/lib/visit-stage.demo");
   advanceToWaitingIfReadyDemo({ consentDocumentId: String(row["id"]) });
   return { outcome: "ok" };

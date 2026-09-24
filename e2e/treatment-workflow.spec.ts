@@ -88,9 +88,19 @@ test("arrived without consent stays arrived; the menu says why; signing in clini
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(/I confirm the risks/)).toBeVisible();
   await expect(dialog.locator('[data-qc="consent-sign"]')).toBeDisabled();
+  const questions = dialog.locator('[data-qc^="contraindication-"]');
+  const questionCount = await questions.count();
+  for (let i = 0; i < questionCount; i++) await questions.nth(i).getByRole("radio", { name: "No" }).click();
   await dialog.locator('[data-qc="consent-understood"]').click();
-  await dialog.locator('[data-qc="consent-signed-name"]').fill("Olivia Bennett");
+  const pad = dialog.locator('[data-qc="consent-signature"]');
+  const box = await pad.boundingBox();
+  if (!box) throw new Error("signature pad missing");
+  await page.mouse.move(box.x + 24, box.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 40, box.y + 50, { steps: 8 });
+  await page.mouse.up();
   await expect(dialog.getByText(/Witnessed by Dr Amara Osei/)).toBeVisible();
+  await expect(dialog.locator('[data-qc="consent-sign"]')).toBeEnabled();
   await dialog.locator('[data-qc="consent-sign"]').click();
   await expect(page.getByText("Consent signed — Olivia is now waiting")).toBeVisible();
   // The card's detail dialog is still open and now reads Waiting, with the form on offer.
@@ -135,15 +145,17 @@ test("the three-page form drives the stage and fans out into the record", async 
   await expect(form).toBeVisible();
   await expect(form.locator('[data-qc="form-stage"]')).toHaveText("Waiting");
 
-  // Page 1: consent shows as signed; checks must all be answered; a "No" needs a note.
+  // Page 1: consent shows as signed; every question must be answered. Yes is a contraindication and needs a note.
   await expect(form.getByText(/Signed by Freya Sundqvist/)).toBeVisible();
   await expect(form.locator('[data-qc="start-treatment-btn"]')).toBeDisabled();
-  for (const key of ["history_unchanged", "not_pregnant", "no_recent_actives", "allergies_confirmed"]) {
-    await form.locator(`[data-qc="pre-check-${key}"] [role=radio]`).first().click();
+  await expect(form.getByRole("heading", { name: "Confirm before starting" })).toBeVisible();
+  const checks = ["changes_since_last", "anything_today", "reason_to_wait"];
+  for (const key of checks) {
+    const answer = key === "changes_since_last" ? 0 : 1;
+    await form.locator(`[data-qc="pre-check-${key}"] [role=radio]`).nth(answer).click();
   }
-  await form.locator('[data-qc="pre-check-expectations_agreed"] [role=radio]').nth(1).click();
   await expect(form.locator('[data-qc="start-treatment-btn"]')).toBeDisabled();
-  await form.getByLabel(/Note for Treatment plan/).fill("Wants a lighter peel this time; agreed 20% glycolic.");
+  await form.getByLabel(/Note for Any change in health/).fill("Started a new blood thinner since the last visit. Bruising risk discussed.");
   await form.locator('[data-qc="start-treatment-btn"]').click();
   await expect(page.getByText(/Treatment started/)).toBeVisible();
   await expect(form.locator('[data-qc="form-stage"]')).toHaveText("In treatment");
@@ -151,9 +163,9 @@ test("the three-page form drives the stage and fans out into the record", async 
   // Page 2: results, both notes, then aftercare.
   await form.locator('[data-qc="tf-area"]').fill("Full face");
   await form.locator('[data-qc="tf-product"]').fill("Glycolic 20%, lot GP-2201");
-  await form.locator('[data-qc="tf-dose"]').fill("Two passes, 3 min");
-  await form.locator('[data-qc="form-page2"] textarea').first().fill("Two passes of 20% glycolic. Endpoint reached at 3 minutes, neutralised.");
-  await form.locator('[data-qc="form-page2"] textarea').nth(1).fill("Peel #2 done. Strict SPF, no actives for five days. Next sitting in four weeks.");
+  await form.locator('[data-qc="tf-strength"]').fill("20%");
+  await form.locator('[data-qc="tf-time_applied"]').fill("3 minutes");
+  await form.locator('[data-qc="form-page2"] textarea').first().fill("Two passes of 20% glycolic. Endpoint reached at 3 minutes, neutralised. Peel #2 done. Strict SPF, no actives for five days. Next sitting in four weeks.");
   await form.locator('[data-qc="move-to-aftercare-btn"]').click();
   await expect(page.getByText(/Moved to aftercare/)).toBeVisible();
   await expect(form.locator('[data-qc="form-stage"]')).toHaveText("Aftercare");
@@ -173,7 +185,6 @@ test("the three-page form drives the stage and fans out into the record", async 
   const record = page.locator('[data-qc="treatment-record-body"]');
   await expect(record).toBeVisible();
   await expect(record).toContainText("Glycolic 20%, lot GP-2201");
-  await expect(record).toContainText("Wants a lighter peel this time");
   await expect(record).toContainText("Peel #2 done");
   await expect(record).toContainText("Book the four-week sitting before leaving.");
   await expect(record.getByText(/^Signed/)).toBeVisible();
@@ -204,8 +215,8 @@ test("a completed session lands on the patient's timeline and the journey card",
   const form = page.locator('[data-qc="treatment-form"]');
   await expect(form).toBeVisible();
   await expect(form.getByText(/witnessed in clinic/)).toBeVisible();
-  for (const key of ["history_unchanged", "not_pregnant", "no_recent_actives", "allergies_confirmed", "expectations_agreed"]) {
-    await form.locator(`[data-qc="pre-check-${key}"] [role=radio]`).first().click();
+  for (const key of ["changes_since_last", "anything_today", "reason_to_wait"]) {
+    await form.locator(`[data-qc="pre-check-${key}"] [role=radio]`).nth(1).click();
   }
   await form.locator('[data-qc="start-treatment-btn"]').click();
   await expect(form.locator('[data-qc="form-stage"]')).toHaveText("In treatment");

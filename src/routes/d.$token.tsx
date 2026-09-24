@@ -2,6 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { BrandLockup } from "@/components/brand-mark";
+import {
+  ConsentContraindications,
+  contraindicationsComplete,
+  type ContraindicationAnswer,
+} from "@/components/consent-contraindications";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,6 +47,7 @@ type LinkState =
 function PublicDocumentPage() {
   const { token } = Route.useParams();
   const [justSigned, setJustSigned] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, ContraindicationAnswer | undefined>>({});
 
   const link = useQuery<LinkState>({
     queryKey: ["public-document", token],
@@ -56,11 +62,14 @@ function PublicDocumentPage() {
   });
 
   const sign = useMutation({
-    mutationFn: async (signedName: string) => {
+    mutationFn: async (input: { signedName: string; contraindications?: Record<string, ContraindicationAnswer> }) => {
       const res = await fetch(`/api/documents/access/${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signed_name: signedName }),
+        body: JSON.stringify({
+          signed_name: input.signedName,
+          ...(input.contraindications ? { contraindications: input.contraindications } : {}),
+        }),
       });
       if (res.status === 409) throw new Error("signed");
       if (!res.ok) throw new Error("not_found");
@@ -124,9 +133,22 @@ function PublicDocumentPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 const name = String(new FormData(e.currentTarget).get("signed_name") ?? "");
-                sign.mutate(name);
+                const isConsent = data.document.kind === "consent";
+                if (isConsent && !contraindicationsComplete(answers)) return;
+                const contraindications = isConsent
+                  ? (Object.fromEntries(
+                      Object.entries(answers).filter((entry): entry is [string, ContraindicationAnswer] => Boolean(entry[1])),
+                    ) as Record<string, ContraindicationAnswer>)
+                  : undefined;
+                sign.mutate({ signedName: name, contraindications });
               }}
             >
+              {data.document.kind === "consent" ? (
+                <ConsentContraindications
+                  value={answers}
+                  onChange={(key, answer) => setAnswers((prev) => ({ ...prev, [key]: answer }))}
+                />
+              ) : null}
               <div className="field-stack">
                 <Label htmlFor="signed_name">Type your full name to sign</Label>
                 <Input
@@ -140,7 +162,10 @@ function PublicDocumentPage() {
               <p className="text-xs text-muted-foreground">
                 By signing you confirm you have read and understood this form.
               </p>
-              <Button type="submit" disabled={sign.isPending}>
+              <Button
+                type="submit"
+                disabled={sign.isPending || (data.document.kind === "consent" && !contraindicationsComplete(answers))}
+              >
                 {sign.isPending ? "Signing…" : "Sign form"}
               </Button>
               {sign.isError && (

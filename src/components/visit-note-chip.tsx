@@ -20,10 +20,9 @@ import {
 } from "@/components/notes/ios-notes-editor";
 
 /**
- * A note on an appointment that has not happened yet is the practitioner's
- * pre-read — what to consider before treating. Once the visit is under way or
- * complete the same note is the visit record, and lives on the patient
- * profile tied to that treatment. The wording follows the appointment.
+ * Booking notes are what the patient mentioned on the phone or at booking.
+ * They are the only note shown on an appointment card. Notes written during
+ * treatment stay on the patient record.
  */
 export function isPreAppointmentNote(a: { stage?: string | null; status?: string | null }) {
   // Arrived and waiting patients are already marked attended; the stage is
@@ -39,7 +38,7 @@ export function VisitNoteEditor({
   minHeightClass = "min-h-[160px]",
   footerEnd,
   onClose,
-  preRead = false,
+  preRead: _preRead = false,
 }: {
   appointmentId: string;
   className?: string;
@@ -189,13 +188,9 @@ export function VisitNoteEditor({
     <div className={`w-full min-w-0 ${className ?? ""}`}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">{preRead ? "Pre-appointment note" : "Visit note"}</p>
+          <p className="text-sm font-semibold text-foreground">Booking Notes</p>
           <p className="text-2xs text-muted-foreground">
-            {data?.updatedBy
-              ? `Last edited by ${data.updatedBy}`
-              : preRead
-                ? "For the practitioner to read before treating. Kept on the patient's record with this appointment."
-                : "Shared with the clinical team"}
+            {data?.updatedBy ? `Last edited by ${data.updatedBy}` : "What the patient mentioned when booking."}
           </p>
         </div>
         <NotesToolbar prefs={prefs} onBullet={() => insertBullet(areaRef.current, value, update)} />
@@ -205,7 +200,7 @@ export function VisitNoteEditor({
         value={value}
         onChange={update}
         prefs={prefs}
-        placeholder={preRead ? "Anything to consider before this appointment…" : "Notes for this visit…"}
+        placeholder="Anything the patient mentioned when booking…"
         className={minHeightClass}
       />
       <div className="mt-1.5 flex items-center justify-between gap-2 pl-1">
@@ -236,7 +231,7 @@ export function VisitNoteChip({
   chipClass,
   compact: _compact,
   variant = "chip",
-  preRead = false,
+  preRead: _preRead = false,
 }: {
   appointmentId: string;
   chipClass?: string;
@@ -277,7 +272,7 @@ export function VisitNoteChip({
         type="button"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
-        aria-label={preRead ? "Open pre-appointment note" : "Open visit note"}
+        aria-label="Open booking notes"
         className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
       >
         <StickyNote className="h-2 w-2" />
@@ -287,10 +282,10 @@ export function VisitNoteChip({
         type="button"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
-        aria-label={preRead ? "Open pre-appointment note" : "Open visit note"}
-        className={`inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground ${chipClass ?? ""}`}
+        aria-label="Open booking notes"
+        className={`inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-full bg-sky-bg text-sky-ink shadow-inset-hi transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9] ${chipClass ?? ""}`}
       >
-        <StickyNote className="h-3 w-3 shrink-0" />
+        <StickyNote className="h-2.5 w-2.5 shrink-0" />
       </button>
     );
 
@@ -313,7 +308,7 @@ export function VisitNoteChip({
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <VisitNoteEditor appointmentId={appointmentId} preRead={preRead} onClose={() => setEditorOpen(false)} />
+          <VisitNoteEditor appointmentId={appointmentId} onClose={() => setEditorOpen(false)} />
         </PopoverContent>
       </Popover>
       <HoverCardContent
@@ -336,12 +331,7 @@ export function VisitNoteChip({
       >
         {has ? (
           <>
-            <p className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">
-              {preRead ? "Pre-appointment note" : "Visit note"}
-            </p>
-            {preRead ? (
-              <p className="mt-0.5 text-2xs text-muted-foreground">To consider before treating</p>
-            ) : null}
+            <p className="text-2xs font-semibold tracking-[0.02em] text-muted-foreground">Booking Notes</p>
             <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-foreground">{preview}</p>
             {data?.updatedBy ? (
               <p className="mt-2 text-2xs text-muted-foreground">{data.updatedBy}</p>
@@ -350,9 +340,9 @@ export function VisitNoteChip({
           </>
         ) : (
           <>
-            <p className="text-xs font-semibold text-foreground">Add a visit note</p>
+            <p className="text-xs font-semibold text-foreground">Booking Notes</p>
             <p className="mt-1 text-2xs leading-relaxed text-muted-foreground">
-              Quick notes for this appointment — shared with the clinical team.
+              What the patient mentioned when booking.
             </p>
             <p className="mt-2 text-2xs text-muted-foreground">Click to write</p>
           </>

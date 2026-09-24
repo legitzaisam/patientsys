@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
@@ -7,8 +7,11 @@ import { completeConsentInClinic, getAppointmentConsent } from "@/lib/clinic.fun
 import { useIdentity } from "@/lib/use-identity";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  ConsentContraindications,
+  contraindicationsComplete,
+  type ContraindicationAnswer,
+} from "@/components/consent-contraindications";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +24,7 @@ import {
 /**
  * Consent completed in clinic. A patient who arrives without having signed
  * reads the form on the clinic's device, ticks that they have understood it
- * and types their name; the staff member logged in is recorded as the
+ * and draws their signature; the staff member logged in is recorded as the
  * witness. Signing is what moves the patient from "arrived" to "waiting".
  */
 export function ConsentInClinicDialog({
@@ -46,11 +49,13 @@ export function ConsentInClinicDialog({
   });
 
   const [understood, setUnderstood] = useState(false);
-  const [name, setName] = useState("");
+  const [signature, setSignature] = useState<string | null>(null);
+  const [contraindications, setContraindications] = useState<Record<string, ContraindicationAnswer | undefined>>({});
   useEffect(() => {
     if (!open) return;
     setUnderstood(false);
-    setName("");
+    setSignature(null);
+    setContraindications({});
   }, [open, appointmentId]);
 
   const sign = useMutation({
@@ -73,7 +78,8 @@ export function ConsentInClinicDialog({
     typeof identity?.profile?.full_name === "string" ? identity.profile.full_name : (identity?.email ?? "Staff member");
   const alreadySigned = data?.document.status === "signed";
   const expected = data?.patientName ?? "";
-  const nameOk = name.trim().length >= 2;
+  const drawn = Boolean(signature);
+  const questionsDone = contraindicationsComplete(contraindications);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -93,27 +99,40 @@ export function ConsentInClinicDialog({
         </DialogHeader>
 
         {data ? (
-          <div className="space-y-4">
+          <div className="max-h-[min(62dvh,560px)] space-y-4 overflow-y-auto pr-1">
             <div className="rounded-2xl bg-glass-2 p-4 shadow-inset-hi">
               <p className="text-sm font-semibold text-foreground">{data.document.title}</p>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{data.document.body}</p>
             </div>
 
             {alreadySigned ? (
-              <p className="flex items-center gap-2 rounded-xl bg-success-bg px-3 py-2 text-xs font-medium text-success-ink">
-                <CheckCircle2 className="h-4 w-4" aria-hidden />
-                Signed by {data.document.signedName ?? data.patientName}
-                {data.document.signedAt
-                  ? ` on ${new Date(data.document.signedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
-                  : ""}
-                .
-              </p>
+              <div className="space-y-2">
+                <p className="flex items-center gap-2 rounded-xl bg-success-bg px-3 py-2 text-xs font-medium text-success-ink">
+                  <CheckCircle2 className="h-4 w-4" aria-hidden />
+                  Signed by {data.document.signedName ?? data.patientName}
+                  {data.document.signedAt
+                    ? ` on ${new Date(data.document.signedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                    : ""}
+                  .
+                </p>
+                {data.document.signatureData ? (
+                  <img
+                    src={data.document.signatureData}
+                    alt={`Signature of ${data.document.signedName ?? data.patientName}`}
+                    className="h-16 w-full rounded-xl border border-edge bg-white object-contain"
+                  />
+                ) : null}
+              </div>
             ) : (
               <>
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  Hand the device to {expected.split(/\s+/)[0] || "the patient"} to read the form above. They tick the
-                  box and type their full name to sign. You are recorded as the witness.
+                  Hand the device to {expected.split(/\s+/)[0] || "the patient"} to answer the questions, tick the box,
+                  and draw their signature. You are recorded as the witness.
                 </p>
+                <ConsentContraindications
+                  value={contraindications}
+                  onChange={(key, answer) => setContraindications((prev) => ({ ...prev, [key]: answer }))}
+                />
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-glass-2 px-3 py-2.5 text-xs leading-relaxed shadow-inset-hi">
                   <Checkbox
                     checked={understood}
@@ -127,20 +146,7 @@ export function ConsentInClinicDialog({
                     treatment described.
                   </span>
                 </label>
-                <div className="space-y-1.5">
-                  <Label htmlFor="consent-signed-name" className="text-xs">
-                    Patient's full name (signature)
-                  </Label>
-                  <Input
-                    id="consent-signed-name"
-                    data-qc="consent-signed-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={expected || "Type your full name"}
-                    autoComplete="off"
-                    className="font-[Caveat,cursive] text-lg"
-                  />
-                </div>
+                <SignaturePad key={`${appointmentId ?? ""}-${open ? "open" : "closed"}`} onChange={setSignature} />
                 <p className="text-2xs text-muted-foreground">
                   Witnessed by <span className="font-semibold text-foreground">{witness}</span> ·{" "}
                   {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
@@ -158,8 +164,17 @@ export function ConsentInClinicDialog({
             <Button
               type="button"
               data-qc="consent-sign"
-              disabled={!understood || !nameOk || sign.isPending}
-              onClick={() => sign.mutate({ data: { appointment_id: appointmentId!, signed_name: name.trim() } })}
+              disabled={!understood || !drawn || !questionsDone || sign.isPending}
+              onClick={() =>
+                sign.mutate({
+                  data: {
+                    appointment_id: appointmentId!,
+                    signed_name: expected.trim() || "Patient",
+                    signature_data: signature!,
+                    contraindications,
+                  },
+                })
+              }
             >
               {sign.isPending ? "Signing…" : "Sign and continue"}
             </Button>
@@ -167,5 +182,124 @@ export function ConsentInClinicDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const ink = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  function paintStyle(ctx: CanvasRenderingContext2D, ratio: number) {
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.lineWidth = 1.75;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#1c1c1c";
+  }
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const fit = () => {
+      if (ink.current) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width < 2) return;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.round(rect.width * ratio);
+      canvas.height = Math.round(rect.height * ratio);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      paintStyle(ctx, ratio);
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(canvas);
+
+    const pointFrom = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    };
+
+    const move = (event: PointerEvent) => {
+      if (!drawing.current) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const next = pointFrom(event);
+      ctx.lineTo(next.x, next.y);
+      ctx.stroke();
+      ink.current = true;
+    };
+
+    const end = () => {
+      if (!drawing.current) return;
+      drawing.current = false;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      onChangeRef.current(ink.current ? canvas.toDataURL("image/png") : null);
+    };
+
+    const start = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      // The dialog takes pointer capture for itself, so the rest of the stroke
+      // is followed on the window rather than on the canvas.
+      event.preventDefault();
+      drawing.current = true;
+      const next = pointFrom(event);
+      ctx.beginPath();
+      ctx.moveTo(next.x, next.y);
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", end);
+      window.addEventListener("pointercancel", end);
+    };
+
+    canvas.addEventListener("pointerdown", start);
+    return () => {
+      canvas.removeEventListener("pointerdown", start);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      observer.disconnect();
+    };
+  }, []);
+
+  function clear() {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ink.current = false;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    onChange(null);
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-edge bg-white">
+      <div className="flex items-center justify-between gap-3 border-b border-edge px-3 py-1.5">
+        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-ink-3">Draw your signature</p>
+        <button
+          type="button"
+          onClick={clear}
+          className="text-xs font-medium text-accent-ink hover:underline"
+          data-qc="consent-signature-clear"
+        >
+          Clear
+        </button>
+      </div>
+      <canvas
+        ref={canvasRef}
+        data-qc="consent-signature"
+        aria-label="Draw your signature"
+        className="block h-28 w-full touch-none cursor-crosshair"
+      />
+    </div>
   );
 }

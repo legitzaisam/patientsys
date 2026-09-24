@@ -27,6 +27,10 @@ test("signs an outstanding form with a typed name", async ({ page }) => {
 
   const signName = page.getByPlaceholder("Type your full name to sign").first();
   await expect(signName).toBeVisible();
+  const form = signName.locator("xpath=ancestor::form");
+  const nos = form.getByRole("radio", { name: "No" });
+  const questionCount = await nos.count();
+  for (let i = 0; i < questionCount; i++) await nos.nth(i).click();
   await signName.fill("Olivia Bennett");
   await signName.locator("xpath=ancestor::form").getByRole("button", { name: "Sign" }).click();
 

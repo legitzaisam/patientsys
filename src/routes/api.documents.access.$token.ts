@@ -15,6 +15,16 @@ function clientMeta(request: Request) {
   };
 }
 
+function parseContraindications(raw: unknown): Record<string, "yes" | "no" | "na"> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, "yes" | "no" | "na"> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (key.length > 64) continue;
+    if (value === "yes" || value === "no" || value === "na") out[key] = value;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 function respond(outcome: { outcome: string } & Record<string, unknown>) {
   if (outcome.outcome === "not_found") {
     return Response.json({ error: "not_found" }, { status: 404 });
@@ -41,17 +51,21 @@ export const Route = createFileRoute("/api/documents/access/$token")({
 
       POST: async ({ request, params }) => {
         const token = params.token ?? "";
-        const body = (await request.json().catch(() => ({}))) as { signed_name?: unknown };
+        const body = (await request.json().catch(() => ({}))) as {
+          signed_name?: unknown;
+          contraindications?: unknown;
+        };
         const signedName = typeof body.signed_name === "string" ? body.signed_name : "";
+        const contraindications = parseContraindications(body.contraindications);
 
         if (DEMO_MODE) {
           const { signDocumentByTokenDemo } = await import("@/lib/documents/access.demo");
-          return respond(await signDocumentByTokenDemo(token, signedName));
+          return respond(await signDocumentByTokenDemo(token, signedName, contraindications));
         }
         const { signDocumentByToken } = await import("@/lib/documents/access.server");
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         return respond(
-          await signDocumentByToken(supabaseAdmin, token, signedName, clientMeta(request)),
+          await signDocumentByToken(supabaseAdmin, token, signedName, clientMeta(request), contraindications),
         );
       },
     },

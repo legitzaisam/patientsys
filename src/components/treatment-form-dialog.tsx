@@ -89,7 +89,7 @@ export function TreatmentFormDialog({
   // ---- local form state, seeded from the saved draft ----
   const [page, setPage] = useState<Page>(1);
   const [checks, setChecks] = useState<PreChecks>({});
-  const [results, setResults] = useState<{ area: string; product: string; dose: string }>({ area: "", product: "", dose: "" });
+  const [results, setResults] = useState<Record<string, string>>({});
   const [treatmentNotes, setTreatmentNotes] = useState("");
   const [visitNotes, setVisitNotes] = useState("");
   const [points, setPoints] = useState<{ label: string; covered: boolean }[]>([]);
@@ -110,9 +110,14 @@ export function TreatmentFormDialog({
     setPage(pageFor(s?.status));
     setChecks(s?.preChecks ?? {});
     setResults({
-      area: s?.results.area ?? data.lastSameTreatment?.area ?? "",
-      product: s?.results.product ?? data.lastSameTreatment?.product ?? "",
-      dose: s?.results.dose ?? data.lastSameTreatment?.dose ?? "",
+      ...(data.lastSameTreatment
+        ? {
+            ...(data.lastSameTreatment.area ? { area: data.lastSameTreatment.area } : {}),
+            ...(data.lastSameTreatment.product ? { product: data.lastSameTreatment.product } : {}),
+            ...(data.lastSameTreatment.dose ? { dose: data.lastSameTreatment.dose } : {}),
+          }
+        : {}),
+      ...(s?.results ?? {}),
     });
     setTreatmentNotes(s?.treatmentNotes ?? "");
     setVisitNotes(s?.visitNotes ?? "");
@@ -227,7 +232,6 @@ export function TreatmentFormDialog({
 
   const prefs = useNotesPrefs("treatment-form-notes");
   const treatmentRef = useRef<HTMLTextAreaElement | null>(null);
-  const visitRef = useRef<HTMLTextAreaElement | null>(null);
 
   const flags = useMemo(() => preCheckFlags(checks), [checks]);
   const allAnswered = useMemo(
@@ -338,6 +342,8 @@ export function TreatmentFormDialog({
               pending={start.isPending}
               canStart={data.canStart}
               alreadyStarted={stageNow === "in_treatment" || stageNow === "aftercare"}
+              uploading={uploading}
+              onUpload={uploadPhoto}
               onStart={() => start.mutate({ data: { appointment_id: appointmentId!, pre_checks: checks } })}
               onSkipToPage={() => setPage(pageFor(data.session?.status))}
             />
@@ -354,14 +360,8 @@ export function TreatmentFormDialog({
                 setTreatmentNotes(v);
                 scheduleDraft();
               }}
-              visitNotes={visitNotes}
-              onVisitNotes={(v) => {
-                setVisitNotes(v);
-                scheduleDraft();
-              }}
               prefs={prefs}
               treatmentRef={treatmentRef}
-              visitRef={visitRef}
               uploading={uploading}
               onUpload={uploadPhoto}
               pending={aftercare.isPending}
@@ -369,13 +369,12 @@ export function TreatmentFormDialog({
                 aftercare.mutate({
                   data: {
                     appointment_id: appointmentId!,
-                    results: {
-                      ...(results.area.trim() ? { area: results.area.trim() } : {}),
-                      ...(results.product.trim() ? { product: results.product.trim() } : {}),
-                      ...(results.dose.trim() ? { dose: results.dose.trim() } : {}),
-                    },
+                    results: Object.fromEntries(
+                      Object.entries(results)
+                        .map(([key, value]) => [key, value.trim()])
+                        .filter(([, value]) => value),
+                    ),
                     ...(treatmentNotes.trim() ? { treatment_notes: treatmentNotes } : {}),
-                    ...(visitNotes.trim() ? { visit_notes: visitNotes } : {}),
                   },
                 })
               }
@@ -479,6 +478,51 @@ function formatDate(iso: string | null | undefined) {
 // where they are used.
 type SessionData = any;
 
+function PhotoCard({
+  kind,
+  photos,
+  uploading,
+  onUpload,
+}: {
+  kind: "before" | "after";
+  photos: { id: string; url?: string | null }[];
+  uploading: boolean;
+  onUpload: (file: File, kind: "before" | "after") => Promise<void>;
+}) {
+  const title = kind === "before" ? "Before" : "After";
+  return (
+    <Section title={title} icon={Camera}>
+      <div className="mb-2 flex items-center justify-end">
+        <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full bg-glass-2 px-3 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.08)]">
+          <Camera className="h-3.5 w-3.5" aria-hidden />
+          {uploading ? "Uploading…" : "Add photo"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            data-qc={`tf-photo-${kind}`}
+            disabled={uploading}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void onUpload(file, kind);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+      {photos.length === 0 ? (
+        <p className="text-2xs text-muted-foreground">No {kind} photo yet.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {photos.map((p) => (
+            <img key={p.id} src={p.url ?? ""} alt="" className="h-20 w-full rounded-lg object-cover" />
+          ))}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 function PageOne({
   data,
   checks,
@@ -491,6 +535,8 @@ function PageOne({
   alreadyStarted,
   onStart,
   onSkipToPage,
+  uploading,
+  onUpload,
 }: {
   data: SessionData;
   checks: PreChecks;
@@ -503,9 +549,13 @@ function PageOne({
   alreadyStarted: boolean;
   onStart: () => void;
   onSkipToPage: () => void;
+  uploading: boolean;
+  onUpload: (file: File, kind: "before" | "after") => Promise<void>;
 }) {
+  const before = data.photos.filter((p: any) => p.kind === "before");
   return (
     <div className="space-y-4" data-qc="form-page1">
+      <PhotoCard kind="before" photos={before} uploading={uploading} onUpload={onUpload} />
       <div className="grid gap-4 md:grid-cols-2">
         <Section title="Patient" icon={FileText}>
           <p className="text-sm font-semibold">{data.patient.name}</p>
@@ -550,46 +600,20 @@ function PageOne({
                 )}
               </p>
             </div>
-            {data.milestone ? <Detail label="Plan step" value={data.milestone.title} /> : null}
+            {data.milestone ? <Detail label="Skin plan step" value={data.milestone.title} /> : null}
           </div>
         </Section>
       </div>
 
-      <Section title="Previous visit notes" icon={FileText}>
-        {data.lastSameTreatment ? (
-          <div className="mb-3 rounded-xl bg-glass-hi p-3">
-            <p className="text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">
-              Last {data.appointment.treatment} · {formatDate(data.lastSameTreatment.performedAt)}
-              {data.lastSameTreatment.by ? ` · ${data.lastSameTreatment.by}` : ""}
-            </p>
-            <p className="mt-1 text-xs text-ink-2">
-              {[data.lastSameTreatment.product, data.lastSameTreatment.area, data.lastSameTreatment.dose].filter(Boolean).join(" · ") ||
-                "No results recorded"}
-            </p>
-            {data.lastSameTreatment.notes ? (
-              <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-foreground">{data.lastSameTreatment.notes}</p>
-            ) : null}
-          </div>
-        ) : null}
-        {data.previousNotes.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No earlier visit notes on file.</p>
+      <Section title="Booking notes" icon={FileText}>
+        {data.bookingNote ? (
+          <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">{data.bookingNote}</p>
         ) : (
-          <ul className="space-y-2">
-            {data.previousNotes.map((n: any) => (
-              <li key={n.appointmentId} className="rounded-xl bg-glass-hi p-3">
-                <p className="text-2xs text-ink-3">
-                  {formatDate(n.startsAt)}
-                  {n.treatment ? ` · ${n.treatment}` : ""}
-                  {n.by ? ` · ${n.by}` : ""}
-                </p>
-                <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-foreground">{n.body}</p>
-              </li>
-            ))}
-          </ul>
+          <p className="text-xs text-muted-foreground">No booking notes for this appointment.</p>
         )}
       </Section>
 
-      <Section title="Pre-treatment checks" icon={ClipboardList}>
+      <Section title="Confirm before starting" icon={ClipboardList}>
         <ul className="space-y-2" data-qc="pre-checks">
           {data.checks.map((c: any) => {
             const value = checks[c.key];
@@ -611,7 +635,7 @@ function PageOne({
                         className={cn(
                           "h-7 cursor-pointer rounded-full px-3 text-xs font-semibold transition-colors",
                           value?.answer === a
-                            ? a === "no"
+                            ? a === "yes"
                               ? "bg-destructive-bg text-destructive-ink shadow-[inset_0_0_0_1px_var(--edge)]"
                               : "bg-accent-soft text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
                             : "bg-glass-2 text-ink-2 hover:bg-[rgba(47,63,102,0.08)]",
@@ -622,11 +646,11 @@ function PageOne({
                     ))}
                   </div>
                 </div>
-                {value?.answer === "no" ? (
+                {value?.answer === "yes" ? (
                   <Input
                     value={value.note ?? ""}
                     onChange={(e) => onNote(c.key, e.target.value)}
-                    placeholder="What changed, and what you did about it"
+                    placeholder="How you will manage this before treating"
                     className="mt-2 h-8 text-xs"
                     aria-label={`Note for ${c.label}`}
                   />
@@ -638,7 +662,7 @@ function PageOne({
         {flags.length > 0 ? (
           <p className="mt-3 flex items-start gap-2 rounded-xl bg-warning-bg px-3 py-2 text-xs text-warning-ink">
             <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
-            {flags.length} check{flags.length === 1 ? "" : "s"} answered No — make sure each has a note before you start.
+            {flags.length} question{flags.length === 1 ? "" : "s"} answered Yes — make sure each has a note before you start.
           </p>
         ) : null}
       </Section>
@@ -670,124 +694,63 @@ function PageTwo({
   onResults,
   treatmentNotes,
   onTreatmentNotes,
-  visitNotes,
-  onVisitNotes,
   prefs,
   treatmentRef,
-  visitRef,
   uploading,
   onUpload,
   pending,
   onNext,
 }: {
   data: SessionData;
-  results: { area: string; product: string; dose: string };
-  onResults: (patch: Partial<{ area: string; product: string; dose: string }>) => void;
+  results: Record<string, string>;
+  onResults: (patch: Record<string, string>) => void;
   treatmentNotes: string;
   onTreatmentNotes: (v: string) => void;
-  visitNotes: string;
-  onVisitNotes: (v: string) => void;
   prefs: ReturnType<typeof useNotesPrefs>;
   treatmentRef: React.RefObject<HTMLTextAreaElement | null>;
-  visitRef: React.RefObject<HTMLTextAreaElement | null>;
   uploading: boolean;
   onUpload: (file: File, kind: "before" | "after") => Promise<void>;
   pending: boolean;
   onNext: () => void;
 }) {
-  const before = data.photos.filter((p: any) => p.kind === "before");
   const after = data.photos.filter((p: any) => p.kind === "after");
+  const fields = (data.resultFields ?? []) as { key: string; label: string; placeholder: string }[];
   return (
     <div className="space-y-4" data-qc="form-page2">
       <Section title="Treatment results" icon={Sparkles}>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="field-stack">
-            <Label htmlFor="tf-area" className="text-xs">Area treated</Label>
-            <Input id="tf-area" data-qc="tf-area" value={results.area} onChange={(e) => onResults({ area: e.target.value })} placeholder="e.g. Glabella and frontalis" />
-          </div>
-          <div className="field-stack">
-            <Label htmlFor="tf-product" className="text-xs">Product / batch</Label>
-            <Input id="tf-product" data-qc="tf-product" value={results.product} onChange={(e) => onResults({ product: e.target.value })} placeholder="e.g. Botulinum toxin, lot 4471" />
-          </div>
-          <div className="field-stack">
-            <Label htmlFor="tf-dose" className="text-xs">Dose / units</Label>
-            <Input id="tf-dose" data-qc="tf-dose" value={results.dose} onChange={(e) => onResults({ dose: e.target.value })} placeholder="e.g. 32 units" />
-          </div>
+        <div className={cn("grid gap-3", fields.length > 3 ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
+          {fields.map((field) => (
+            <div key={field.key} className="field-stack">
+              <Label htmlFor={`tf-${field.key}`} className="text-xs">{field.label}</Label>
+              <Input
+                id={`tf-${field.key}`}
+                data-qc={`tf-${field.key}`}
+                value={results[field.key] ?? ""}
+                onChange={(e) => onResults({ [field.key]: e.target.value })}
+                placeholder={field.placeholder}
+              />
+            </div>
+          ))}
         </div>
       </Section>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Section
-          title="Treatment notes"
-          icon={FileText}
-          action={<NotesToolbar prefs={prefs} onBullet={() => insertBullet(treatmentRef.current, treatmentNotes, onTreatmentNotes)} />}
-        >
-          <p className="mb-2 text-2xs text-muted-foreground">What was done and how it went. Saved to the treatment history.</p>
-          <NotesTextarea
-            textareaRef={treatmentRef}
-            value={treatmentNotes}
-            onChange={onTreatmentNotes}
-            prefs={prefs}
-            placeholder="Technique, response, anything to remember next time…"
-            className="min-h-[160px]"
-          />
-        </Section>
-        <Section
-          title="Visit notes"
-          icon={FileText}
-          action={<NotesToolbar prefs={prefs} onBullet={() => insertBullet(visitRef.current, visitNotes, onVisitNotes)} />}
-        >
-          <p className="mb-2 text-2xs text-muted-foreground">The note the diary and the patient's visit-notes tab show for this appointment.</p>
-          <NotesTextarea
-            textareaRef={visitRef}
-            value={visitNotes}
-            onChange={onVisitNotes}
-            prefs={prefs}
-            placeholder="Summary for the record…"
-            className="min-h-[160px]"
-          />
-        </Section>
-      </div>
-
-      <Section title="Before and after" icon={Camera}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {(["before", "after"] as const).map((kind) => {
-            const list = kind === "before" ? before : after;
-            return (
-              <div key={kind} className="rounded-xl bg-glass-hi p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-semibold capitalize">{kind}</p>
-                  <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full bg-glass-2 px-3 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.08)]">
-                    <Camera className="h-3.5 w-3.5" aria-hidden />
-                    {uploading ? "Uploading…" : "Add photo"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      data-qc={`tf-photo-${kind}`}
-                      disabled={uploading}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) void onUpload(file, kind);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                </div>
-                {list.length === 0 ? (
-                  <p className="text-2xs text-muted-foreground">No {kind} photo yet.</p>
-                ) : (
-                  <div className="grid grid-cols-3 gap-2">
-                    {list.map((p: any) => (
-                      <img key={p.id} src={p.url ?? ""} alt="" className="h-20 w-full rounded-lg object-cover" />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+      <Section
+        title="Treatment notes"
+        icon={FileText}
+        action={<NotesToolbar prefs={prefs} onBullet={() => insertBullet(treatmentRef.current, treatmentNotes, onTreatmentNotes)} />}
+      >
+        <p className="mb-2 text-2xs text-muted-foreground">What was done and how it went. Saved to the treatment history.</p>
+        <NotesTextarea
+          textareaRef={treatmentRef}
+          value={treatmentNotes}
+          onChange={onTreatmentNotes}
+          prefs={prefs}
+          placeholder="Technique, response, anything to remember next time…"
+          className="min-h-[160px]"
+        />
       </Section>
+
+      <PhotoCard kind="after" photos={after} uploading={uploading} onUpload={onUpload} />
 
       <div className="flex justify-end">
         <Button type="button" data-qc="move-to-aftercare-btn" disabled={pending} onClick={onNext}>

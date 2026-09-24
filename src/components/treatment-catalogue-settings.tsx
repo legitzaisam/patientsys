@@ -21,7 +21,7 @@ import {
   toneForTreatment,
   treatmentKey,
 } from "@/lib/practitioner-colours";
-import { SaveCatalogueItem } from "@/lib/validation/schemas";
+import { RESULT_TEMPLATES, templateFor } from "@/lib/treatment-results";
 import { numericText } from "@/lib/validation/primitives";
 import { ColourWheelButton } from "@/components/colour-wheel-button";
 import { Card } from "@/components/ui/card";
@@ -49,6 +49,7 @@ type Item = {
   requires_consent: boolean;
   active: boolean;
   aftercare_points?: string[] | null;
+  result_template?: string | null;
 };
 
 type Draft = {
@@ -59,8 +60,8 @@ type Draft = {
   duration_minutes: string;
   cooling_off_hours: string;
   requires_consent: boolean;
-  /** One aftercare point per line; empty uses the category defaults. */
   aftercare_points: string;
+  result_template: string;
 };
 
 const blank: Draft = {
@@ -72,6 +73,7 @@ const blank: Draft = {
   cooling_off_hours: "0",
   requires_consent: true,
   aftercare_points: "",
+  result_template: "toxin",
 };
 
 const shape = SaveCatalogueItem.shape;
@@ -85,6 +87,7 @@ const DraftSchema = z.object({
   cooling_off_hours: numericText(shape.cooling_off_hours, 0),
   requires_consent: z.boolean(),
   aftercare_points: z.string().max(8_000),
+  result_template: z.string().trim().min(1, "Choose what to record").max(64),
 });
 
 export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
@@ -163,6 +166,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
         duration_minutes: values.duration_minutes === "" ? 60 : Number(values.duration_minutes),
         cooling_off_hours: values.cooling_off_hours === "" ? 0 : Number(values.cooling_off_hours),
         requires_consent: values.requires_consent,
+        result_template: values.result_template,
         aftercare_points: values.aftercare_points
           .split("\n")
           .map((x) => x.trim())
@@ -265,6 +269,31 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
               />
               <FormField
                 control={draftForm.control}
+                name="result_template"
+                render={({ field }) => (
+                  <div className="field-stack sm:col-span-2">
+                    <label htmlFor="catalogue-result-template" className="text-xs text-muted-foreground">
+                      Details to record
+                    </label>
+                    <select
+                      id="catalogue-result-template"
+                      data-qc="catalogue-result-template"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      className="flex h-9 w-full rounded-xl border border-edge bg-glass-2 px-3 text-[13.5px] shadow-inset-hi outline-none"
+                    >
+                      {RESULT_TEMPLATES.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              />
+              <FormField
+                control={draftForm.control}
                 name="requires_consent"
                 render={({ field }) => (
                   <div className="glass-item flex items-center justify-between px-3 py-2">
@@ -357,6 +386,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                       duration_minutes: String(item.duration_minutes ?? 60),
                       cooling_off_hours: String(item.cooling_off_hours ?? 0),
                       requires_consent: item.requires_consent,
+                      result_template: item.result_template || templateFor(item.name).id,
                       aftercare_points: (item.aftercare_points ?? []).join("\n"),
                     })
                   }

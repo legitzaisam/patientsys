@@ -30,7 +30,7 @@ import {
   updateAppointmentState,
 } from "@/lib/clinic.functions";
 import { formatMoney } from "@/lib/payment-link";
-import { manualStageOptions, type ConsentState } from "@/lib/visit-stage";
+import { manualStageOptions, stageHeldForConsent, type ConsentState } from "@/lib/visit-stage";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -70,7 +70,9 @@ const STAGE_TONE: Record<Stage, string> = {
 };
 
 function stageOf(a: any): Stage {
-  return (a.stage ?? (a.status === "no_show" ? "no_show" : a.status === "attended" ? "complete" : "booked")) as Stage;
+  const raw = (a.stage ?? (a.status === "no_show" ? "no_show" : a.status === "attended" ? "complete" : "booked")) as Stage;
+  const consent: ConsentState = a.consentState ?? (a.documents?.status === "signed" ? "signed" : "outstanding");
+  return stageHeldForConsent(raw, consent) as Stage;
 }
 
 function sortByStart(appointments: any[]) {
@@ -467,7 +469,7 @@ function TodayCard({
   const navigate = useNavigate();
   const consent: ConsentState = a.consentState ?? (consentSigned ? "signed" : "outstanding");
   const [consentOpen, setConsentOpen] = useState(false);
-  const needsConsentInClinic = stage === "arrived" && consent === "outstanding" && !isCancelled;
+  const needsConsentInClinic = stage === "arrived" && consent !== "signed" && !isCancelled;
   const openTreatmentForm = () => {
     setDetailOpen(false);
     void navigate({ to: "/patients/$id", params: { id: a.patient_id }, search: { treat: a.id } });
@@ -602,7 +604,7 @@ function TodayCard({
           </div>
 
           <div
-            className="mt-auto flex flex-wrap items-center gap-2 [&_button]:inline-flex [&_button]:items-center"
+            className="mt-auto flex flex-nowrap items-center gap-1.5 [&_button]:inline-flex [&_button]:items-center"
             onClick={stopCardOpen}
           >
             <ConsentChip appointment={a} signed={consentSigned} />
@@ -1037,11 +1039,12 @@ function ClaimedOfferChip({ offer }: { offer: { id: string; headline: string; co
     <HoverCard openDelay={80} closeDelay={140}>
       <HoverCardTrigger asChild>
         <span
-          className="inline-flex h-5 cursor-default items-center gap-1 rounded-full bg-accent-soft px-2 text-2xs font-semibold leading-none text-accent-ink shadow-inset-hi"
+          className="inline-flex h-5 shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-accent-soft px-1.5 text-[10px] font-semibold leading-none text-accent-ink shadow-inset-hi"
           data-qc="claimed-offer-chip"
+          aria-label="Offer claimed"
         >
-          <Gift className="h-3 w-3 shrink-0" />
-          Offer claimed
+          <Gift className="h-2.5 w-2.5 shrink-0" />
+          Offer
         </span>
       </HoverCardTrigger>
       <HoverCardContent align="start" className="w-64 rounded-2xl p-3.5 text-sm">

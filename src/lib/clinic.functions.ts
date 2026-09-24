@@ -19,9 +19,10 @@ import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voic
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
-import { CONSENT_BODY_DEFAULT, PRE_TREATMENT_CHECKS, canStartTreatment, consentReady } from "@/lib/visit-stage";
+import { CONSENT_BODY_DEFAULT, PRE_TREATMENT_CHECKS, canStartTreatment, consentReady, stageHeldForConsent } from "@/lib/visit-stage";
+import { fieldsFor, foldResults } from "@/lib/treatment-results";
 import { aftercarePointsFor } from "@/lib/aftercare-defaults";
-import { advanceToWaitingIfReady, consentStateOf } from "@/lib/visit-stage.server";
+import { advanceToWaitingIfReady, consentStateOf, holdArrivedUntilConsent } from "@/lib/visit-stage.server";
 import {
   type Ctx,
   authorize,
@@ -435,6 +436,7 @@ export const getDashboard = createServerFn({ method: "GET" })
     let monthTreats = (monthTreatments.data ?? []) as any[];
     let prevMonthTreats = (prevMonthTreatments.data ?? []) as any[];
     let todayAppts = (todayAppointmentsRaw.data ?? []) as any[];
+    await holdArrivedUntilConsent(supabase, todayAppts);
     let unpaidDeposits = (unpaidDepositRaw.data ?? []) as any[];
     // A patient's next due date is the one on their most recent treatment that
     // carries one — the same rule the retention page and the patient list use.
@@ -929,11 +931,7 @@ export const getPatient = createServerFn({ method: "GET" })
       .map((a: any) => {
         const embedded = a.appointment_notes;
         const noteRow = Array.isArray(embedded) ? embedded[0] : embedded;
-        const fromTable = plainVisitNote(noteRow?.body);
-        const booking = plainVisitNote(
-          String(a.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, ""),
-        );
-        const body = fromTable || booking;
+        const body = plainVisitNote(noteRow?.body);
         if (!body) return null;
         return {
           appointmentId: a.id as string,
@@ -1001,7 +999,9 @@ export const getPatient = createServerFn({ method: "GET" })
         .order("starts_at", { ascending: true }),
     ]);
     const withRecord = new Set((sessions ?? []).map((s: any) => s.treatment_id).filter(Boolean));
-    const todayVisit = (todayAppts ?? []).find((a: any) => a.status !== "no_show") ?? null;
+    const visits = (todayAppts ?? []) as any[];
+    await holdArrivedUntilConsent(supabase, visits);
+    const todayVisit = visits.find((a: any) => a.status !== "no_show") ?? null;
 
     return {
       patient,
@@ -1024,7 +1024,7 @@ export const getPatient = createServerFn({ method: "GET" })
             id: todayVisit.id,
             startsAt: todayVisit.starts_at,
             treatment: todayVisit.treatment_name,
-            stage: todayVisit.stage ?? "booked",
+            stage: stageHeldForConsent(todayVisit.stage ?? "booked", consentStateOf(todayVisit as any)),
             practitionerName: (todayVisit as any).profiles?.full_name ?? null,
             consentState: consentStateOf(todayVisit as any),
           }
@@ -1137,7 +1137,9 @@ export const listAppointments = createServerFn({ method: "GET" })
       .lt("starts_at", data.to)
       .order("starts_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return (rows ?? []).map((a: any) => ({ ...a, consentState: consentStateOf(a) }));
+    const list = (rows ?? []) as any[];
+    await holdArrivedUntilConsent((context as Ctx).supabase, list);
+    return list.map((a: any) => ({ ...a, consentState: consentStateOf(a) }));
   });
 
 /** One formatting of an appointment time for everything patient-facing. */
@@ -1647,7 +1649,7 @@ export const getAppointmentConsent = createServerFn({ method: "GET" })
     const { data: appt, error } = await ctx.supabase
       .from("appointments")
       .select(
-        "id, stage, treatment_name, patient_id, consent_document_id, documents(id, title, body, status, signed_at, signed_name), treatment_catalogue(requires_consent), patients(first_name, last_name)",
+        "id, stage, treatment_name, patient_id, consent_document_id, documents(id, title, body, status, signed_at, signed_name, signature_data), treatment_catalogue(requires_consent), patients(first_name, last_name)",
       )
       .eq("id", data.appointment_id)
       .maybeSingle();
@@ -1667,25 +1669,35 @@ export const getAppointmentConsent = createServerFn({ method: "GET" })
         status: doc?.status ?? null,
         signedAt: doc?.signed_at ?? null,
         signedName: doc?.signed_name ?? null,
+        signatureData: typeof doc?.signature_data === "string" && doc.signature_data.startsWith("data:image/")
+          ? doc.signature_data
+          : null,
       },
     };
   });
 
 /**
  * Consent completed in clinic: the patient reads the form on the clinic's
- * device and types their name; the staff member present is recorded as the
+ * device and draws their signature; the staff member present is recorded as the
  * witness. Creates the consent document if none was issued, signs it, and
  * lets the arrival rule move the patient on to waiting.
  */
 export const completeConsentInClinic = createServerFn({ method: "POST" })
-  .validator((data: { appointment_id: string; signed_name: string }) =>
-    parseInput(schemas.CompleteConsentInClinic, data),
-  )
+  .validator((data: {
+    appointment_id: string;
+    signed_name: string;
+    signature_data?: string;
+    contraindications?: Record<string, "yes" | "no" | "na">;
+  }) => parseInput(schemas.CompleteConsentInClinic, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "completeConsentInClinic");
     const name = data.signed_name.trim().slice(0, 240);
+    const signature =
+      typeof data.signature_data === "string" && data.signature_data.startsWith("data:image/")
+        ? data.signature_data
+        : name;
     const { data: appt, error } = await ctx.supabase
       .from("appointments")
       .select("id, stage, patient_id, treatment_name, consent_document_id, documents(id, status)")
@@ -1726,9 +1738,10 @@ export const completeConsentInClinic = createServerFn({ method: "POST" })
           status: "signed",
           signed_at: new Date().toISOString(),
           signed_name: name,
-          signature_data: name,
+          signature_data: signature,
           viewed_at: new Date().toISOString(),
           witnessed_by: ctx.userId,
+          ...(data.contraindications ? { responses: { contraindications: data.contraindications } } : {}),
         })
         .eq("id", documentId)
         .neq("status", "signed");
@@ -4116,7 +4129,9 @@ export const submitHistoryUpdate = createServerFn({ method: "POST" })
   });
 
 export const signDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; signed_name: string }) => parseInput(schemas.SignDocument, data))
+  .validator((data: { id: string; signed_name: string; contraindications?: Record<string, "yes" | "no" | "na"> }) =>
+    parseInput(schemas.SignDocument, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -4139,6 +4154,7 @@ export const signDocument = createServerFn({ method: "POST" })
         signed_at: new Date().toISOString(),
         signed_name: name,
         signature_data: name,
+        ...(data.contraindications ? { responses: { contraindications: data.contraindications } } : {}),
       })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -6314,10 +6330,11 @@ export type CatalogueInput = {
   interval_days?: number | null;
   duration_minutes?: number | null;
   cooling_off_hours?: number | null;
-  requires_consent?: boolean;
-  active?: boolean;
-  aftercare_points?: string[];
-};
+      requires_consent?: boolean;
+      active?: boolean;
+      aftercare_points?: string[];
+      result_template?: string;
+    };
 
 /** Manager-only: create or update a treatment in the clinic catalogue. */
 export const saveCatalogueItem = createServerFn({ method: "POST" })
@@ -6339,6 +6356,7 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
       cooling_off_hours: data.cooling_off_hours ?? 0,
       requires_consent: data.requires_consent ?? true,
       active: data.active ?? true,
+      result_template: data.result_template?.trim() || null,
       ...(data.aftercare_points
         ? { aftercare_points: data.aftercare_points.map((x) => x.trim()).filter(Boolean) }
         : {}),
@@ -6522,24 +6540,12 @@ export const getAppointmentNote = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     await authorize(context as Ctx, "getAppointmentNote");
     const { supabase } = context as Ctx;
-    const [{ data: row, error }, { data: appt }] = await Promise.all([
-      supabase
-        .from("appointment_notes")
-        .select("body, updated_at, updated_by_label")
-        .eq("appointment_id", data.appointment_id)
-        .maybeSingle(),
-      supabase.from("appointments").select("notes").eq("id", data.appointment_id).maybeSingle(),
-    ]);
+    const { data: appt, error } = await supabase
+      .from("appointments")
+      .select("notes")
+      .eq("id", data.appointment_id)
+      .maybeSingle();
     if (error) throw new Error(error.message);
-    const visitBody = plainVisitNote(row?.body as string);
-    if (visitBody) {
-      return {
-        body: visitBody,
-        updatedAt: (row?.updated_at as string) ?? null,
-        updatedBy: (row?.updated_by_label as string) ?? null,
-      };
-    }
-    // Fall back to booking notes so both surfaces stay in sync.
     const bookingNotes = String((appt as { notes?: string | null } | null)?.notes ?? "");
     const withoutCancel = bookingNotes.replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim();
     return {
@@ -6562,18 +6568,34 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     await authorize(context as Ctx, "saveAppointmentNote");
-    return writeVisitNote(context as Ctx, data.appointment_id, data.body);
+    return writeBookingNote(context as Ctx, data.appointment_id, data.body);
   });
 
+/** Booking notes live on the appointment and are what the diary card shows. */
+async function writeBookingNote(ctx: Ctx, appointmentId: string, body: string) {
+  const { supabase } = ctx;
+  const { data: appt, error: readError } = await supabase
+    .from("appointments")
+    .select("notes")
+    .eq("id", appointmentId)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+  const prior = String((appt as { notes?: string | null } | null)?.notes ?? "");
+  const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
+  const next = cancelLine ? (body.trim() ? `${cancelLine}\n\n${body}` : cancelLine) : body || null;
+  const { error } = await supabase.from("appointments").update({ notes: next }).eq("id", appointmentId);
+  if (error) throw new Error(error.message);
+  return { body: plainVisitNote(body), updatedAt: new Date().toISOString(), updatedBy: null };
+}
+
 /**
- * The one write path for a visit note: upsert `appointment_notes` and keep
- * `appointments.notes` mirrored (preserving a cancel stamp). Shared by the
- * diary editor and page 2 of the treatment form.
+ * The visit note written on the treatment form. Stored on `appointment_notes`
+ * for the patient record, and not copied onto the booking note the diary shows.
  */
 async function writeVisitNote(ctx: Ctx, appointmentId: string, body: string) {
   const { supabase, userId } = ctx;
   const [{ data: appt }, { data: me }] = await Promise.all([
-    supabase.from("appointments").select("clinic_id, patient_id, notes").eq("id", appointmentId).maybeSingle(),
+    supabase.from("appointments").select("clinic_id, patient_id").eq("id", appointmentId).maybeSingle(),
     supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle(),
   ]);
   const { data: row, error } = await supabase
@@ -6593,11 +6615,6 @@ async function writeVisitNote(ctx: Ctx, appointmentId: string, body: string) {
     .select("body, updated_at, updated_by_label")
     .single();
   if (error) throw new Error(error.message);
-
-  const prior = String((appt as { notes?: string | null } | null)?.notes ?? "");
-  const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
-  const mirrored = cancelLine ? (body.trim() ? `${cancelLine}\n\n${body}` : cancelLine) : body || null;
-  await supabase.from("appointments").update({ notes: mirrored }).eq("id", appointmentId);
 
   return {
     body: plainVisitNote(row.body as string),
@@ -7121,7 +7138,7 @@ async function loadFormAppointment(ctx: Ctx, appointmentId: string) {
   const { data: appt, error } = await ctx.supabase
     .from("appointments")
     .select(
-      "id, clinic_id, starts_at, ends_at, stage, status, price, treatment_name, treatment_number, patient_id, practitioner_id, catalogue_id, consent_document_id, documents(id, title, status, signed_at, signed_name, witnessed_by), treatment_catalogue(name, category, requires_consent, interval_days, aftercare_points), patients(first_name, last_name, reference, date_of_birth, allergies, medications, conditions, phone, email), profiles(full_name)",
+      "id, clinic_id, starts_at, ends_at, stage, status, price, notes, treatment_name, treatment_number, patient_id, practitioner_id, catalogue_id, consent_document_id, documents(id, title, status, signed_at, signed_name, witnessed_by), treatment_catalogue(name, category, requires_consent, interval_days, aftercare_points, result_template), patients(first_name, last_name, reference, date_of_birth, allergies, medications, conditions, phone, email), profiles(full_name)",
     )
     .eq("id", appointmentId)
     .maybeSingle();
@@ -7187,15 +7204,8 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
     const patient = appt.patients ?? {};
     const consent = consentStateOf(appt);
 
-    const [{ data: session }, { data: prevNotes }, { data: lastSame }, { data: photos }, milestone] = await Promise.all([
+    const [{ data: session }, { data: lastSame }, { data: photos }, milestone] = await Promise.all([
       ctx.supabase.from("treatment_sessions").select(SESSION_SELECT).eq("appointment_id", appt.id).maybeSingle(),
-      ctx.supabase
-        .from("appointment_notes")
-        .select("appointment_id, body, updated_at, updated_by_label, appointments(starts_at, treatment_name)")
-        .eq("patient_id", appt.patient_id)
-        .neq("appointment_id", appt.id)
-        .order("updated_at", { ascending: false })
-        .limit(5),
       ctx.supabase
         .from("treatments")
         .select("performed_at, product, dose, area, notes, profiles(full_name)")
@@ -7255,15 +7265,8 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
       },
       canStart: canStartTreatment({ stage: appt.stage ?? "booked", consent }),
       session: sessionView(session),
-      previousNotes: (prevNotes ?? [])
-        .filter((n: any) => plainVisitNote(n.body).trim())
-        .map((n: any) => ({
-          appointmentId: n.appointment_id,
-          startsAt: n.appointments?.starts_at ?? n.updated_at,
-          treatment: n.appointments?.treatment_name ?? null,
-          body: plainVisitNote(n.body),
-          by: n.updated_by_label ?? null,
-        })),
+      bookingNote: String(appt.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim(),
+      resultFields: fieldsFor(appt.treatment_name, appt.treatment_catalogue?.result_template ?? null),
       lastSameTreatment: lastSame
         ? {
             performedAt: (lastSame as any).performed_at,
@@ -7398,7 +7401,8 @@ export const completeTreatment = createServerFn({ method: "POST" })
       return { ok: true, treatmentId: session.treatment_id as string, stage: "complete" as const };
     }
     const now = new Date().toISOString();
-    const results = (session.results ?? {}) as { area?: string; product?: string; dose?: string };
+    const results = (session.results ?? {}) as Record<string, string>;
+    const folded = foldResults(fieldsFor(appt.treatment_name, appt.treatment_catalogue?.result_template ?? null), results);
     const practitionerId = appt.practitioner_id ?? ctx.userId;
     const supabaseAdmin = await adminClient(context);
     const { data: rateRow } = await supabaseAdmin.from("profiles").select("commission_rate").eq("id", practitionerId).maybeSingle();
@@ -7416,9 +7420,9 @@ export const completeTreatment = createServerFn({ method: "POST" })
         practitioner_id: practitionerId,
         appointment_id: appt.id,
         name: appt.treatment_name,
-        product: results.product?.trim() || null,
-        dose: results.dose?.trim() || null,
-        area: results.area?.trim() || null,
+        product: folded.product,
+        dose: folded.dose,
+        area: folded.area,
         notes: session.treatment_notes ?? null,
         price: appt.price ?? null,
         performed_at: appt.starts_at,
@@ -7527,7 +7531,7 @@ export const getTreatmentRecord = createServerFn({ method: "GET" })
     const { data: treatment, error } = await ctx.supabase
       .from("treatments")
       .select(
-        "*, profiles(full_name), patients(first_name, last_name, reference, date_of_birth), appointments(id, starts_at, ends_at, treatment_number), treatment_catalogue(category)",
+        "*, profiles(full_name), patients(first_name, last_name, reference, date_of_birth), appointments(id, starts_at, ends_at, treatment_number), treatment_catalogue(category, result_template)",
       )
       .eq("id", data.treatment_id)
       .maybeSingle();
@@ -7552,6 +7556,7 @@ export const getTreatmentRecord = createServerFn({ method: "GET" })
         id: t.id,
         name: t.name,
         category: t.treatment_catalogue?.category ?? null,
+        resultTemplate: t.treatment_catalogue?.result_template ?? null,
         performedAt: t.performed_at,
         nextDueAt: t.next_due_at ?? null,
         product: t.product ?? null,

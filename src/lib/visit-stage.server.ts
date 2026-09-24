@@ -14,7 +14,7 @@
  * session, the clinic-scoped admin client (portal signing) and the raw
  * service client behind the public link.
  */
-import { consentReady, consentState, type ConsentState } from "@/lib/visit-stage";
+import { consentReady, consentState, stageHeldForConsent, type ConsentState } from "@/lib/visit-stage";
 
 type Db = { from: (table: string) => any };
 
@@ -35,6 +35,20 @@ export function consentStateOf(row: {
     documentStatus: row.documents?.status ?? null,
     requiresConsent: row.treatment_catalogue?.requires_consent ?? null,
   });
+}
+
+/**
+ * Waiting without a signed form is not a valid stage. Pull those visits back
+ * to arrived so the diary, the dock and the schedule all stop at arrival.
+ */
+export async function holdArrivedUntilConsent(db: Db, rows: any[]) {
+  const held = (rows ?? []).filter((row) => stageHeldForConsent(row?.stage, consentStateOf(row)) !== row?.stage);
+  if (held.length === 0) return;
+  const ids = held.map((row) => row.id).filter(Boolean);
+  if (ids.length === 0) return;
+  const { error } = await db.from("appointments").update({ stage: "arrived" }).in("id", ids).eq("stage", "waiting");
+  if (error) throw new Error(error.message);
+  for (const row of held) row.stage = "arrived";
 }
 
 export async function advanceToWaitingIfReady(db: Db, lookup: Lookup): Promise<AdvanceResult> {

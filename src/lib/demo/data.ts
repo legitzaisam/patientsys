@@ -1,4 +1,5 @@
 import { DEMO_NOW } from "@/lib/demo/enabled";
+import { templateFor } from "@/lib/treatment-results";
 import { defaultDurationMinutes } from "@/lib/treatment-duration";
 
 /**
@@ -259,6 +260,7 @@ type CatalogueSpec = {
   description: string;
   /** Aftercare read out after this treatment; empty uses the category defaults. */
   aftercare?: string[];
+  template?: string;
 };
 
 const CATALOGUE_SPECS: CatalogueSpec[] = [
@@ -370,6 +372,158 @@ const CATALOGUE_SPECS: CatalogueSpec[] = [
     description: "Course of six, Nd:YAG.",
   },
   {
+    name: "Tear Trough Filler",
+    category: "Injectables",
+    price: 400,
+    interval: 365,
+    consent: true,
+    description: "Under-eye hyaluronic acid, cannula technique.",
+  },
+  {
+    name: "Chin Filler",
+    category: "Injectables",
+    price: 380,
+    interval: 365,
+    consent: true,
+    description: "Chin projection, 1–2ml hyaluronic acid.",
+  },
+  {
+    name: "Non-surgical Rhinoplasty",
+    category: "Injectables",
+    price: 450,
+    interval: 365,
+    consent: true,
+    description: "Nasal bridge and tip contouring with filler.",
+  },
+  {
+    name: "Skin Booster",
+    category: "Skin Boosters",
+    price: 280,
+    interval: 180,
+    consent: true,
+    description: "Hyaluronic acid skin quality course.",
+  },
+  {
+    name: "Microneedling",
+    category: "Skin",
+    price: 220,
+    interval: 42,
+    consent: true,
+    description: "Collagen induction without PRP.",
+  },
+  {
+    name: "PRP",
+    category: "Skin",
+    price: 350,
+    interval: 90,
+    consent: true,
+    description: "Platelet-rich plasma, injected or applied.",
+  },
+  {
+    name: "Dermaplaning",
+    category: "Skin",
+    price: 90,
+    interval: 28,
+    consent: false,
+    description: "Manual exfoliation with a sterile blade.",
+  },
+  {
+    name: "LED Light Therapy",
+    category: "Skin",
+    price: 60,
+    interval: 14,
+    consent: false,
+    description: "Red or blue light session.",
+  },
+  {
+    name: "Laser Skin Resurfacing",
+    category: "Laser",
+    price: 450,
+    interval: 90,
+    consent: true,
+    description: "Fractional laser for texture and tone.",
+  },
+  {
+    name: "IPL",
+    category: "Laser",
+    price: 200,
+    interval: 28,
+    consent: true,
+    description: "Intense pulsed light for pigment and redness.",
+  },
+  {
+    name: "Fat Dissolving",
+    category: "Injectables",
+    price: 300,
+    interval: 42,
+    consent: true,
+    description: "Injectable fat reduction, usually under the chin.",
+  },
+  {
+    name: "Mesotherapy",
+    category: "Injectables",
+    price: 220,
+    interval: 28,
+    consent: true,
+    description: "Superficial cocktail of vitamins and hyaluronic acid.",
+  },
+  {
+    name: "Vitamin Injection",
+    category: "Wellness",
+    price: 45,
+    interval: 30,
+    consent: false,
+    description: "Intramuscular vitamin, usually B12.",
+  },
+  {
+    name: "IV Drip",
+    category: "Wellness",
+    price: 150,
+    interval: 30,
+    consent: true,
+    description: "Intravenous vitamin infusion.",
+  },
+  {
+    name: "Brow Tattoo",
+    category: "Semi-permanent makeup",
+    price: 350,
+    interval: 365,
+    consent: true,
+    description: "Powder or hair-stroke brows.",
+  },
+  {
+    name: "Lip Blush",
+    category: "Semi-permanent makeup",
+    price: 350,
+    interval: 365,
+    consent: true,
+    description: "Semi-permanent lip colour.",
+  },
+  {
+    name: "Eyeliner Tattoo",
+    category: "Semi-permanent makeup",
+    price: 280,
+    interval: 365,
+    consent: true,
+    description: "Lash-line enhancement.",
+  },
+  {
+    name: "Laser Tattoo Removal",
+    category: "Laser",
+    price: 150,
+    interval: 42,
+    consent: true,
+    description: "Q-switched or picosecond laser, per session.",
+  },
+  {
+    name: "Follow-up Review",
+    category: "Consultation",
+    price: 0,
+    interval: null,
+    consent: false,
+    description: "Review of a recent treatment.",
+  },
+  {
     name: "Vitamin B12 Injection",
     category: "Wellness",
     price: 45,
@@ -391,6 +545,7 @@ export const catalogue: Row[] = CATALOGUE_SPECS.map((spec) => ({
   duration_minutes: defaultDurationMinutes(spec.name),
   cooling_off_hours: spec.consent ? 48 : 0,
   requires_consent: spec.consent,
+  result_template: spec.template ?? templateFor(spec.name).id,
   aftercare_points: spec.aftercare ?? [],
   active: spec.active ?? true,
   created_at: iso(-700),
@@ -3348,18 +3503,21 @@ const PRE_READ_NOTES = [
       const body = underWay
         ? VISIT_NOTES[noted.size % VISIT_NOTES.length]
         : PRE_READ_NOTES[preReads++ % PRE_READ_NOTES.length];
-      appointmentNotes.push({
-        id: id("r1"),
-        appointment_id: booking["id"],
-        clinic_id: CLINIC_ID,
-        patient_id: booking["patient_id"],
-        body,
-        updated_by: booking["practitioner_id"],
-        updated_by_label: practitioner?.["full_name"] ?? "Practitioner",
-        created_at: booking["starts_at"],
-        updated_at: booking["updated_at"],
-      });
-      booking["notes"] = String(body).replace(/<\/?p>/g, "");
+      if (underWay) {
+        appointmentNotes.push({
+          id: id("r1"),
+          appointment_id: booking["id"],
+          clinic_id: CLINIC_ID,
+          patient_id: booking["patient_id"],
+          body,
+          updated_by: booking["practitioner_id"],
+          updated_by_label: practitioner?.["full_name"] ?? "Practitioner",
+          created_at: booking["starts_at"],
+          updated_at: booking["updated_at"],
+        });
+      } else {
+        booking["notes"] = String(body).replace(/<\/?p>/g, "");
+      }
       noted.add(booking["id"] as string);
     }
   }
@@ -3372,18 +3530,7 @@ const PRE_READ_NOTES = [
     const when = new Date(booking["starts_at"] as string);
     if (when <= NOW || when.getTime() > NOW.getTime() + 14 * 86400000) continue;
     if (ahead++ % 3 !== 0) continue;
-    const practitioner = profiles.find((p) => p["id"] === booking["practitioner_id"]);
-    appointmentNotes.push({
-      id: id("r1"),
-      appointment_id: booking["id"],
-      clinic_id: CLINIC_ID,
-      patient_id: booking["patient_id"],
-      body: PRE_READ_NOTES[preReads++ % PRE_READ_NOTES.length],
-      updated_by: booking["practitioner_id"],
-      updated_by_label: practitioner?.["full_name"] ?? "Practitioner",
-      created_at: iso(-1),
-      updated_at: iso(-1),
-    });
+    booking["notes"] = PRE_READ_NOTES[preReads++ % PRE_READ_NOTES.length];
     noted.add(booking["id"] as string);
   }
   for (const booking of appointments) {
@@ -3742,11 +3889,9 @@ export const treatmentSessions: Row[] = [];
 
 {
   const STANDARD_CHECKS = {
-    history_unchanged: { answer: "yes" },
-    not_pregnant: { answer: "yes" },
-    no_recent_actives: { answer: "yes" },
-    allergies_confirmed: { answer: "yes" },
-    expectations_agreed: { answer: "yes" },
+    changes_since_last: { answer: "no" },
+    anything_today: { answer: "no" },
+    reason_to_wait: { answer: "no" },
   };
   const todayKey = TODAY.toDateString();
   for (const booking of appointments) {

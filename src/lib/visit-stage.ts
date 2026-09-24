@@ -7,9 +7,10 @@
  *   booked → arrived → waiting → in_treatment → aftercare → complete
  *   no_show sits beside the line.
  *
- * The feedback's rule: a patient is only "waiting" once they have arrived AND
- * their consent is complete. If consent is outstanding when they arrive,
- * reception has them sign it in clinic, and signing is what moves them on.
+ * A patient is only "waiting" once they have arrived AND a consent form is
+ * signed. That holds for every treatment, including ones the catalogue does
+ * not require a form for in advance: if the diary still says consent is due,
+ * the journey stops at "arrived" until they sign in clinic.
  * From there the treatment form drives in_treatment → aftercare → complete.
  */
 
@@ -31,8 +32,18 @@ export function consentState(input: ConsentInput): ConsentState {
   return "outstanding";
 }
 
+/**
+ * Whether the visit may leave "arrived". Only a signed form counts — a
+ * catalogue flag of "not required" still shows as consent due until they sign.
+ */
 export function consentReady(state: ConsentState) {
-  return state === "signed" || state === "not_required";
+  return state === "signed";
+}
+
+/** Waiting without a signed consent is held at arrived. Later stages are left as recorded. */
+export function stageHeldForConsent(stage: VisitStage, consent: ConsentState): VisitStage {
+  if (stage === "waiting" && !consentReady(consent)) return "arrived";
+  return stage;
 }
 
 /** Where an arriving patient lands: waiting if consent is done, else arrived. */
@@ -92,41 +103,85 @@ export const STAGE_LABEL: Record<VisitStage, string> = {
   no_show: "No show",
 };
 
-/** The standard pre-treatment checks read through on page 1 of the form. */
+/** Asked on the consent form, before treatment or on arrival if it is still unsigned. A "yes" is a contraindication. */
+export const CONTRAINDICATIONS: { key: string; label: string; hint: string }[] = [
+  {
+    key: "pregnant_breastfeeding",
+    label: "Are you pregnant, trying to conceive, or breastfeeding?",
+    hint: "Delay toxin, filler, peels, laser and most energy devices.",
+  },
+  {
+    key: "blood_thinners",
+    label: "Are you taking a blood thinner, or do you have a bleeding or clotting disorder?",
+    hint: "Aspirin, warfarin, apixaban, rivaroxaban, clopidogrel. Do not stop a prescribed thinner without the prescriber.",
+  },
+  {
+    key: "active_infection",
+    label: "Is there an infection, cold sore, or broken skin in the area to be treated?",
+    hint: "Postpone until it has settled. An active cold sore delays lip and perioral work.",
+  },
+  {
+    key: "herpes_history",
+    label: "Have you ever had cold sores?",
+    hint: "Ask before lip filler, peels and laser. Antiviral cover may be needed.",
+  },
+  {
+    key: "neuromuscular",
+    label: "Do you have a neuromuscular condition, such as myasthenia gravis?",
+    hint: "Botulinum toxin is contraindicated.",
+  },
+  {
+    key: "product_allergy",
+    label: "Any allergy to lidocaine, hyaluronidase, or the product planned today?",
+    hint: "Check before filler, including emergency dissolution.",
+  },
+  {
+    key: "keloid",
+    label: "Do you form keloid or hypertrophic scars?",
+    hint: "Caution with needling, filler and energy devices.",
+  },
+  {
+    key: "isotretinoin",
+    label: "Have you taken isotretinoin in the last 12 months, or a strong retinoid recently?",
+    hint: "Peels and laser usually wait. Pause topical retinoids for several days.",
+  },
+  {
+    key: "recent_skin",
+    label: "Any recent sunburn, peel, or other treatment in this area?",
+    hint: "Wait until the skin has recovered.",
+  },
+  {
+    key: "previous_reaction",
+    label: "Have you reacted badly to toxin, filler, a peel, or laser before?",
+    hint: "Including vascular compromise, prolonged swelling, or a result to avoid repeating.",
+  },
+];
+
+/** Three checks the practitioner confirms in the room, immediately before starting. A "yes" needs a note. */
 export const PRE_TREATMENT_CHECKS: { key: string; label: string; hint: string }[] = [
   {
-    key: "history_unchanged",
-    label: "Medical history and medications unchanged since last visit",
-    hint: "Ask about new diagnoses, prescriptions, supplements and blood thinners.",
+    key: "changes_since_last",
+    label: "Any change in health, medication, or allergies since the last treatment?",
+    hint: "Including anything new since the consent form was signed.",
   },
   {
-    key: "not_pregnant",
-    label: "Not pregnant, trying, or breastfeeding",
-    hint: "Applies to injectables, peels, retinoids and most energy-based treatments.",
+    key: "anything_today",
+    label: "Anything new today — illness, a skin change, or a recent treatment — to know before starting?",
+    hint: "What you can see now, and what the patient has just told you.",
   },
   {
-    key: "no_recent_actives",
-    label: "No recent sun exposure, retinoids or exfoliating actives",
-    hint: "Typically 48 hours for actives, two weeks for sun, per the treatment.",
-  },
-  {
-    key: "allergies_confirmed",
-    label: "Allergies confirmed and products checked against them",
-    hint: "Read the allergies on the record back to the patient.",
-  },
-  {
-    key: "expectations_agreed",
-    label: "Treatment plan and expected result agreed",
-    hint: "Including areas, product, dose and what to expect over the next two weeks.",
+    key: "reason_to_wait",
+    label: "Any reason not to go ahead with the treatment agreed?",
+    hint: "If yes, pause and record why before you start.",
   },
 ];
 
 export type PreCheckAnswer = { answer: "yes" | "no" | "na"; note?: string };
 export type PreChecks = Record<string, PreCheckAnswer>;
 
-/** Any "no" on a pre-check is a flag the practitioner has to have addressed. */
+/** Any "yes" is something to settle before treatment starts. */
 export function preCheckFlags(checks: PreChecks) {
-  return PRE_TREATMENT_CHECKS.filter((c) => checks[c.key]?.answer === "no");
+  return PRE_TREATMENT_CHECKS.filter((c) => checks[c.key]?.answer === "yes");
 }
 
 /** The consent wording used when a form is created in clinic on the spot. */

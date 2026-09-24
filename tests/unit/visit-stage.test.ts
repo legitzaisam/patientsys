@@ -30,7 +30,7 @@ describe("consentState", () => {
 describe("stageAfterArrival", () => {
   it("moves straight to waiting when consent is done, else stays arrived", () => {
     expect(stageAfterArrival("signed")).toBe("waiting");
-    expect(stageAfterArrival("not_required")).toBe("waiting");
+    expect(stageAfterArrival("not_required")).toBe("arrived");
     expect(stageAfterArrival("outstanding")).toBe("arrived");
   });
 });
@@ -42,11 +42,11 @@ describe("manualStageOptions", () => {
     expect(waiting?.reason).toMatch(/consent/i);
   });
 
-  it("offers waiting once consent is complete", () => {
+  it("offers waiting only once a form is signed", () => {
     expect(manualStageOptions({ current: "arrived", consent: "signed" }).find((o) => o.key === "waiting")?.enabled).toBe(true);
     expect(
       manualStageOptions({ current: "arrived", consent: "not_required" }).find((o) => o.key === "waiting")?.enabled,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("routes in_treatment through the form and keeps the rest free", () => {
@@ -75,13 +75,13 @@ describe("canStartTreatment", () => {
 });
 
 describe("preCheckFlags", () => {
-  it("flags only the checks answered no", () => {
+  it("flags only the questions answered yes", () => {
     const flags = preCheckFlags({
-      history_unchanged: { answer: "no", note: "Started warfarin" },
-      not_pregnant: { answer: "yes" },
-      allergies_confirmed: { answer: "na" },
+      changes_since_last: { answer: "yes", note: "Started a new blood thinner" },
+      anything_today: { answer: "no" },
+      reason_to_wait: { answer: "na" },
     });
-    expect(flags.map((f) => f.key)).toEqual(["history_unchanged"]);
+    expect(flags.map((f) => f.key)).toEqual(["changes_since_last"]);
   });
 });
 
