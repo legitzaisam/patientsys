@@ -502,6 +502,7 @@ export type Database = {
           treatment_id: string | null;
           updated_at: string;
           viewed_at: string | null;
+          witnessed_by: string | null;
         };
         Insert: {
           access_token?: string;
@@ -525,6 +526,7 @@ export type Database = {
           treatment_id?: string | null;
           updated_at?: string;
           viewed_at?: string | null;
+          witnessed_by?: string | null;
         };
         Update: {
           access_token?: string;
@@ -548,6 +550,7 @@ export type Database = {
           treatment_id?: string | null;
           updated_at?: string;
           viewed_at?: string | null;
+          witnessed_by?: string | null;
         };
         Relationships: [
           {
@@ -2001,9 +2004,108 @@ export type Database = {
           },
         ];
       };
+      treatment_sessions: {
+        Row: {
+          aftercare_at: string | null;
+          aftercare_extra: string | null;
+          aftercare_points: Json;
+          appointment_id: string;
+          catalogue_id: string | null;
+          clinic_id: string;
+          completed_at: string | null;
+          created_at: string;
+          id: string;
+          patient_id: string;
+          practitioner_id: string | null;
+          pre_checks: Json;
+          results: Json;
+          started_at: string | null;
+          status: string;
+          treating_at: string | null;
+          treatment_id: string | null;
+          treatment_notes: string | null;
+          updated_at: string;
+          visit_notes: string | null;
+        };
+        Insert: {
+          aftercare_at?: string | null;
+          aftercare_extra?: string | null;
+          aftercare_points?: Json;
+          appointment_id: string;
+          catalogue_id?: string | null;
+          clinic_id: string;
+          completed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          patient_id: string;
+          practitioner_id?: string | null;
+          pre_checks?: Json;
+          results?: Json;
+          started_at?: string | null;
+          status?: string;
+          treating_at?: string | null;
+          treatment_id?: string | null;
+          treatment_notes?: string | null;
+          updated_at?: string;
+          visit_notes?: string | null;
+        };
+        Update: {
+          aftercare_at?: string | null;
+          aftercare_extra?: string | null;
+          aftercare_points?: Json;
+          appointment_id?: string;
+          catalogue_id?: string | null;
+          clinic_id?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          patient_id?: string;
+          practitioner_id?: string | null;
+          pre_checks?: Json;
+          results?: Json;
+          started_at?: string | null;
+          status?: string;
+          treating_at?: string | null;
+          treatment_id?: string | null;
+          treatment_notes?: string | null;
+          updated_at?: string;
+          visit_notes?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "treatment_sessions_appointment_id_fkey";
+            columns: ["appointment_id"];
+            isOneToOne: true;
+            referencedRelation: "appointments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "treatment_sessions_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "treatment_sessions_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "treatment_sessions_treatment_id_fkey";
+            columns: ["treatment_id"];
+            isOneToOne: false;
+            referencedRelation: "treatments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       treatment_catalogue: {
         Row: {
           active: boolean;
+          aftercare_points: string[];
           category: string | null;
           clinic_id: string;
           cooling_off_hours: number;
@@ -2019,6 +2121,7 @@ export type Database = {
         };
         Insert: {
           active?: boolean;
+          aftercare_points?: string[];
           category?: string | null;
           clinic_id: string;
           cooling_off_hours?: number;
@@ -2034,6 +2137,7 @@ export type Database = {
         };
         Update: {
           active?: boolean;
+          aftercare_points?: string[];
           category?: string | null;
           clinic_id?: string;
           cooling_off_hours?: number;
@@ -2132,6 +2236,7 @@ export type Database = {
       };
       treatment_photos: {
         Row: {
+          appointment_id: string | null;
           caption: string | null;
           clinic_id: string;
           created_at: string;
@@ -2145,6 +2250,7 @@ export type Database = {
           visible_to_patient: boolean;
         };
         Insert: {
+          appointment_id?: string | null;
           caption?: string | null;
           clinic_id: string;
           created_at?: string;
@@ -2158,6 +2264,7 @@ export type Database = {
           visible_to_patient?: boolean;
         };
         Update: {
+          appointment_id?: string | null;
           caption?: string | null;
           clinic_id?: string;
           created_at?: string;
@@ -2292,6 +2399,7 @@ export type Database = {
       };
       treatments: {
         Row: {
+          appointment_id: string | null;
           area: string | null;
           catalogue_id: string | null;
           clinic_id: string;
@@ -2312,6 +2420,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          appointment_id?: string | null;
           area?: string | null;
           catalogue_id?: string | null;
           clinic_id: string;
@@ -2332,6 +2441,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          appointment_id?: string | null;
           area?: string | null;
           catalogue_id?: string | null;
           clinic_id?: string;

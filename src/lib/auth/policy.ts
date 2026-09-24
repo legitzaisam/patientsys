@@ -79,9 +79,17 @@ export const POLICY = {
   listTreatmentPlans: { kind: "staff" },
   createTreatmentPlan: { kind: "capability", key: "treatments.record" },
   updatePlanMilestone: { kind: "capability", key: "treatments.record" },
+  getTreatmentSession: { kind: "staff" },
+  startTreatment: { kind: "capability", key: "treatments.record" },
+  moveToAftercare: { kind: "capability", key: "treatments.record" },
+  completeTreatment: { kind: "capability", key: "treatments.record" },
+  saveTreatmentSessionDraft: { kind: "capability", key: "treatments.record" },
+  getTreatmentRecord: { kind: "staff" },
   addPhoto: { kind: "capability", key: "photos.manage" },
   sendDocument: { kind: "capability", key: "documents.send" },
   resendDocument: { kind: "capability", key: "documents.send" },
+  getAppointmentConsent: { kind: "staff" },
+  completeConsentInClinic: { kind: "capability", key: "documents.send" },
 
   /* Patient messaging. The portal composer calls sendMessage as the patient, so
      the capability applies to the staff side only. */

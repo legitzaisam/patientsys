@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ElementType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   BellRing,
   CalendarClock,
@@ -10,12 +10,17 @@ import {
   ChevronRight,
   ChevronUp,
   Clock,
+  Hourglass,
+  ShieldAlert,
+  Sparkles,
   TriangleAlert,
   UserCheck,
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getDashboard, logCallAttempt, updateAppointmentState } from "@/lib/clinic.functions";
+import { useIdentity } from "@/lib/use-identity";
+import { ConsentInClinicDialog } from "@/components/consent-in-clinic-dialog";
 import {
   isArrivalAlertSnoozed,
   loadArrivalAlertSnoozes,
@@ -94,7 +99,30 @@ const phaseMeta: Record<
     pill: "bg-[#e0a8c4] text-[#7a2a4a] ring-destructive/40",
     hint: "Over 15 minutes late — contact the patient to reschedule.",
   },
+  // Arrived, but consent is still outstanding: reception has them sign here.
+  consent: {
+    label: "Consent needed",
+    icon: ShieldAlert,
+    wash: "bg-[rgba(232,196,154,0.52)]",
+    ring: "ring-[rgba(224,154,92,0.45)]",
+    badge: "bg-[#e8c49a] text-[#7a4518]",
+    pill: "bg-[#e8c49a] text-[#7a4518] ring-[rgba(224,154,92,0.45)]",
+    hint: "Arrived without signed consent. Have them sign on this device to move to waiting.",
+  },
+  // Checked in and consented: the practitioner's nudge to start.
+  waiting: {
+    label: "Waiting",
+    icon: Hourglass,
+    wash: "bg-[rgba(238,212,136,0.5)]",
+    ring: "ring-accent/50",
+    badge: "bg-accent-soft text-accent-ink",
+    pill: "bg-accent-soft text-accent-ink ring-accent/50",
+    hint: "Consent complete. Start treatment when you are ready.",
+  },
 };
+
+/** Highest first: the practitioner's start nudge outranks everything. */
+const PHASE_ORDER: Phase[] = ["due", "arrival", "late", "consent", "overdue", "waiting"];
 
 export function ArrivalAlerts({
   roles = [],
@@ -115,8 +143,11 @@ export function ArrivalAlerts({
 }) {
   void roles;
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { data: identity } = useIdentity();
   const fetchDashboard = useServerFn(getDashboard);
   const logCall = useServerFn(logCallAttempt);
+  const [consentAppt, setConsentAppt] = useState<any | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [collapsed, setCollapsed] = useState(false);
   /** Snooze map (appointment id → until/phase); mirrored in sessionStorage for all pages. */
@@ -196,7 +227,11 @@ export function ArrivalAlerts({
 
   const alerts = useMemo(() => {
     const list = (data?.todayAppointments ?? []) as any[];
-    return list
+    const byStart = (x: { appt: any }, y: { appt: any }) =>
+      new Date(x.appt.starts_at).getTime() - new Date(y.appt.starts_at).getTime();
+
+    // Arrival prompts: booked slots inside the check-in window.
+    const arrivals = list
       .filter((a) => {
         const stage = a.stage ?? "booked";
         if (stage !== "booked") return false;
@@ -205,8 +240,29 @@ export function ArrivalAlerts({
         return phaseOf(new Date(a.starts_at).getTime(), now) !== null;
       })
       .map((a) => ({ appt: a, phase: phaseOf(new Date(a.starts_at).getTime(), now)! }))
-      .sort((a, b) => new Date(a.appt.starts_at).getTime() - new Date(b.appt.starts_at).getTime());
-  }, [data, now, noShowAppt]);
+      .sort(byStart);
+
+    // Arrived without consent: for whoever can take consent (documents.send).
+    const canConsent = Boolean(identity?.isStaff);
+    const consents = canConsent
+      ? list
+          .filter((a) => (a.stage ?? "booked") === "arrived" && a.status !== "cancelled" && a.consentState === "outstanding")
+          .map((a) => ({ appt: a, phase: "consent" as Phase }))
+          .sort(byStart)
+      : [];
+
+    // Waiting: the appointment's practitioner sees their own; managers see all.
+    const waiting = list
+      .filter((a) => {
+        if ((a.stage ?? "booked") !== "waiting" || a.status === "cancelled") return false;
+        if (identity?.isManager) return true;
+        return Boolean(identity?.userId) && a.practitioner_id === identity?.userId;
+      })
+      .map((a) => ({ appt: a, phase: "waiting" as Phase }))
+      .sort(byStart);
+
+    return [...waiting, ...consents, ...arrivals];
+  }, [data, now, noShowAppt, identity?.isStaff, identity?.isManager, identity?.userId]);
 
   const visible = alerts.filter(
     (a) => !isArrivalAlertSnoozed(a.appt.id, a.phase, now, snoozes),
@@ -218,10 +274,9 @@ export function ArrivalAlerts({
   const loaded = data !== undefined;
   const visibleCount = alerts.filter((x) => !isArrivalAlertSnoozed(x.appt.id, x.phase, now, snoozes)).length;
   const mostUrgentPhase = useMemo<Phase>(() => {
-    const order: Phase[] = ["due", "arrival", "late", "overdue"];
     let highest: Phase = "due";
     for (const a of visible) {
-      if (order.indexOf(a.phase) > order.indexOf(highest)) highest = a.phase;
+      if (PHASE_ORDER.indexOf(a.phase) > PHASE_ORDER.indexOf(highest)) highest = a.phase;
     }
     return highest;
   }, [visible]);
@@ -244,12 +299,33 @@ export function ArrivalAlerts({
     />
   ) : null;
 
-  if (visible.length === 0) return noShowDialog;
+  const consentDialog = (
+    <ConsentInClinicDialog
+      appointmentId={consentAppt?.id ?? null}
+      open={Boolean(consentAppt)}
+      onOpenChange={(o) => !o && setConsentAppt(null)}
+      onSigned={() => setCursor(0)}
+    />
+  );
+
+  if (visible.length === 0)
+    return (
+      <>
+        {noShowDialog}
+        {consentDialog}
+      </>
+    );
 
   const index = Math.min(cursor, visible.length - 1);
   const current = visible[index]!;
   const { appt: a, phase } = current;
   const start = new Date(a.starts_at).getTime();
+  const sinceLabel =
+    a.updated_at ? new Date(a.updated_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : null;
+  const openTreatmentForm = () => {
+    onRequestCollapse?.();
+    void navigate({ to: "/patients/$id", params: { id: a.patient_id }, search: { treat: a.id } });
+  };
   const name = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
   const firstName = name.split(" ")[0] ?? "Patient";
   const time = new Date(a.starts_at).toLocaleTimeString("en-GB", {
@@ -263,7 +339,9 @@ export function ArrivalAlerts({
       ? `${minutes(start - now)} min`
       : phase === "late"
         ? `${minutes(start + OVERDUE_MS - now)} min left`
-        : time;
+        : phase === "waiting" && sinceLabel
+          ? `since ${sinceLabel}`
+          : time;
 
   if (collapsed && variant !== "panel") {
     const pill = phaseMeta[mostUrgentPhase];
@@ -274,7 +352,7 @@ export function ArrivalAlerts({
           type="button"
           ref={collapsedBtnRef}
           aria-expanded={false}
-          aria-label={`Show ${visible.length} arrival alert${visible.length > 1 ? "s" : ""}`}
+          aria-label={`Show ${visible.length} alert${visible.length > 1 ? "s" : ""}`}
           onClick={() => setCollapsed(false)}
           className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-full px-3.5 text-xs font-semibold shadow-glass ring-1 transition-all hover:-translate-y-0.5 ${pill.pill}`}
         >
@@ -359,8 +437,14 @@ export function ArrivalAlerts({
             </div>
           </div>
 
-          <div className="relative mt-2.5 min-w-0">
-            <p className="text-xs font-semibold text-foreground">Has {firstName} arrived?</p>
+          <div className="relative mt-2.5 min-w-0" data-qc={`dock-card-${phase}`}>
+            <p className="text-xs font-semibold text-foreground">
+              {phase === "waiting"
+                ? `${firstName} is waiting`
+                : phase === "consent"
+                  ? `${firstName} has arrived — consent outstanding`
+                  : `Has ${firstName} arrived?`}
+            </p>
             <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5 truncate">
               <Link
                 to="/patients/$id"
@@ -400,33 +484,71 @@ export function ArrivalAlerts({
             </p>
           </div>
 
-          <div className="relative mt-3 flex gap-2">
-            <Button
-              size="sm"
-              className="h-8 flex-1 px-3 text-xs"
-              disabled={setState.isPending}
-              onClick={() => {
-                setState.mutate({ data: { id: a.id, stage: "arrived" } });
-                setCursor(0);
-              }}
-            >
-              <UserCheck className="h-3.5 w-3.5" /> Arrived
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 flex-1 px-3 text-xs"
-              onClick={() => {
-                setNoShowAppt(a);
-                setCursor(0);
-              }}
-            >
-              <UserX className="h-3.5 w-3.5" /> No show
-            </Button>
-          </div>
+          {phase === "waiting" ? (
+            <div className="relative mt-3 flex gap-2">
+              <Button size="sm" className="h-8 flex-1 px-3 text-xs" data-qc="dock-start-treatment" onClick={openTreatmentForm}>
+                <Sparkles className="h-3.5 w-3.5" /> Start treatment
+              </Button>
+              <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs">
+                <Link to="/patients/$id" params={{ id: a.patient_id }}>
+                  Record
+                </Link>
+              </Button>
+            </div>
+          ) : phase === "consent" ? (
+            <div className="relative mt-3 flex gap-2">
+              <Button
+                size="sm"
+                className="h-8 flex-1 px-3 text-xs"
+                data-qc="dock-complete-consent"
+                onClick={() => setConsentAppt(a)}
+              >
+                <ShieldAlert className="h-3.5 w-3.5" /> Complete consent
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs"
+                disabled={setState.isPending}
+                title="Send the patient back to booked (they have not checked in after all)"
+                onClick={() => {
+                  setState.mutate({ data: { id: a.id, stage: "booked" } });
+                  setCursor(0);
+                }}
+              >
+                Undo arrival
+              </Button>
+            </div>
+          ) : (
+            <div className="relative mt-3 flex gap-2">
+              <Button
+                size="sm"
+                className="h-8 flex-1 px-3 text-xs"
+                disabled={setState.isPending}
+                onClick={() => {
+                  setState.mutate({ data: { id: a.id, stage: "arrived" } });
+                  setCursor(0);
+                }}
+              >
+                <UserCheck className="h-3.5 w-3.5" /> Arrived
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 flex-1 px-3 text-xs"
+                onClick={() => {
+                  setNoShowAppt(a);
+                  setCursor(0);
+                }}
+              >
+                <UserX className="h-3.5 w-3.5" /> No show
+              </Button>
+            </div>
+          )}
         </div>
       </div>
       {noShowDialog}
+      {consentDialog}
     </>
   );
 }

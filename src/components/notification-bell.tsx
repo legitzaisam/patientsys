@@ -139,6 +139,11 @@ export function NotificationBell({
           };
           queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
           queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
+          // A patient reaching "waiting" changes the diary and the dock too.
+          if (row.kind === "patient_waiting") {
+            queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+            queryClient.invalidateQueries({ queryKey: ["appointments"] });
+          }
           if (!row.id || seenStaffAlerts.current.has(row.id)) return;
           if (row.recipient_id && identity?.userId && row.recipient_id !== identity.userId) return;
           seenStaffAlerts.current.add(row.id);
@@ -177,6 +182,13 @@ export function NotificationBell({
     for (const alert of alerts) {
       if (seenStaffAlerts.current.has(alert.id)) continue;
       seenStaffAlerts.current.add(alert.id);
+      // Mirrors the production realtime handler: a patient reaching "waiting"
+      // refreshes the diary and the dock within a poll, not a minute.
+      if (alert.kind === "patient_waiting") {
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        queryClient.invalidateQueries({ queryKey: ["appointments"] });
+        continue;
+      }
       if (alert.kind !== "staff_chat" && alert.kind !== "staff_message" && alert.kind !== "urgent") {
         continue;
       }
@@ -190,7 +202,7 @@ export function NotificationBell({
         navigate,
       });
     }
-  }, [alerts, identity?.userId, isStaff, navigate]);
+  }, [alerts, identity?.userId, isStaff, navigate, queryClient]);
 
   return (
     <Popover>
@@ -244,7 +256,12 @@ export function NotificationBell({
                         navigate({
                           to: "/patients/$id",
                           params: { id: alert.patient_id },
-                          search: alert.kind === "patient_message" ? { chat: true } : {},
+                          search:
+                            alert.kind === "patient_message"
+                              ? { chat: true }
+                              : alert.kind === "patient_waiting" && alert.appointment_id
+                                ? { treat: alert.appointment_id }
+                                : {},
                         });
                       } else if (alert.kind === "appointment") {
                         navigate({ to: "/schedule" });

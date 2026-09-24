@@ -48,6 +48,7 @@ type Item = {
   cooling_off_hours: number;
   requires_consent: boolean;
   active: boolean;
+  aftercare_points?: string[] | null;
 };
 
 type Draft = {
@@ -58,6 +59,8 @@ type Draft = {
   duration_minutes: string;
   cooling_off_hours: string;
   requires_consent: boolean;
+  /** One aftercare point per line; empty uses the category defaults. */
+  aftercare_points: string;
 };
 
 const blank: Draft = {
@@ -68,6 +71,7 @@ const blank: Draft = {
   duration_minutes: "60",
   cooling_off_hours: "0",
   requires_consent: true,
+  aftercare_points: "",
 };
 
 const shape = SaveCatalogueItem.shape;
@@ -80,6 +84,7 @@ const DraftSchema = z.object({
   duration_minutes: numericText(shape.duration_minutes, 60),
   cooling_off_hours: numericText(shape.cooling_off_hours, 0),
   requires_consent: z.boolean(),
+  aftercare_points: z.string().max(8_000),
 });
 
 export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
@@ -158,6 +163,11 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
         duration_minutes: values.duration_minutes === "" ? 60 : Number(values.duration_minutes),
         cooling_off_hours: values.cooling_off_hours === "" ? 0 : Number(values.cooling_off_hours),
         requires_consent: values.requires_consent,
+        aftercare_points: values.aftercare_points
+          .split("\n")
+          .map((x) => x.trim())
+          .filter(Boolean)
+          .slice(0, 20),
       },
     });
   };
@@ -263,6 +273,27 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                   </div>
                 )}
               />
+              <FormField
+                control={draftForm.control}
+                name="aftercare_points"
+                render={({ field }) => (
+                  <div className="field-stack sm:col-span-2 lg:col-span-3">
+                    <label htmlFor="catalogue-aftercare" className="text-xs text-muted-foreground">
+                      Aftercare read out after this treatment (one point per line — blank uses the {draftForm.watch("category") || "category"} defaults)
+                    </label>
+                    <textarea
+                      id="catalogue-aftercare"
+                      data-qc="catalogue-aftercare"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      rows={4}
+                      placeholder={"Stay upright for four hours.\nNo make-up or exercise for 24 hours."}
+                      className="w-full rounded-xl border border-edge-2 bg-glass-2 px-3 py-2 text-sm shadow-inset-hi outline-none focus:border-edge"
+                    />
+                  </div>
+                )}
+              />
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(null)}>
@@ -326,6 +357,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                       duration_minutes: String(item.duration_minutes ?? 60),
                       cooling_off_hours: String(item.cooling_off_hours ?? 0),
                       requires_consent: item.requires_consent,
+                      aftercare_points: (item.aftercare_points ?? []).join("\n"),
                     })
                   }
                 >

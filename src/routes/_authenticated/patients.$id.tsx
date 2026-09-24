@@ -1,5 +1,5 @@
 import { RiskBadge } from "@/components/retention/risk-badge";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -34,6 +34,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RecallTasksPanel } from "@/components/retention/recall-tasks-panel";
 import { CommsPreferencesCard } from "@/components/comms/comms-preferences";
 import { CommsLogCard } from "@/components/comms/comms-log";
+import { TreatmentFormDialog } from "@/components/treatment-form-dialog";
+import { TreatmentRecordDialog } from "@/components/treatment-record-view";
+import { STAGE_LABEL } from "@/lib/visit-stage";
 import { can } from "@/lib/permissions";
 import { plainVisitNote } from "@/lib/sanitize-note-html";
 import {
@@ -46,14 +49,22 @@ import {
 } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/patients/$id")({
-  validateSearch: (search: Record<string, unknown>): { tab?: string; chase?: boolean; chat?: boolean } => {
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: string; chase?: boolean; chat?: boolean; treat?: string; record?: string } => {
     const tab = typeof search["tab"] === "string" ? search["tab"] : undefined;
+    const treat = typeof search["treat"] === "string" && search["treat"] ? search["treat"] : undefined;
+    const record = typeof search["record"] === "string" && search["record"] ? search["record"] : undefined;
     const flag = (v: unknown) => v === true || v === "1" || v === 1;
     return {
       ...(tab ? { tab } : {}),
       ...(flag(search["chase"]) ? { chase: true } : {}),
       // `chat` opens the docked message panel (Contact buttons elsewhere link here).
       ...(flag(search["chat"]) ? { chat: true } : {}),
+      // `treat` opens the treatment form for that appointment (dock, bell, diary).
+      ...(treat ? { treat } : {}),
+      // `record` opens a completed treatment's record.
+      ...(record ? { record } : {}),
     };
   },
   head: () => ({
@@ -70,7 +81,26 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
 
 function PatientRecord() {
   const { id } = Route.useParams();
-  const { tab: tabSearch, chase: chaseFocus, chat: chatFocus } = Route.useSearch();
+  const { tab: tabSearch, chase: chaseFocus, chat: chatFocus, treat: treatParam, record: recordParam } = Route.useSearch();
+  const navigate = useNavigate();
+  // The treatment form and the record viewer are driven by the address so the
+  // dock, the bell and the diary can open them directly.
+  const [treatOpen, setTreatOpen] = useState<string | null>(treatParam ?? null);
+  const [recordOpen, setRecordOpen] = useState<string | null>(recordParam ?? null);
+  useEffect(() => {
+    if (treatParam) setTreatOpen(treatParam);
+  }, [treatParam]);
+  useEffect(() => {
+    if (recordParam) setRecordOpen(recordParam);
+  }, [recordParam]);
+  const closeTreat = () => {
+    setTreatOpen(null);
+    if (treatParam) void navigate({ to: "/patients/$id", params: { id }, search: (prev: any) => ({ ...prev, treat: undefined }), replace: true });
+  };
+  const closeRecord = () => {
+    setRecordOpen(null);
+    if (recordParam) void navigate({ to: "/patients/$id", params: { id }, search: (prev: any) => ({ ...prev, record: undefined }), replace: true });
+  };
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
   const fetchPatient = useServerFn(getPatient);
@@ -634,6 +664,36 @@ function PatientRecord() {
             </TabsContent>
 
             <TabsContent value="treatments" className="space-y-4">
+              {(data as any).todayVisit && (data as any).todayVisit.stage !== "complete" ? (
+                <Card className="flex flex-wrap items-center gap-3 p-4" data-qc="today-visit">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">Today's visit</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {(data as any).todayVisit.treatment} ·{" "}
+                      {new Date((data as any).todayVisit.startsAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                      {(data as any).todayVisit.practitionerName ? ` · ${(data as any).todayVisit.practitionerName}` : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {STAGE_LABEL[(data as any).todayVisit.stage as keyof typeof STAGE_LABEL] ?? (data as any).todayVisit.stage}
+                      {(data as any).todayVisit.consentState === "outstanding" ? " · consent outstanding" : ""}
+                    </p>
+                  </div>
+                  {can(identity, "treatments.record") ? (
+                    <Button
+                      type="button"
+                      data-qc="open-treatment-form"
+                      disabled={(data as any).todayVisit.consentState === "outstanding" || (data as any).todayVisit.stage === "no_show"}
+                      title={(data as any).todayVisit.consentState === "outstanding" ? "Consent is outstanding" : undefined}
+                      onClick={() => setTreatOpen((data as any).todayVisit.id)}
+                    >
+                      {(data as any).todayVisit.stage === "in_treatment" || (data as any).todayVisit.stage === "aftercare"
+                        ? "Continue treatment form"
+                        : "Start treatment"}
+                    </Button>
+                  ) : null}
+                </Card>
+              ) : null}
+
               <Card className="p-5">
                 <div className="mb-3">
                   <h3 className="section-title">Treatment history</h3>
@@ -642,9 +702,19 @@ function PatientRecord() {
                 <ul className="divide-y divide-glass-line">
                   {data.treatments.map((t: any) => (
                     <li key={t.id} className="py-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-3">
                         <p className="text-sm text-foreground">{t.name}</p>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {t.hasRecord ? (
+                            <button
+                              type="button"
+                              data-qc="view-treatment-record"
+                              onClick={() => setRecordOpen(t.id)}
+                              className="cursor-pointer font-semibold text-accent-ink hover:underline"
+                            >
+                              View record
+                            </button>
+                          ) : null}
                           {new Date(t.performed_at).toLocaleDateString("en-GB")}
                         </span>
                       </div>
@@ -1003,7 +1073,35 @@ function PatientRecord() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="documents">
+            <TabsContent value="documents" className="space-y-4">
+              {data.treatments.some((t: any) => t.hasRecord) ? (
+                <Card className="p-5" data-qc="treatment-records">
+                  <div className="mb-3">
+                    <h3 className="section-title">Treatment records</h3>
+                    <p className="text-xs text-muted-foreground">
+                      The completed treatment form for each visit, kept as a viewable document.
+                    </p>
+                  </div>
+                  <ul className="divide-y divide-glass-line">
+                    {data.treatments
+                      .filter((t: any) => t.hasRecord)
+                      .map((t: any) => (
+                        <li key={t.id} className="flex items-center justify-between gap-3 py-3">
+                          <div className="min-w-0">
+                            <p className="text-sm text-foreground">{t.name} — treatment record</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(t.performed_at).toLocaleDateString("en-GB")}
+                              {t.profiles?.full_name ? ` · ${t.profiles.full_name}` : ""}
+                            </p>
+                          </div>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setRecordOpen(t.id)}>
+                            View
+                          </Button>
+                        </li>
+                      ))}
+                  </ul>
+                </Card>
+              ) : null}
               <Card className="p-5">
                 <ul className="divide-y divide-glass-line">
                   {data.documents.map((d: any) => (
@@ -1144,6 +1242,9 @@ function PatientRecord() {
             </TabsContent>
           </Tabs>
         </div>
+
+        <TreatmentFormDialog appointmentId={treatOpen} patientId={id} open={Boolean(treatOpen)} onOpenChange={(o) => !o && closeTreat()} />
+        <TreatmentRecordDialog treatmentId={recordOpen} open={Boolean(recordOpen)} onOpenChange={(o) => !o && closeRecord()} />
 
         {chatCollapsed ? null : (
           <PatientChatPanel

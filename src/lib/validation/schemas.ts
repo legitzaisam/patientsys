@@ -115,6 +115,7 @@ export const AddTreatment = z.object({
 export const AddPhoto = z.object({
   patient_id: id,
   treatment_id: optionalId,
+  appointment_id: optionalId,
   storage_path: requiredText(500),
   kind: z.enum(["before", "after"]),
   caption: optionalText(500),
@@ -147,6 +148,14 @@ export const ResendDocument = z.object({
 });
 
 export const SignDocument = z.object({ id, signed_name: text(240) });
+
+export const GetAppointmentConsent = z.object({ appointment_id: id });
+
+/** Consent completed on the clinic's device: the patient types their name, staff witness. */
+export const CompleteConsentInClinic = z.object({
+  appointment_id: id,
+  signed_name: requiredText(240),
+});
 
 export const SendMessage = z.object({
   patient_id: id,
@@ -437,6 +446,7 @@ export const SaveCatalogueItem = z.object({
   cooling_off_hours: optionalCount,
   requires_consent: z.boolean().optional(),
   active: z.boolean().optional(),
+  aftercare_points: z.array(requiredText(400)).max(20).optional(),
 });
 
 export const SetCatalogueItemActive = z.object({ id, active: z.boolean() });
@@ -586,6 +596,45 @@ export const SaveAppointmentNote = z.object({
   appointment_id: id,
   body: text(100_000),
 });
+
+/* ---- the treatment form ---- */
+const preCheckAnswer = z.object({ answer: z.enum(["yes", "no", "na"]), note: optionalText(500) });
+const preChecks = z.record(z.string().max(64), preCheckAnswer);
+const treatmentResults = z.object({
+  area: optionalText(200),
+  product: optionalText(200),
+  dose: optionalText(120),
+});
+const aftercarePoint = z.object({ label: requiredText(400), covered: z.boolean() });
+
+export const GetTreatmentSession = z.object({ appointment_id: id });
+
+export const StartTreatment = z.object({ appointment_id: id, pre_checks: preChecks });
+
+export const MoveToAftercare = z.object({
+  appointment_id: id,
+  results: treatmentResults,
+  treatment_notes: optionalText(20_000),
+  visit_notes: optionalText(20_000),
+});
+
+export const CompleteTreatment = z.object({
+  appointment_id: id,
+  aftercare_points: z.array(aftercarePoint).max(40),
+  aftercare_extra: optionalText(4000),
+});
+
+export const SaveTreatmentSessionDraft = z.object({
+  appointment_id: id,
+  pre_checks: preChecks.optional(),
+  results: treatmentResults.optional(),
+  treatment_notes: optionalText(20_000),
+  visit_notes: optionalText(20_000),
+  aftercare_points: z.array(aftercarePoint).max(40).optional(),
+  aftercare_extra: optionalText(4000),
+});
+
+export const GetTreatmentRecord = z.object({ treatment_id: id });
 
 /** Kept for the `money` re-export used by callers building numeric form fields. */
 export { money };

@@ -1,6 +1,10 @@
 /** Cross-page snooze for arrival alerts (Clock control). Survives route changes. */
 
-export type ArrivalAlertPhase = "due" | "arrival" | "late" | "overdue";
+/**
+ * Arrival phases, plus the two visit-state cards that share the dock:
+ * "consent" (arrived, consent outstanding) and "waiting" (ready to treat).
+ */
+export type ArrivalAlertPhase = "due" | "arrival" | "late" | "overdue" | "consent" | "waiting";
 
 const STORAGE_KEY = "aetheria:arrival-alert-snoozes";
 export const ARRIVAL_ALERT_SNOOZE_MS = 5 * 60 * 1000;

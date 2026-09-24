@@ -55,5 +55,7 @@ export async function signDocumentByTokenDemo(
   row["signed_at"] = new Date().toISOString();
   row["signed_name"] = name;
   row["signature_data"] = name;
+  const { advanceToWaitingIfReadyDemo } = await import("@/lib/visit-stage.demo");
+  advanceToWaitingIfReadyDemo({ consentDocumentId: String(row["id"]) });
   return { outcome: "ok" };
 }

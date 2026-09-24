@@ -50,6 +50,7 @@ export const CLINIC_SCOPED_TABLES = [
   "treatment_colours",
   "treatment_photos",
   "treatment_plans",
+  "treatment_sessions",
   "treatments",
   "website_leads",
 ] as const;

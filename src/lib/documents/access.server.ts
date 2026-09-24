@@ -148,5 +148,13 @@ export async function signDocumentByToken(
   }
 
   await recordAccess(db, classified.document.id, "sign", meta);
+  // A patient signing from the waiting room: if they are already marked as
+  // arrived, this is what moves them on to waiting.
+  try {
+    const { advanceToWaitingIfReady } = await import("@/lib/visit-stage.server");
+    await advanceToWaitingIfReady(db, { consentDocumentId: classified.document.id });
+  } catch (error) {
+    console.warn(`[documents] signed but could not advance the visit: ${(error as Error).message}`);
+  }
   return { outcome: "ok" };
 }

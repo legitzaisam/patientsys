@@ -26,6 +26,9 @@ import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
+import { CONSENT_BODY_DEFAULT, PRE_TREATMENT_CHECKS, canStartTreatment, consentReady } from "@/lib/visit-stage";
+import { aftercarePointsFor } from "@/lib/aftercare-defaults";
+import { advanceToWaitingIfReadyDemo, demoConsentStateOf } from "@/lib/visit-stage.demo";
 import { EMAIL_OTP_RESEND_MS } from "@/lib/auth/constants";
 import {
   findPractitionerOverlap,
@@ -78,6 +81,7 @@ const recoveryCheckins = db.recoveryCheckins as any[];
 const routineCompletions = db.routineCompletions as any[];
 const skincareRoutines = db.skincareRoutines as any[];
 const routineItemOverrides = db.routineItemOverrides as any[];
+const treatmentSessions = db.treatmentSessions as any[];
 const routineItems = db.routineItems as any[];
 const clinicNews = db.clinicNews as any[];
 const clinicOffers = db.clinicOffers as any[];
@@ -292,11 +296,14 @@ function patientJoin(id: string) {
 function appointmentView(a: any) {
   const doc = a.consent_document_id ? documents.find((d) => d.id === a.consent_document_id) : null;
   const note = appointmentNotes.find((n) => n.appointment_id === a.id);
+  const item = a.catalogue_id ? catalogue.find((c) => c.id === a.catalogue_id) : null;
   return {
     ...a,
     patients: patientJoin(a.patient_id),
     profiles: a.practitioner_id ? { full_name: profileName(a.practitioner_id) } : null,
     documents: doc ? { status: doc.status, title: doc.title } : null,
+    treatment_catalogue: item ? { requires_consent: Boolean(item.requires_consent) } : null,
+    consentState: demoConsentStateOf(a),
     appointment_notes: note
       ? {
           body: plainVisitNote(note.body),
@@ -775,12 +782,16 @@ export const getPatient = createServerFn({ method: "GET" })
     const patient = patientById(data.id);
     if (!patient) throw new Error("Patient not found");
     const nowIso = new Date().toISOString();
+    const withRecord = new Set(
+      treatmentSessions.filter((s) => s.patient_id === data.id && s.status === "complete").map((s) => s.treatment_id),
+    );
     const mine = sortDesc(
       treatments.filter((t) => t.patient_id === data.id),
       "performed_at",
     ).map((t) => ({
       ...t,
       profiles: { full_name: profileName(t.practitioner_id) },
+      hasRecord: withRecord.has(t.id),
     }));
     const upcoming = appointments.filter(
       (a) =>
@@ -873,6 +884,29 @@ export const getPatient = createServerFn({ method: "GET" })
         .slice(0, 14)
         .map((c) => ({ ...c, needsAttention: portal.checkinNeedsAttention(c as any) })),
       nextAppointmentAt: sortAsc(upcoming, "starts_at")[0]?.starts_at ?? null,
+      todayVisit: (() => {
+        const todayKey = new Date().toDateString();
+        const visit = sortAsc(
+          appointments.filter(
+            (a) =>
+              a.patient_id === data.id &&
+              new Date(a.starts_at).toDateString() === todayKey &&
+              a.status !== "cancelled" &&
+              a.status !== "no_show",
+          ),
+          "starts_at",
+        )[0];
+        return visit
+          ? {
+              id: visit.id,
+              startsAt: visit.starts_at,
+              treatment: visit.treatment_name,
+              stage: visit.stage ?? "booked",
+              practitionerName: visit.practitioner_id ? profileName(visit.practitioner_id) : null,
+              consentState: demoConsentStateOf(visit),
+            }
+          : null;
+      })(),
     };
   });
 
@@ -1237,11 +1271,16 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const row = appointments.find((a) => a.id === data.id);
-    if (!row) return { ok: true };
+    if (!row) return { ok: true, stage: null };
     if (data.status) row.status = data.status;
     if (data.payment_status) row.payment_status = data.payment_status;
+    // Mirrors production: waiting and in-treatment both need consent; a manual
+    // "waiting" is arrival plus the rule.
+    if ((data.stage === "waiting" || data.stage === "in_treatment") && !consentReady(demoConsentStateOf(row))) {
+      throw new Error("Consent is outstanding — complete it in clinic first");
+    }
     if (data.stage) {
-      row.stage = data.stage;
+      row.stage = data.stage === "waiting" ? "arrived" : data.stage;
       row.status =
         data.stage === "no_show" ? "no_show" : data.stage === "booked" ? "booked" : "attended";
     }
@@ -1254,7 +1293,88 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       row.notes = prior ? `${stamp}\n\n${prior}` : stamp;
     }
     row.updated_at = new Date().toISOString();
-    return { ok: true };
+    if (data.stage === "arrived" || data.stage === "waiting") {
+      const advanced = advanceToWaitingIfReadyDemo({ appointmentId: data.id });
+      return { ok: true, stage: advanced.advanced ? "waiting" : "arrived" };
+    }
+    return { ok: true, stage: data.stage ?? null };
+  });
+
+export const getAppointmentConsent = createServerFn({ method: "GET" })
+  .validator((data: { appointment_id: string }) => parseInput(schemas.GetAppointmentConsent, data))
+  .handler(async ({ data }) => {
+    requireStaff();
+    const appt = appointments.find((a) => a.id === data.appointment_id);
+    if (!appt) throw new Error("Appointment not found");
+    const doc = appt.consent_document_id ? documents.find((d) => d.id === appt.consent_document_id) : null;
+    const patient = patientById(appt.patient_id);
+    return {
+      appointmentId: appt.id,
+      stage: appt.stage,
+      patientName: `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
+      treatment: appt.treatment_name,
+      consentState: demoConsentStateOf(appt),
+      document: {
+        id: doc?.id ?? null,
+        title: doc?.title ?? `${appt.treatment_name} — consent form`,
+        body: doc?.body ?? CONSENT_BODY_DEFAULT,
+        status: doc?.status ?? null,
+        signedAt: doc?.signed_at ?? null,
+        signedName: doc?.signed_name ?? null,
+      },
+    };
+  });
+
+export const completeConsentInClinic = createServerFn({ method: "POST" })
+  .validator((data: { appointment_id: string; signed_name: string }) =>
+    parseInput(schemas.CompleteConsentInClinic, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const name = data.signed_name.trim().slice(0, 240);
+    const appt = appointments.find((a) => a.id === data.appointment_id);
+    if (!appt) throw new Error("Appointment not found");
+    const now = new Date().toISOString();
+    let doc = appt.consent_document_id ? documents.find((d) => d.id === appt.consent_document_id) : null;
+    if (!doc) {
+      doc = {
+        id: newId("f9"),
+        clinic_id: CLINIC_ID,
+        patient_id: appt.patient_id,
+        treatment_id: null,
+        kind: "consent",
+        title: `${appt.treatment_name} — consent form`,
+        body: CONSENT_BODY_DEFAULT,
+        fields: {},
+        responses: null,
+        status: "sent",
+        access_token: newId("f8"),
+        sent_at: now,
+        viewed_at: null,
+        signed_at: null,
+        signed_name: null,
+        signature_data: null,
+        signed_ip: null,
+        witnessed_by: null,
+        expires_at: null,
+        created_by: me.userId,
+        created_at: now,
+        updated_at: now,
+      };
+      documents.unshift(doc);
+      appt.consent_document_id = doc.id;
+    }
+    if (doc.status !== "signed") {
+      doc.status = "signed";
+      doc.signed_at = now;
+      doc.signed_name = name;
+      doc.signature_data = name;
+      doc.viewed_at = doc.viewed_at ?? now;
+      doc.witnessed_by = me.userId;
+      doc.updated_at = now;
+    }
+    const advanced = advanceToWaitingIfReadyDemo({ appointmentId: appt.id });
+    return { ok: true, documentId: doc.id, stage: advanced.advanced ? "waiting" : appt.stage };
   });
 
 export const rescheduleAppointment = createServerFn({ method: "POST" })
@@ -1347,39 +1467,38 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
       body: plainVisitNote(sanitizeNoteHtml(String(data?.body ?? ""))).slice(0, 20000),
     }),
   )
-  .handler(async ({ data }) => {
-    const me = identity();
-    const appointment = appointments.find((a) => a.id === data.appointment_id);
-    const now = new Date().toISOString();
-    let row = appointmentNotes.find((n) => n.appointment_id === data.appointment_id);
-    if (!row) {
-      row = {
-        id: newId("r1"),
-        appointment_id: data.appointment_id,
-        clinic_id: appointment?.clinic_id ?? CLINIC_ID,
-        patient_id: appointment?.patient_id ?? null,
-        created_at: now,
-      };
-      appointmentNotes.push(row);
-    }
-    row.body = data.body;
-    row.updated_by = me.userId;
-    row.updated_by_label = me.profile?.full_name ?? null;
-    row.updated_at = now;
+  .handler(async ({ data }) => demoWriteVisitNote(data.appointment_id, data.body));
 
-    if (appointment) {
-      const prior = String(appointment.notes ?? "");
-      const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
-      appointment.notes = cancelLine
-        ? data.body.trim()
-          ? `${cancelLine}\n\n${data.body}`
-          : cancelLine
-        : data.body || null;
-      appointment.updated_at = now;
-    }
+/** Demo twin of writeVisitNote: upsert the note and mirror it onto the booking. */
+function demoWriteVisitNote(appointmentId: string, body: string) {
+  const me = identity();
+  const appointment = appointments.find((a) => a.id === appointmentId);
+  const now = new Date().toISOString();
+  let row = appointmentNotes.find((n) => n.appointment_id === appointmentId);
+  if (!row) {
+    row = {
+      id: newId("r1"),
+      appointment_id: appointmentId,
+      clinic_id: appointment?.clinic_id ?? CLINIC_ID,
+      patient_id: appointment?.patient_id ?? null,
+      created_at: now,
+    };
+    appointmentNotes.push(row);
+  }
+  row.body = body;
+  row.updated_by = me.userId;
+  row.updated_by_label = me.profile?.full_name ?? null;
+  row.updated_at = now;
 
-    return { body: row.body, updatedAt: row.updated_at, updatedBy: row.updated_by_label };
-  });
+  if (appointment) {
+    const prior = String(appointment.notes ?? "");
+    const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
+    appointment.notes = cancelLine ? (body.trim() ? `${cancelLine}\n\n${body}` : cancelLine) : body || null;
+    appointment.updated_at = now;
+  }
+
+  return { body: row.body, updatedAt: row.updated_at, updatedBy: row.updated_by_label };
+}
 
 /* ---------------------------------------------------------------- */
 /* treatments, photos, documents                                      */
@@ -1436,6 +1555,7 @@ export const addPhoto = createServerFn({ method: "POST" })
     (data: {
       patient_id: string;
       treatment_id?: string;
+      appointment_id?: string;
       storage_path: string;
       kind: "before" | "after";
       caption?: string;
@@ -1448,6 +1568,7 @@ export const addPhoto = createServerFn({ method: "POST" })
       clinic_id: CLINIC_ID,
       patient_id: data.patient_id,
       treatment_id: data.treatment_id || null,
+      appointment_id: data.appointment_id || null,
       storage_path: data.storage_path,
       kind: data.kind,
       caption: data.caption || null,
@@ -1797,6 +1918,8 @@ export const signDocument = createServerFn({ method: "POST" })
       row.signed_at = new Date().toISOString();
       row.signed_name = name;
       row.signature_data = name;
+      // Mirrors production: signing moves an arrived patient on to waiting.
+      advanceToWaitingIfReadyDemo({ consentDocumentId: row.id });
     }
     return { ok: true };
   });
@@ -2727,7 +2850,12 @@ export const getPortalTimeline = createServerFn({ method: "GET" }).handler(async
           ? (documents.find((d) => d.id === a.consent_document_id)?.status ?? null) === "signed"
           : null,
       })),
-    treatments: treatments.filter((t) => t.patient_id === patient.id) as any,
+    treatments: treatments
+      .filter((t) => t.patient_id === patient.id)
+      .map((t) => {
+        const session = treatmentSessions.find((x) => x.treatment_id === t.id && x.status === "complete");
+        return { ...t, notes: session?.visit_notes ?? t.notes ?? null };
+      }) as any,
     photos: photos
       .filter((p: any) => p.patient_id === patient.id && p.visible_to_patient)
       .map((p: any) => ({ ...p, url: p.storage_path })),
@@ -4460,6 +4588,7 @@ export type CatalogueInput = {
   cooling_off_hours?: number | null;
   requires_consent?: boolean;
   active?: boolean;
+  aftercare_points?: string[];
 };
 
 export const saveCatalogueItem = createServerFn({ method: "POST" })
@@ -4479,6 +4608,9 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
       cooling_off_hours: data.cooling_off_hours ?? 0,
       requires_consent: data.requires_consent ?? true,
       active: data.active ?? true,
+      ...(data.aftercare_points
+        ? { aftercare_points: data.aftercare_points.map((x) => x.trim()).filter(Boolean) }
+        : {}),
       updated_at: new Date().toISOString(),
     };
     if (data.id) {
@@ -4889,29 +5021,416 @@ export const updatePlanMilestone = createServerFn({ method: "POST" })
     parseInput(schemas.UpdatePlanMilestone, data),
   )
   .handler(async ({ data }) => {
-    const milestone = planMilestones.find((m) => m.id === data.id);
-    if (!milestone) throw new Error("Milestone not found.");
-    milestone.status = data.status;
-    milestone.completed_at = data.status === "done" ? new Date().toISOString() : null;
+    demoSetMilestoneStatus(data.id, data.status);
+    return { ok: true };
+  });
 
-    const siblings = sortAsc(
-      planMilestones.filter((m) => m.plan_id === milestone.plan_id),
-      "idx",
-    );
-    if (data.status === "done" || data.status === "skipped") {
-      const hasCurrent = siblings.some((m) => m.status === "current");
-      const nextUp = siblings.find((m) => m.status === "upcoming");
-      if (!hasCurrent && nextUp) nextUp.status = "current";
-      const open = siblings.filter((m) => m.status === "upcoming" || m.status === "current");
-      if (open.length === 0) {
-        const plan = treatmentPlans.find((p) => p.id === milestone.plan_id);
-        if (plan) {
-          plan.status = "completed";
-          plan.completed_at = new Date().toISOString();
-        }
+/** Demo twin of setMilestoneStatus. */
+function demoSetMilestoneStatus(
+  milestoneId: string,
+  status: "upcoming" | "current" | "done" | "skipped",
+  extra: Record<string, unknown> = {},
+) {
+  const milestone = planMilestones.find((m) => m.id === milestoneId);
+  if (!milestone) throw new Error("Milestone not found.");
+  milestone.status = status;
+  milestone.completed_at = status === "done" ? new Date().toISOString() : null;
+  Object.assign(milestone, extra);
+
+  const siblings = sortAsc(planMilestones.filter((m) => m.plan_id === milestone.plan_id), "idx");
+  if (status === "done" || status === "skipped") {
+    const hasCurrent = siblings.some((m) => m.status === "current");
+    const nextUp = siblings.find((m) => m.status === "upcoming");
+    if (!hasCurrent && nextUp) nextUp.status = "current";
+    const open = siblings.filter((m) => m.status === "upcoming" || m.status === "current");
+    if (open.length === 0) {
+      const plan = treatmentPlans.find((p) => p.id === milestone.plan_id);
+      if (plan) {
+        plan.status = "completed";
+        plan.completed_at = new Date().toISOString();
       }
     }
-    return { ok: true };
+  }
+  return milestone;
+}
+
+/* ------------------------------------------------------------------ */
+/* The treatment form — demo twins                                      */
+/* ------------------------------------------------------------------ */
+
+function demoSessionView(row: any) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status as "started" | "treating" | "aftercare" | "complete",
+    treatmentId: row.treatment_id ?? null,
+    preChecks: (row.pre_checks ?? {}) as Record<string, { answer: "yes" | "no" | "na"; note?: string }>,
+    results: (row.results ?? {}) as { area?: string; product?: string; dose?: string },
+    treatmentNotes: row.treatment_notes ?? null,
+    visitNotes: row.visit_notes ?? null,
+    aftercarePoints: (row.aftercare_points ?? []) as { label: string; covered: boolean }[],
+    aftercareExtra: row.aftercare_extra ?? null,
+    startedAt: row.started_at ?? null,
+    treatingAt: row.treating_at ?? null,
+    aftercareAt: row.aftercare_at ?? null,
+    completedAt: row.completed_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function demoFormAppointment(appointmentId: string) {
+  const appt = appointments.find((a) => a.id === appointmentId);
+  if (!appt) throw new Error("Appointment not found");
+  return appt;
+}
+
+function demoMilestoneForVisit(appt: any) {
+  let milestone = planMilestones.find((m) => m.appointment_id === appt.id) ?? null;
+  let planId: string | null = milestone?.plan_id ?? null;
+  if (!milestone) {
+    const plan = sortDesc(
+      treatmentPlans.filter((p) => p.patient_id === appt.patient_id && p.status === "active"),
+      "started_at",
+    )[0];
+    if (plan) {
+      planId = plan.id;
+      milestone =
+        sortAsc(
+          planMilestones.filter(
+            (m) => m.plan_id === plan.id && m.kind === "session" && (m.status === "current" || m.status === "upcoming"),
+          ),
+          "idx",
+        )[0] ?? null;
+    }
+  }
+  if (!milestone || !planId) return null;
+  const sessions = sortAsc(planMilestones.filter((m) => m.plan_id === planId && m.kind === "session"), "idx");
+  const n = sessions.findIndex((m) => m.id === milestone!.id) + 1;
+  return { id: milestone.id as string, title: milestone.title as string, sessionNumber: n || null, sessionTotal: sessions.length || null };
+}
+
+function demoUpsertSession(appt: any, patch: Record<string, unknown>) {
+  const me = identity();
+  const now = new Date().toISOString();
+  let row = treatmentSessions.find((s) => s.appointment_id === appt.id);
+  if (!row) {
+    row = {
+      id: newId("s9"),
+      clinic_id: CLINIC_ID,
+      appointment_id: appt.id,
+      patient_id: appt.patient_id,
+      practitioner_id: appt.practitioner_id ?? me.userId,
+      catalogue_id: appt.catalogue_id ?? null,
+      treatment_id: null,
+      pre_checks: {},
+      results: {},
+      treatment_notes: null,
+      visit_notes: null,
+      aftercare_points: [],
+      aftercare_extra: null,
+      status: "started",
+      started_at: now,
+      treating_at: null,
+      aftercare_at: null,
+      completed_at: null,
+      created_at: now,
+      updated_at: now,
+    };
+    treatmentSessions.push(row);
+  }
+  Object.assign(row, patch, { updated_at: now });
+  return row;
+}
+
+export const getTreatmentSession = createServerFn({ method: "GET" })
+  .validator((data: { appointment_id: string }) => parseInput(schemas.GetTreatmentSession, data))
+  .handler(async ({ data }) => {
+    requireStaff();
+    const appt = demoFormAppointment(data.appointment_id);
+    const patient = patientById(appt.patient_id) ?? {};
+    const item = appt.catalogue_id ? catalogue.find((c) => c.id === appt.catalogue_id) : null;
+    const doc = appt.consent_document_id ? documents.find((d) => d.id === appt.consent_document_id) : null;
+    const consent = demoConsentStateOf(appt);
+    const session = treatmentSessions.find((s) => s.appointment_id === appt.id) ?? null;
+    const milestone = demoMilestoneForVisit(appt);
+    const starts = new Date(appt.starts_at);
+    const prevNotes = sortDesc(
+      appointmentNotes.filter((n) => n.patient_id === appt.patient_id && n.appointment_id !== appt.id),
+      "updated_at",
+    )
+      .filter((n) => plainVisitNote(n.body).trim())
+      .slice(0, 5)
+      .map((n) => {
+        const a = appointments.find((x) => x.id === n.appointment_id);
+        return {
+          appointmentId: n.appointment_id,
+          startsAt: a?.starts_at ?? n.updated_at,
+          treatment: a?.treatment_name ?? null,
+          body: plainVisitNote(n.body),
+          by: n.updated_by_label ?? null,
+        };
+      });
+    const lastSame = sortDesc(
+      treatments.filter((t) => t.patient_id === appt.patient_id && t.name === appt.treatment_name),
+      "performed_at",
+    )[0];
+    return {
+      appointment: {
+        id: appt.id,
+        startsAt: appt.starts_at,
+        endsAt: appt.ends_at ?? null,
+        date: starts.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }),
+        time: starts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+        stage: appt.stage ?? "booked",
+        status: appt.status,
+        treatment: appt.treatment_name,
+        treatmentNumber: appt.treatment_number,
+        category: item?.category ?? null,
+        price: appt.price ?? null,
+        practitionerId: appt.practitioner_id ?? null,
+        practitionerName: appt.practitioner_id ? profileName(appt.practitioner_id) : null,
+        sessionNumber: milestone?.sessionNumber ?? null,
+        sessionTotal: milestone?.sessionTotal ?? null,
+      },
+      patient: {
+        id: appt.patient_id,
+        name: `${patient.first_name ?? ""} ${patient.last_name ?? ""}`.trim(),
+        firstName: patient.first_name ?? "",
+        reference: patient.reference ?? null,
+        dateOfBirth: patient.date_of_birth ?? null,
+        allergies: patient.allergies ?? null,
+        medications: patient.medications ?? null,
+        conditions: patient.conditions ?? null,
+        phone: patient.phone ?? null,
+        email: patient.email ?? null,
+      },
+      consent: {
+        state: consent,
+        documentId: doc?.id ?? null,
+        title: doc?.title ?? null,
+        signedAt: doc?.signed_at ?? null,
+        signedName: doc?.signed_name ?? null,
+        witnessed: Boolean(doc?.witnessed_by),
+      },
+      canStart: canStartTreatment({ stage: appt.stage ?? "booked", consent }),
+      session: demoSessionView(session),
+      previousNotes: prevNotes,
+      lastSameTreatment: lastSame
+        ? {
+            performedAt: lastSame.performed_at,
+            product: lastSame.product ?? null,
+            dose: lastSame.dose ?? null,
+            area: lastSame.area ?? null,
+            notes: lastSame.notes ?? null,
+            by: lastSame.practitioner_id ? profileName(lastSame.practitioner_id) : null,
+          }
+        : null,
+      aftercarePoints: aftercarePointsFor({
+        catalogueAftercare: (item?.aftercare_points as string[] | undefined) ?? null,
+        category: item?.category ?? null,
+      }),
+      checks: PRE_TREATMENT_CHECKS,
+      photos: sortAsc(photos.filter((p: any) => p.appointment_id === appt.id), "taken_at").map((p: any) => ({
+        id: p.id,
+        kind: p.kind,
+        takenAt: p.taken_at,
+        caption: p.caption ?? null,
+        url: p.storage_path,
+      })),
+      milestone: milestone ? { id: milestone.id, title: milestone.title } : null,
+    };
+  });
+
+export const startTreatment = createServerFn({ method: "POST" })
+  .validator((data: { appointment_id: string; pre_checks: Record<string, { answer: "yes" | "no" | "na"; note?: string }> }) =>
+    parseInput(schemas.StartTreatment, data),
+  )
+  .handler(async ({ data }) => {
+    requireStaff();
+    const appt = demoFormAppointment(data.appointment_id);
+    const gate = canStartTreatment({ stage: appt.stage ?? "booked", consent: demoConsentStateOf(appt) });
+    if (!gate.ok) throw new Error(gate.reason);
+    const now = new Date().toISOString();
+    const row = demoUpsertSession(appt, { pre_checks: data.pre_checks, status: "treating", treating_at: now });
+    appt.stage = "in_treatment";
+    appt.status = "attended";
+    appt.updated_at = now;
+    return { ok: true, sessionId: row.id as string, stage: "in_treatment" as const };
+  });
+
+export const moveToAftercare = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      appointment_id: string;
+      results: { area?: string; product?: string; dose?: string };
+      treatment_notes?: string;
+      visit_notes?: string;
+    }) => parseInput(schemas.MoveToAftercare, data),
+  )
+  .handler(async ({ data }) => {
+    requireStaff();
+    const appt = demoFormAppointment(data.appointment_id);
+    const now = new Date().toISOString();
+    const visitNotes = plainVisitNote(sanitizeNoteHtml(data.visit_notes ?? "")).slice(0, 20000);
+    const row = demoUpsertSession(appt, {
+      results: data.results,
+      treatment_notes: data.treatment_notes?.trim() || null,
+      visit_notes: visitNotes || null,
+      status: "aftercare",
+      aftercare_at: now,
+    });
+    if (visitNotes.trim()) demoWriteVisitNote(appt.id, visitNotes);
+    appt.stage = "aftercare";
+    appt.status = "attended";
+    appt.updated_at = now;
+    return { ok: true, sessionId: row.id as string, stage: "aftercare" as const };
+  });
+
+export const completeTreatment = createServerFn({ method: "POST" })
+  .validator(
+    (data: { appointment_id: string; aftercare_points: { label: string; covered: boolean }[]; aftercare_extra?: string }) =>
+      parseInput(schemas.CompleteTreatment, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const appt = demoFormAppointment(data.appointment_id);
+    const session = treatmentSessions.find((s) => s.appointment_id === appt.id);
+    if (!session) throw new Error("Start the treatment form before completing it");
+    if (session.treatment_id) return { ok: true, treatmentId: session.treatment_id as string, stage: "complete" as const };
+    const now = new Date().toISOString();
+    const results = (session.results ?? {}) as { area?: string; product?: string; dose?: string };
+    const practitionerId = appt.practitioner_id ?? me.userId;
+    const item = appt.catalogue_id ? catalogue.find((c) => c.id === appt.catalogue_id) : null;
+    const interval = (item?.interval_days as number | null | undefined) ?? null;
+    const treatmentId = newId("e9");
+    treatments.push({
+      id: treatmentId,
+      clinic_id: CLINIC_ID,
+      patient_id: appt.patient_id,
+      catalogue_id: appt.catalogue_id ?? null,
+      practitioner_id: practitionerId,
+      appointment_id: appt.id,
+      name: appt.treatment_name,
+      product: results.product?.trim() || null,
+      dose: results.dose?.trim() || null,
+      area: results.area?.trim() || null,
+      notes: session.treatment_notes ?? null,
+      price: appt.price ?? null,
+      performed_at: appt.starts_at,
+      next_due_at: interval
+        ? new Date(new Date(appt.starts_at).getTime() + interval * 86400000).toISOString().slice(0, 10)
+        : null,
+      status: "completed",
+      consent_document_id: appt.consent_document_id ?? null,
+      commission_rate_snapshot: profiles.find((p) => p.id === practitionerId)?.commission_rate ?? 40,
+      created_at: now,
+      updated_at: now,
+    });
+    Object.assign(session, {
+      treatment_id: treatmentId,
+      aftercare_points: data.aftercare_points,
+      aftercare_extra: data.aftercare_extra?.trim() || null,
+      status: "complete",
+      completed_at: now,
+      updated_at: now,
+    });
+    for (const photo of photos as any[]) {
+      if (photo.appointment_id === appt.id && !photo.treatment_id) photo.treatment_id = treatmentId;
+    }
+    const milestone = demoMilestoneForVisit(appt);
+    if (milestone) demoSetMilestoneStatus(milestone.id, "done", { appointment_id: appt.id });
+    appt.stage = "complete";
+    appt.status = "attended";
+    appt.updated_at = now;
+    const patient = patientById(appt.patient_id);
+    if (patient) {
+      patient.last_visit_at = appt.starts_at;
+      patient.status = "active";
+    }
+    return { ok: true, treatmentId, stage: "complete" as const };
+  });
+
+export const saveTreatmentSessionDraft = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      appointment_id: string;
+      pre_checks?: Record<string, { answer: "yes" | "no" | "na"; note?: string }>;
+      results?: { area?: string; product?: string; dose?: string };
+      treatment_notes?: string;
+      visit_notes?: string;
+      aftercare_points?: { label: string; covered: boolean }[];
+      aftercare_extra?: string;
+    }) => parseInput(schemas.SaveTreatmentSessionDraft, data),
+  )
+  .handler(async ({ data }) => {
+    requireStaff();
+    const appt = demoFormAppointment(data.appointment_id);
+    const existing = treatmentSessions.find((s) => s.appointment_id === appt.id);
+    if (existing?.status === "complete") return { ok: true, saved: false };
+    const patch: Record<string, unknown> = {};
+    if (data.pre_checks) patch["pre_checks"] = data.pre_checks;
+    if (data.results) patch["results"] = data.results;
+    if (data.treatment_notes !== undefined) patch["treatment_notes"] = data.treatment_notes.trim() || null;
+    if (data.visit_notes !== undefined) patch["visit_notes"] = plainVisitNote(sanitizeNoteHtml(data.visit_notes)).slice(0, 20000) || null;
+    if (data.aftercare_points) patch["aftercare_points"] = data.aftercare_points;
+    if (data.aftercare_extra !== undefined) patch["aftercare_extra"] = data.aftercare_extra.trim() || null;
+    demoUpsertSession(appt, patch);
+    return { ok: true, saved: true };
+  });
+
+export const getTreatmentRecord = createServerFn({ method: "GET" })
+  .validator((data: { treatment_id: string }) => parseInput(schemas.GetTreatmentRecord, data))
+  .handler(async ({ data }) => {
+    requireStaff();
+    const t = treatments.find((x) => x.id === data.treatment_id);
+    if (!t) throw new Error("Treatment not found");
+    const appt = t.appointment_id ? appointments.find((a) => a.id === t.appointment_id) : null;
+    const patient = patientById(t.patient_id);
+    const item = t.catalogue_id ? catalogue.find((c) => c.id === t.catalogue_id) : null;
+    const session = treatmentSessions.find((s) => s.treatment_id === t.id) ?? null;
+    const consent = t.consent_document_id ? documents.find((d) => d.id === t.consent_document_id) : null;
+    return {
+      treatment: {
+        id: t.id,
+        name: t.name,
+        category: item?.category ?? null,
+        performedAt: t.performed_at,
+        nextDueAt: t.next_due_at ?? null,
+        product: t.product ?? null,
+        dose: t.dose ?? null,
+        area: t.area ?? null,
+        notes: t.notes ?? null,
+        price: t.price ?? null,
+        practitionerName: t.practitioner_id ? profileName(t.practitioner_id) : null,
+        treatmentNumber: appt?.treatment_number ?? null,
+        appointmentId: t.appointment_id ?? null,
+      },
+      patient: {
+        id: t.patient_id,
+        name: `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
+        reference: patient?.reference ?? null,
+        dateOfBirth: patient?.date_of_birth ?? null,
+      },
+      session: demoSessionView(session),
+      photos: sortAsc(photos.filter((p: any) => p.treatment_id === t.id), "taken_at").map((p: any) => ({
+        id: p.id,
+        kind: p.kind,
+        takenAt: p.taken_at,
+        caption: p.caption ?? null,
+        url: p.storage_path,
+      })),
+      consent: consent
+        ? {
+            id: consent.id,
+            title: consent.title,
+            status: consent.status,
+            signedAt: consent.signed_at,
+            signedName: consent.signed_name,
+            witnessed: Boolean(consent.witnessed_by),
+          }
+        : null,
+      checks: PRE_TREATMENT_CHECKS,
+    };
   });
 
 export const getInsights = createServerFn({ method: "GET" })

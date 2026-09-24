@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -29,12 +29,14 @@ import {
   updateAppointmentState,
 } from "@/lib/clinic.functions";
 import { formatMoney } from "@/lib/payment-link";
+import { manualStageOptions, type ConsentState } from "@/lib/visit-stage";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { AppointmentTimeEditor } from "@/components/appointment-time-editor";
 import { NoShowFollowUpDialog } from "@/components/no-show-followup-dialog";
+import { ConsentInClinicDialog } from "@/components/consent-in-clinic-dialog";
 import { VisitNoteChip, VisitNoteEditor, isPreAppointmentNote } from "@/components/visit-note-chip";
 import {
   Dialog,
@@ -306,7 +308,9 @@ function AppointmentCarousel({
       startScroll: el.scrollLeft,
       moved: false,
     };
-    el.setPointerCapture(event.pointerId);
+    // Capture is taken only once a drag is under way (see onPointerMove).
+    // Capturing on every press retargets the following click to the strip,
+    // so a plain click on a card never reached the card's own handler.
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -317,6 +321,7 @@ function AppointmentCarousel({
     if (!drag.moved && Math.abs(dx) > 5) {
       drag.moved = true;
       el.dataset.diaryDragging = "1";
+      el.setPointerCapture(event.pointerId);
     }
     if (!drag.moved) return;
     event.preventDefault();
@@ -458,9 +463,27 @@ function TodayCard({
   const [detailOpen, setDetailOpen] = useState(false);
   const [cancelStep, setCancelStep] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const navigate = useNavigate();
+  const consent: ConsentState = a.consentState ?? (consentSigned ? "signed" : "outstanding");
+  const [consentOpen, setConsentOpen] = useState(false);
+  // "Since" reads from the last state change; good enough for a waiting room.
+  const waitingSince =
+    stage === "waiting" && a.updated_at
+      ? new Date(a.updated_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+      : null;
+  const needsConsentInClinic = stage === "arrived" && consent === "outstanding" && !isCancelled;
+  const openTreatmentForm = () => {
+    setDetailOpen(false);
+    void navigate({ to: "/patients/$id", params: { id: a.patient_id }, search: { treat: a.id } });
+  };
   const handleStage = (s: Stage) => {
     if (s === "no_show") {
       setNoShowOpen(true);
+      return;
+    }
+    // Treatment starts from the form, which sets the stage itself.
+    if (s === "in_treatment") {
+      openTreatmentForm();
       return;
     }
     setStage(s);
@@ -542,13 +565,19 @@ function TodayCard({
                   </AppointmentTimeEditor>
                 </div>
               </div>
-              <div className="shrink-0" onClick={stopCardOpen}>
+              <div className="flex shrink-0 flex-col items-end gap-1" onClick={stopCardOpen}>
                 <StageBadge
                   stage={stage}
                   StageIcon={StageIcon}
                   onChange={handleStage}
+                  consent={consent}
                   locked={detailOpen}
                 />
+                {waitingSince ? (
+                  <span className="text-[10px] leading-none tabular-nums text-warning-ink" data-qc="waiting-since">
+                    since {waitingSince}
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="flex items-center gap-2.5">
@@ -671,6 +700,7 @@ function TodayCard({
                     stage={stage}
                     StageIcon={StageIcon}
                     onChange={handleStage}
+                    consent={consent}
                     reopenGraceMs={450}
                   />
                 </div>
@@ -705,6 +735,25 @@ function TodayCard({
                   </div>
                 )}
               </div>
+
+              {needsConsentInClinic ? (
+                <div className="flex items-center gap-3 rounded-2xl bg-warning-bg px-3.5 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-warning-ink">Consent outstanding</p>
+                    <p className="text-2xs leading-snug text-warning-ink/80">
+                      Have {a.patients?.first_name ?? "the patient"} sign on this device to move them to waiting.
+                    </p>
+                  </div>
+                  <Button type="button" data-qc="complete-consent" className="shrink-0 text-xs" onClick={() => setConsentOpen(true)}>
+                    Complete consent
+                  </Button>
+                </div>
+              ) : null}
+              {stage === "waiting" || stage === "in_treatment" || stage === "aftercare" ? (
+                <Button type="button" data-qc="start-treatment" className="w-full text-xs" onClick={openTreatmentForm}>
+                  {stage === "waiting" ? "Start treatment" : "Continue treatment form"}
+                </Button>
+              ) : null}
 
               <div className="flex gap-2">
                 <Button asChild variant="outline" className="flex-1 text-xs">
@@ -741,6 +790,8 @@ function TodayCard({
         </DialogContent>
       </Dialog>
 
+      <ConsentInClinicDialog appointmentId={a.id} open={consentOpen} onOpenChange={setConsentOpen} />
+
       <NoShowFollowUpDialog
         appointment={a}
         open={noShowOpen}
@@ -757,12 +808,15 @@ function StageBadge({
   stage,
   StageIcon,
   onChange,
+  consent = "outstanding",
   locked = false,
   reopenGraceMs = 0,
 }: {
   stage: Stage;
   StageIcon: React.ElementType;
   onChange?: (s: Stage) => void;
+  /** Gates "Waiting" and explains why when consent is still outstanding. */
+  consent?: ConsentState;
   /** Keep closed (e.g. while the appointment detail dialog is open). */
   locked?: boolean;
   /**
@@ -791,6 +845,7 @@ function StageBadge({
   }, [locked]);
 
   const label = stage === "no_show" ? "No show" : STAGES.find((s) => s.key === stage)?.label ?? "Booked";
+  const options = manualStageOptions({ current: stage, consent });
   const trigger = (
     <button
       type="button"
@@ -827,24 +882,40 @@ function StageBadge({
         className="w-56 rounded-2xl p-3.5"
       >
         <p className="text-sm font-semibold leading-snug text-foreground">Patient journey</p>
-        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">Set current stage.</p>
+        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+          Waiting needs consent; treatment starts from the form.
+        </p>
         <div className="mt-2.5 -mx-1.5 space-y-0.5">
           {STAGES.map((s) => {
             const Icon = s.icon;
             const active = s.key === stage;
+            const option = options.find((o) => o.key === s.key);
+            const disabled = option ? !option.enabled : false;
             return (
               <button
                 key={s.key}
                 type="button"
+                data-stage-option={s.key}
+                disabled={disabled}
+                title={option?.reason}
+                aria-disabled={disabled || undefined}
                 onClick={() => onChange(s.key)}
-                className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs leading-snug transition-colors ${
-                  active
-                    ? "bg-accent-soft font-semibold text-accent-ink"
-                    : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
+                className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs leading-snug transition-colors ${
+                  disabled
+                    ? "cursor-not-allowed text-ink-3"
+                    : active
+                      ? "cursor-pointer bg-accent-soft font-semibold text-accent-ink"
+                      : "cursor-pointer text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span>{s.label}</span>
+                <span className="min-w-0 flex-1">
+                  {s.label}
+                  {option?.opensForm ? <span className="ml-1 text-2xs text-muted-foreground">· opens the form</span> : null}
+                  {disabled && option?.reason ? (
+                    <span className="block text-2xs leading-snug text-ink-3">{option.reason}</span>
+                  ) : null}
+                </span>
               </button>
             );
           })}

@@ -253,11 +253,20 @@ type CatalogueSpec = {
   consent: boolean;
   active?: boolean;
   description: string;
+  /** Aftercare read out after this treatment; empty uses the category defaults. */
+  aftercare?: string[];
 };
 
 const CATALOGUE_SPECS: CatalogueSpec[] = [
   {
     name: "Anti-Wrinkle Injections",
+    aftercare: [
+      "Stay upright for four hours; no lying down or bending forward.",
+      "No make-up, exercise, alcohol, saunas or facials for 24 hours.",
+      "Do not rub or massage the treated areas.",
+      "Small red marks fade within an hour; a tiny bruise can take a few days.",
+      "The result develops over 3–14 days. The two-week review is where we fine-tune.",
+    ],
     category: "Injectables",
     price: 275,
     interval: 120,
@@ -298,6 +307,12 @@ const CATALOGUE_SPECS: CatalogueSpec[] = [
   },
   {
     name: "Chemical Peel",
+    aftercare: [
+      "Skin will feel tight and may look pink for 24–72 hours.",
+      "Do not pick or peel flaking skin — let it lift on its own.",
+      "SPF 50 every day for two weeks, reapplied outdoors.",
+      "Pause retinoids and acids for five days; cleanse gently and moisturise.",
+    ],
     category: "Skin",
     price: 150,
     interval: 60,
@@ -338,6 +353,12 @@ const CATALOGUE_SPECS: CatalogueSpec[] = [
   },
   {
     name: "Laser Hair Removal",
+    aftercare: [
+      "Cool the area with a clean compress if it feels warm.",
+      "No sun, saunas, hot baths or exercise for 48 hours.",
+      "Shave between sessions; do not wax, pluck or thread.",
+      "SPF 50 on treated areas for four weeks.",
+    ],
     category: "Laser",
     price: 180,
     interval: 42,
@@ -366,6 +387,7 @@ export const catalogue: Row[] = CATALOGUE_SPECS.map((spec) => ({
   duration_minutes: defaultDurationMinutes(spec.name),
   cooling_off_hours: spec.consent ? 48 : 0,
   requires_consent: spec.consent,
+  aftercare_points: spec.aftercare ?? [],
   active: spec.active ?? true,
   created_at: iso(-700),
   updated_at: iso(-40),
@@ -1122,6 +1144,7 @@ for (const patient of patients) {
       next_due_at: itemInterval ? dateOnly(-daysAgo + itemInterval) : null,
       status: "completed",
       consent_document_id: null,
+      appointment_id: null,
       commission_rate_snapshot: rate,
       created_at: iso(-daysAgo),
       updated_at: iso(-daysAgo),
@@ -1165,6 +1188,7 @@ function makeDocument(
     signed_name: null,
     signature_data: null,
     signed_ip: null,
+    witnessed_by: null,
     expires_at: null,
     created_by: USERS.frontDesk,
     created_at: iso(-daysAgo, 9, 30),
@@ -1221,6 +1245,12 @@ patients.slice(0, 90).forEach((patient, index) => {
  * out of the UI.
  */
 export const DEMO_CONSENT_TOKEN = "e2ec0deba5e00000e2ec0deba5e00000e2ec0deba5e00000";
+/**
+ * The consent still to sign for today's 14:00 booking (patient 16), under a
+ * known token, so the suite can sign it through the public link and watch the
+ * arrived patient move to waiting.
+ */
+export const DEMO_TODAY_CONSENT_TOKEN = "e2ec0deba5e00001e2ec0deba5e00001e2ec0deba5e00001";
 
 {
   const pending = makeDocument(
@@ -1338,6 +1368,7 @@ const TODAY_PLAN: {
     payment: "deposit_paid",
     consent: "signed",
   },
+  // Treatment cannot start without consent, so the in-treatment card is signed.
   {
     patientIndex: 21,
     practitionerId: USERS.practitioner2,
@@ -1347,8 +1378,10 @@ const TODAY_PLAN: {
     duration: 45,
     stage: "in_treatment",
     payment: "unpaid",
-    consent: "sent",
+    consent: "signed",
   },
+  // Arrived with consent outstanding: reception's "complete consent in
+  // clinic" card. Stays "arrived" until the form is signed.
   {
     patientIndex: 6,
     practitionerId: USERS.owner,
@@ -1356,10 +1389,12 @@ const TODAY_PLAN: {
     hour: 11,
     minute: 30,
     duration: 30,
-    stage: "waiting",
+    stage: "arrived",
     payment: "unpaid",
     consent: "none",
   },
+  // Arrived with consent already signed: automatically "waiting", which is
+  // the practitioner's "start treatment" nudge (Dr Nadia Rahman's book).
   {
     patientIndex: 13,
     practitionerId: USERS.practitioner,
@@ -1367,7 +1402,7 @@ const TODAY_PLAN: {
     hour: 13,
     minute: 0,
     duration: 45,
-    stage: "arrived",
+    stage: "waiting",
     payment: "paid",
     consent: "signed",
   },
@@ -1393,16 +1428,18 @@ const TODAY_PLAN: {
     payment: "unpaid",
     consent: "none",
   },
+  // Booked with consent already signed: marking arrival moves straight to
+  // waiting, on Dr Nadia Rahman's book so the nudge shows for the demo practitioner.
   {
     patientIndex: 18,
-    practitionerId: USERS.practitioner2,
+    practitionerId: USERS.practitioner,
     treatment: "Chemical Peel",
     hour: 15,
     minute: 30,
     duration: 45,
     stage: "booked",
     payment: "unpaid",
-    consent: "sent",
+    consent: "signed",
   },
   {
     patientIndex: 23,
@@ -1432,6 +1469,7 @@ for (const plan of TODAY_PLAN) {
       doc["signed_name"] = `${patient["first_name"]} ${patient["last_name"]}`;
       doc["signature_data"] = doc["signed_name"];
     }
+    if (plan.patientIndex === 16 && plan.consent === "sent") doc["access_token"] = DEMO_TODAY_CONSENT_TOKEN;
     consentId = doc["id"] as string;
   }
   const status =
@@ -1449,6 +1487,11 @@ for (const plan of TODAY_PLAN) {
     paymentStatus: plan.payment,
     consentDocumentId: consentId,
   });
+  // The cards read "since HH:MM" from the last state change; an arrived or
+  // waiting patient checked in a few minutes before their slot.
+  if (plan.stage === "arrived" || plan.stage === "waiting") {
+    booking["updated_at"] = new Date(new Date(booking["starts_at"]).getTime() - 4 * 60000).toISOString();
+  }
 
   // Only record a treatment once the slot has actually passed, so "last seen"
   // never reads as a future date when screenshots are taken early in the day.
@@ -1472,6 +1515,7 @@ for (const plan of TODAY_PLAN) {
       next_due_at: itemInterval ? dateOnly(itemInterval) : null,
       status: "completed",
       consent_document_id: consentId,
+      appointment_id: booking["id"],
       commission_rate_snapshot:
         profiles.find((p) => p["id"] === plan.practitionerId)?.["commission_rate"] ?? 40,
       created_at: booking["starts_at"],
@@ -1565,6 +1609,7 @@ for (const patient of engagedPatients) {
         next_due_at: itemInterval ? dateOnly(offset + itemInterval) : null,
         status: "completed",
         consent_document_id: null,
+        appointment_id: booking["id"],
         commission_rate_snapshot:
           profiles.find((p) => p["id"] === spec.practitioner)?.["commission_rate"] ?? 40,
         created_at: booking["starts_at"],
@@ -3679,6 +3724,68 @@ const PORTAL_CHECKLISTS = [
   ["Take your progress photo", "Complete your check-in", "Photos filed by clinic"],
 ];
 
+/* ---------------------------------------------------------------- */
+/* treatment sessions (the three-page treatment form)                */
+/* ---------------------------------------------------------------- */
+
+/**
+ * One form per visit that has started treatment. Today's cards mid-flow get a
+ * draft at the matching page so opening the form resumes where the
+ * practitioner left it; completed visits get a finished form behind the
+ * treatment row so the record viewer has something to open.
+ */
+export const treatmentSessions: Row[] = [];
+
+{
+  const STANDARD_CHECKS = {
+    history_unchanged: { answer: "yes" },
+    not_pregnant: { answer: "yes" },
+    no_recent_actives: { answer: "yes" },
+    allergies_confirmed: { answer: "yes" },
+    expectations_agreed: { answer: "yes" },
+  };
+  const todayKey = TODAY.toDateString();
+  for (const booking of appointments) {
+    if (new Date(booking["starts_at"] as string).toDateString() !== todayKey) continue;
+    const stage = booking["stage"] as string;
+    if (stage !== "in_treatment" && stage !== "aftercare" && stage !== "complete") continue;
+    const item = catalogue.find((c) => c["id"] === booking["catalogue_id"]);
+    const treatment = treatments.find((t) => t["appointment_id"] === booking["id"]) ?? null;
+    const startedAt = booking["starts_at"] as string;
+    const plus = (mins: number) => new Date(new Date(startedAt).getTime() + mins * 60000).toISOString();
+    const status = stage === "in_treatment" ? "treating" : stage === "aftercare" ? "aftercare" : "complete";
+    const details = detailsFor(booking["treatment_name"] as string);
+    treatmentSessions.push({
+      id: id("s1"),
+      clinic_id: CLINIC_ID,
+      appointment_id: booking["id"],
+      patient_id: booking["patient_id"],
+      practitioner_id: booking["practitioner_id"],
+      catalogue_id: booking["catalogue_id"],
+      treatment_id: treatment?.["id"] ?? null,
+      pre_checks: STANDARD_CHECKS,
+      results: status === "treating" ? {} : { area: details.area, product: details.product, dose: details.dose },
+      treatment_notes:
+        status === "treating"
+          ? null
+          : `${details.product} to ${details.area}, ${details.dose}. Tolerated well; no immediate reaction.`,
+      visit_notes: status === "treating" ? null : (treatment?.["notes"] ?? booking["notes"] ?? null),
+      aftercare_points:
+        status === "complete"
+          ? ((item?.["aftercare_points"] as string[] | undefined) ?? []).map((label) => ({ label, covered: true }))
+          : [],
+      aftercare_extra: status === "complete" ? "Patient has the aftercare sheet in the portal." : null,
+      status,
+      started_at: startedAt,
+      treating_at: plus(8),
+      aftercare_at: status === "treating" ? null : plus(35),
+      completed_at: status === "complete" ? plus(45) : null,
+      created_at: startedAt,
+      updated_at: status === "complete" ? plus(45) : status === "aftercare" ? plus(35) : plus(8),
+    });
+  }
+}
+
 /** Patient-readable treatment notes for the sessions synthesised below. */
 const PLAN_VISIT_NOTES = [
   "Tolerated well. Mild redness expected for 24 hours; SPF 50 daily and no actives for five days.",
@@ -3765,6 +3872,7 @@ for (const recipe of PLAN_RECIPES) {
       next_due_at: null,
       status: "completed",
       consent_document_id: doc["id"],
+      appointment_id: visit["id"],
       commission_rate_snapshot:
         profiles.find((p) => p["id"] === (spec.practitioner ?? USERS.practitioner))?.["commission_rate"] ?? 40,
       created_at: visit["starts_at"],
@@ -4402,6 +4510,7 @@ export const db = {
   skincareRoutines,
   routineItems,
   routineItemOverrides,
+  treatmentSessions,
   clinicNews,
   clinicOffers,
   externalTreatments,

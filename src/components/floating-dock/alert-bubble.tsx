@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ElementType } from "react";
-import { CalendarClock, ChevronDown, ChevronUp, Clock, Megaphone, TriangleAlert } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronUp, Clock, Hourglass, Megaphone, ShieldAlert, TriangleAlert } from "lucide-react";
 import { ArrivalAlerts } from "@/components/arrival-alerts";
 import { UrgentStaffAlerts } from "@/components/urgent-staff-alerts";
 import type { ArrivalAlertPhase } from "@/lib/arrival-alert-snooze";
@@ -45,6 +45,14 @@ const ARRIVAL_PILL: Record<
   overdue: {
     className: "bg-[#e0a8c4] text-[#7a2a4a] ring-destructive/40",
     icon: TriangleAlert,
+  },
+  consent: {
+    className: "bg-[#e8c49a] text-[#7a4518] ring-[rgba(224,154,92,0.45)]",
+    icon: ShieldAlert,
+  },
+  waiting: {
+    className: "bg-accent-soft text-accent-ink ring-accent/50",
+    icon: Hourglass,
   },
 };
 

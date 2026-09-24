@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +35,7 @@ import { checkEmail } from "@/lib/email";
 import { useIdentity } from "@/lib/use-identity";
 import { useStaffPresence } from "@/lib/use-staff-presence";
 import { cn } from "@/lib/utils";
+import { manualStageOptions, type ConsentState } from "@/lib/visit-stage";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -154,7 +155,17 @@ function StageTracker({
   const current = stageOf(a);
   const idx = STAGES.findIndex((s) => s.key === current);
   const [noShowOpen, setNoShowOpen] = useState(false);
-  const set = (stage: Stage) => { onState?.({ data: { id: a.id, stage } }); };
+  const navigate = useNavigate();
+  const consent: ConsentState = a.consentState ?? (a.documents?.status === "signed" ? "signed" : "outstanding");
+  const options = manualStageOptions({ current, consent });
+  const set = (stage: Stage) => {
+    // Treatment starts from the form, which sets the stage itself.
+    if (stage === "in_treatment") {
+      void navigate({ to: "/patients/$id", params: { id: a.patient_id }, search: { treat: a.id } });
+      return;
+    }
+    onState?.({ data: { id: a.id, stage } });
+  };
   const meta = STAGE_META[current];
   const label = current === "no_show" ? "No show" : (STAGES[idx]?.label ?? "Booked");
   const Icon = meta.icon;
@@ -178,20 +189,30 @@ function StageTracker({
       <HoverCardTrigger asChild>{trigger}</HoverCardTrigger>
       <HoverCardContent className="w-64 rounded-2xl" align="start">
         <p className="text-sm font-semibold text-foreground">Patient journey</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">Set where this patient is right now.</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">Waiting needs consent; treatment starts from the form.</p>
         <div className="mt-3 space-y-1">
           {STAGES.map((s, i) => {
             const done = current !== "no_show" && i < idx;
             const active = s.key === current;
             const stageMeta = STAGE_META[s.key];
             const StageIcon = stageMeta.icon;
+            const option = options.find((o) => o.key === s.key);
+            const disabled = option ? !option.enabled : false;
             return (
               <button
                 key={s.key}
                 type="button"
+                data-stage-option={s.key}
+                disabled={disabled}
+                title={option?.reason}
+                aria-disabled={disabled || undefined}
                 onClick={() => set(s.key)}
-                className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent-wash ${
-                  active ? "bg-accent-soft font-semibold text-accent-ink" : "text-muted-foreground"
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
+                  disabled
+                    ? "cursor-not-allowed text-ink-3"
+                    : active
+                      ? "cursor-pointer bg-accent-soft font-semibold text-accent-ink hover:bg-accent-wash"
+                      : "cursor-pointer text-muted-foreground hover:bg-accent-wash"
                 }`}
               >
                 <span
@@ -201,7 +222,11 @@ function StageTracker({
                 >
                   {done ? <Check className="h-2.5 w-2.5" /> : <StageIcon className="h-2.5 w-2.5" />}
                 </span>
-                {s.label}
+                <span className="min-w-0 flex-1">
+                  {s.label}
+                  {option?.opensForm ? <span className="ml-1 text-2xs text-ink-3">· opens the form</span> : null}
+                  {disabled && option?.reason ? <span className="block text-2xs leading-snug text-ink-3">{option.reason}</span> : null}
+                </span>
               </button>
             );
           })}
