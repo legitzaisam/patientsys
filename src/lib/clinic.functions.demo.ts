@@ -2970,6 +2970,17 @@ export const getPortalRecords = createServerFn({ method: "GET" }).handler(async 
     labs: docs.filter((d) => d.kind === "consultation" || d.kind === "other"),
     documents: docs.filter((d) => d.kind !== "consultation" && d.kind !== "other"),
     photoCount: photos.filter((p: any) => p.patient_id === patient.id && p.visible_to_patient).length,
+    photos: sortDesc(
+      photos.filter((p: any) => p.patient_id === patient.id && p.visible_to_patient),
+      "taken_at",
+    ).map((p: any) => ({
+      id: p.id,
+      kind: p.kind,
+      caption: p.caption ?? null,
+      takenAt: p.taken_at,
+      treatment: p.treatment_id ? (treatments.find((t) => t.id === p.treatment_id)?.name ?? null) : null,
+      url: p.storage_path,
+    })),
     latestHistory:
       sortDesc(medicalHistory.filter((h: any) => h.patient_id === patient.id), "created_at")[0] ?? null,
   };

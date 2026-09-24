@@ -375,6 +375,28 @@ test("clinic: a past treatment can be added and removed", async ({ page }) => {
   await expect(page.getByText(treatment)).toBeHidden();
 });
 
+test("records: the archive card is content-sized and opens the photo gallery", async ({ page }) => {
+  await page.goto("/my-record/records");
+  const archive = page.locator('[data-qc="photo-archive"]');
+  await archive.waitFor();
+  // A standalone card must not stretch to fill the page.
+  const box = await archive.boundingBox();
+  expect(box && box.height < 320).toBeTruthy();
+  const health = page.getByRole("heading", { name: "Update your health information" }).locator("xpath=ancestor::div[contains(@class,'glass-card')]").first();
+  const healthBox = await health.boundingBox();
+  expect(healthBox && healthBox.height < 420).toBeTruthy();
+
+  // Thumbnails inline, and the gallery opens with every shared photo.
+  expect(await archive.locator('[data-qc="photo-strip"] button').count()).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "View my gallery" }).click();
+  const gallery = page.locator('[data-qc="photo-gallery"]');
+  await expect(gallery).toBeVisible();
+  expect(await gallery.locator("img").count()).toBeGreaterThan(0);
+  await expect(gallery.getByText(/Before/).first()).toBeVisible();
+  await gallery.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(gallery).toBeHidden();
+});
+
 test("records: profile edits save, and health updates and signing work", async ({ page }) => {
   await page.goto("/my-record/records");
 

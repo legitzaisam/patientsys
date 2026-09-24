@@ -3605,9 +3605,10 @@ export const getPortalRecords = createServerFn({ method: "GET" })
         .order("created_at", { ascending: false }),
       ctx.supabase
         .from("treatment_photos")
-        .select("id")
+        .select("id, kind, caption, taken_at, storage_path, treatment_id, treatments(name)")
         .eq("patient_id", patient.id)
-        .eq("visible_to_patient", true),
+        .eq("visible_to_patient", true)
+        .order("taken_at", { ascending: false }),
       ctx.supabase
         .from("medical_history_versions")
         .select("*")
@@ -3615,6 +3616,20 @@ export const getPortalRecords = createServerFn({ method: "GET" })
         .order("created_at", { ascending: false })
         .limit(1),
     ]);
+
+    // The archive gallery: every photo the clinic has shared, newest first.
+    const gallery = [];
+    for (const photo of (photos ?? []) as any[]) {
+      const { data: signed } = await ctx.supabase.storage.from("patient-photos").createSignedUrl(photo.storage_path, 3600);
+      gallery.push({
+        id: photo.id,
+        kind: photo.kind,
+        caption: photo.caption ?? null,
+        takenAt: photo.taken_at,
+        treatment: photo.treatments?.name ?? null,
+        url: signed?.signedUrl ?? null,
+      });
+    }
 
     const docs = documents ?? [];
     return {
@@ -3624,7 +3639,8 @@ export const getPortalRecords = createServerFn({ method: "GET" })
       // consents and plans are paperwork.
       labs: docs.filter((d: any) => d.kind === "consultation" || d.kind === "other"),
       documents: docs.filter((d: any) => d.kind !== "consultation" && d.kind !== "other"),
-      photoCount: (photos ?? []).length,
+      photoCount: gallery.length,
+      photos: gallery,
       latestHistory: (history ?? [])[0] ?? null,
     };
   });

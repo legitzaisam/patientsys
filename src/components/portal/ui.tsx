@@ -25,9 +25,10 @@ export function PortalCard({
   "data-qc"?: string;
 }) {
   return (
-    // h-full: inside a stretch grid every card in a row takes the row's height,
-    // which is what "all boxes need to match in size" asks for.
-    <Card className={cn("h-full rounded-[22px] p-[14px]", className)} style={style} {...rest}>
+    // Inside an items-stretch grid every card in a row takes the row's height
+    // on its own; no explicit height here, so a card on its own stays the
+    // size of its content.
+    <Card className={cn("rounded-[22px] p-[14px]", className)} style={style} {...rest}>
       {children}
     </Card>
   );

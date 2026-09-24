@@ -35,6 +35,7 @@ function MyRecords() {
   const fetchRecords = useServerFn(getPortalRecords);
   const { data, isLoading } = useQuery({ queryKey: ["portal-records"], queryFn: () => fetchRecords() });
   const [editing, setEditing] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["portal-records"] });
   const sign = useMutation({
@@ -194,7 +195,7 @@ function MyRecords() {
           sub="Tell us about changes to medication, allergies, diet or health so your practitioner can treat you safely."
         />
         <form
-          className="grid gap-3 sm:grid-cols-2"
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
           data-qc="history-form"
           onSubmit={(e) => {
             e.preventDefault();
@@ -219,7 +220,7 @@ function MyRecords() {
           <HField name="diet" label="Diet / lifestyle changes" />
           <HField name="pregnancy" label="Pregnancy or breastfeeding" />
           <HField name="other" label="Anything else" />
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 xl:col-span-3">
             <button
               type="submit"
               data-qc="history-submit"
@@ -232,7 +233,7 @@ function MyRecords() {
         </form>
       </PortalCard>
 
-      <PortalCard className="mt-3.5">
+      <PortalCard className="mt-3.5" data-qc="photo-archive">
         <div className="flex items-center gap-3">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-accent-soft text-accent-ink">
             <ImageIcon className="h-4 w-4" aria-hidden />
@@ -248,10 +249,31 @@ function MyRecords() {
               {data.photoCount} photo{data.photoCount === 1 ? "" : "s"} of your treatment progress, all in one place.
             </p>
           </div>
-          <PortalLink>View my gallery</PortalLink>
+          {data.photoCount > 0 ? (
+            <PortalLink onClick={() => setGalleryOpen(true)}>View my gallery</PortalLink>
+          ) : null}
         </div>
+        {(data.photos ?? []).length > 0 ? (
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1" data-qc="photo-strip">
+            {(data.photos ?? []).slice(0, 8).map((photo: any) => (
+              <button
+                key={photo.id}
+                type="button"
+                onClick={() => setGalleryOpen(true)}
+                aria-label={`${photo.kind} photo, ${formatPortalDate(photo.takenAt)}`}
+                className="relative h-[72px] w-[72px] shrink-0 cursor-pointer overflow-hidden rounded-[12px] shadow-inset-hi transition-transform hover:scale-[1.03]"
+              >
+                {photo.url ? <img src={photo.url} alt="" className="h-full w-full object-cover" /> : <span className="block h-full w-full bg-glass-2" />}
+                <span className="absolute bottom-1 left-1 rounded-full bg-white/85 px-1.5 text-[9px] font-semibold capitalize text-foreground">
+                  {photo.kind}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </PortalCard>
 
+      {galleryOpen && <GalleryModal photos={data.photos ?? []} onClose={() => setGalleryOpen(false)} />}
       {editing && <EditProfileModal patient={p} onClose={() => setEditing(false)} />}
     </div>
   );
@@ -318,6 +340,80 @@ function Stack({ label, value }: { label: string; value: string }) {
     <div className="mb-2">
       <p className="text-xs font-semibold">{label}</p>
       <p className="mt-px text-xs text-muted-foreground">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Every photo the clinic has shared, grouped by treatment and date, with the
+ * before/after pairs side by side. Opened from the archive card.
+ */
+function GalleryModal({
+  photos,
+  onClose,
+}: {
+  photos: { id: string; kind: string; caption: string | null; takenAt: string; treatment: string | null; url: string | null }[];
+  onClose: () => void;
+}) {
+  const groups = new Map<string, typeof photos>();
+  for (const photo of photos) {
+    const key = `${photo.treatment ?? "Progress photos"}`;
+    const list = groups.get(key) ?? [];
+    list.push(photo);
+    groups.set(key, list);
+  }
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-[rgba(47,63,102,0.28)] p-6 backdrop-blur-[2px]"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-label="Your before and after gallery"
+        data-qc="photo-gallery"
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[88vh] w-[min(820px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
+      >
+        <div className="flex items-start gap-2.5">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-semibold">Before &amp; After gallery</h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {photos.length} photo{photos.length === 1 ? "" : "s"} your clinic has shared with you, newest first.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-6 w-6 cursor-pointer place-items-center rounded-full text-ink-3 hover:bg-glass-2"
+          >
+            <X className="h-3 w-3" aria-hidden />
+          </button>
+        </div>
+        {[...groups.entries()].map(([title, list]) => (
+          <section key={title} className="mt-4">
+            <p className="text-xs font-semibold">{title}</p>
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              {list.map((photo) => (
+                <figure key={photo.id} className="min-w-0">
+                  {photo.url ? (
+                    <img src={photo.url} alt="" className="aspect-square w-full rounded-[14px] object-cover shadow-inset-hi" />
+                  ) : (
+                    <div className="aspect-square w-full rounded-[14px] bg-glass-2" />
+                  )}
+                  <figcaption className="mt-1.5 text-2xs text-muted-foreground">
+                    <span className="font-semibold capitalize text-foreground">{photo.kind}</span> · {formatPortalDate(photo.takenAt)}
+                    {photo.caption ? <span className="block">{photo.caption}</span> : null}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        ))}
+        {photos.length === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">No photos have been shared yet.</p>
+        ) : null}
+      </div>
     </div>
   );
 }
