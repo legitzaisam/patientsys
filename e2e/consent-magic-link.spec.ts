@@ -25,7 +25,8 @@ test("issuing a consent form queues the signing-link email", async ({ page, cont
   await dialog.getByRole("button", { name: "Send", exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  // The outbox on the record now holds a queued transactional consent email.
+  // The outbox on the record's Contact tab now holds a queued transactional consent email.
+  await page.getByRole("tab", { name: "Contact" }).click();
   const row = page.locator("li", { hasText: "please review and sign" }).first();
   await expect(row.getByText("queued", { exact: true })).toBeVisible();
   await expect(row.getByText(/transactional/)).toBeVisible();

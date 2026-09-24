@@ -46,11 +46,15 @@ import {
 } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/patients/$id")({
-  validateSearch: (search: Record<string, unknown>): { tab?: string; chase?: boolean } => {
+  validateSearch: (search: Record<string, unknown>): { tab?: string; chase?: boolean; chat?: boolean } => {
     const tab = typeof search["tab"] === "string" ? search["tab"] : undefined;
-    const rawChase = search["chase"];
-    const chase = rawChase === true || rawChase === "1" || rawChase === 1;
-    return chase ? { ...(tab ? { tab } : {}), chase: true } : tab ? { tab } : {};
+    const flag = (v: unknown) => v === true || v === "1" || v === 1;
+    return {
+      ...(tab ? { tab } : {}),
+      ...(flag(search["chase"]) ? { chase: true } : {}),
+      // `chat` opens the docked message panel (Contact buttons elsewhere link here).
+      ...(flag(search["chat"]) ? { chat: true } : {}),
+    };
   },
   head: () => ({
     meta: [
@@ -66,7 +70,7 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
 
 function PatientRecord() {
   const { id } = Route.useParams();
-  const { tab: tabSearch, chase: chaseFocus } = Route.useSearch();
+  const { tab: tabSearch, chase: chaseFocus, chat: chatFocus } = Route.useSearch();
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
   const fetchPatient = useServerFn(getPatient);
@@ -120,6 +124,18 @@ function PatientRecord() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, patientName, chatCollapsed, !!data?.patient]);
   useEffect(() => () => registerChatPage(null), [registerChatPage]);
+
+  // Arriving with ?chat=1 (e.g. Contact on a dashboard card): make sure the
+  // docked panel is open and put the cursor in the composer.
+  useEffect(() => {
+    if (!chatFocus || !data?.patient) return;
+    setChatCollapsedPersisted(false);
+    const timer = window.setTimeout(() => {
+      document.querySelector<HTMLTextAreaElement>("#patient-chat textarea")?.focus();
+    }, 150);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatFocus, !!data?.patient]);
   const [resizing, setResizing] = useState(false);
   const resizeStart = useRef({ x: 0, width: 340 });
 
@@ -581,20 +597,10 @@ function PatientRecord() {
             </div>
           </Card>
 
-          <CommsPreferencesCard
-            patientId={id}
-            patient={p}
-            onSaved={() => {
-              invalidate();
-              void queryClient.invalidateQueries({ queryKey: ["communications", id] });
-            }}
-          />
-          {can(identity, "comms.send") ? (
-            <CommsLogCard patientId={id} enabled canDrain={can(identity, "comms.send")} />
-          ) : null}
-
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
+            {/* Seven tabs: let the pill wrap on narrower layouts rather than run
+                under the docked chat panel. */}
+            <TabsList className="h-auto max-w-full flex-wrap justify-start">
               <TabsTrigger value="treatments" className="items-center pr-2.5">
                 Treatments
                 {bookingChase.length > 0 ? (
@@ -608,7 +614,24 @@ function PatientRecord() {
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="history">History updates</TabsTrigger>
               <TabsTrigger value="portal">From the patient</TabsTrigger>
+              <TabsTrigger value="contact">Contact</TabsTrigger>
             </TabsList>
+
+            {/* How we may reach this patient, and what has been sent. Lives in
+                a tab so the record opens on clinical content, not admin. */}
+            <TabsContent value="contact" className="space-y-4">
+              <CommsPreferencesCard
+                patientId={id}
+                patient={p}
+                onSaved={() => {
+                  invalidate();
+                  void queryClient.invalidateQueries({ queryKey: ["communications", id] });
+                }}
+              />
+              {can(identity, "comms.send") ? (
+                <CommsLogCard patientId={id} enabled canDrain={can(identity, "comms.send")} />
+              ) : null}
+            </TabsContent>
 
             <TabsContent value="treatments" className="space-y-4">
               <Card className="p-5">
@@ -709,7 +732,10 @@ function PatientRecord() {
                   <h3 className="section-title">
                     Visit notes
                   </h3>
-                  <p className="text-xs text-muted-foreground">From diary appointments.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Kept here against each appointment and its treatment. A note on an upcoming appointment is the
+                    practitioner's pre-read; once the visit is done it is the visit record.
+                  </p>
                 </div>
                 {(data.visitNotes ?? []).length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 px-4 py-6 text-center text-sm text-muted-foreground">

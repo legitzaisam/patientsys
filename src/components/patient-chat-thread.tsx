@@ -56,6 +56,7 @@ export function PatientChatThread({
   templates = false,
   canDeleteTemplates = false,
   typing = false,
+  initialDraft,
 }: {
   patientId: string;
   patientName: string;
@@ -67,6 +68,8 @@ export function PatientChatThread({
   canDeleteTemplates?: boolean;
   /** Render a "…" bubble at the end of the thread (demo AI patient composing). */
   typing?: boolean;
+  /** Pre-fill the composer (and focus it). */
+  initialDraft?: string | undefined;
 }) {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const firstName = patientName.trim().split(/\s+/)[0] || patientName;
@@ -182,6 +185,8 @@ export function PatientChatThread({
         placeholder={as === "staff" ? `Message ${firstName}…` : "Message the clinic…"}
         onSent={onSent}
         variant="chat"
+        initialDraft={initialDraft}
+        autoFocus={Boolean(initialDraft)}
       />
     </>
   );

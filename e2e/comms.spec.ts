@@ -7,10 +7,13 @@ import { expect, test } from "./fixtures";
 
 test.use({ role: "owner" });
 
+/** Open Olivia's record on the Contact tab, where preferences and the outbox live. */
 async function openOliviaRecord(page: import("@playwright/test").Page) {
   await page.goto("/patients");
   await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: /Bennett, .*Olivia/ })).toBeVisible();
+  await page.getByRole("tab", { name: "Contact" }).click();
+  await expect(page.getByRole("heading", { name: "Contact preferences" })).toBeVisible();
 }
 
 test("processing the queue sends the queued fixture through the sandbox", async ({ page }) => {
@@ -37,6 +40,7 @@ test("contact preference toggles persist across a reload", async ({ page }) => {
   await expect(marketing).toHaveAttribute("aria-checked", before === "true" ? "false" : "true");
 
   await page.reload();
+  await page.getByRole("tab", { name: "Contact" }).click();
   await expect(page.getByRole("switch").nth(1)).toHaveAttribute(
     "aria-checked",
     before === "true" ? "false" : "true",

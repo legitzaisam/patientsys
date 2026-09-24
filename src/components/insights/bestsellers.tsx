@@ -3,12 +3,14 @@ import { money } from "@/components/period-picker";
 import type { InsightsResult } from "@/lib/insights.server";
 
 function RankedList({
+  id,
   title,
   subtitle,
   rows,
   empty,
   unit,
 }: {
+  id?: string;
   title: string;
   subtitle: string;
   rows: { name: string; count: number; revenue: number; detail?: string }[];
@@ -17,7 +19,7 @@ function RankedList({
 }) {
   const max = rows[0]?.revenue || rows[0]?.count || 1;
   return (
-    <Card className="p-5">
+    <Card id={id} className="scroll-mt-20 p-5">
       <h2 className="section-title">{title}</h2>
       <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
       <ul className="mt-4 space-y-2.5">
@@ -52,6 +54,7 @@ export function Bestsellers({ data }: { data: InsightsResult["bestsellers"] | un
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <RankedList
+        id="insights-sold"
         title="Best-selling treatments"
         subtitle="Volume and revenue in this window."
         unit="visit"

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   BarChart3,
@@ -20,6 +20,7 @@ import {
   User,
 } from "lucide-react";
 import { getPortalPlan, submitRecoveryCheckin, toggleChecklistItem } from "@/lib/clinic.functions";
+import { severityLabel } from "@/lib/portal/shape";
 import { PlanTabs } from "@/components/portal/plan-tabs";
 import {
   PortalCard,
@@ -52,12 +53,36 @@ function PlanOverview() {
   });
   const checkin = useMutation({
     mutationFn: useServerFn(submitRecoveryCheckin),
-    onSuccess: () => {
-      toast.success("Thanks — your clinic can see this");
+    onSuccess: (_res, vars: any) => {
+      toast.success(vars?.data?.note ? "Note saved — your clinic can see this" : "Check-in saved");
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // Local slider state so dragging is smooth; the server is written when the
+  // patient lets go (one reading per day, so a re-drag corrects today).
+  const [readings, setReadings] = useState<{ redness: number; sensitivity: number; dryness: number } | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const serverCheckIn = data?.checkIn;
+  useEffect(() => {
+    setReadings(
+      serverCheckIn
+        ? {
+            redness: serverCheckIn.rows[0]?.value ?? 0,
+            sensitivity: serverCheckIn.rows[1]?.value ?? 0,
+            dryness: serverCheckIn.rows[2]?.value ?? 0,
+          }
+        : { redness: 20, sensitivity: 20, dryness: 20 },
+    );
+    setNote(serverCheckIn?.note && serverCheckIn.note !== "Submitted from the portal" ? serverCheckIn.note : "");
+  }, [serverCheckIn?.date, serverCheckIn?.rows[0]?.value, serverCheckIn?.rows[1]?.value, serverCheckIn?.rows[2]?.value]);
+
+  const saveCheckin = (next: { redness: number; sensitivity: number; dryness: number }, noteText?: string) =>
+    checkin.mutate({
+      data: { ...next, ...(noteText?.trim() ? { note: noteText.trim() } : {}) },
+    });
 
   if (isLoading) return <p className="p-6 text-sm text-muted-foreground">Loading your plan…</p>;
   if (!data?.plan) {
@@ -133,7 +158,7 @@ function PlanOverview() {
 
       <PlanTabs />
 
-      <div className="grid items-start gap-3.5 xl:grid-cols-[1.05fr_1fr_1fr]">
+      <div className="grid items-stretch gap-3.5 xl:grid-cols-[1.05fr_1fr_1fr]">
         <PortalCard>
           <PortalHead
             icon={Sun}
@@ -162,7 +187,11 @@ function PlanOverview() {
                   >
                     <Upload className="h-3 w-3" aria-hidden /> Upload result
                   </button>
-                  <PortalLink onClick={() => navigate({ to: "/my-record/plan/timeline" })}>View the step</PortalLink>
+                  <PortalLink
+                    onClick={() => navigate({ to: "/my-record/plan/timeline", search: { step: todayAction.id } })}
+                  >
+                    View the step
+                  </PortalLink>
                 </div>
               </div>
             </div>
@@ -178,37 +207,85 @@ function PlanOverview() {
             sub="How are you feeling today?"
             action={checkIn ? <span className="text-xs text-muted-foreground">{formatPortalDate(checkIn.date)}</span> : null}
           />
-          {checkIn ? (
-            <div className="grid gap-2.5">
-              {checkIn.rows.map((r: any) => (
-                <PortalSlider key={r.label} label={r.label} value={r.value} reading={r.reading} />
-              ))}
-            </div>
+          {!checkIn && <p className="mb-2 text-xs text-muted-foreground">No reading yet today — drag to record how you feel.</p>}
+          <div className="grid gap-2.5" data-qc="checkin-sliders">
+            {(
+              [
+                ["redness", "Redness"],
+                ["sensitivity", "Sensitivity"],
+                ["dryness", "Dryness"],
+              ] as const
+            ).map(([key, label]) => {
+              const value = readings?.[key] ?? 0;
+              return (
+                <PortalSlider
+                  key={key}
+                  label={label}
+                  value={value}
+                  reading={severityLabel(value)}
+                  onChange={(v) => setReadings((r) => ({ ...(r ?? { redness: 0, sensitivity: 0, dryness: 0 }), [key]: v }))}
+                  onCommit={(v) => {
+                    const next = { ...(readings ?? { redness: 0, sensitivity: 0, dryness: 0 }), [key]: v };
+                    saveCheckin(next, note);
+                  }}
+                />
+              );
+            })}
+          </div>
+          {noteOpen ? (
+            <form
+              className="mt-3"
+              data-qc="checkin-note"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (readings) saveCheckin(readings, note);
+                setNoteOpen(false);
+              }}
+            >
+              <label htmlFor="checkin-note" className="text-xs font-semibold text-accent-ink">
+                Add note
+              </label>
+              <textarea
+                id="checkin-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                placeholder="Anything your clinic should know — where it's sore, what changed, what you've tried."
+                className="mt-1.5 w-full resize-none rounded-[14px] border border-edge-2 bg-glass-2 px-3 py-2 text-xs leading-relaxed shadow-inset-hi outline-none placeholder:text-ink-3 focus:border-edge"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={checkin.isPending}
+                  className="inline-flex h-7 cursor-pointer items-center rounded-full bg-accent px-3 text-xs font-semibold text-accent-foreground shadow-bloom hover:brightness-105 disabled:opacity-60"
+                >
+                  Save note
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNoteOpen(false)}
+                  className="inline-flex h-7 cursor-pointer items-center rounded-full px-3 text-xs font-semibold text-ink-2 hover:bg-[rgba(47,63,102,0.08)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           ) : (
-            <p className="text-xs text-muted-foreground">No reading yet today.</p>
+            <button
+              type="button"
+              data-qc="checkin-submit"
+              onClick={() => setNoteOpen(true)}
+              className="mt-3 inline-flex h-7 cursor-pointer items-center gap-1 text-xs font-semibold text-accent-ink hover:underline"
+            >
+              {note ? "Edit note" : "Add note"}
+            </button>
           )}
-          <button
-            type="button"
-            data-qc="checkin-submit"
-            disabled={checkin.isPending}
-            onClick={() =>
-              checkin.mutate({
-                data: {
-                  redness: checkIn?.rows[0]?.value ?? 20,
-                  sensitivity: checkIn?.rows[1]?.value ?? 20,
-                  dryness: checkIn?.rows[2]?.value ?? 20,
-                  note: "Submitted from the portal",
-                },
-              })
-            }
-            className="mt-3 inline-flex h-7 cursor-pointer items-center gap-1 text-xs font-semibold text-accent-ink hover:underline disabled:opacity-50"
-          >
-            Add a note if you're experiencing increased symptoms
-          </button>
+          {note && !noteOpen ? <p className="mt-1 text-xs leading-relaxed text-ink-2">{note}</p> : null}
           {checkIn?.needsAttention && (
             <div className="mt-2.5">
               <PortalNote tone="danger" icon={TriangleAlert}>
-                Your response suggests higher irritation. Please add a note so we can track this in your journal.
+                Your reading suggests higher irritation. Add a note so your clinic can follow it in your journal.
               </PortalNote>
             </div>
           )}
@@ -256,7 +333,7 @@ function PlanOverview() {
         </PortalCard>
       </div>
 
-      <div className="mt-3.5 grid items-start gap-3.5 xl:grid-cols-[2.1fr_1fr]">
+      <div className="mt-3.5 grid items-stretch gap-3.5 xl:grid-cols-[2.1fr_1fr]">
         <PortalCard>
           <PortalHead
             icon={Layers}
@@ -324,7 +401,7 @@ function PlanOverview() {
             className="mt-2.5 flex w-full cursor-pointer items-center justify-between rounded-full bg-glass-2 px-3 py-1.5 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.08)]"
           >
             <span className="flex items-center gap-1.5">
-              <Info className="h-3 w-3" aria-hidden /> View checklist
+              <Info className="h-3 w-3" aria-hidden /> View more details
             </span>
             <ChevronRight className="h-3 w-3" aria-hidden />
           </button>

@@ -12,10 +12,13 @@ const NAV = [
   { label: "My Clinic", path: "/my-record/clinic", heading: /My Clinic/ },
   { label: "My Profile / Records", path: "/my-record/records", heading: /My Profile \/ Records/ },
   { label: "Appointments", path: "/my-record/appointments", heading: /Appointments/ },
+  { label: "Resources", path: "/my-record/resources", heading: /Resources/ },
+];
+
+/** Billing and Settings moved out of the sidebar into the account menu. */
+const ACCOUNT_MENU = [
   { label: "Billing", path: "/my-record/billing", heading: /Billing/ },
   { label: "Settings", path: "/my-record/settings", heading: /Settings/ },
-  { label: "Resources", path: "/my-record/resources", heading: /Resources/ },
-  { label: "Messages", path: "/my-record/messages", heading: /Messages/ },
 ];
 
 const TABS = [
@@ -42,6 +45,32 @@ test.describe("as a patient", () => {
     }
   });
 
+  test("Billing and Settings live in the account menu", async ({ page }) => {
+    for (const item of ACCOUNT_MENU) {
+      await page.goto("/my-record");
+      await page.getByRole("heading", { level: 1 }).waitFor();
+      // Not in the sidebar any more.
+      await expect(page.getByRole("navigation").getByRole("link", { name: item.label, exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: "Account menu" }).click();
+      const entry = page.getByRole("menuitem", { name: item.label });
+      await entry.waitFor();
+      await entry.click();
+      await expect(page).toHaveURL(new RegExp(`${item.path.replace(/\//g, "\\/")}$`));
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(item.heading);
+    }
+    // Messages is no longer a page: neither the sidebar nor the menu offers it,
+    // and its old address no longer renders one.
+    await expect(page.getByRole("navigation").getByRole("link", { name: "Messages", exact: true })).toHaveCount(0);
+    await page.goto("/my-record/messages");
+    await expect(page.getByRole("heading", { level: 1, name: "Messages" })).toHaveCount(0);
+  });
+
+  test("Home stays highlighted with a trailing slash in the address", async ({ page }) => {
+    await page.goto("/my-record/");
+    const home = page.getByRole("navigation").getByRole("link", { name: "Home", exact: true });
+    await expect(home).toHaveAttribute("aria-current", "page");
+  });
+
   test("every plan tab navigates and marks itself selected", async ({ page }) => {
     await page.goto("/my-record/plan");
 
@@ -53,7 +82,7 @@ test.describe("as a patient", () => {
   });
 
   test("deep links land directly on the right page", async ({ page }) => {
-    for (const path of [...NAV.map((n) => n.path), ...TABS.map((t) => t.path)]) {
+    for (const path of [...NAV.map((n) => n.path), ...ACCOUNT_MENU.map((n) => n.path), ...TABS.map((t) => t.path)]) {
       await page.goto(path);
       await expect(page).toHaveURL(new RegExp(`${path.replace(/\//g, "\\/")}$`));
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

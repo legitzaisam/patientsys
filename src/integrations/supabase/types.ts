@@ -96,6 +96,7 @@ export type Database = {
           ends_at: string;
           id: string;
           notes: string | null;
+          patient_confirmed_at: string | null;
           patient_id: string;
           payment_status: Database["public"]["Enums"]["payment_status"];
           practitioner_id: string | null;
@@ -116,6 +117,7 @@ export type Database = {
           ends_at: string;
           id?: string;
           notes?: string | null;
+          patient_confirmed_at?: string | null;
           patient_id: string;
           payment_status?: Database["public"]["Enums"]["payment_status"];
           practitioner_id?: string | null;
@@ -136,6 +138,7 @@ export type Database = {
           ends_at?: string;
           id?: string;
           notes?: string | null;
+          patient_confirmed_at?: string | null;
           patient_id?: string;
           payment_status?: Database["public"]["Enums"]["payment_status"];
           practitioner_id?: string | null;
@@ -1573,6 +1576,67 @@ export type Database = {
           },
         ];
       };
+      routine_item_overrides: {
+        Row: {
+          clinic_id: string;
+          created_at: string;
+          how_to: string | null;
+          id: string;
+          patient_id: string;
+          product_name: string;
+          product_url: string | null;
+          routine_item_id: string;
+          source: string;
+          updated_at: string;
+        };
+        Insert: {
+          clinic_id: string;
+          created_at?: string;
+          how_to?: string | null;
+          id?: string;
+          patient_id: string;
+          product_name: string;
+          product_url?: string | null;
+          routine_item_id: string;
+          source?: string;
+          updated_at?: string;
+        };
+        Update: {
+          clinic_id?: string;
+          created_at?: string;
+          how_to?: string | null;
+          id?: string;
+          patient_id?: string;
+          product_name?: string;
+          product_url?: string | null;
+          routine_item_id?: string;
+          source?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "routine_item_overrides_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "routine_item_overrides_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "routine_item_overrides_routine_item_id_fkey";
+            columns: ["routine_item_id"];
+            isOneToOne: true;
+            referencedRelation: "routine_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       routine_items: {
         Row: {
           clinic_id: string;
@@ -2139,6 +2203,7 @@ export type Database = {
           created_by: string | null;
           duration_days: number | null;
           id: string;
+          kind: string;
           name: string;
           patient_id: string;
           phase: Database["public"]["Enums"]["treatment_plan_phase"];
@@ -2157,6 +2222,7 @@ export type Database = {
           created_by?: string | null;
           duration_days?: number | null;
           id?: string;
+          kind?: string;
           name: string;
           patient_id: string;
           phase?: Database["public"]["Enums"]["treatment_plan_phase"];
@@ -2175,6 +2241,7 @@ export type Database = {
           created_by?: string | null;
           duration_days?: number | null;
           id?: string;
+          kind?: string;
           name?: string;
           patient_id?: string;
           phase?: Database["public"]["Enums"]["treatment_plan_phase"];
@@ -2625,6 +2692,10 @@ export type Database = {
       match_reauthentication_otp: {
         Args: { p_user_id: string; p_code: string };
         Returns: boolean;
+      };
+      confirm_appointment: {
+        Args: { p_appointment_id: string };
+        Returns: string;
       };
       record_login_event: {
         Args: { p_email: string; p_surface: string; p_success: boolean };

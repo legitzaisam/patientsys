@@ -285,6 +285,13 @@ export const GetMyEarnings = z.object({ from: dateString, to: dateString });
 
 export const GetInsights = z.object({ from: dateString, to: dateString });
 
+/** Empty means "this year to date", which is what the dashboard asks for. */
+export const GetRetention = z.object({
+  from: optionalDateString,
+  to: optionalDateString,
+  key: z.enum(["day", "week", "month", "year"]).optional(),
+});
+
 export const SaveRetailProduct = z.object({
   id: optionalId,
   name: requiredText(200),
@@ -475,6 +482,10 @@ export const SubmitRecoveryCheckin = z.object({
   note: optionalText(2000),
 });
 
+export const ConfirmAppointment = z.object({
+  appointment_id: id,
+});
+
 export const RequestPlanPause = z.object({
   plan_id: id,
   reason: requiredText(120),
@@ -489,6 +500,18 @@ export const SnoozeRoutineReminder = z.object({
   period: routinePeriod,
   minutes: z.number().int().min(5).max(720).optional(),
 });
+
+export const ExtractProductFromLink = z.object({ url: requiredText(2048) });
+
+export const SaveRoutineOverride = z.object({
+  routine_item_id: id,
+  product_name: requiredText(200),
+  how_to: optionalText(600),
+  product_url: optionalText(2048),
+  source: z.enum(["link", "ai", "manual"]).optional(),
+});
+
+export const ClearRoutineOverride = z.object({ routine_item_id: id });
 
 export const ToggleChecklistItem = z.object({ id, done: z.boolean() });
 

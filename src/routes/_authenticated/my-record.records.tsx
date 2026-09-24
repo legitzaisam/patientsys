@@ -69,7 +69,7 @@ function MyRecords() {
         </div>
       </div>
 
-      <div className="grid items-start gap-3.5 xl:grid-cols-3">
+      <div className="grid items-stretch gap-3.5 xl:grid-cols-3">
         <PortalCard>
           <EditableHead icon={User} title="Personal details" onEdit={() => setEditing(true)} />
           <Field label="Full name" value={`${p.first_name} ${p.last_name}`} />
@@ -99,7 +99,7 @@ function MyRecords() {
         </PortalCard>
       </div>
 
-      <div className="mt-3.5 grid items-start gap-3.5 xl:grid-cols-3">
+      <div className="mt-3.5 grid items-stretch gap-3.5 xl:grid-cols-3">
         <PortalCard>
           <RecordsHead icon={FileText} title="Treatment history" />
           <div className="relative mt-1 pl-1">

@@ -15,7 +15,6 @@ import {
   ChevronDown,
   Repeat,
   Lightbulb,
-  MessageSquare,
   Megaphone,
   PanelLeft,
   PanelLeftClose,
@@ -41,7 +40,7 @@ import { StaffAlertDialog } from "@/components/staff-alert-dialog";
 import { FloatingNotes } from "@/components/dashboard/floating-notes";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
-import { getUnreadMessages, listAppointments, listTeam } from "@/lib/clinic.functions";
+import { listAppointments, listTeam } from "@/lib/clinic.functions";
 import { clinicDayRange } from "@/lib/clinic-time";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { can } from "@/lib/permissions";
@@ -250,10 +249,20 @@ function AccountMenu({
             )}
           </>
         ) : (
-          <DropdownMenuItem onClick={() => navigate({ to: "/my-record" })}>
-            <HeartPulse className="h-4 w-4" />
-            My record
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem onClick={() => navigate({ to: "/my-record" })}>
+              <HeartPulse className="h-4 w-4" />
+              My record
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate({ to: "/my-record/billing" })}>
+              <Wallet className="h-4 w-4" />
+              Billing
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate({ to: "/my-record/settings" })}>
+              <SettingsIcon className="h-4 w-4" />
+              Settings
+            </DropdownMenuItem>
+          </>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={signOut}>
@@ -331,7 +340,9 @@ function SidebarChrome({
             <div key={item.to}>
               <NavItem
                 item={item}
-                active={item.to === "/my-record" ? pathname === item.to : pathname.startsWith(item.to)}
+                active={
+                  item.to === "/my-record" ? pathname.replace(/\/+$/, "") === item.to : pathname.startsWith(item.to)
+                }
                 onNavigate={onNavigate}
               />
               {item.to === "/my-record/plan" && pathname.startsWith("/my-record/plan") && (
@@ -479,17 +490,6 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     });
   }, [teamMembers, onlineIds]);
 
-  // Patients see an unread badge on their Messages nav item; the bell uses
-  // the same query key, so one fetch serves both.
-  const fetchPortalUnread = useServerFn(getUnreadMessages);
-  const { data: portalUnreadData } = useQuery({
-    queryKey: ["unread-messages"],
-    queryFn: () => fetchPortalUnread(),
-    refetchInterval: 60_000,
-    enabled: !identity.isStaff && sessionReady,
-  });
-  const portalUnread = portalUnreadData?.total ?? 0;
-
   const { data: todayAppointments } = useQuery({
     queryKey: ["sidebar-diary-count", startISO],
     queryFn: () => fetchAppointments({ data: { from: startISO, to: endISO } }),
@@ -517,17 +517,13 @@ export function AppShell({ identity, children }: { identity: Identity; children:
         { to: "/my-record/clinic", label: "My Clinic", icon: HeartPulse },
         { to: "/my-record/records", label: "My Profile / Records", icon: Users },
         { to: "/my-record/appointments", label: "Appointments", icon: CalendarDays },
-        { to: "/my-record/billing", label: "Billing", icon: Wallet },
-        { to: "/my-record/settings", label: "Settings", icon: SettingsIcon },
       ];
 
-  /** Support group, mirroring the V4 wireframes' second nav block. */
+  // Billing and Settings live in the account menu (top right); messages are
+  // the chat bubble in the corner, so neither needs a sidebar entry.
   const supportLinks: NavLink[] = identity.isStaff
     ? []
-    : [
-        { to: "/my-record/resources", label: "Resources", icon: Lightbulb },
-        { to: "/my-record/messages", label: "Messages", icon: MessageSquare, badge: portalUnread },
-      ];
+    : [{ to: "/my-record/resources", label: "Resources", icon: Lightbulb }];
 
   const reportLinks: NavLink[] = [
     ...(canInsights ? [{ to: "/insights", label: "Insights", icon: Lightbulb }] : []),

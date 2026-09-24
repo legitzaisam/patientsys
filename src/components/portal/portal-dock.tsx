@@ -14,6 +14,18 @@ import { cn } from "@/lib/utils";
 
 type Surface = null | "chat" | "ai";
 
+const OPEN_EVENT = "portal-dock:open";
+type OpenDetail = { surface: Exclude<Surface, null>; draft?: string };
+
+/**
+ * Open the dock's chat from anywhere in the portal — Reply on the home card,
+ * Reschedule on an appointment, Message Clinician on My Clinic. An optional
+ * draft pre-fills the composer so the patient only has to press send.
+ */
+export function openPortalChat(draft?: string) {
+  window.dispatchEvent(new CustomEvent<OpenDetail>(OPEN_EVENT, { detail: { surface: "chat", ...(draft ? { draft } : {}) } }));
+}
+
 /**
  * The two corner launchers from the mockups: a message bubble for the clinic
  * conversation and an AI bubble for the care assistant.
@@ -24,7 +36,18 @@ type Surface = null | "chat" | "ai";
  */
 export function PortalDock() {
   const [open, setOpen] = useState<Surface>(null);
+  const [draft, setDraft] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<OpenDetail>).detail;
+      setDraft(detail.draft);
+      setOpen(detail.surface);
+    };
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_EVENT, onOpen);
+  }, []);
 
   const fetchUnread = useServerFn(getUnreadMessages);
   const { data: unread } = useQuery({
@@ -69,7 +92,7 @@ export function PortalDock() {
       </div>
 
       <div className="relative">
-        {open === "chat" && <ChatPanel onClose={() => setOpen(null)} />}
+        {open === "chat" && <ChatPanel draft={draft} onClose={() => setOpen(null)} />}
         <button
           type="button"
           data-qc="chat-bubble"
@@ -129,7 +152,7 @@ function PanelShell({
   );
 }
 
-function ChatPanel({ onClose }: { onClose: () => void }) {
+function ChatPanel({ onClose, draft }: { onClose: () => void; draft?: string | undefined }) {
   const queryClient = useQueryClient();
   const fetchRecords = useServerFn(getPortalRecords);
   const fetchMessages = useServerFn(getPatientMessages);
@@ -149,6 +172,8 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
     if (!patientId) return;
     void markRead({ data: { patient_id: patientId } }).then(() => {
       void queryClient.invalidateQueries({ queryKey: ["unread-messages"] });
+      // The home card reads "Read" once the conversation has been opened.
+      void queryClient.invalidateQueries({ queryKey: ["portal-home"] });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientId]);
@@ -163,6 +188,7 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
             messages={(data?.messages ?? []) as PatientChatMessage[]}
             as="patient"
             fontSize={12}
+            initialDraft={draft}
             onSent={() => {
               void queryClient.invalidateQueries({ queryKey: ["patient-messages", patientId] });
               void queryClient.invalidateQueries({ queryKey: ["portal-home"] });

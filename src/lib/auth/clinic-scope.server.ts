@@ -39,6 +39,7 @@ export const CLINIC_SCOPED_TABLES = [
   "retention_outreach",
   "role_permissions",
   "routine_completions",
+  "routine_item_overrides",
   "routine_items",
   "skincare_routines",
   "staff_chat_messages",

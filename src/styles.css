@@ -1037,3 +1037,27 @@
       0 0 0 1px color-mix(in srgb, var(--accent-line) 70%, transparent);
   }
 }
+
+/* A summary card was clicked: ring the detail it points at, then let go. */
+@keyframes focus-flash {
+  0%,
+  45% {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 0 8px color-mix(in srgb, var(--accent) 28%, transparent),
+      var(--shadow-glass);
+  }
+  100% {
+    box-shadow: var(--shadow-glass);
+  }
+}
+
+.focus-flash {
+  animation: focus-flash 1.8s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-flash {
+    animation-duration: 0.01ms;
+  }
+}

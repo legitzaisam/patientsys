@@ -46,7 +46,7 @@ function DashboardPage() {
   const fetchRetention = useServerFn(getRetention);
   const { data: retention } = useQuery({
     queryKey: ["retention"],
-    queryFn: () => fetchRetention(),
+    queryFn: () => fetchRetention({ data: {} }),
     enabled: !!identity?.isStaff && can(identity, "reports.retention"),
   });
   const fetchIncomplete = useServerFn(listAccountsMissingEmail);
@@ -147,6 +147,11 @@ function DashboardPage() {
             <KpiGrid
               kpis={{
                 ...data?.kpis,
+                // Same source as the retention page, scoped the same way.
+                retention: retention?.summary?.rate ?? 0,
+                retentionChange: retention?.summary?.change ?? 0,
+                returningInWindow: retention?.summary?.returningInWindow ?? 0,
+                activeInWindow: retention?.summary?.activeInWindow ?? 0,
                 revenueAtRisk: retention?.summary?.revenueAtRisk ?? 0,
                 patientsToChase: retention?.atRisk?.length ?? 0,
                 activePlans: (data as any)?.journeys?.activeCount ?? 0,

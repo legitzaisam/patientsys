@@ -5,6 +5,7 @@ import { CalendarCheck, Moon, Receipt, Repeat2, UserPlus, UserRound, Users, Wall
 import { getPatientMetrics } from "@/lib/clinic.functions";
 import { money } from "@/components/period-picker";
 import { Card } from "@/components/ui/card";
+import { focusSection } from "@/lib/focus-section";
 
 const ACCENT = "var(--accent-line)";
 const MUTED = "rgba(47, 63, 102, 0.22)";
@@ -30,18 +31,27 @@ export function PatientMetrics() {
   const { data } = useQuery({ queryKey: ["patient-metrics"], queryFn: () => fetchMetrics() });
 
   const rowOne = [
-    { label: "Total patients", value: data?.totals.total ?? "—", hint: "Everyone on the clinic list", icon: Users },
+    // Each tile points at the card below that explains it.
+    {
+      label: "Total patients",
+      value: data?.totals.total ?? "—",
+      hint: "Everyone on the clinic list",
+      icon: Users,
+      target: "book-composition",
+    },
     {
       label: "Active",
       value: data?.totals.active ?? "—",
       hint: `${data?.totals.inactive ?? 0} inactive`,
       icon: UserRound,
+      target: "book-status",
     },
     {
       label: "New this month",
       value: data?.totals.newThisMonth ?? "—",
       hint: "Records created this calendar month",
       icon: UserPlus,
+      target: "book-new-patients",
     },
     {
       label: "Dormant",
@@ -50,6 +60,7 @@ export function PatientMetrics() {
         ? `${pct(data.totals.dormantShare)} of the book · clinics often 25–40%`
         : "No visit in 12 months, or never treated",
       icon: Moon,
+      target: "book-status",
     },
   ];
 
@@ -59,24 +70,28 @@ export function PatientMetrics() {
       value: pct(data?.quality.firstToSecond),
       hint: "in 90 days · clinic median ~46%",
       icon: Repeat2,
+      target: "book-mix",
     },
     {
       label: "Rebooked",
       value: pct(data?.quality.rebooked),
       hint: "after a visit · clinic median ~69%",
       icon: CalendarCheck,
+      target: "book-mix",
     },
     {
       label: "Spend per patient",
       value: data?.quality.spendPerPatient != null ? money(data.quality.spendPerPatient) : "—",
       hint: "Last 12 months",
       icon: Wallet,
+      target: "book-mix",
     },
     {
       label: "Visit value",
       value: data?.quality.visitValue != null ? money(data.quality.visitValue) : "—",
       hint: "Last 12 months",
       icon: Receipt,
+      target: "book-mix",
     },
   ];
 
@@ -105,7 +120,7 @@ export function PatientMetrics() {
         ))}
       </div>
 
-      <Card className="p-5">
+      <Card id="book-composition" className="scroll-mt-20 p-5">
         <h2 className="section-title">Composition</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           Names with no visit, one visit, or two or more treatment types.
@@ -118,7 +133,7 @@ export function PatientMetrics() {
       </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="p-5">
+        <Card id="book-new-patients" className="scroll-mt-20 p-5">
           <h2 className="section-title">New patients</h2>
           <p className="mt-1 text-xs text-muted-foreground">Records created per month, last 12 months.</p>
           <div className="mt-4 h-56">
@@ -134,7 +149,7 @@ export function PatientMetrics() {
           </div>
         </Card>
 
-        <Card className="p-5">
+        <Card id="book-status" className="scroll-mt-20 p-5">
           <h2 className="section-title">Active vs inactive</h2>
           <p className="mt-1 text-xs text-muted-foreground">Current status split across the whole book.</p>
           <div className="mt-4 flex h-56 items-center gap-6">
@@ -170,7 +185,7 @@ export function PatientMetrics() {
           </div>
         </Card>
 
-        <Card className="p-5">
+        <Card id="book-mix" className="scroll-mt-20 p-5">
           <h2 className="section-title">New vs returning</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Of people treated in the last 12 months · aim near 30 / 70.
@@ -249,17 +264,32 @@ function Tile({
   value,
   hint,
   icon: Icon,
+  target,
 }: {
   label: string;
   value: string | number;
   hint: string;
   icon: typeof Users;
+  /** id of the detail card this tile summarises. */
+  target: string;
 }) {
   return (
-    <Card className="p-[18px]">
+    <Card
+      role="button"
+      tabIndex={0}
+      aria-label={`${label}: show details`}
+      onClick={() => focusSection(target)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          focusSection(target);
+        }
+      }}
+      className="group cursor-pointer p-[18px] transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
       <div className="flex items-start justify-between">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <Icon className="h-4 w-4 text-ink-3" aria-hidden />
+        <Icon className="h-4 w-4 text-ink-3 transition-colors group-hover:text-foreground" aria-hidden />
       </div>
       <p className="mt-2.5 text-[27px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground">
         {value}

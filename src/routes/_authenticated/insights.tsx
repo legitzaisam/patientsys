@@ -6,7 +6,7 @@ import { getInsights } from "@/lib/clinic.functions";
 import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
-import { PeriodPicker, periodHeading, periodRange, type PeriodSelection } from "@/components/period-picker";
+import { CURRENT_YEAR, PeriodPicker, periodHeading, periodRange, type PeriodSelection } from "@/components/period-picker";
 import { PatientMetrics } from "@/components/patients/patient-metrics";
 import { ActionList } from "@/components/insights/action-list";
 import { Bestsellers } from "@/components/insights/bestsellers";
@@ -41,7 +41,7 @@ function InsightsPage() {
   const { data: identity } = useIdentity();
   const navigate = useNavigate();
   const { tab = "pipeline" } = Route.useSearch();
-  const [period, setPeriod] = useState<PeriodSelection>({ key: "month", offset: 0 });
+  const [period, setPeriod] = useState<PeriodSelection>(CURRENT_YEAR);
   const range = useMemo(() => periodRange(period), [period]);
   const fetchInsights = useServerFn(getInsights);
   const allowed = Boolean(identity && can(identity, "reports.insights"));

@@ -77,7 +77,7 @@ import {
 
 import { initialsOf, laneFor, toneForTreatment } from "@/lib/practitioner-colours";
 import { PractitionerHoverCard } from "@/components/practitioner-hovercard";
-import { VisitNoteChip } from "@/components/visit-note-chip";
+import { VisitNoteChip, isPreAppointmentNote } from "@/components/visit-note-chip";
 import { useTreatmentColours } from "@/lib/use-treatment-colours";
 import { resendDocument, sendMessage, sendPaymentRequest } from "@/lib/clinic.functions";
 import { bookingNotifyDescription, formatMoney } from "@/lib/payment-link";
@@ -957,7 +957,7 @@ function AppointmentCard({ a, onState }: { a: any; onState?: (v: any) => Promise
         </AppointmentTimeEditor>
         <div className="flex items-center gap-1">
           <PaymentStatusChip a={a} compact />
-          <VisitNoteChip appointmentId={a.id} variant="chip" compact />
+          <VisitNoteChip appointmentId={a.id} variant="chip" compact preRead={isPreAppointmentNote(a)} />
         </div>
       </div>
       <Link
@@ -1857,7 +1857,7 @@ function DayPlanner({
                             </span>
                             <div className="flex items-center gap-1">
                               <ChipRow a={a} onState={onState} />
-                              <VisitNoteChip appointmentId={a.id} variant="ghost" />
+                              <VisitNoteChip appointmentId={a.id} variant="ghost" preRead={isPreAppointmentNote(a)} />
                             </div>
                           </div>
                           <Link
@@ -2252,7 +2252,7 @@ function WeekAppointmentCard({
         </AppointmentTimeEditor>
         <div className="flex items-center gap-1">
           <ChipRow a={a} onState={onState} />
-          <VisitNoteChip appointmentId={a.id} variant="ghost" />
+          <VisitNoteChip appointmentId={a.id} variant="ghost" preRead={isPreAppointmentNote(a)} />
         </div>
       </div>
       <Link

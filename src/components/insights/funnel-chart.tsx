@@ -48,7 +48,7 @@ export function FunnelChart({ monthly }: { monthly: InsightsResult["monthly"] | 
   const empty = monthly != null && monthly.every((row) => !row.signUps && !row.firstBookings && !row.firstConsults);
 
   return (
-    <Card className="p-5">
+    <Card id="insights-by-month" className="scroll-mt-20 p-5">
       <h2 className="section-title">{seriesTitle(monthly ?? [])}</h2>
       <p className="mt-1 text-xs text-muted-foreground">For people who signed up in this window.</p>
       {monthly == null ? (

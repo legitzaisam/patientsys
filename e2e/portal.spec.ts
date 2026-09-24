@@ -45,6 +45,7 @@ test("shows how the clinic contacts them", async ({ page }) => {
 });
 
 test("keeps their clinic conversation reachable", async ({ page }) => {
-  await page.goto("/my-record/messages");
-  await expect(page.getByRole("heading", { level: 1, name: "Messages" })).toBeVisible();
+  await page.goto("/my-record");
+  await page.locator('[data-qc="chat-bubble"]').click();
+  await expect(page.locator('[data-qc="chat-panel"]')).toBeVisible();
 });

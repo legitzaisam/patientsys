@@ -77,6 +77,7 @@ const journalAttachments = db.journalAttachments as any[];
 const recoveryCheckins = db.recoveryCheckins as any[];
 const routineCompletions = db.routineCompletions as any[];
 const skincareRoutines = db.skincareRoutines as any[];
+const routineItemOverrides = db.routineItemOverrides as any[];
 const routineItems = db.routineItems as any[];
 const clinicNews = db.clinicNews as any[];
 const clinicOffers = db.clinicOffers as any[];
@@ -344,7 +345,15 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   const isFrontDesk = me.roles.includes("front_desk");
 
   const all = patients;
-  let dueAll = treatments.filter((t) => t.next_due_at && t.next_due_at <= in30);
+  // Mirrors production: one due date per patient, from their most recent
+  // treatment that carries one.
+  const latestDueByPatient = new Map<string, (typeof treatments)[number]>();
+  for (const t of treatments) {
+    if (!t.next_due_at) continue;
+    const cur = latestDueByPatient.get(t.patient_id);
+    if (!cur || t.performed_at > cur.performed_at) latestDueByPatient.set(t.patient_id, t);
+  }
+  let dueAll = [...latestDueByPatient.values()].filter((t) => t.next_due_at <= in30);
   let monthTreats = treatments.filter((t) => t.performed_at >= monthStart);
   let prevMonthTreats = treatments.filter(
     (t) => t.performed_at >= prevMonthStart && t.performed_at < prevMonthEnd,
@@ -371,19 +380,29 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   const active = all.filter((p) => p.status === "active").length;
   const inactive = all.filter((p) => p.status !== "active").length;
 
-  const yearAgoMs = today.getTime() - 365 * 86400000;
-  const twoYearsAgoMs = today.getTime() - 730 * 86400000;
-  const seen = new Map<string, number>();
-  const seenPrev = new Map<string, number>();
-  for (const t of treatments) {
-    const ms = new Date(t.performed_at).getTime();
-    if (ms >= yearAgoMs) seen.set(t.patient_id, (seen.get(t.patient_id) ?? 0) + 1);
-    else if (ms >= twoYearsAgoMs) seenPrev.set(t.patient_id, (seenPrev.get(t.patient_id) ?? 0) + 1);
+  // Mirrors production: a practitioner's book is everyone they have treated or
+  // hold a non-cancelled appointment for; the chip is book size now vs the end
+  // of last month.
+  const monthStartMs = new Date(monthStart).getTime();
+  let ownClients: number | null = null;
+  let ownClientsPrev = 0;
+  if (isPractitioner && !isManager) {
+    const firstSeen = new Map<string, number>();
+    for (const t of treatments.filter((t) => t.practitioner_id === me.userId)) {
+      const ms = new Date(t.performed_at).getTime();
+      firstSeen.set(t.patient_id, Math.min(firstSeen.get(t.patient_id) ?? Infinity, ms));
+    }
+    for (const a of appointments.filter((a) => a.practitioner_id === me.userId && a.status !== "cancelled")) {
+      const ms = new Date(a.starts_at).getTime();
+      firstSeen.set(a.patient_id, Math.min(firstSeen.get(a.patient_id) ?? Infinity, ms));
+    }
+    ownClients = firstSeen.size;
+    ownClientsPrev = [...firstSeen.values()].filter((ms) => ms < monthStartMs).length;
   }
-  const returning = [...seen.values()].filter((n) => n > 1).length;
-  const retention = seen.size ? Math.round((returning / seen.size) * 100) : 0;
-  const returningPrev = [...seenPrev.values()].filter((n) => n > 1).length;
-  const retentionPrev = seenPrev.size ? Math.round((returningPrev / seenPrev.size) * 100) : 0;
+  const clinicClientsPrev = all.filter((p) => new Date(p.created_at).getTime() < monthStartMs).length;
+  const clientsNow = ownClients ?? all.length;
+  const clientsPrev = ownClients === null ? clinicClientsPrev : ownClientsPrev;
+  const clientsChange = clientsPrev ? Math.round(((clientsNow - clientsPrev) / clientsPrev) * 100) : 0;
 
   const revenue = monthTreats.reduce((sum, t) => sum + Number(t.price ?? 0), 0);
   const prevRevenue = prevMonthTreats.reduce((sum, t) => sum + Number(t.price ?? 0), 0);
@@ -528,27 +547,29 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   if (isPractitioner && !isManager) {
     activePlans = activePlans.filter((p) => !p.practitioner_id || p.practitioner_id === me.userId);
   }
+  const todayKeyForPlans = clinicDayKey(today);
   const journeyPhases = (["consult", "foundation", "build", "results"] as const).map((phase) => {
     const inPhase = activePlans.filter((p) => p.phase === phase);
     return {
       phase,
       count: inPhase.length,
       plans: inPhase.slice(0, 4).map((p) => {
-        const mine = planMilestones.filter((m) => m.plan_id === p.id);
+        const mine = planMilestones.filter((m) => m.plan_id === p.id).sort((a, b) => a.idx - b.idx);
         const patient = patientById(p.patient_id);
+        const summary = portal.journeyPlanSummary(mine, todayKeyForPlans);
         return {
           id: p.id,
           patientId: p.patient_id,
           patientName: `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim(),
           avatarUrl: patient?.avatar_url ?? null,
           name: p.name,
-          done: mine.filter((m) => m.status === "done" || m.status === "skipped").length,
-          total: mine.length || p.total_sessions,
+          kind: p.kind ?? "treatment",
+          ...summary,
+          total: summary.total || p.total_sessions,
         };
       }),
     };
   });
-  const todayKeyForPlans = clinicDayKey(today);
   const overduePlanIds = new Set<string>();
   for (const m of planMilestones) {
     if ((m.status === "current" || m.status === "upcoming") && m.due_date && m.due_date < todayKeyForPlans) {
@@ -613,13 +634,12 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
 
   return {
     kpis: {
+      scope: isPractitioner && !isManager ? "own" : "clinic",
       totalClients: all.length,
+      ownClients,
+      clientsChange,
       activeClients: active,
       inactiveClients: inactive,
-      retention,
-      retentionChange: retentionPrev ? retention - retentionPrev : 0,
-      repeatClients: returning,
-      oneVisitClients: seen.size - returning,
       treatmentsDue: treatmentsDueSoon + treatmentsOverdue,
       treatmentsDueSoon,
       treatmentsOverdue,
@@ -1944,8 +1964,42 @@ export const sendMessage = createServerFn({ method: "POST" })
     });
     // Demo magic: the patient texts back (Cohere persona, canned fallback).
     if (data.as === "staff") schedulePatientReply(data.patient_id);
+    // Mirrors production: the patient's own clinician is told about the message.
+    if (data.as === "patient") {
+      const practitionerId = demoPractitionerForPatient(data.patient_id);
+      const patient = patientById(data.patient_id);
+      if (practitionerId) {
+        staffNotifications.unshift({
+          id: newId("l9"),
+          clinic_id: CLINIC_ID,
+          recipient_id: practitionerId,
+          sender_id: null,
+          urgent: false,
+          kind: "patient_message",
+          title: `Message from ${`${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "A patient"}`,
+          body: (body || "Sent an attachment").slice(0, 160),
+          patient_id: data.patient_id,
+          appointment_id: null,
+          read_at: null,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
     return { ok: true };
   });
+
+/** Active plan's practitioner, else the next booking's, else the last treatment's. */
+function demoPractitionerForPatient(patientId: string): string | null {
+  const plan = sortDesc(
+    treatmentPlans.filter((p) => p.patient_id === patientId && p.status === "active" && p.practitioner_id),
+    "started_at",
+  )[0];
+  if (plan?.practitioner_id) return plan.practitioner_id;
+  const next = demoUpcomingAppointments(patientId, 1)[0];
+  if (next?.practitioner_id) return next.practitioner_id;
+  const last = sortDesc(treatments.filter((t) => t.patient_id === patientId && t.practitioner_id), "performed_at")[0];
+  return last?.practitioner_id ?? null;
+}
 
 export const getUnreadMessages = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
@@ -2526,6 +2580,7 @@ function demoAppointmentView(a: any) {
     time: starts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
     status: a.status,
     stage: a.stage ?? null,
+    confirmedAt: a.patient_confirmed_at ?? null,
   };
 }
 
@@ -2570,6 +2625,8 @@ export const getPortalHome = createServerFn({ method: "GET" }).handler(async () 
           createdAt: last.created_at,
           author: last.author,
           from: last.author === "staff" ? profileName(last.author_id) : null,
+          fromClinic: last.author === "staff",
+          read: last.author !== "staff" || Boolean(last.read_at),
         }
       : null,
   };
@@ -2584,7 +2641,9 @@ export const getPortalPlan = createServerFn({ method: "GET" }).handler(async () 
   const checklist = planMilestoneChecklist.filter((c) => ids.has(c.milestone_id));
   const current = portal.currentMilestone(milestones as any);
   const latest = sortDesc(recoveryCheckins.filter((c) => c.patient_id === patient.id), "checkin_date")[0];
-  const visible = photos.filter((p: any) => p.patient_id === patient.id && p.visible_to_patient);
+  const visible = photos
+    .filter((p: any) => p.patient_id === patient.id && p.visible_to_patient)
+    .map((p: any) => ({ ...p, url: p.storage_path }));
   const upcoming = demoUpcomingAppointments(patient.id, 1)[0];
   const progress = portal.planProgress(milestones as any);
 
@@ -2653,6 +2712,27 @@ export const getPortalTimeline = createServerFn({ method: "GET" }).handler(async
   const checklist = planMilestoneChecklist.filter((c) => ids.has(c.milestone_id));
   const progress = portal.planProgress(milestones as any);
 
+  // Mirrors production: the step card reads the linked appointment (and its
+  // consent), the treatment note and the visible photos from the record.
+  const apptIds = new Set(milestones.map((m) => m.appointment_id).filter(Boolean));
+  const extras = portal.stepExtrasFor({
+    milestones: milestones as any,
+    appointments: appointments
+      .filter((a) => apptIds.has(a.id))
+      .map((a) => ({
+        id: a.id,
+        starts_at: a.starts_at,
+        treatment_name: a.treatment_name,
+        consentSigned: a.consent_document_id
+          ? (documents.find((d) => d.id === a.consent_document_id)?.status ?? null) === "signed"
+          : null,
+      })),
+    treatments: treatments.filter((t) => t.patient_id === patient.id) as any,
+    photos: photos
+      .filter((p: any) => p.patient_id === patient.id && p.visible_to_patient)
+      .map((p: any) => ({ ...p, url: p.storage_path })),
+  });
+
   return {
     plan: {
       id: plan.id,
@@ -2663,7 +2743,7 @@ export const getPortalTimeline = createServerFn({ method: "GET" }).handler(async
       milestonesTotal: progress.total,
       completion: progress.pct,
     },
-    roadmap: portal.roadmapFor(milestones as any, checklist as any),
+    roadmap: portal.roadmapFor(milestones as any, checklist as any, extras),
     pendingPause:
       sortDesc(
         planPauseRequests.filter((r) => r.plan_id === plan.id && r.status === "pending"),
@@ -2697,7 +2777,19 @@ export const getPortalRoutine = createServerFn({ method: "GET" }).handler(async 
   const routine = skincareRoutines.find((r) => r.patient_id === patient.id) ?? null;
   const items = routine ? routineItems.filter((i) => i.routine_id === routine.id) : [];
   const completions = routineCompletions.filter((c) => c.patient_id === patient.id);
-  const order = (list: any[]) => [...list].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const overrideFor = new Map(
+    routineItemOverrides.filter((o) => o.patient_id === patient.id).map((o) => [o.routine_item_id, o]),
+  );
+  const withOverride = (i: any) => {
+    const o = overrideFor.get(i.id);
+    return {
+      ...i,
+      override: o
+        ? { product_name: o.product_name, how_to: o.how_to ?? null, product_url: o.product_url ?? null, source: o.source }
+        : null,
+    };
+  };
+  const order = (list: any[]) => [...list].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map(withOverride);
   const today = new Date().toISOString().slice(0, 10);
   const reminder = portal.nextRoutineReminder();
   const doneToday = completions.some(
@@ -2840,6 +2932,23 @@ export const requestPlanPause = createServerFn({ method: "POST" })
     return { ok: true, id, alreadyOpen: false };
   });
 
+export const confirmAppointment = createServerFn({ method: "POST" })
+  .validator((data: { appointment_id: string }) => parseInput(schemas.ConfirmAppointment, data))
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const appt = appointments.find((a) => a.id === data.appointment_id);
+    if (
+      !appt ||
+      appt.patient_id !== patient.id ||
+      appt.status !== "booked" ||
+      new Date(String(appt.starts_at)).getTime() <= Date.now()
+    ) {
+      throw new Error("Appointment not found or can no longer be confirmed");
+    }
+    appt.patient_confirmed_at ??= new Date().toISOString();
+    return { ok: true, confirmedAt: appt.patient_confirmed_at as string };
+  });
+
 export const markRoutineComplete = createServerFn({ method: "POST" })
   .validator((data: { period: string }) => parseInput(schemas.MarkRoutineComplete, data))
   .handler(async ({ data }) => {
@@ -2885,6 +2994,69 @@ export const snoozeRoutineReminder = createServerFn({ method: "POST" })
         created_at: new Date().toISOString(),
       });
     return { ok: true, snoozedUntil: until };
+  });
+
+export const extractProductFromLink = createServerFn({ method: "POST" })
+  .validator((data: { url: string }) => parseInput(schemas.ExtractProductFromLink, data))
+  .handler(async ({ data }) => {
+    demoRequirePortalPatient();
+    const { extractProductFromUrl } = await import("./portal/product-link.server");
+    return extractProductFromUrl(data.url);
+  });
+
+function demoRequireOwnRoutineItem(patientId: string, routineItemId: string) {
+  const item = routineItems.find((i) => i.id === routineItemId);
+  const routine = item ? skincareRoutines.find((r) => r.id === item.routine_id) : null;
+  if (!item || routine?.patient_id !== patientId) throw new Error("Routine step not found");
+  return item;
+}
+
+export const saveRoutineOverride = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      routine_item_id: string;
+      product_name: string;
+      how_to?: string;
+      product_url?: string;
+      source?: "link" | "ai" | "manual";
+    }) => parseInput(schemas.SaveRoutineOverride, data),
+  )
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    demoRequireOwnRoutineItem(patient.id, data.routine_item_id);
+    const row = {
+      product_name: data.product_name.trim(),
+      how_to: data.how_to?.trim() || null,
+      product_url: data.product_url?.trim() || null,
+      source: data.source ?? "manual",
+      updated_at: new Date().toISOString(),
+    };
+    const existing = routineItemOverrides.find((o) => o.routine_item_id === data.routine_item_id);
+    if (existing) {
+      Object.assign(existing, row);
+      return { ok: true, id: existing.id };
+    }
+    const id = newId("e9");
+    routineItemOverrides.push({
+      id,
+      clinic_id: CLINIC_ID,
+      patient_id: patient.id,
+      routine_item_id: data.routine_item_id,
+      ...row,
+      created_at: new Date().toISOString(),
+    });
+    return { ok: true, id };
+  });
+
+export const clearRoutineOverride = createServerFn({ method: "POST" })
+  .validator((data: { routine_item_id: string }) => parseInput(schemas.ClearRoutineOverride, data))
+  .handler(async ({ data }) => {
+    const patient = demoRequirePortalPatient();
+    const idx = routineItemOverrides.findIndex(
+      (o) => o.routine_item_id === data.routine_item_id && o.patient_id === patient.id,
+    );
+    if (idx >= 0) routineItemOverrides.splice(idx, 1);
+    return { ok: true };
   });
 
 export const toggleChecklistItem = createServerFn({ method: "POST" })
@@ -3800,7 +3972,9 @@ export const getStaffProfile = createServerFn({ method: "GET" })
 /* retention and recalls                                              */
 /* ---------------------------------------------------------------- */
 
-export const getRetention = createServerFn({ method: "GET" }).handler(async () => {
+export const getRetention = createServerFn({ method: "GET" })
+  .validator((data: { from?: string; to?: string; key?: string }) => parseInput(schemas.GetRetention, data))
+  .handler(async ({ data }) => {
   const me = requireStaff();
   if (!me.isOwner && !me.permissions.includes("reports.retention")) {
     throw new Error("You do not have access to retention reports");
@@ -3847,6 +4021,14 @@ export const getRetention = createServerFn({ method: "GET" }).handler(async () =
     // Only a practitioner has a book of their own to scope to; other staff who
     // hold the permission (e.g. a coordinator) see the whole clinic.
     practitionerId: me.isManager || !me.roles.includes("practitioner") ? null : me.userId,
+    window:
+      data.from && data.to
+        ? {
+            from: new Date(data.from).getTime(),
+            to: new Date(data.to).getTime(),
+            key: (["day", "week", "month", "year"] as const).find((k) => k === data.key) ?? "year",
+          }
+        : undefined,
   });
 
   return {
@@ -4671,6 +4853,7 @@ export const createTreatmentPlan = createServerFn({ method: "POST" })
       patient_id: data.patient_id,
       practitioner_id: data.practitioner_id || null,
       catalogue_id: data.catalogue_id || null,
+      kind: "treatment",
       name: data.name,
       phase: data.phase ?? "consult",
       status: "active",

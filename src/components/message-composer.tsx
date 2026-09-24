@@ -41,6 +41,7 @@ export function MessageComposer({
   placeholder = "Write a message…",
   variant = "default",
   autoFocus = false,
+  initialDraft,
 }: {
   /** Patient thread id — required unless messaging a staff peer. */
   patientId?: string;
@@ -55,9 +56,11 @@ export function MessageComposer({
   /** `chat` = glass form chrome + outline attach/templates beside the pill. */
   variant?: "default" | "chat";
   autoFocus?: boolean;
+  /** Pre-filled text, e.g. "I'd like to reschedule…" from a Reschedule button. */
+  initialDraft?: string | undefined;
 }) {
   const queryClient = useQueryClient();
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(initialDraft ?? "");
   const [pending, setPending] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);

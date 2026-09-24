@@ -38,22 +38,42 @@ test("a message the clinic sends appears in the patient's thread", async ({ page
   await expect(page.locator("#patient-chat").getByText(probe)).toBeVisible();
 
   await becomePatient(page);
-  await page.goto("/my-record/messages");
-  await expect(page.getByText(probe)).toBeVisible();
+  await page.goto("/my-record");
+  await page.locator('[data-qc="chat-bubble"]').click();
+  await expect(page.locator('[data-qc="chat-panel"]').getByText(probe)).toBeVisible();
 });
 
 test("a message the patient sends appears on the staff record", async ({ page }) => {
   const probe = `From the patient ${Date.now()}`;
 
   await becomePatient(page);
-  await page.goto("/my-record/messages");
-  await page.locator("textarea").first().fill(probe);
-  await page.locator('[aria-label="Send message"]').first().click();
-  await expect(page.getByText(probe)).toBeVisible();
+  await page.goto("/my-record");
+  await page.locator('[data-qc="chat-bubble"]').click();
+  await page.locator('[data-qc="chat-panel"] textarea').fill(probe);
+  await page.locator('[data-qc="chat-panel"] [aria-label="Send message"]').click();
+  await expect(page.locator('[data-qc="chat-panel"]').getByText(probe)).toBeVisible();
 
   await becomeStaff(page);
   await openStaffRecord(page);
   await expect(page.locator("#patient-chat").getByText(probe)).toBeVisible();
+});
+
+test("a patient's message also reaches their clinician's bell", async ({ page, context, baseURL }) => {
+  const probe = `For my clinician ${Date.now()}`;
+
+  await becomePatient(page);
+  await page.goto("/my-record/clinic");
+  await page.locator('[data-qc="message-clinician"]').click();
+  await page.locator('[data-qc="chat-panel"] textarea').fill(probe);
+  await page.locator('[data-qc="chat-panel"] [aria-label="Send message"]').click();
+  await expect(page.locator('[data-qc="chat-panel"]').getByText(probe)).toBeVisible();
+
+  // Olivia's plan is run by Dr Nadia Rahman, the demo practitioner.
+  await context.addCookies([{ name: "demo_role", value: "practitioner", url: baseURL ?? "http://localhost:8091" }]);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: /^Notifications/ }).click();
+  await expect(page.getByText("Message from Olivia Bennett").first()).toBeVisible();
+  await expect(page.getByText(probe).first()).toBeVisible();
 });
 
 test("a journal entry the patient writes is visible to the clinic", async ({ page }) => {

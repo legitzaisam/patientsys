@@ -1,20 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
+  CalendarCheck,
   CalendarDays,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   Droplet,
   ExternalLink,
+  FileText,
   Heart,
   Info,
   Layers,
   Lock,
   Megaphone,
+  MessageCircle,
   MessageSquare,
   Image as ImageIcon,
   PauseCircle,
@@ -24,6 +28,8 @@ import {
   X,
 } from "lucide-react";
 import { getPortalTimeline, requestPlanPause, toggleChecklistItem } from "@/lib/clinic.functions";
+import { focusSection } from "@/lib/focus-section";
+import { openPortalChat } from "@/components/portal/portal-dock";
 import { PlanTabs } from "@/components/portal/plan-tabs";
 import {
   PortalCard,
@@ -36,6 +42,10 @@ import {
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/my-record/plan/timeline")({
+  // ?step=<milestone id> opens that step, scrolled into view and highlighted
+  // (the overview's "View the step" links here).
+  validateSearch: (search: Record<string, unknown>): { step?: string } =>
+    typeof search["step"] === "string" && search["step"] ? { step: search["step"] } : {},
   component: PlanTimeline,
 });
 
@@ -54,12 +64,21 @@ const PAUSE_REASONS = ["Going on holiday", "Medical reason", "Cost / budget", "S
 
 function PlanTimeline() {
   const queryClient = useQueryClient();
+  const { step: stepParam } = Route.useSearch();
   const fetchTimeline = useServerFn(getPortalTimeline);
   const { data, isLoading } = useQuery({ queryKey: ["portal-timeline"], queryFn: () => fetchTimeline() });
 
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(stepParam ?? null);
   const [collapsed, setCollapsed] = useState<number[]>([]);
   const [pauseOpen, setPauseOpen] = useState(false);
+
+  // Deep link: once the roadmap has loaded, land on the requested step.
+  useEffect(() => {
+    if (!stepParam || !data?.roadmap) return;
+    setOpenId(stepParam);
+    focusSection(`step-${stepParam}`);
+    focusSection("step-details");
+  }, [stepParam, Boolean(data?.roadmap)]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["portal-timeline"] });
   const toggle = useMutation({
@@ -117,7 +136,7 @@ function PlanTimeline() {
 
       <PlanTabs />
 
-      <div className={cn("grid items-start gap-3.5", step ? "xl:grid-cols-[1.9fr_1fr]" : "grid-cols-1")}>
+      <div className={cn("grid items-stretch gap-3.5", step ? "xl:grid-cols-[1.9fr_1fr]" : "grid-cols-1")}>
         <PortalCard>
           <PortalHead
             icon={Megaphone}
@@ -187,10 +206,12 @@ function PlanTimeline() {
                           />
                           <button
                             type="button"
+                            id={`step-${s.id}`}
                             data-qc="step-row"
+                            data-step-status={s.status}
                             onClick={() => setOpenId(s.id)}
                             className={cn(
-                              "my-1 flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors",
+                              "my-1 flex w-full cursor-pointer scroll-mt-24 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors",
                               active
                                 ? "bg-accent-soft shadow-[inset_0_0_0_1px_var(--accent-line)]"
                                 : "bg-glass-2 shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.06)]",
@@ -201,7 +222,11 @@ function PlanTimeline() {
                             </span>
                             <span className="min-w-0">
                               <span className="block text-xs font-semibold">{s.title}</span>
-                              <span className="text-xs text-muted-foreground">{formatPortalDate(s.date)}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {s.status === "done" || s.status === "skipped"
+                                  ? formatPortalDate(s.completedAt) && `Completed ${formatPortalDate(s.completedAt)}`
+                                  : formatPortalDate(s.date)}
+                              </span>
                             </span>
                             <span className="ml-auto flex items-center gap-1.5">
                               <PortalStatus status={s.status} label={s.statusLabel} />
@@ -218,94 +243,222 @@ function PlanTimeline() {
           })}
         </PortalCard>
 
-        {step && (
-          <PortalCard data-qc="step-details">
-            <div className="mb-2.5 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-accent-ink" aria-hidden />
-              <h2 className="section-title">Step details</h2>
-              <button
-                type="button"
-                onClick={() => setOpenId("none")}
-                aria-label="Close step details"
-                className="ml-auto grid h-6 w-6 cursor-pointer place-items-center rounded-full text-ink-3 hover:bg-glass-2 hover:text-foreground"
-              >
-                <X className="h-3 w-3" aria-hidden />
-              </button>
-            </div>
-
-            <div className="flex justify-end">
-              <PortalStatus status={step.status} label={step.statusLabel} />
-            </div>
-
-            <p className="mt-1 text-[15px] font-semibold">{step.title}</p>
-
-            <div className="mt-2 flex items-center gap-2 rounded-[16px] border border-edge-2 bg-glass-2 px-2.5 py-2 shadow-inset-hi">
-              <CalendarDays className="h-3.5 w-3.5 text-ink-3" aria-hidden />
-              <span>
-                <span className="block text-xs text-muted-foreground">Due date</span>
-                <span className="text-xs font-semibold">{formatPortalDate(step.date) || "To be confirmed"}</span>
-              </span>
-            </div>
-
-            {step.detail && <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">{step.detail}</p>}
-
-            {step.checklist.length > 0 && (
-              <div className="mt-3 rounded-[16px] border border-edge-2 bg-glass-2 p-2.5 shadow-inset-hi">
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-accent-ink" aria-hidden />
-                  <span className="text-xs font-semibold">Your checklist</span>
-                  <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-                    {step.checklist.filter((c: any) => c.done).length} of {step.checklist.length} completed
-                  </span>
-                </div>
-                <div className="mt-2 grid gap-0.5">
-                  {step.checklist.map((c: any) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      data-qc="checklist-item"
-                      data-done={c.done ? "1" : "0"}
-                      disabled={c.byClinic || toggle.isPending}
-                      onClick={() => toggle.mutate({ data: { id: c.id, done: !c.done } })}
-                      className="flex w-full cursor-pointer items-center gap-2 rounded-[9px] bg-glass-hi px-2 py-1.5 text-left disabled:cursor-not-allowed"
-                    >
-                      <PortalCheck on={c.done} className="h-3.5 w-3.5" />
-                      <span className="min-w-0">
-                        <span className="block text-xs">{c.label}</span>
-                        {c.byClinic && <span className="text-2xs text-muted-foreground">Completed by clinic</span>}
-                      </span>
-                      {c.byClinic ? (
-                        <Lock className="ml-auto h-3 w-3 text-ink-3" aria-hidden />
-                      ) : (
-                        <ExternalLink className="ml-auto h-3 w-3 text-accent-ink" aria-hidden />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {step.guidance && (
-              <div className="mt-2.5 rounded-[16px] bg-sky-bg p-2.5">
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-sky-ink">
-                  <MessageSquare className="h-3.5 w-3.5" aria-hidden /> Clinician guidance
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-sky-ink">{step.guidance}</p>
-              </div>
-            )}
-
-            <div className="mt-2.5 flex gap-2 rounded-[13px] bg-glass-2 px-3 py-2.5">
-              <Lock className="mt-px h-3.5 w-3.5 shrink-0 text-ink-3" aria-hidden />
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                This step is managed by your clinic. Dates, requirements and progression cannot be edited by patients.
-              </p>
-            </div>
-          </PortalCard>
-        )}
+        {step && <StepDetails step={step} pending={toggle.isPending} onToggle={(id, done) => toggle.mutate({ data: { id, done } })} onClose={() => setOpenId("none")} />}
       </div>
 
       {pauseOpen && <PauseModal planId={data.plan.id} onClose={() => setPauseOpen(false)} />}
     </div>
+  );
+}
+
+const DONE = new Set(["done", "skipped"]);
+
+/**
+ * The step card has three shapes. A completed step is a record of what
+ * happened — the appointment, consent and consultation, photos and the
+ * treatment note — with no checklist to tick. The step in progress carries
+ * its detail and checklist. An upcoming step shows when it is due and booked,
+ * its checklist, and a way to ask the clinic about it.
+ */
+function StepDetails({
+  step,
+  pending,
+  onToggle,
+  onClose,
+}: {
+  step: any;
+  pending: boolean;
+  onToggle: (id: string, done: boolean) => void;
+  onClose: () => void;
+}) {
+  const done = DONE.has(step.status);
+  const upcoming = step.status === "upcoming";
+  const isSession = step.kind === "session";
+  const title = done && isSession ? "Treatment details" : "Step details";
+
+  return (
+    <PortalCard id="step-details" className="scroll-mt-24" data-qc="step-details">
+      <div className="mb-2.5 flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-accent-ink" aria-hidden />
+        <h2 className="section-title">{title}</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close step details"
+          className="ml-auto grid h-6 w-6 cursor-pointer place-items-center rounded-full text-ink-3 hover:bg-glass-2 hover:text-foreground"
+        >
+          <X className="h-3 w-3" aria-hidden />
+        </button>
+      </div>
+
+      <div className="flex justify-end">
+        <PortalStatus status={step.status} label={step.statusLabel} />
+      </div>
+
+      <p className="mt-1 text-[15px] font-semibold">{step.title}</p>
+
+      {/* Dates: what a finished step was completed on; what a coming step is due and booked for. */}
+      <div className="mt-2 grid gap-2" data-qc="step-dates">
+        {done ? (
+          <DateRow
+            icon={CalendarCheck}
+            label={step.appointment ? "Appointment" : "Completed on"}
+            value={
+              step.appointment
+                ? `${step.appointment.date} · ${step.appointment.time}`
+                : formatPortalDate(step.completedAt) || "Marked complete by your clinic"
+            }
+          />
+        ) : (
+          <>
+            <DateRow icon={CalendarDays} label="Due date" value={formatPortalDate(step.date) || "To be confirmed"} />
+            {isSession ? (
+              <DateRow
+                icon={CalendarCheck}
+                label="Booked for"
+                value={step.appointment ? `${step.appointment.date} · ${step.appointment.time}` : "Not booked yet"}
+                muted={!step.appointment}
+              />
+            ) : null}
+          </>
+        )}
+      </div>
+
+      {done && isSession ? (
+        <>
+          <div className="mt-2.5 flex flex-wrap gap-1.5" data-qc="step-pills">
+            <Pill on={step.consentSigned === true} label="Consent" off={step.consentSigned === null ? "Not on file" : "Not signed"} />
+            <Pill on={step.consultationDone} label="Consultation" off="Not on file" />
+          </div>
+          {step.photos?.length ? (
+            <div className="mt-3">
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
+                <ImageIcon className="h-3.5 w-3.5 text-accent-ink" aria-hidden /> Before & after
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {step.photos.map((p: any) => (
+                  <figure key={p.id}>
+                    {p.url ? (
+                      <img src={p.url} alt="" className="h-24 w-full rounded-xl object-cover" />
+                    ) : (
+                      <div className="h-24 w-full rounded-xl bg-glass-2 shadow-inset-hi" />
+                    )}
+                    <figcaption className="mt-1 text-2xs text-muted-foreground">
+                      <span className="font-semibold capitalize text-foreground">{p.kind}</span> · {formatPortalDate(p.taken_at)}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-3 rounded-[16px] border border-edge-2 bg-glass-2 p-2.5 shadow-inset-hi" data-qc="step-visit-note">
+            <p className="flex items-center gap-1.5 text-xs font-semibold">
+              <FileText className="h-3.5 w-3.5 text-accent-ink" aria-hidden /> Visit notes
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {step.visitNote ?? "Your clinic's notes from this visit will appear here once they are written up."}
+            </p>
+          </div>
+        </>
+      ) : (
+        <>
+          {step.detail && <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">{step.detail}</p>}
+
+          {!done && step.checklist.length > 0 && (
+            <div className="mt-3 rounded-[16px] border border-edge-2 bg-glass-2 p-2.5 shadow-inset-hi">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-accent-ink" aria-hidden />
+                <span className="text-xs font-semibold">Your checklist</span>
+                <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                  {step.checklist.filter((c: any) => c.done).length} of {step.checklist.length} completed
+                </span>
+              </div>
+              <div className="mt-2 grid gap-0.5">
+                {step.checklist.map((c: any) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    data-qc="checklist-item"
+                    data-done={c.done ? "1" : "0"}
+                    disabled={c.byClinic || pending}
+                    onClick={() => onToggle(c.id, !c.done)}
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-[9px] bg-glass-hi px-2 py-1.5 text-left disabled:cursor-not-allowed"
+                  >
+                    <PortalCheck on={c.done} className="h-3.5 w-3.5" />
+                    <span className="min-w-0">
+                      <span className="block text-xs">{c.label}</span>
+                      {c.byClinic && <span className="text-2xs text-muted-foreground">Completed by clinic</span>}
+                    </span>
+                    {c.byClinic ? (
+                      <Lock className="ml-auto h-3 w-3 text-ink-3" aria-hidden />
+                    ) : (
+                      <ExternalLink className="ml-auto h-3 w-3 text-accent-ink" aria-hidden />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {upcoming ? (
+        <button
+          type="button"
+          data-qc="step-contact"
+          onClick={() =>
+            openPortalChat(`Hi, I have a question about "${step.title}" in my plan${step.date ? ` (due ${formatPortalDate(step.date)})` : ""}. `)
+          }
+          className="mt-3 inline-flex h-8 w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-accent px-3 text-xs font-semibold text-accent-foreground shadow-bloom hover:brightness-105"
+        >
+          <MessageCircle className="h-3.5 w-3.5" aria-hidden /> Contact clinic about this step
+        </button>
+      ) : null}
+
+      <div className="mt-2.5 flex gap-2 rounded-[13px] bg-glass-2 px-3 py-2.5">
+        <Lock className="mt-px h-3.5 w-3.5 shrink-0 text-ink-3" aria-hidden />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          This step is managed by your clinic. Dates, requirements and progression cannot be edited by patients.
+        </p>
+      </div>
+    </PortalCard>
+  );
+}
+
+function DateRow({
+  icon: Icon,
+  label,
+  value,
+  muted = false,
+}: {
+  icon: typeof CalendarDays;
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-[16px] border border-edge-2 bg-glass-2 px-2.5 py-2 shadow-inset-hi">
+      <Icon className="h-3.5 w-3.5 text-ink-3" aria-hidden />
+      <span>
+        <span className="block text-xs text-muted-foreground">{label}</span>
+        <span className={cn("text-xs font-semibold", muted && "font-normal text-muted-foreground")}>{value}</span>
+      </span>
+    </div>
+  );
+}
+
+function Pill({ on, label, off }: { on: boolean; label: string; off: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-inset-hi",
+        on ? "bg-success-bg text-success-ink" : "bg-glass-2 text-muted-foreground",
+      )}
+    >
+      {on ? <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden /> : null}
+      {label}
+      {on ? null : <span className="font-normal">· {off}</span>}
+    </span>
   );
 }
 

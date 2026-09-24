@@ -1,8 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Info, Receipt } from "lucide-react";
 import { getPortalClinic } from "@/lib/clinic.functions";
+import { openPortalChat } from "@/components/portal/portal-dock";
 import { PortalCard, PortalHead, PortalNote, formatPortalDate } from "@/components/portal/ui";
 
 export const Route = createFileRoute("/_authenticated/my-record/billing")({
@@ -41,9 +42,13 @@ function Billing() {
         <div className="mt-3">
           <PortalNote icon={Info}>
             Payments are taken at the clinic. For an invoice or a question about a charge,{" "}
-            <Link to="/my-record/messages" className="font-semibold underline">
+            <button
+              type="button"
+              onClick={() => openPortalChat("Hi, could you send me an invoice for my recent treatment?")}
+              className="cursor-pointer font-semibold underline"
+            >
               message your clinic
-            </Link>
+            </button>
             .
           </PortalNote>
         </div>

@@ -31,7 +31,6 @@ import { Route as AuthenticatedMyRecordIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedMyRecordAppointmentsRouteImport } from './routes/_authenticated/my-record.appointments'
 import { Route as AuthenticatedMyRecordBillingRouteImport } from './routes/_authenticated/my-record.billing'
 import { Route as AuthenticatedMyRecordClinicRouteImport } from './routes/_authenticated/my-record.clinic'
-import { Route as AuthenticatedMyRecordMessagesRouteImport } from './routes/_authenticated/my-record.messages'
 import { Route as AuthenticatedMyRecordRecordsRouteImport } from './routes/_authenticated/my-record.records'
 import { Route as AuthenticatedMyRecordResourcesRouteImport } from './routes/_authenticated/my-record.resources'
 import { Route as AuthenticatedMyRecordSettingsRouteImport } from './routes/_authenticated/my-record.settings'
@@ -164,12 +163,6 @@ const AuthenticatedMyRecordClinicRoute =
     path: '/clinic',
     getParentRoute: () => AuthenticatedMyRecordRoute,
   } as any)
-const AuthenticatedMyRecordMessagesRoute =
-  AuthenticatedMyRecordMessagesRouteImport.update({
-    id: '/messages',
-    path: '/messages',
-    getParentRoute: () => AuthenticatedMyRecordRoute,
-  } as any)
 const AuthenticatedMyRecordRecordsRoute =
   AuthenticatedMyRecordRecordsRouteImport.update({
     id: '/records',
@@ -286,7 +279,6 @@ export interface FileRoutesByFullPath {
   '/my-record/appointments': typeof AuthenticatedMyRecordAppointmentsRoute
   '/my-record/billing': typeof AuthenticatedMyRecordBillingRoute
   '/my-record/clinic': typeof AuthenticatedMyRecordClinicRoute
-  '/my-record/messages': typeof AuthenticatedMyRecordMessagesRoute
   '/my-record/records': typeof AuthenticatedMyRecordRecordsRoute
   '/my-record/resources': typeof AuthenticatedMyRecordResourcesRoute
   '/my-record/settings': typeof AuthenticatedMyRecordSettingsRoute
@@ -325,7 +317,6 @@ export interface FileRoutesByTo {
   '/my-record/appointments': typeof AuthenticatedMyRecordAppointmentsRoute
   '/my-record/billing': typeof AuthenticatedMyRecordBillingRoute
   '/my-record/clinic': typeof AuthenticatedMyRecordClinicRoute
-  '/my-record/messages': typeof AuthenticatedMyRecordMessagesRoute
   '/my-record/records': typeof AuthenticatedMyRecordRecordsRoute
   '/my-record/resources': typeof AuthenticatedMyRecordResourcesRoute
   '/my-record/settings': typeof AuthenticatedMyRecordSettingsRoute
@@ -368,7 +359,6 @@ export interface FileRoutesById {
   '/_authenticated/my-record/appointments': typeof AuthenticatedMyRecordAppointmentsRoute
   '/_authenticated/my-record/billing': typeof AuthenticatedMyRecordBillingRoute
   '/_authenticated/my-record/clinic': typeof AuthenticatedMyRecordClinicRoute
-  '/_authenticated/my-record/messages': typeof AuthenticatedMyRecordMessagesRoute
   '/_authenticated/my-record/records': typeof AuthenticatedMyRecordRecordsRoute
   '/_authenticated/my-record/resources': typeof AuthenticatedMyRecordResourcesRoute
   '/_authenticated/my-record/settings': typeof AuthenticatedMyRecordSettingsRoute
@@ -411,7 +401,6 @@ export interface FileRouteTypes {
     | '/my-record/appointments'
     | '/my-record/billing'
     | '/my-record/clinic'
-    | '/my-record/messages'
     | '/my-record/records'
     | '/my-record/resources'
     | '/my-record/settings'
@@ -450,7 +439,6 @@ export interface FileRouteTypes {
     | '/my-record/appointments'
     | '/my-record/billing'
     | '/my-record/clinic'
-    | '/my-record/messages'
     | '/my-record/records'
     | '/my-record/resources'
     | '/my-record/settings'
@@ -492,7 +480,6 @@ export interface FileRouteTypes {
     | '/_authenticated/my-record/appointments'
     | '/_authenticated/my-record/billing'
     | '/_authenticated/my-record/clinic'
-    | '/_authenticated/my-record/messages'
     | '/_authenticated/my-record/records'
     | '/_authenticated/my-record/resources'
     | '/_authenticated/my-record/settings'
@@ -684,13 +671,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMyRecordClinicRouteImport
       parentRoute: typeof AuthenticatedMyRecordRoute
     }
-    '/_authenticated/my-record/messages': {
-      id: '/_authenticated/my-record/messages'
-      path: '/messages'
-      fullPath: '/my-record/messages'
-      preLoaderRoute: typeof AuthenticatedMyRecordMessagesRouteImport
-      parentRoute: typeof AuthenticatedMyRecordRoute
-    }
     '/_authenticated/my-record/records': {
       id: '/_authenticated/my-record/records'
       path: '/records'
@@ -817,7 +797,6 @@ interface AuthenticatedMyRecordRouteChildren {
   AuthenticatedMyRecordAppointmentsRoute: typeof AuthenticatedMyRecordAppointmentsRoute
   AuthenticatedMyRecordBillingRoute: typeof AuthenticatedMyRecordBillingRoute
   AuthenticatedMyRecordClinicRoute: typeof AuthenticatedMyRecordClinicRoute
-  AuthenticatedMyRecordMessagesRoute: typeof AuthenticatedMyRecordMessagesRoute
   AuthenticatedMyRecordRecordsRoute: typeof AuthenticatedMyRecordRecordsRoute
   AuthenticatedMyRecordResourcesRoute: typeof AuthenticatedMyRecordResourcesRoute
   AuthenticatedMyRecordSettingsRoute: typeof AuthenticatedMyRecordSettingsRoute
@@ -833,7 +812,6 @@ const AuthenticatedMyRecordRouteChildren: AuthenticatedMyRecordRouteChildren = {
     AuthenticatedMyRecordAppointmentsRoute,
   AuthenticatedMyRecordBillingRoute: AuthenticatedMyRecordBillingRoute,
   AuthenticatedMyRecordClinicRoute: AuthenticatedMyRecordClinicRoute,
-  AuthenticatedMyRecordMessagesRoute: AuthenticatedMyRecordMessagesRoute,
   AuthenticatedMyRecordRecordsRoute: AuthenticatedMyRecordRecordsRoute,
   AuthenticatedMyRecordResourcesRoute: AuthenticatedMyRecordResourcesRoute,
   AuthenticatedMyRecordSettingsRoute: AuthenticatedMyRecordSettingsRoute,

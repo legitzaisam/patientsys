@@ -1281,6 +1281,7 @@ function makeAppointment(input: {
     payment_status: input.paymentStatus,
     price: Number(item["price"] ?? 0),
     consent_document_id: input.consentDocumentId ?? null,
+    patient_confirmed_at: null,
     notes: null,
     created_by: USERS.frontDesk,
     created_at: iso(input.dayOffset - between(5, 30)),
@@ -1597,6 +1598,19 @@ for (const patient of patients) {
 appointments.sort((a, b) => (a["starts_at"] < b["starts_at"] ? -1 : 1));
 treatments.sort((a, b) => (a["performed_at"] < b["performed_at"] ? 1 : -1));
 
+// Roughly every other upcoming booking has been confirmed by its patient, so
+// the clinic side shows both states. The portal demo patient's own bookings
+// stay unconfirmed so the home card starts on its "please confirm" path.
+{
+  const portalPatient = patients.find((p) => p["user_id"] === USERS.patient);
+  let n = 0;
+  for (const booking of appointments) {
+    if (booking["status"] !== "booked" || new Date(booking["starts_at"]).getTime() <= Date.now()) continue;
+    if (portalPatient && booking["patient_id"] === portalPatient["id"]) continue;
+    if (n++ % 2 === 0) booking["patient_confirmed_at"] = iso(-1);
+  }
+}
+
 // Appointment-derived treatments can move a patient's most recent visit forward.
 const nowISO = NOW.toISOString();
 for (const patient of patients) {
@@ -1774,6 +1788,14 @@ thread(oliviaId, [
     author: "patient",
     body: "All cleared up now, thanks so much. Could I move my next appointment to the afternoon?",
     daysAgo: 2,
+    unread: true,
+  },
+  // Unread reply from the clinic: the portal home shows it as "New" until
+  // Olivia opens the chat, then as "Read".
+  {
+    author: "staff",
+    body: "Of course — I've pencilled you in for 14:30 on the 3rd. Confirm from your portal when you're happy and I'll lock it in.",
+    daysAgo: 1,
     unread: true,
   },
 ]);
@@ -3251,29 +3273,69 @@ const VISIT_NOTES = [
   "PRP drawn and applied. Patient comfortable throughout. Iron levels noted from last bloods.",
 ];
 
+// A note on an appointment that has not happened yet is the practitioner's
+// pre-read, so upcoming bookings carry these rather than a clinical outcome.
+const PRE_READ_NOTES = [
+  "Asked about downtime — has a wedding on the 30th, keep it conservative.",
+  "Check retinol use in the last 7 days before starting.",
+  "Wants to discuss adding lip filler; bring the price list.",
+  "Found the numbing cream stung last time — offer the alternative.",
+  "Photos from the last visit show slight asymmetry on the left; review together first.",
+  "Nervous about needles — allow an extra ten minutes and talk through each step.",
+];
+
 {
   const noted = new Set<string>();
+  let preReads = 0;
   const todayKey = TODAY.toDateString();
   for (const booking of appointments) {
     const when = new Date(booking["starts_at"] as string);
     const isToday = when.toDateString() === todayKey;
     const stage = booking["stage"] as string;
-    if (isToday && (stage === "complete" || stage === "aftercare" || stage === "in_treatment" || stage === "waiting" || stage === "arrived")) {
+    const underWay = stage === "complete" || stage === "aftercare" || stage === "in_treatment";
+    const stillToCome = stage === "waiting" || stage === "arrived";
+    if (isToday && (underWay || stillToCome)) {
       const practitioner = profiles.find((p) => p["id"] === booking["practitioner_id"]);
+      const body = underWay
+        ? VISIT_NOTES[noted.size % VISIT_NOTES.length]
+        : PRE_READ_NOTES[preReads++ % PRE_READ_NOTES.length];
       appointmentNotes.push({
         id: id("r1"),
         appointment_id: booking["id"],
         clinic_id: CLINIC_ID,
         patient_id: booking["patient_id"],
-        body: VISIT_NOTES[noted.size % VISIT_NOTES.length],
+        body,
         updated_by: booking["practitioner_id"],
         updated_by_label: practitioner?.["full_name"] ?? "Practitioner",
         created_at: booking["starts_at"],
         updated_at: booking["updated_at"],
       });
-      booking["notes"] = String(VISIT_NOTES[noted.size % VISIT_NOTES.length]).replace(/<\/?p>/g, "");
+      booking["notes"] = String(body).replace(/<\/?p>/g, "");
       noted.add(booking["id"] as string);
     }
+  }
+  // A few upcoming bookings over the next fortnight carry a pre-read too, so
+  // the week view shows what the hover is for.
+  let ahead = 0;
+  for (const booking of appointments) {
+    if (ahead >= 8) break;
+    if (noted.has(booking["id"] as string) || booking["status"] !== "booked") continue;
+    const when = new Date(booking["starts_at"] as string);
+    if (when <= NOW || when.getTime() > NOW.getTime() + 14 * 86400000) continue;
+    if (ahead++ % 3 !== 0) continue;
+    const practitioner = profiles.find((p) => p["id"] === booking["practitioner_id"]);
+    appointmentNotes.push({
+      id: id("r1"),
+      appointment_id: booking["id"],
+      clinic_id: CLINIC_ID,
+      patient_id: booking["patient_id"],
+      body: PRE_READ_NOTES[preReads++ % PRE_READ_NOTES.length],
+      updated_by: booking["practitioner_id"],
+      updated_by_label: practitioner?.["full_name"] ?? "Practitioner",
+      created_at: iso(-1),
+      updated_at: iso(-1),
+    });
+    noted.add(booking["id"] as string);
   }
   for (const booking of appointments) {
     if (noted.size >= 90) break;
@@ -3305,6 +3367,8 @@ type PlanRecipe = {
   /** Index into PATIENT_SPECS / patients. */
   patient: number;
   name: string;
+  /** Defaults to a clinical treatment course. */
+  kind?: "treatment" | "review" | "re_engagement";
   phase: "consult" | "foundation" | "build" | "results";
   /** How many leading steps are already done. */
   done: number;
@@ -3483,6 +3547,7 @@ const PLAN_RECIPES: PlanRecipe[] = [
   {
     patient: 7,
     name: "Maintenance Review Track",
+    kind: "review",
     phase: "consult",
     done: 1,
     nextDueIn: 4,
@@ -3523,6 +3588,7 @@ const PLAN_RECIPES: PlanRecipe[] = [
   {
     patient: 12,
     name: "Win-back Review",
+    kind: "re_engagement",
     phase: "consult",
     done: 0,
     nextDueIn: -6,
@@ -3613,6 +3679,13 @@ const PORTAL_CHECKLISTS = [
   ["Take your progress photo", "Complete your check-in", "Photos filed by clinic"],
 ];
 
+/** Patient-readable treatment notes for the sessions synthesised below. */
+const PLAN_VISIT_NOTES = [
+  "Tolerated well. Mild redness expected for 24 hours; SPF 50 daily and no actives for five days.",
+  "Good response to the second sitting. Keep the skin cool tonight and avoid the gym until Friday.",
+  "Settled nicely since last time. Reviewed photos together — the texture change is visible on the left cheek.",
+];
+
 export const treatmentPlans: Row[] = [];
 export const planMilestones: Row[] = [];
 export const planMilestoneChecklist: Row[] = [];
@@ -3628,6 +3701,7 @@ for (const recipe of PLAN_RECIPES) {
     patient_id: patient["id"],
     practitioner_id: spec.practitioner ?? USERS.practitioner,
     catalogue_id: null,
+    kind: recipe.kind ?? "treatment",
     name: recipe.name,
     strapline: PLAN_STRAPLINES[recipe.patient % PLAN_STRAPLINES.length],
     duration_days: 90,
@@ -3641,10 +3715,77 @@ for (const recipe of PLAN_RECIPES) {
     updated_at: iso(-2, 9, 0),
   });
   const perMonth = Math.ceil(recipe.steps.length / 3);
+  // Session steps are tied to real diary slots: completed sessions to the
+  // patient's past attended appointments (oldest first), the next session to
+  // their next booking. That is what lets the timeline's step card show the
+  // appointment date, consent state, photos and note for a finished session.
+  const pastVisits = appointments
+    .filter((a) => a["patient_id"] === patient["id"] && a["status"] === "attended" && new Date(a["starts_at"]) < NOW)
+    .sort((a, b) => (a["starts_at"] < b["starts_at"] ? -1 : 1));
+  const nextVisit = appointments
+    .filter((a) => a["patient_id"] === patient["id"] && a["status"] === "booked" && new Date(a["starts_at"]) >= NOW)
+    .sort((a, b) => (a["starts_at"] < b["starts_at"] ? -1 : 1))[0];
+  const doneSessions = recipe.steps.filter((st, i) => i < recipe.done && (st.k ?? "task") === "session").length;
+  // Patients whose diary history is thin get a completed, consented visit per
+  // finished session so the record behind the step is there to show.
+  while (pastVisits.length < doneSessions) {
+    const k = doneSessions - pastVisits.length;
+    const daysAgo = 9 * k + 4;
+    const treatmentName = catalogueByName.has(recipe.name.replace(/ (Plan|Course|Programme|Series|Track|Journey).*$/, ""))
+      ? recipe.name.replace(/ (Plan|Course|Programme|Series|Track|Journey).*$/, "")
+      : "Skin Consultation";
+    const doc = makeDocument(patient["id"] as string, "consent", `${treatmentName} — consent form`, "signed", daysAgo);
+    doc["signed_name"] = `${patient["first_name"]} ${patient["last_name"]}`;
+    doc["signature_data"] = doc["signed_name"];
+    const visit = makeAppointment({
+      patient,
+      practitionerId: spec.practitioner ?? USERS.practitioner,
+      treatmentName,
+      dayOffset: -daysAgo,
+      hour: 10 + (k % 5),
+      minute: 0,
+      durationMinutes: 45,
+      status: "attended",
+      stage: "complete",
+      paymentStatus: "paid",
+      consentDocumentId: doc["id"] as string,
+    });
+    const item = catalogueByName.get(treatmentName) ?? activeCatalogue[0]!;
+    treatments.push({
+      id: id("e1"),
+      clinic_id: CLINIC_ID,
+      patient_id: patient["id"],
+      catalogue_id: item["id"],
+      practitioner_id: spec.practitioner ?? USERS.practitioner,
+      name: treatmentName,
+      ...detailsFor(treatmentName),
+      notes: PLAN_VISIT_NOTES[k % PLAN_VISIT_NOTES.length],
+      price: visit["price"],
+      performed_at: visit["starts_at"],
+      next_due_at: null,
+      status: "completed",
+      consent_document_id: doc["id"],
+      commission_rate_snapshot:
+        profiles.find((p) => p["id"] === (spec.practitioner ?? USERS.practitioner))?.["commission_rate"] ?? 40,
+      created_at: visit["starts_at"],
+      updated_at: visit["starts_at"],
+    });
+    pastVisits.unshift(visit);
+  }
+  const sessionVisits = pastVisits.slice(-doneSessions);
+  let sessionIdx = 0;
+  let nextLinked = false;
   recipe.steps.forEach((step, i) => {
     const status = i < recipe.done ? "done" : i === recipe.done ? "current" : "upcoming";
     const group = Math.min(3, Math.floor(i / perMonth) + 1);
     const milestoneId = id("d8");
+    const isSession = (step.k ?? "task") === "session";
+    let linkedVisit: Row | undefined;
+    if (isSession && status === "done") linkedVisit = sessionVisits[sessionIdx++];
+    else if (isSession && status !== "done" && !nextLinked && nextVisit) {
+      linkedVisit = nextVisit;
+      nextLinked = true;
+    }
     // Patient-facing detail: the portal timeline explains every step, and
     // each one carries a short checklist the patient can work through.
     PORTAL_CHECKLISTS[(i + recipe.patient) % PORTAL_CHECKLISTS.length]!.forEach((label, ci) => {
@@ -3680,8 +3821,9 @@ for (const recipe of PLAN_RECIPES) {
           : status === "upcoming"
             ? iso(recipe.nextDueIn ?? 7 + (i - recipe.done) * 14).slice(0, 10)
             : null,
-      appointment_id: null,
-      completed_at: status === "done" ? iso(-((recipe.done - i) * 9), 15, 0) : null,
+      appointment_id: linkedVisit?.["id"] ?? null,
+      completed_at:
+        status === "done" ? (linkedVisit?.["starts_at"] ?? iso(-((recipe.done - i) * 9), 15, 0)) : null,
       created_at: iso(-45 + recipe.patient, 10, 0),
     });
   });
@@ -4011,6 +4153,8 @@ export const recoveryCheckins: Row[] = [];
 export const routineCompletions: Row[] = [];
 export const skincareRoutines: Row[] = [];
 export const routineItems: Row[] = [];
+/** The patient's own product for a step, kept beside the clinic's recommendation. */
+export const routineItemOverrides: Row[] = [];
 export const clinicNews: Row[] = [];
 export const clinicOffers: Row[] = [];
 export const externalTreatments: Row[] = [];
@@ -4161,6 +4305,22 @@ export const planPauseRequests: Row[] = [];
       created_at: iso(-30, 10, 0),
     });
   });
+  // She already owns an SPF she likes, so that step carries her own product.
+  const spfItem = routineItems.find((i) => i["routine_id"] === routineId && i["step"] === "SPF");
+  if (spfItem) {
+    routineItemOverrides.push({
+      id: id("e9"),
+      clinic_id: CLINIC_ID,
+      patient_id: pid,
+      routine_item_id: spfItem["id"],
+      product_name: "La Roche-Posay Anthelios UVMune 400 SPF50+",
+      how_to: "Apply generously as the last step of the morning routine and reapply every two hours outdoors.",
+      product_url: "https://www.laroche-posay.co.uk/anthelios-uvmune-400",
+      source: "link",
+      created_at: iso(-6, 9, 0),
+      updated_at: iso(-6, 9, 0),
+    });
+  }
 
   clinicNews.push({
     id: id("e8"),
@@ -4241,6 +4401,7 @@ export const db = {
   routineCompletions,
   skincareRoutines,
   routineItems,
+  routineItemOverrides,
   clinicNews,
   clinicOffers,
   externalTreatments,

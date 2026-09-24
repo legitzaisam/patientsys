@@ -11,12 +11,14 @@ import {
   FileText,
   Mail,
   MapPin,
+  MessageCircle,
   Phone,
   Plus,
   Trash2,
   X,
 } from "lucide-react";
 import { addExternalTreatment, deleteExternalTreatment, getPortalClinic } from "@/lib/clinic.functions";
+import { openPortalChat } from "@/components/portal/portal-dock";
 import { PortalCard, PortalHead, PortalLink, formatPortalDate } from "@/components/portal/ui";
 
 export const Route = createFileRoute("/_authenticated/my-record/clinic")({
@@ -52,8 +54,10 @@ function MyClinic() {
         </div>
       </div>
 
-      <div className="grid items-start gap-3.5 xl:grid-cols-[1fr_1.35fr]">
-        <PortalCard>
+      {/* Two equal columns: the clinician card carries the message action so it
+          is as substantial as the clinic details beside it. */}
+      <div className="grid items-stretch gap-3.5 md:grid-cols-2">
+        <PortalCard data-qc="clinician-card">
           <PortalHead title="Your clinician" />
           <div className="flex items-center gap-3.5">
             {clinician?.avatarUrl ? (
@@ -63,36 +67,77 @@ function MyClinic() {
                 {clinician?.initials ?? "AC"}
               </span>
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold">{clinician?.name ?? "Your care team"}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">{clinician?.title ?? "Aetheria Skin Clinic"}</p>
-              <PortalLink>View profile</PortalLink>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                Messages go to your clinic's inbox and straight to {clinician?.name ? clinician.name.split(" ").slice(-2).join(" ") : "your clinician"}.
+              </p>
             </div>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              data-qc="message-clinician"
+              onClick={() =>
+                openPortalChat(`Hi${clinician?.name ? ` ${clinician.name.split(" ").slice(-2).join(" ")}` : ""}, `)
+              }
+              className="inline-flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-accent px-3 text-xs font-semibold text-accent-foreground shadow-bloom hover:brightness-105"
+            >
+              <MessageCircle className="h-3.5 w-3.5" aria-hidden /> Message clinician
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                openPortalChat("Hi, I'd like to book my next appointment. When do you have availability?")
+              }
+              className="inline-flex h-8 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-full bg-glass-2 px-3 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.08)]"
+            >
+              Ask to book
+            </button>
           </div>
         </PortalCard>
 
         <PortalCard>
           <PortalHead title="Clinic details" />
           <div className="flex gap-3.5">
-            <div className="grid min-w-0 flex-1 gap-2.5">
+            <div className="grid min-w-0 flex-1 content-start gap-2.5">
               <Line icon={MapPin}>
                 <b className="font-semibold">{clinic?.name ?? "Aetheria Skin Clinic"}</b>
                 {clinic?.address && <span className="block">{clinic.address}</span>}
               </Line>
-              {clinic?.phone && <Line icon={Phone}>{clinic.phone}</Line>}
-              {clinic?.email && <Line icon={Mail}>{clinic.email}</Line>}
+              {clinic?.phone && (
+                <Line icon={Phone}>
+                  <a href={`tel:${String(clinic.phone).replace(/\s+/g, "")}`} className="hover:underline">
+                    {clinic.phone}
+                  </a>
+                </Line>
+              )}
+              {clinic?.email && (
+                <Line icon={Mail}>
+                  <a href={`mailto:${clinic.email}`} className="hover:underline">
+                    {clinic.email}
+                  </a>
+                </Line>
+              )}
             </div>
-            <div className="hidden w-[190px] shrink-0 md:block">
+            <div className="hidden w-[150px] shrink-0 md:block">
               <MapPlaceholder />
               <div className="mt-1.5 text-right">
-                <PortalLink>Get directions</PortalLink>
+                <PortalLink
+                  href={`https://www.google.com/maps/search/${encodeURIComponent(
+                    `${clinic?.name ?? "Aetheria Skin Clinic"} ${clinic?.address ?? ""}`.trim(),
+                  )}`}
+                >
+                  Get directions
+                </PortalLink>
               </div>
             </div>
           </div>
         </PortalCard>
       </div>
 
-      <div className="mt-3.5 grid items-start gap-3.5 md:grid-cols-2">
+      <div className="mt-3.5 grid items-stretch gap-3.5 md:grid-cols-2">
         <PortalCard>
           <PortalHead icon={CalendarDays} title="Upcoming treatments" />
           {(data?.upcoming ?? []).length === 0 && (

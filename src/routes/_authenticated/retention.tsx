@@ -14,7 +14,14 @@ import { SuggestedActions, type Suggestion } from "@/components/retention/sugges
 import { RetentionBreakdown, type BreakdownTab } from "@/components/retention/retention-breakdown";
 import type { RiskLevel } from "@/components/retention/risk-badge";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
-import { money } from "@/components/period-picker";
+import {
+  CURRENT_YEAR,
+  PeriodPicker,
+  money,
+  periodHeading,
+  periodRange,
+  type PeriodSelection,
+} from "@/components/period-picker";
 
 export const Route = createFileRoute("/_authenticated/retention")({
   head: () => ({
@@ -65,6 +72,8 @@ function RetentionPage() {
   const fetchRetention = useServerFn(getRetention);
   const [filter, setFilter] = useState<RiskLevel | "all">("all");
   const [breakdownTab, setBreakdownTab] = useState<BreakdownTab>("cohorts");
+  const [period, setPeriod] = useState<PeriodSelection>(CURRENT_YEAR);
+  const range = periodRange(period);
 
   function onInsight(suggestion: Suggestion) {
     setFilter(suggestion.filter);
@@ -82,8 +91,8 @@ function RetentionPage() {
   }
 
   const { data } = useQuery({
-    queryKey: ["retention"],
-    queryFn: () => fetchRetention(),
+    queryKey: ["retention", period.key, period.offset],
+    queryFn: () => fetchRetention({ data: { from: range.from, to: range.to, key: period.key } }),
     enabled: !!identity?.isStaff,
   });
 
@@ -101,16 +110,25 @@ function RetentionPage() {
   /** Matches the server: only practitioners see a book scoped to themselves. */
   const ownBookOnly = !identity.isManager && identity.roles.includes("practitioner");
   const s = data?.summary;
+  const heading = periodHeading(period);
+  const periodPhrase = period.offset === 0 && period.key !== "day" ? heading.toLowerCase() : heading;
+  const trendSubtitle =
+    period.key === "year"
+      ? `Monthly return rate, ${periodPhrase}.`
+      : `Weekly return rate, ${periodPhrase}.`;
 
   return (
     <AppShell identity={identity}>
-      <div className="mb-6">
-        <h1 className="page-title">Retention</h1>
-        <p className="page-subtitle">
-          {ownBookOnly
-            ? "How well you keep your own patients, and who needs a nudge."
-            : "How well the clinic keeps patients, who is slipping away and what to do next."}
-        </p>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Retention</h1>
+          <p className="page-subtitle">
+            {ownBookOnly
+              ? "How well you keep your own patients, and who needs a nudge."
+              : "How well the clinic keeps patients, who is slipping away and what to do next."}
+          </p>
+        </div>
+        <PeriodPicker value={period} onChange={setPeriod} />
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -123,14 +141,14 @@ function RetentionPage() {
         <Stat
           label="One visit only"
           value={`${s?.oneVisitPatients ?? 0}`}
-          hint={`${s?.repeatPatients ?? 0} repeat patients`}
+          hint={`${s?.repeatPatients ?? 0} repeat patients seen ${periodPhrase}`}
         />
-        <Stat label="Average visits" value={`${s?.averageVisits ?? 0}`} hint="Per patient, all time" />
-        <Stat label="Revenue at risk" value={money(s?.revenueAtRisk ?? 0)} hint="From at-risk or lost patients" />
+        <Stat label="Average visits" value={`${s?.averageVisits ?? 0}`} hint={`Per patient seen ${periodPhrase}`} />
+        <Stat label="Revenue at risk" value={money(s?.revenueAtRisk ?? 0)} hint={`Patients who lapsed ${periodPhrase}`} />
       </div>
 
       <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-[1fr_380px]">
-        <RetentionTrend monthly={data?.monthly ?? []} weekly={data?.weekly ?? []} />
+        <RetentionTrend points={data?.trend ?? []} subtitle={trendSubtitle} />
         <SuggestedActions suggestions={data?.suggestions ?? []} onPick={onInsight} />
       </div>
 

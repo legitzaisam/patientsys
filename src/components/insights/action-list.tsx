@@ -17,7 +17,7 @@ export function ActionList({
   kind: "waiting" | "consulted";
 }) {
   return (
-    <Card className="p-5">
+    <Card id={kind === "waiting" ? "insights-waiting" : "insights-consulted"} className="scroll-mt-20 p-5">
       <h2 className="section-title">{title}</h2>
       <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
       <ul className="mt-3">

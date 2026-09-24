@@ -241,7 +241,11 @@ export function NotificationBell({
                           search: { chat: true },
                         });
                       } else if (alert.patient_id) {
-                        navigate({ to: "/patients/$id", params: { id: alert.patient_id } });
+                        navigate({
+                          to: "/patients/$id",
+                          params: { id: alert.patient_id },
+                          search: alert.kind === "patient_message" ? { chat: true } : {},
+                        });
                       } else if (alert.kind === "appointment") {
                         navigate({ to: "/schedule" });
                       }

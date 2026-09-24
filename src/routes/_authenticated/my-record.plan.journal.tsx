@@ -3,10 +3,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Link2, Play, Plus, Search, Tag, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Link2, Play, Plus, Search, Tag, Trash2, X } from "lucide-react";
 import { createJournalEntry, deleteJournalEntry, getPortalJournal } from "@/lib/clinic.functions";
 import { PlanTabs } from "@/components/portal/plan-tabs";
 import { PortalCard, PortalHead } from "@/components/portal/ui";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/my-record/plan/journal")({
@@ -109,30 +115,46 @@ function PlanJournal() {
 
       <PlanTabs />
 
-      <div className="grid items-start gap-3.5 xl:grid-cols-[2.05fr_1fr]">
+      <div className="grid items-stretch gap-3.5 xl:grid-cols-[2.05fr_1fr]">
         <div>
-          <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Journal filters">
-            {FILTERS.map((f) => (
-              <button
-                key={f.label}
-                type="button"
-                role="tab"
-                data-qc="journal-filter"
-                aria-selected={filter === f.label}
-                onClick={() => setFilter(f.label)}
-                className={cn(
-                  "inline-flex h-7 cursor-pointer items-center rounded-full px-3 text-xs shadow-[inset_0_0_0_1px_var(--edge-2)] transition-colors",
-                  filter === f.label
-                    ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--accent-line)]"
-                    : "bg-glass-2 text-ink-2 hover:bg-[rgba(47,63,102,0.08)]",
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
+          {/* One Tags button in place of the chip row: the menu lists every tag
+              and shows which one is active; "All" clears it. */}
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="section-title ml-0.5">{monthLabel}</p>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  data-qc="journal-tags"
+                  aria-label={`Filter by tag: ${filter}`}
+                  className={cn(
+                    "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-3 text-xs shadow-[inset_0_0_0_1px_var(--edge-2)] transition-colors",
+                    filter !== "All"
+                      ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--accent-line)]"
+                      : "bg-glass-2 text-ink-2 hover:bg-[rgba(47,63,102,0.08)]",
+                  )}
+                >
+                  <Tag className="h-3 w-3" aria-hidden />
+                  {filter === "All" ? "Tags" : filter}
+                  <ChevronDown className="h-3 w-3 text-ink-3" aria-hidden />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {FILTERS.map((f) => (
+                  <DropdownMenuItem
+                    key={f.label}
+                    data-qc="journal-filter"
+                    data-active={filter === f.label ? "1" : "0"}
+                    onClick={() => setFilter(f.label)}
+                    className="justify-between text-xs"
+                  >
+                    {f.label}
+                    {filter === f.label ? <Check className="h-3.5 w-3.5 text-accent-ink" aria-hidden /> : null}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-
-          <p className="section-title mb-2 ml-0.5">{monthLabel}</p>
 
           {isLoading && <p className="p-4 text-xs text-muted-foreground">Loading your journal…</p>}
           {!isLoading && entries.length === 0 && (
@@ -151,7 +173,19 @@ function PlanJournal() {
                     {new Date(e.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                   </p>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13.5px] font-semibold">{e.title}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 truncate text-[13.5px] font-semibold">{e.title}</p>
+                      <span
+                        data-qc="journal-tag"
+                        className={cn(
+                          "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold",
+                          TAG_TONE[e.kind] ?? "bg-glass-2 text-muted-foreground",
+                        )}
+                      >
+                        <Tag className="h-2.5 w-2.5" aria-hidden />
+                        {TAG_LABEL[e.kind] ?? e.kind}
+                      </span>
+                    </div>
                     {e.body && <p className="mt-1 max-w-[420px] text-xs leading-relaxed text-muted-foreground">{e.body}</p>}
                     {e.attachments.some((a: any) => a.kind === "voice") && (
                       <div className="mt-2 flex max-w-[290px] items-center gap-2.5 rounded-[16px] border border-edge-2 bg-glass-2 px-3 py-2 shadow-inset-hi">
@@ -188,16 +222,7 @@ function PlanJournal() {
                         ))}
                     </div>
                   )}
-                  <div className="flex w-[100px] shrink-0 items-center justify-end gap-1.5">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold",
-                        TAG_TONE[e.kind] ?? "bg-glass-2 text-muted-foreground",
-                      )}
-                    >
-                      <Tag className="h-2.5 w-2.5" aria-hidden />
-                      {TAG_LABEL[e.kind] ?? e.kind}
-                    </span>
+                  <div className="flex shrink-0 items-center">
                     <button
                       type="button"
                       data-qc="journal-delete"

@@ -34,11 +34,16 @@ test("home shows the greeting, four tiles, news, offer, appointment and quick ac
 
   await expect(page.getByRole("heading", { name: "Clinic news" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Special offers" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your next appointment" })).toBeVisible();
+  // The appointment card presents itself as "your next appointment" only once
+  // confirmed; the seeded booking starts unconfirmed.
+  await expect(page.getByRole("heading", { name: /Please confirm your appointment|Your next appointment/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Quick actions" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Your plan progress" })).toBeVisible();
+  // Completed steps in the progress track carry green ticks under their labels.
+  expect(await page.locator('[data-qc="step-tick"]').count()).toBeGreaterThan(0);
   await expect(page.getByRole("heading", { name: "Latest message from your clinic" })).toBeVisible();
-  await expect(page.getByText("You're doing great")).toBeVisible();
+  // The encouragement banner was removed.
+  await expect(page.getByText("You're doing great")).toHaveCount(0);
 
   expect(errors).toEqual([]);
 });
@@ -93,7 +98,11 @@ test("journal shows filters, entries and the calendar", async ({ page }) => {
   await page.goto("/my-record/plan/journal");
 
   await expect(page.getByRole("heading", { level: 1, name: "Your Journal" })).toBeVisible();
-  expect(await page.locator('[data-qc="journal-filter"]').count()).toBe(7);
+  // A single Tags button replaces the chip row; the menu lists every tag.
+  await expect(page.locator('[data-qc="journal-tags"]')).toBeVisible();
+  await page.locator('[data-qc="journal-tags"]').click();
+  expect(await page.getByRole("menuitem").count()).toBe(7);
+  await page.keyboard.press("Escape");
   await expect(page.getByPlaceholder("Search journal...")).toBeVisible();
   await expect(page.getByRole("button", { name: /New entry/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Share your journal" })).toBeVisible();
@@ -186,9 +195,6 @@ test("secondary pages render their own content", async ({ page }) => {
   await page.goto("/my-record/resources");
   await expect(page.getByRole("heading", { level: 1, name: "Resources" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Clinic news" })).toBeVisible();
-
-  await page.goto("/my-record/messages");
-  await expect(page.getByRole("heading", { level: 1, name: "Messages" })).toBeVisible();
 
   expect(errors).toEqual([]);
 });

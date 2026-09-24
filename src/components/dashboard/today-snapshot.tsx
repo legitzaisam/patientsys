@@ -35,7 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { AppointmentTimeEditor } from "@/components/appointment-time-editor";
 import { NoShowFollowUpDialog } from "@/components/no-show-followup-dialog";
-import { VisitNoteChip, VisitNoteEditor } from "@/components/visit-note-chip";
+import { VisitNoteChip, VisitNoteEditor, isPreAppointmentNote } from "@/components/visit-note-chip";
 import {
   Dialog,
   DialogContent,
@@ -266,120 +266,33 @@ function AppointmentCarousel({
     return idx;
   };
 
-  const HOVER_GLIDE_DELAY_MS = 80;
-  const HOVER_GLIDE_PX_PER_SEC = 260;
-  const hoverAutoRef = useRef<{
-    dir: -1 | 1;
-    delayTimer: ReturnType<typeof setTimeout> | null;
-    raf: number | null;
-    startedAt: number;
-  } | null>(null);
-  const gutterLockRef = useRef(false);
-  const gutterAnimatingRef = useRef(false);
-  const gutterHoveringRef = useRef<-1 | 1 | null>(null);
-
   const setSnap = (on: boolean) => {
     const el = scrollerRef.current;
     if (!el) return;
     el.classList.toggle("is-free-scroll", !on);
-    // Inline snap must come off during a glide — the scroller also sets
+    // Inline snap must come off during a paged scroll — the scroller also sets
     // scroll-snap-type in CSS, and an inline value would win over the class.
     el.style.scrollSnapType = on ? "x mandatory" : "none";
   };
 
-  const stopHoverGlide = () => {
-    const hover = hoverAutoRef.current;
-    if (!hover) return;
-    if (hover.delayTimer !== null) clearTimeout(hover.delayTimer);
-    if (hover.raf !== null) cancelAnimationFrame(hover.raf);
-    hoverAutoRef.current = null;
-  };
-
-  const startHoverAutoSlide = (dir: -1 | 1, delayMs = HOVER_GLIDE_DELAY_MS) => {
-    if (gutterLockRef.current) return;
-    stopHoverGlide();
-    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setSnap(true);
-      return;
-    }
-    setSnap(false);
-    const delayTimer = setTimeout(() => {
-      const el = scrollerRef.current;
-      if (!el || !hoverAutoRef.current || gutterLockRef.current) return;
-      const startedAt = performance.now();
-      hoverAutoRef.current.startedAt = startedAt;
-      let last = startedAt;
-      const step = (now: number) => {
-        const hover = hoverAutoRef.current;
-        if (!hover || hover.raf === null || gutterLockRef.current) return;
-        const scroller = scrollerRef.current;
-        if (!scroller) return;
-        const dt = Math.min(24, now - last);
-        last = now;
-        const ramp = Math.min(1, (now - hover.startedAt) / 180);
-        const eased = ramp * ramp * (3 - 2 * ramp);
-        const speed = HOVER_GLIDE_PX_PER_SEC * (0.55 + 0.45 * eased);
-        const max = scroller.scrollWidth - scroller.clientWidth;
-        scroller.scrollLeft = Math.max(0, Math.min(max, scroller.scrollLeft + dir * speed * (dt / 1000)));
-        syncEdges();
-        const edges = getEdges();
-        if (dir === -1 ? !edges.canPrev : !edges.canNext) {
-          stopHoverGlide();
-          setSnap(true);
-          scrollToIndex(nearestIndex(), "smooth");
-          return;
-        }
-        hover.raf = requestAnimationFrame(step);
-      };
-      hoverAutoRef.current.delayTimer = null;
-      hoverAutoRef.current.raf = requestAnimationFrame(step);
-    }, delayMs);
-    hoverAutoRef.current = { dir, delayTimer, raf: null, startedAt: 0 };
-  };
-
-  const onGutterPointerDown = () => {
-    stopHoverGlide();
-    gutterLockRef.current = true;
-  };
-
-  const onGutterClick = (dir: -1 | 1) => {
-    stopHoverGlide();
-    gutterLockRef.current = true;
+  // The arrows page by two cards on click. There is deliberately no hover
+  // behaviour here: the old hover auto-glide kept the row moving whenever the
+  // pointer sat near an edge, which made the cards hard to click.
+  const onArrowClick = (dir: -1 | 1) => {
     const el = scrollerRef.current;
     if (!el) return;
-    gutterAnimatingRef.current = true;
     setSnap(false);
     scrollToIndex(alignedIndex() + dir * 2, "smooth");
     let settled = false;
     const settle = () => {
       if (settled) return;
       settled = true;
-      gutterAnimatingRef.current = false;
-      gutterLockRef.current = false;
       setSnap(true);
       syncEdges();
-      const hovering = gutterHoveringRef.current;
-      if (hovering) startHoverAutoSlide(hovering, 0);
     };
     el.addEventListener("scrollend", settle, { once: true });
     window.setTimeout(settle, 500);
   };
-
-  const onGutterEnter = (dir: -1 | 1) => {
-    gutterHoveringRef.current = dir;
-    startHoverAutoSlide(dir);
-  };
-
-  const onGutterLeave = () => {
-    gutterHoveringRef.current = null;
-    stopHoverGlide();
-    gutterLockRef.current = false;
-    if (gutterAnimatingRef.current) return;
-    setSnap(true);
-    scrollToIndex(nearestIndex(), "smooth");
-  };
-
-  useEffect(() => () => stopHoverGlide(), []);
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -467,41 +380,35 @@ function AppointmentCarousel({
           </div>
         </div>
 
-        {/* Arrows sit on the unmasked gutter so they stay fully opaque. */}
+        {/*
+          Plain arrow buttons on the unmasked gutter. They are the size of the
+          circle you see — not full-height hover zones — so the cards beside
+          them stay clickable and nothing moves until you click.
+        */}
         {canPrev ? (
-          <button
-            type="button"
-            aria-label="Previous appointments"
-            className="absolute inset-y-0 left-0 z-20 w-[4.75rem] cursor-pointer sm:w-[5.25rem]"
-            onPointerDown={onGutterPointerDown}
-            onClick={() => onGutterClick(-1)}
-            onMouseEnter={() => onGutterEnter(-1)}
-            onMouseLeave={onGutterLeave}
-          >
-            <span className="pointer-events-none absolute top-3 bottom-8 left-0 right-0 flex items-center justify-start pl-5">
-              <span className="relative z-[1] inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]">
-                <ChevronLeft className="h-4 w-4" />
-              </span>
-            </span>
-          </button>
+          <div className="pointer-events-none absolute top-3 bottom-8 left-0 z-20 flex items-center pl-5">
+            <button
+              type="button"
+              aria-label="Previous appointments"
+              onClick={() => onArrowClick(-1)}
+              className="pointer-events-auto inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px] transition-colors hover:bg-card"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          </div>
         ) : null}
 
         {canNext ? (
-          <button
-            type="button"
-            aria-label="Next appointments"
-            className="absolute inset-y-0 right-0 z-20 w-16 cursor-pointer sm:w-[4.5rem]"
-            onPointerDown={onGutterPointerDown}
-            onClick={() => onGutterClick(1)}
-            onMouseEnter={() => onGutterEnter(1)}
-            onMouseLeave={onGutterLeave}
-          >
-            <span className="pointer-events-none absolute top-3 bottom-8 left-0 right-0 flex items-center justify-end pr-1">
-              <span className="relative z-[1] inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px]">
-                <ChevronRight className="h-4 w-4" />
-              </span>
-            </span>
-          </button>
+          <div className="pointer-events-none absolute top-3 bottom-8 right-0 z-20 flex items-center pr-1">
+            <button
+              type="button"
+              aria-label="Next appointments"
+              onClick={() => onArrowClick(1)}
+              className="pointer-events-auto inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-edge-2 bg-card/90 shadow-lift backdrop-blur-[2px] transition-colors hover:bg-card"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         ) : null}
       </div>
     </div>
@@ -680,7 +587,7 @@ function TodayCard({
           >
             <ConsentChip appointment={a} signed={consentSigned} />
             <PaymentChip appointment={a} status={paymentStatus} />
-            <VisitNoteChip appointmentId={a.id} variant="chip" compact />
+            <VisitNoteChip appointmentId={a.id} variant="chip" compact preRead={isPreAppointmentNote(a)} />
           </div>
         </div>
       </div>
@@ -812,6 +719,7 @@ function TodayCard({
 
               <VisitNoteEditor
                 appointmentId={a.id}
+                preRead={isPreAppointmentNote(a)}
                 minHeightClass="min-h-[180px]"
                 footerEnd={
                   !isCancelled ? (

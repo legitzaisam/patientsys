@@ -29,7 +29,7 @@ function Resources() {
         </div>
       </div>
 
-      <div className="grid items-start gap-3.5 md:grid-cols-2">
+      <div className="grid items-stretch gap-3.5 md:grid-cols-2">
         <PortalCard>
           <PortalHead icon={Megaphone} title="Clinic news" />
           {home?.news ? (

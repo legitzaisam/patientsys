@@ -8,7 +8,7 @@ import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { EarningsLinesTable } from "@/components/earnings/earnings-lines-table";
-import { PeriodPicker, periodRange, money, type PeriodSelection } from "@/components/period-picker";
+import { CURRENT_YEAR, PeriodPicker, periodRange, money, type PeriodSelection } from "@/components/period-picker";
 
 export const Route = createFileRoute("/_authenticated/earnings")({
   head: () => ({
@@ -28,7 +28,7 @@ export const Route = createFileRoute("/_authenticated/earnings")({
 
 function EarningsPage() {
   const { data: identity } = useIdentity();
-  const [period, setPeriod] = useState<PeriodSelection>({ key: "month", offset: 0 });
+  const [period, setPeriod] = useState<PeriodSelection>(CURRENT_YEAR);
   const range = useMemo(() => periodRange(period), [period]);
   const fetchEarnings = useServerFn(getMyEarnings);
 

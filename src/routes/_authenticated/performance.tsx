@@ -8,7 +8,7 @@ import { getPractitionerPerformance } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { PeriodPicker, periodRange, previousPeriodRange, money, type PeriodSelection } from "@/components/period-picker";
+import { CURRENT_YEAR, PeriodPicker, periodRange, previousPeriodRange, money, type PeriodSelection } from "@/components/period-picker";
 import { PerformanceTrends } from "@/components/performance-trends";
 import { PerformanceTable } from "@/components/performance/performance-table";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_authenticated/performance")({
 function PerformancePage() {
   const { data: identity } = useIdentity();
   const navigate = useNavigate();
-  const [period, setPeriod] = useState<PeriodSelection>({ key: "month", offset: 0 });
+  const [period, setPeriod] = useState<PeriodSelection>(CURRENT_YEAR);
   const range = useMemo(() => periodRange(period), [period]);
   const previous = useMemo(() => previousPeriodRange(period), [period]);
   const fetchPerformance = useServerFn(getPractitionerPerformance);

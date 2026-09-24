@@ -30,7 +30,7 @@ test("a patient can unsubscribe from the email footer link", async ({ page, cont
 
   // Staff side reflects it: reminders and marketing are now off.
   await context.addCookies([{ name: "demo_role", value: "owner", url: baseURL! }]);
-  await page.goto(`/patients/${patientId}`);
+  await page.goto(`/patients/${patientId}?tab=contact`);
   await expect(page.getByRole("heading", { name: "Contact preferences" })).toBeVisible();
   // Switch order: reminders, marketing, marketing email, marketing text.
   await expect(page.getByRole("switch").nth(0)).toHaveAttribute("aria-checked", "false");

@@ -20,11 +20,11 @@ type KpiChip = {
   icon?: "up" | "down";
 };
 
-function percentChip(id: string, change: number): KpiChip {
+function percentChip(id: string, change: number, suffix = ""): KpiChip {
   const rounded = Math.round(change);
   return {
     id,
-    label: `${Math.abs(rounded)}%`,
+    label: `${Math.abs(rounded)}%${suffix}`,
     tone: rounded > 0 ? "mint" : rounded < 0 ? "rose" : "sky",
     icon: rounded > 0 ? "up" : rounded < 0 ? "down" : undefined,
   };
@@ -60,13 +60,16 @@ export function KpiGrid({
   canRetention?: boolean;
   canRevenue?: boolean;
 }) {
+  // A practitioner's dashboard is scoped to their own book, so the client and
+  // treatments-due cards say whose numbers they are; a manager sees the clinic.
+  const ownBook = kpis?.scope === "own";
   const items = [
     ...(canRetention
       ? [
           {
             label: "Retention rate",
             value: `${kpis?.retention ?? 0}%`,
-            hint: `${kpis?.repeatClients ?? 0} returning · ${kpis?.oneVisitClients ?? 0} one visit only`,
+            hint: `${kpis?.returningInWindow ?? 0} of ${kpis?.activeInWindow ?? 0} seen in 12 months`,
             icon: Repeat,
             accent: true,
             to: "/retention",
@@ -87,13 +90,15 @@ export function KpiGrid({
         ]
       : []),
     {
-      label: "Total clients",
-      value: kpis?.totalClients ?? "—",
-      hint: `${kpis?.activeClients ?? 0} active · ${kpis?.inactiveClients ?? 0} inactive`,
+      label: ownBook ? "Your clients" : "Total clients",
+      value: (ownBook ? kpis?.ownClients : kpis?.totalClients) ?? "—",
+      hint: ownBook
+        ? `Clinic total ${kpis?.totalClients ?? 0} · ${kpis?.activeClients ?? 0} active · ${kpis?.inactiveClients ?? 0} inactive`
+        : `${kpis?.activeClients ?? 0} active · ${kpis?.inactiveClients ?? 0} inactive`,
       icon: Users,
       to: "/patients",
       search: { view: "all" },
-      chips: [percentChip("patients-change", kpis?.patientChange ?? 0)],
+      chips: [percentChip("clients-change", kpis?.clientsChange ?? 0, " vs last month")],
     },
     {
       label: "Active skin plans",
@@ -113,7 +118,7 @@ export function KpiGrid({
     {
       label: "Treatments due",
       value: kpis?.treatmentsDue ?? "—",
-      hint: "Next 30 days",
+      hint: ownBook ? "Your patients · next 30 days" : "Whole clinic · next 30 days",
       icon: Calendar,
       to: "/patients",
       search: { view: "due" },

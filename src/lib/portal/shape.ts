@@ -10,7 +10,10 @@ export type MilestoneLike = {
   id: string;
   title: string;
   status: string;
+  kind?: string | null;
   due_date?: string | null;
+  appointment_id?: string | null;
+  completed_at?: string | null;
   idx?: number | null;
   detail?: string | null;
   guidance?: string | null;
@@ -56,8 +59,85 @@ export function sortMilestones(milestones: MilestoneLike[]): MilestoneLike[] {
   });
 }
 
+export type StepAppointment = { id: string; starts_at: string; treatment_name: string; consentSigned: boolean | null };
+export type StepTreatment = { name: string; performed_at: string; notes?: string | null };
+export type StepPhoto = { id: string; kind: string; taken_at: string; url: string | null; caption?: string | null };
+
+/** Everything the timeline's step card can show beyond the milestone row itself. */
+export type StepExtras = {
+  /** When the step was finished (the linked appointment's date, else the completion stamp). */
+  completedAt: string | null;
+  /** For steps still to come: the diary slot they are booked into, if any. */
+  bookedAt: string | null;
+  appointment: { date: string; time: string; treatment: string } | null;
+  consentSigned: boolean | null;
+  consultationDone: boolean;
+  photos: StepPhoto[];
+  visitNote: string | null;
+};
+
+const DAY_MS = 86_400_000;
+
+/**
+ * What the record already holds for each step: the appointment it was booked
+ * into, whether consent was signed for it, whether a consultation came before
+ * it, the photos taken at and after it, and the treatment note. Pure — the
+ * callers fetch rows (prod through RLS, demo from fixtures) and pass them in.
+ */
+export function stepExtrasFor(input: {
+  milestones: MilestoneLike[];
+  appointments: StepAppointment[];
+  treatments: StepTreatment[];
+  photos: StepPhoto[];
+}): Record<string, StepExtras> {
+  const ordered = sortMilestones(input.milestones);
+  const apptById = new Map(input.appointments.map((a) => [a.id, a]));
+  const out: Record<string, StepExtras> = {};
+  ordered.forEach((m, i) => {
+    const appt = m.appointment_id ? (apptById.get(m.appointment_id) ?? null) : null;
+    const done = DONE_STATUSES.has(m.status);
+    const anchor = appt?.starts_at ?? (done ? (m.completed_at ?? null) : null);
+    const anchorMs = anchor ? new Date(anchor).getTime() : null;
+    const near = (iso: string, before: number, after: number) => {
+      if (anchorMs === null) return false;
+      const ms = new Date(iso).getTime();
+      return ms >= anchorMs - before * DAY_MS && ms <= anchorMs + after * DAY_MS;
+    };
+    const treatment = anchorMs === null ? null : (input.treatments.find((t) => near(t.performed_at, 1, 1)) ?? null);
+    const photos =
+      anchorMs === null
+        ? []
+        : [
+            ...input.photos.filter((p) => p.kind === "before" && near(p.taken_at, 2, 1)).slice(0, 1),
+            ...input.photos.filter((p) => p.kind === "after" && near(p.taken_at, 0, 45)).slice(-1),
+          ];
+    const starts = appt ? new Date(appt.starts_at) : null;
+    out[m.id] = {
+      completedAt: done ? anchor : null,
+      bookedAt: !done && appt ? appt.starts_at : null,
+      appointment:
+        appt && starts
+          ? {
+              date: starts.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+              time: starts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+              treatment: appt.treatment_name,
+            }
+          : null,
+      consentSigned: appt ? appt.consentSigned : null,
+      consultationDone: ordered.slice(0, i).some((prev) => DONE_STATUSES.has(prev.status) && /consult/i.test(prev.title)),
+      photos,
+      visitNote: treatment?.notes?.trim() || null,
+    };
+  });
+  return out;
+}
+
 /** Group milestones into the portal's month sections, checklists attached. */
-export function roadmapFor(milestones: MilestoneLike[], checklist: ChecklistLike[]) {
+export function roadmapFor(
+  milestones: MilestoneLike[],
+  checklist: ChecklistLike[],
+  extras: Record<string, StepExtras> = {},
+) {
   const byMilestone = new Map<string, ChecklistLike[]>();
   for (const item of checklist) {
     const list = byMilestone.get(item.milestone_id) ?? [];
@@ -82,6 +162,7 @@ export function roadmapFor(milestones: MilestoneLike[], checklist: ChecklistLike
     group.steps.push({
       id: m.id,
       title: m.title,
+      kind: m.kind ?? "task",
       date: m.due_date ?? null,
       status: m.status,
       statusLabel: statusLabel(m.status),
@@ -91,6 +172,7 @@ export function roadmapFor(milestones: MilestoneLike[], checklist: ChecklistLike
       checklist: (byMilestone.get(m.id) ?? [])
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
         .map((c) => ({ id: c.id, label: c.label, done: c.done, byClinic: c.clinic_owned })),
+      ...(extras[m.id] ?? {}),
     });
   }
   return [...groups.values()].sort((a, b) => a.n - b.n);
@@ -157,4 +239,25 @@ export function nextRoutineReminder(now = new Date()) {
   return hour < 12
     ? { period: "morning" as const, title: "Time for your morning routine", when: "Today at 8:00 AM" }
     : { period: "evening" as const, title: "Time for your evening routine", when: "Today at 8:00 PM" };
+}
+
+/**
+ * What the dashboard journey card says about one plan: steps done of total
+ * and the step that is up next (and whether it is late). The plan's kind
+ * (treatment course, review track, re-engagement track) is a column on the
+ * plan itself and travels alongside.
+ */
+export function journeyPlanSummary(
+  milestones: { status: string; title?: string | null; due_date?: string | null }[],
+  todayKey: string,
+) {
+  const done = milestones.filter((m) => m.status === "done" || m.status === "skipped").length;
+  const next = milestones.find((m) => m.status === "current") ?? milestones.find((m) => m.status === "upcoming") ?? null;
+  return {
+    done,
+    total: milestones.length,
+    nextStep: next?.title ?? null,
+    nextDue: next?.due_date ?? null,
+    overdue: !!next?.due_date && next.due_date < todayKey,
+  };
 }

@@ -10,6 +10,8 @@ export type PeriodSelection = {
 };
 
 export const CURRENT_MONTH: PeriodSelection = { key: "month", offset: 0 };
+/** The default for every metrics page: the feedback asked for one consistent picker defaulting to the year. */
+export const CURRENT_YEAR: PeriodSelection = { key: "year", offset: 0 };
 
 const OPTIONS: { key: PeriodKey; label: string }[] = [
   { key: "day", label: "Today" },

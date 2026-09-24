@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
-import { PauseCircle } from "lucide-react";
+import { MessageCircle, PauseCircle } from "lucide-react";
 import { toast } from "sonner";
 import { decidePlanPause, listPlanPauseRequests } from "@/lib/clinic.functions";
 import { PatientAvatar } from "@/components/patient-avatar";
@@ -80,6 +80,13 @@ export function PauseRequests() {
                 onClick={() => decide.mutate({ data: { id: r.id, approve: false } })}
               >
                 Decline
+              </Button>
+              {/* Talk it through before deciding: opens the patient's message thread. */}
+              <Button asChild size="sm" variant="outline" className="h-7 flex-1 text-xs">
+                <Link to="/patients/$id" params={{ id: r.patientId }} search={{ chat: true }}>
+                  <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+                  Contact
+                </Link>
               </Button>
             </div>
           </div>

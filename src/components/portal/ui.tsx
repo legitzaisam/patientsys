@@ -16,13 +16,18 @@ export function PortalCard({
   children,
   className,
   style,
+  ...rest
 }: {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  id?: string;
+  "data-qc"?: string;
 }) {
   return (
-    <Card className={cn("rounded-[22px] p-[14px]", className)} style={style}>
+    // h-full: inside a stretch grid every card in a row takes the row's height,
+    // which is what "all boxes need to match in size" asks for.
+    <Card className={cn("h-full rounded-[22px] p-[14px]", className)} style={style} {...rest}>
       {children}
     </Card>
   );
@@ -52,13 +57,27 @@ export function PortalHead({
   );
 }
 
-export function PortalLink({ children, onClick }: { children: ReactNode; onClick?: () => void }) {
+export function PortalLink({
+  children,
+  onClick,
+  href,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  /** External destination; rendered as a real link that opens in a new tab. */
+  href?: string;
+}) {
+  const className = "inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-accent-ink hover:underline";
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" className={className}>
+        {children}
+        <ArrowRight className="h-3 w-3" aria-hidden />
+      </a>
+    );
+  }
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-accent-ink hover:underline"
-    >
+    <button type="button" onClick={onClick} className={className}>
       {children}
       <ArrowRight className="h-3 w-3" aria-hidden />
     </button>
@@ -143,19 +162,56 @@ export function PortalTile({
   );
 }
 
-/** Read-only severity slider from a recovery check-in. */
-export function PortalSlider({ label, value, reading }: { label: string; value: number; reading: string }) {
+/**
+ * Severity slider from a recovery check-in. Read-only by default; pass
+ * `onChange` to make it draggable and `onCommit` to persist when the patient
+ * lets go. A native range input sits invisibly over the track so it is
+ * keyboard- and screen-reader-operable without a custom widget.
+ */
+export function PortalSlider({
+  label,
+  value,
+  reading,
+  onChange,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  reading: string;
+  onChange?: ((value: number) => void) | undefined;
+  onCommit?: ((value: number) => void) | undefined;
+}) {
+  const interactive = Boolean(onChange);
   return (
     <div className="flex items-center gap-2.5">
       <span className="w-[66px] shrink-0 text-xs text-muted-foreground">{label}</span>
-      <span className="relative h-1.5 flex-1">
+      <span className={cn("relative h-1.5 flex-1", interactive && "group cursor-pointer")}>
         <span className="absolute inset-0 overflow-hidden rounded-full bg-bar">
           <span className="block h-full rounded-full bg-success" style={{ width: `${value}%` }} />
         </span>
         <span
-          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-success shadow-glass ring-2 ring-white"
+          className={cn(
+            "absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-success shadow-glass ring-2 ring-white transition-transform",
+            interactive && "group-hover:scale-110 group-focus-within:scale-110",
+          )}
           style={{ left: `${value}%` }}
         />
+        {interactive ? (
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={value}
+            aria-label={`${label}: ${reading}`}
+            aria-valuetext={reading}
+            onChange={(e) => onChange?.(Number(e.target.value))}
+            onPointerUp={(e) => onCommit?.(Number((e.target as HTMLInputElement).value))}
+            onKeyUp={(e) => onCommit?.(Number((e.target as HTMLInputElement).value))}
+            onBlur={(e) => onCommit?.(Number(e.target.value))}
+            className="absolute -inset-y-2.5 inset-x-0 m-0 w-full cursor-pointer opacity-0"
+          />
+        ) : null}
       </span>
       <span className="w-[54px] shrink-0 text-right text-xs text-muted-foreground">{reading}</span>
     </div>

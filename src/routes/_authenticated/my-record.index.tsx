@@ -1,17 +1,20 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import {
   ArrowRight,
   BarChart3,
   Building2,
   CalendarDays,
+  CalendarPlus,
   Check,
+  CheckCircle2,
   Clock,
   Droplet,
   FileText,
-  Heart,
   Mail,
+  MailOpen,
   MapPin,
   Megaphone,
   PenLine,
@@ -19,9 +22,9 @@ import {
   Tag,
   User,
 } from "lucide-react";
-import { getPortalHome } from "@/lib/clinic.functions";
+import { confirmAppointment, getPortalHome } from "@/lib/clinic.functions";
+import { openPortalChat } from "@/components/portal/portal-dock";
 import {
-  PortalBanner,
   PortalCard,
   PortalHead,
   PortalLink,
@@ -31,9 +34,25 @@ import {
 } from "@/components/portal/ui";
 import { cn } from "@/lib/utils";
 
+/** Drafts the dock chat opens with, so the patient only has to press send. */
+const DRAFTS = {
+  book: "Hi, I'd like to book my next appointment. When do you have availability?",
+  reschedule: (treatment: string, date: string, time: string) =>
+    `Hi, I need to reschedule my ${treatment} on ${date} at ${time}. What other times do you have?`,
+};
+
 export const Route = createFileRoute("/_authenticated/my-record/")({
   component: PortalHome,
 });
+
+/** The wireframe's tick: drawn to sit centred in a 17px dot, unlike lucide's at 10px. */
+function Tick({ className, ...rest }: { className?: string; "data-qc"?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden {...rest}>
+      <path d="M5 12.5 10 17.5 19 7" />
+    </svg>
+  );
+}
 
 function greeting(now = new Date()) {
   const h = now.getHours();
@@ -44,13 +63,30 @@ function greeting(now = new Date()) {
 
 function PortalHome() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const fetchHome = useServerFn(getPortalHome);
   const { data, isLoading } = useQuery({ queryKey: ["portal-home"], queryFn: () => fetchHome() });
+
+  const confirm = useMutation({
+    mutationFn: useServerFn(confirmAppointment),
+    onSuccess: () => {
+      toast.success("Appointment confirmed");
+      void queryClient.invalidateQueries({ queryKey: ["portal-home"] });
+      void queryClient.invalidateQueries({ queryKey: ["portal-appointments"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   if (isLoading) return <p className="p-6 text-sm text-muted-foreground">Loading your care…</p>;
   if (!data) return <p className="p-6 text-sm text-muted-foreground">No record linked yet.</p>;
 
   const { plan, clinician, nextAppointment, news, offer, latestMessage, progressSteps } = data;
+  // The home only presents a booking as "your next appointment" once the
+  // patient has confirmed it; until then it asks them to.
+  const confirmed = Boolean(nextAppointment?.confirmedAt);
+  const rescheduleDraft = nextAppointment
+    ? DRAFTS.reschedule(nextAppointment.treatment, nextAppointment.date, nextAppointment.time)
+    : DRAFTS.book;
 
   return (
     <div data-qc="portal-home">
@@ -86,8 +122,14 @@ function PortalHome() {
           icon={CalendarDays}
           iconClass="bg-sky-bg text-sky-ink"
           label="Next appointment"
-          value={nextAppointment?.date ?? "Nothing booked"}
-          sub={nextAppointment?.time ?? "Message your clinic to book"}
+          value={!nextAppointment ? "Nothing booked" : confirmed ? nextAppointment.date : "Please confirm"}
+          sub={
+            !nextAppointment
+              ? "Message your clinic to book"
+              : confirmed
+                ? `${nextAppointment.time} · Confirmed`
+                : `${nextAppointment.date} · ${nextAppointment.time}`
+          }
           onClick={() => navigate({ to: "/my-record/appointments" })}
         />
         <PortalTile
@@ -100,7 +142,7 @@ function PortalHome() {
         />
       </div>
 
-      <div className="mt-3.5 grid items-start gap-3.5 xl:grid-cols-3">
+      <div className="mt-3.5 grid items-stretch gap-3.5 xl:grid-cols-3">
         {/* ------------------------------------------------- column 1 */}
         <div className="grid gap-3.5">
           <PortalCard>
@@ -163,11 +205,17 @@ function PortalHome() {
                           s.state === "upcoming" && "bg-glass-2 shadow-[inset_0_0_0_1.5px_var(--bar)]",
                         )}
                       >
-                        {s.state === "done" && <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />}
+                        {s.state === "done" && <Tick className="h-2.5 w-2.5" />}
                         {s.state === "current" && <span className="h-1.5 w-1.5 rounded-full bg-accent-ink" />}
                       </span>
                       <p className="mt-1.5 line-clamp-2 text-[9.5px] leading-tight text-ink-2">{s.label}</p>
-                      {s.note && <p className="text-[8.5px] text-ink-3">{s.note}</p>}
+                      {/* Done steps carry a small green tick under the label, as in the
+                          wireframe; current and upcoming steps carry their state word. */}
+                      {s.state === "done" ? (
+                        <Tick className="mx-auto mt-0.5 h-2.5 w-2.5 text-success" data-qc="step-tick" />
+                      ) : (
+                        s.note && <p className="text-[8.5px] text-ink-3">{s.note}</p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -216,22 +264,36 @@ function PortalHome() {
 
           <PortalCard>
             <PortalHead
-              icon={Mail}
+              icon={latestMessage?.read ? MailOpen : Mail}
               title="Latest message from your clinic"
-              action={<PortalLink onClick={() => navigate({ to: "/my-record/messages" })}>See all</PortalLink>}
+              action={<PortalLink onClick={() => openPortalChat()}>See all</PortalLink>}
             />
             {latestMessage ? (
               <>
+                {latestMessage.fromClinic ? (
+                  <span
+                    data-qc="message-read-state"
+                    className={cn(
+                      "mb-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-inset-hi",
+                      latestMessage.read ? "bg-success-bg text-success-ink" : "bg-accent-soft text-accent-ink",
+                    )}
+                  >
+                    {latestMessage.read ? <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden /> : null}
+                    {latestMessage.read ? "Read" : "New"}
+                  </span>
+                ) : null}
                 <div className="flex gap-2.5">
                   <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-accent-soft text-2xs font-semibold text-accent-ink">
-                    {(latestMessage.from ?? "Clinic")
+                    {(latestMessage.fromClinic ? (latestMessage.from ?? "Clinic") : data.patient.name)
                       .split(/\s+/)
                       .slice(0, 2)
                       .map((w: string) => w[0]?.toUpperCase() ?? "")
                       .join("")}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold">{latestMessage.from ?? "Your clinic"}</p>
+                    <p className="text-xs font-semibold">
+                      {latestMessage.fromClinic ? (latestMessage.from ?? "Your clinic") : "You"}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(latestMessage.createdAt).toLocaleString("en-GB", {
                         day: "numeric",
@@ -243,13 +305,16 @@ function PortalHome() {
                   </div>
                 </div>
                 <p className="mt-2.5 text-xs leading-relaxed text-ink-2">{latestMessage.body}</p>
-                <Link
-                  to="/my-record/messages"
+                {/* Once the message has been opened the card says so and the
+                    action becomes optional; before that it asks for a reply. */}
+                <button
+                  type="button"
+                  onClick={() => openPortalChat()}
                   className="mt-2.5 inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full bg-glass-2 px-3 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.08)]"
                 >
-                  Reply
+                  {!latestMessage.fromClinic ? "Open conversation" : latestMessage.read ? "Reply if you'd like" : "Read and reply"}
                   <ArrowRight className="h-3 w-3" aria-hidden />
-                </Link>
+                </button>
               </>
             ) : (
               <p className="py-4 text-xs text-muted-foreground">No messages yet.</p>
@@ -259,78 +324,102 @@ function PortalHome() {
 
         {/* ------------------------------------------------- column 3 */}
         <div className="grid gap-3.5">
-          <PortalCard>
-            <PortalHead icon={CalendarDays} title="Your next appointment" />
-            {nextAppointment ? (
-              <>
-                <div className="flex gap-3">
-                  <div className="shrink-0 rounded-[16px] bg-accent-wash px-3 py-2.5 text-center shadow-inset-hi">
-                    <p className="text-xs font-semibold text-muted-foreground">{nextAppointment.weekday}</p>
-                    <p className="text-[22px] font-semibold leading-tight tabular-nums">{nextAppointment.day}</p>
-                    <p className="text-xs text-muted-foreground">{nextAppointment.monthYear}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold">{nextAppointment.treatment}</p>
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" aria-hidden /> {nextAppointment.time}
-                    </p>
-                    <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <MapPin className="h-3 w-3" aria-hidden /> Aetheria Skin Clinic
-                    </p>
-                  </div>
+          {!nextAppointment ? (
+            <PortalCard data-qc="next-appointment-book">
+              <PortalHead icon={CalendarPlus} title="Book your next appointment" />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Nothing is in the diary yet. Send your clinic a note and they will find you a time.
+              </p>
+              <button
+                type="button"
+                onClick={() => openPortalChat(DRAFTS.book)}
+                className="mt-3 inline-flex h-7 w-full cursor-pointer items-center justify-center whitespace-nowrap rounded-full bg-accent px-3 text-xs font-semibold text-accent-foreground shadow-bloom hover:brightness-105"
+              >
+                Ask to book
+              </button>
+            </PortalCard>
+          ) : (
+            <PortalCard data-qc={confirmed ? "next-appointment" : "next-appointment-confirm"}>
+              <PortalHead
+                icon={confirmed ? CalendarDays : CheckCircle2}
+                title={confirmed ? "Your next appointment" : "Please confirm your appointment"}
+              />
+              <div className="flex gap-3">
+                <div className="shrink-0 rounded-[16px] bg-accent-wash px-3 py-2.5 text-center shadow-inset-hi">
+                  <p className="text-xs font-semibold text-muted-foreground">{nextAppointment.weekday}</p>
+                  <p className="text-[22px] font-semibold leading-tight tabular-nums">{nextAppointment.day}</p>
+                  <p className="text-xs text-muted-foreground">{nextAppointment.monthYear}</p>
                 </div>
-                <div className="mt-3 flex gap-2">
-                  <Link
-                    to="/my-record/appointments"
-                    className="inline-flex h-7 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-full bg-accent px-3 text-xs font-semibold text-accent-foreground shadow-bloom hover:brightness-105"
-                  >
-                    Confirm appointment
-                  </Link>
-                  <Link
-                    to="/my-record/messages"
-                    className="inline-flex h-7 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-full bg-glass-2 px-3 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.08)]"
-                  >
-                    Reschedule
-                  </Link>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold">{nextAppointment.treatment}</p>
+                  <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" aria-hidden /> {nextAppointment.time}
+                  </p>
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <MapPin className="h-3 w-3" aria-hidden /> Aetheria Skin Clinic
+                  </p>
+                  {confirmed ? (
+                    <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-success-bg px-2 py-0.5 text-[10px] font-semibold text-success-ink shadow-inset-hi">
+                      <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden /> Confirmed
+                    </p>
+                  ) : null}
                 </div>
-              </>
-            ) : (
-              <p className="py-4 text-xs text-muted-foreground">Nothing booked yet.</p>
-            )}
-          </PortalCard>
+              </div>
+              <div className="mt-3 flex gap-2">
+                {confirmed ? null : (
+                  <button
+                    type="button"
+                    disabled={confirm.isPending}
+                    onClick={() => confirm.mutate({ data: { appointment_id: nextAppointment.id } })}
+                    className="inline-flex h-7 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-full bg-accent px-3 text-xs font-semibold text-accent-foreground shadow-bloom hover:brightness-105 disabled:opacity-60"
+                  >
+                    {confirm.isPending ? "Confirming…" : "Confirm appointment"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => openPortalChat(rescheduleDraft)}
+                  className="inline-flex h-7 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-full bg-glass-2 px-3 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.08)]"
+                >
+                  Reschedule
+                </button>
+              </div>
+            </PortalCard>
+          )}
 
           <PortalCard>
             <PortalHead icon={Sparkles} title="Quick actions" />
             <div>
-              {[
-                { icon: FileText, label: "Upload a result", to: "/my-record/records" as const },
-                { icon: Mail, label: "Message your clinic", to: "/my-record/messages" as const },
-                { icon: PenLine, label: "Complete your daily journal", to: "/my-record/plan/journal" as const },
-                { icon: Droplet, label: "View your skincare routine", to: "/my-record/plan/routine" as const },
-              ].map((a) => (
-                <Link
-                  key={a.label}
-                  to={a.to}
-                  className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-[rgba(47,63,102,0.08)]"
-                >
-                  <a.icon className="h-4 w-4 shrink-0 text-accent-ink" aria-hidden />
-                  <span className="text-xs">{a.label}</span>
-                  <ArrowRight className="ml-auto h-3 w-3 shrink-0 text-ink-3" aria-hidden />
-                </Link>
-              ))}
+              {(
+                [
+                  { icon: FileText, label: "Upload a result", to: "/my-record/records" },
+                  { icon: Mail, label: "Message your clinic", onClick: () => openPortalChat() },
+                  { icon: PenLine, label: "Complete your daily journal", to: "/my-record/plan/journal" },
+                  { icon: Droplet, label: "View your skincare routine", to: "/my-record/plan/routine" },
+                ] as const
+              ).map((a) => {
+                const rowClass =
+                  "flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-[rgba(47,63,102,0.08)]";
+                const inner = (
+                  <>
+                    <a.icon className="h-4 w-4 shrink-0 text-accent-ink" aria-hidden />
+                    <span className="text-xs">{a.label}</span>
+                    <ArrowRight className="ml-auto h-3 w-3 shrink-0 text-ink-3" aria-hidden />
+                  </>
+                );
+                return "to" in a ? (
+                  <Link key={a.label} to={a.to} className={rowClass}>
+                    {inner}
+                  </Link>
+                ) : (
+                  <button key={a.label} type="button" onClick={a.onClick} className={rowClass}>
+                    {inner}
+                  </button>
+                );
+              })}
             </div>
           </PortalCard>
         </div>
-      </div>
-
-      <div className="mt-3.5">
-        <PortalBanner
-          icon={Heart}
-          title="You're doing great"
-          body="Consistency brings real results. Keep going — your skin journey matters."
-          cta="View your journey"
-          onCta={() => navigate({ to: "/my-record/plan" })}
-        />
       </div>
     </div>
   );

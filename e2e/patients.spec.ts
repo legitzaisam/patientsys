@@ -26,12 +26,12 @@ test("record page exposes every clinical tab", async ({ page }) => {
   await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: /Bennett, .*Olivia/ })).toBeVisible();
 
-  for (const tab of ["Visit notes", "Before and after", "Documents", "History updates"]) {
+  for (const tab of ["Visit notes", "Before and after", "Documents", "History updates", "Contact"]) {
     await page.getByRole("tab", { name: tab }).click();
     await expect(page.getByRole("tab", { name: tab })).toHaveAttribute("aria-selected", "true");
   }
 
-  // Contact preferences and the comms log render on the record for comms.send staff.
+  // Contact preferences and the comms log live on the Contact tab for comms.send staff.
   await expect(page.getByRole("heading", { name: "Contact preferences" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Email and text" })).toBeVisible();
 });

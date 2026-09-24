@@ -338,7 +338,7 @@ export function PerformanceTable({
                       </td>
                       <td className="px-5 py-3">
                         <p className="text-foreground">{r.retention}%</p>
-                        <p className="text-2xs text-muted-foreground">{r.patients} patients</p>
+                        <p className="text-2xs text-muted-foreground">{r.patients} patients seen</p>
                       </td>
                       <td className="px-5 py-3">
                         <p className={r.outstanding > 0 ? "text-destructive" : "text-foreground"}>
