@@ -36,7 +36,7 @@ CROSS JOIN (
     ('Lip Blush', 'Semi-permanent makeup', 'Semi-permanent lip colour.', 350, 365, 48, true, 'pmu'),
     ('Eyeliner Tattoo', 'Semi-permanent makeup', 'Lash-line enhancement.', 280, 365, 48, true, 'pmu'),
     ('Laser Tattoo Removal', 'Laser', 'Q-switched or picosecond laser, per session.', 150, 42, 48, true, 'tattoo'),
-    ('Skin Consultation', 'Consultation', 'Thirty minute assessment and treatment plan.', 50, 180, 0, false, 'consultation'),
+    ('Skin Consultation', 'Consultation', 'Thirty minute assessment and treatment plan.', 50, 365, 0, false, 'consultation'),
     ('Follow-up Review', 'Consultation', 'Review of a recent treatment.', 0, NULL, 0, false, 'consultation')
 ) AS v(name, category, description, price, interval_days, cooling_off_hours, requires_consent, result_template)
 WHERE NOT EXISTS (
@@ -45,6 +45,6 @@ WHERE NOT EXISTS (
 );
 
 UPDATE public.treatment_catalogue
-SET interval_days = 180
+SET interval_days = 365
 WHERE name = 'Skin Consultation'
-  AND interval_days IS DISTINCT FROM 180;
+  AND interval_days IS DISTINCT FROM 365;

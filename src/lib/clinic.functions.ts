@@ -903,7 +903,7 @@ export const getPatient = createServerFn({ method: "GET" })
       supabase
         .from("appointments")
         .select(
-          "id, starts_at, treatment_name, status, payment_status, profiles(full_name), documents(status, title)",
+          "id, starts_at, treatment_name, status, payment_status, notes, profiles(full_name), documents(status, title), appointment_notes(body)",
         )
         .eq("patient_id", data.id)
         .gte("starts_at", new Date().toISOString())
@@ -954,6 +954,11 @@ export const getPatient = createServerFn({ method: "GET" })
         if (a.payment_status === "unpaid") issues.push("Deposit unpaid");
         if (a.payment_status === "deposit_paid") issues.push("Balance due");
         if (docStatus !== "signed") issues.push("Consent due");
+        const embedded = a.appointment_notes;
+        const noteRow = Array.isArray(embedded) ? embedded[0] : embedded;
+        const bookingNote =
+          String(a.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim() ||
+          plainVisitNote(noteRow?.body);
         return {
           id: a.id as string,
           startsAt: a.starts_at as string,
@@ -962,9 +967,10 @@ export const getPatient = createServerFn({ method: "GET" })
           paymentStatus: (a.payment_status as string) ?? "unpaid",
           consentSigned: docStatus === "signed",
           issues,
+          bookingNote,
         };
       })
-      .filter((b) => b.issues.length > 0);
+      .filter((b) => b.issues.length > 0 || b.bookingNote);
 
     // What the patient wrote in their portal. Journal entries they kept
     // private are excluded at the query, not filtered in the UI.

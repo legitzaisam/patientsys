@@ -329,7 +329,7 @@ const CATALOGUE_SPECS: CatalogueSpec[] = [
     name: "Skin Consultation",
     category: "Consultation",
     price: 50,
-    interval: 180,
+    interval: 365,
     consent: false,
     description: "Thirty minute assessment and treatment plan.",
   },
@@ -1282,7 +1282,8 @@ for (const patient of patients) {
 
   for (let visit = spec.visits - 1; visit >= 0; visit--) {
     // Most recent visit is `lastVisit` days ago; earlier ones step back by the cadence.
-    const daysAgo = spec.lastVisit + visit * (interval + between(-12, 25));
+    const step = cat["category"] === "Consultation" ? interval : interval + between(-12, 25);
+    const daysAgo = spec.lastVisit + visit * step;
     if (daysAgo > 730) continue;
     const useFavourite = visit === 0 || rand() > 0.35;
     const treatmentMenu = activeCatalogue.filter((c) => c["category"] !== "Consultation");
@@ -1301,7 +1302,7 @@ for (const patient of patients) {
       ...(consultation ? { product: null, area: null, dose: null } : detailsFor(item["name"] as string)),
       notes: consultation
         ? visit === 0
-          ? "Assessment and plan agreed. Next consultation in six months."
+          ? "Assessment and plan agreed. Next consultation in a year."
           : null
         : visit === 0
           ? "Tolerated well. Aftercare advice given, review at two weeks."
@@ -4019,7 +4020,8 @@ for (const recipe of PLAN_RECIPES) {
     const item = catalogueByName.get(treatmentName) ?? activeCatalogue.find((c) => c["category"] !== "Consultation")!;
     const consultation = item["category"] === "Consultation";
     if (consultation && pastVisits.some((v) => v["treatment_name"] === item["name"])) break;
-    const visitDaysAgo = consultation ? 180 : daysAgo;
+    const consultEvery = (item["interval_days"] as number | null) ?? 365;
+    const visitDaysAgo = consultation ? consultEvery : daysAgo;
     const doc = makeDocument(patient["id"] as string, "consent", `${item["name"]} — consent form`, "signed", visitDaysAgo);
     doc["signed_name"] = `${patient["first_name"]} ${patient["last_name"]}`;
     doc["signature_data"] = doc["signed_name"];
@@ -4045,11 +4047,11 @@ for (const recipe of PLAN_RECIPES) {
       name: item["name"],
       ...(consultation ? { product: null, area: null, dose: null } : detailsFor(item["name"] as string)),
       notes: consultation
-        ? "Assessment and plan agreed. Next consultation in six months."
+        ? "Assessment and plan agreed. Next consultation in a year."
         : PLAN_VISIT_NOTES[k % PLAN_VISIT_NOTES.length],
       price: visit["price"],
       performed_at: visit["starts_at"],
-      next_due_at: consultation ? dateOnly(-visitDaysAgo + 180) : null,
+      next_due_at: consultation ? dateOnly(-visitDaysAgo + consultEvery) : null,
       status: "completed",
       consent_document_id: doc["id"],
       appointment_id: visit["id"],

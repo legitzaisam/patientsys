@@ -99,9 +99,8 @@ test.describe("as the owner", () => {
     await expect(page.locator("#patient-chat")).toBeVisible();
     await expect(page.locator("#patient-chat textarea")).toBeFocused();
 
-    // The Visit notes tab explains where notes live.
-    await page.getByRole("tab", { name: "Visit notes" }).click();
-    await expect(page.getByText(/practitioner's pre-read/)).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Visit notes" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Upcoming appointments" })).toBeVisible();
   });
 
   test("journey card: steps counter, next step, plan kind and a bounded height", async ({ page }) => {

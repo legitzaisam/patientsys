@@ -26,7 +26,7 @@ test("record page exposes every clinical tab", async ({ page }) => {
   await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: /Bennett, .*Olivia/ })).toBeVisible();
 
-  for (const tab of ["Visit notes", "Before and after", "Documents", "History updates", "Contact"]) {
+  for (const tab of ["Before and after", "Documents", "History updates", "Contact"]) {
     await page.getByRole("tab", { name: tab }).click();
     await expect(page.getByRole("tab", { name: tab })).toHaveAttribute("aria-selected", "true");
   }

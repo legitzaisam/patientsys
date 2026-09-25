@@ -852,6 +852,9 @@ export const getPatient = createServerFn({ method: "GET" })
         if (a.payment_status === "unpaid") issues.push("Deposit unpaid");
         if (a.payment_status === "deposit_paid") issues.push("Balance due");
         if (docStatus !== "signed") issues.push("Consent due");
+        const bookingNote =
+          String(a.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim() ||
+          plainVisitNote(view.appointment_notes?.body);
         return {
           id: a.id as string,
           startsAt: a.starts_at as string,
@@ -860,9 +863,10 @@ export const getPatient = createServerFn({ method: "GET" })
           paymentStatus: (a.payment_status as string) ?? "unpaid",
           consentSigned: docStatus === "signed",
           issues,
+          bookingNote,
         };
       })
-      .filter((b) => b.issues.length > 0);
+      .filter((b) => b.issues.length > 0 || b.bookingNote);
     const { patientRetention } = await import("./retention.server");
     return {
       patient,
