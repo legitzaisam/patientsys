@@ -2,6 +2,7 @@
 const DEMO_ROLE_BY_EMAIL: Record<string, string> = {
   "amara.osei@aetheria.clinic": "owner",
   "nadia.rahman@aetheria.clinic": "practitioner",
+  "tom.whitfield@aetheria.clinic": "practitioner",
   "sofia.marchetti@aetheria.clinic": "front_desk",
   "olivia.bennett@example.com": "patient",
   "developer@aetheria.clinic": "admin",

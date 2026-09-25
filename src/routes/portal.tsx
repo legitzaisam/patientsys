@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CalendarCheck, FileSignature, MessageCircle } from "lucide-react";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import { autofillHandlers } from "@/components/auth/login-autofill";
 import { PasswordResetRequest } from "@/components/auth/password-reset-request";
 
 export const Route = createFileRoute("/portal")({
@@ -171,15 +172,17 @@ function PortalLogin() {
             />
           ) : (
             <>
-              <form onSubmit={(e) => void submit(e)} className="mt-8 space-y-4">
+              <form onSubmit={(e) => void submit(e)} autoComplete="on" className="mt-8 space-y-4">
                 <div className="field-stack">
                   <Label htmlFor="portal-email">Email</Label>
                   <Input
                     id="portal-email"
+                    name="username"
                     type="email"
-                    autoComplete="email"
+                    autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    {...autofillHandlers(setEmail)}
                     required
                   />
                 </div>
@@ -187,10 +190,12 @@ function PortalLogin() {
                   <Label htmlFor="portal-password">Password</Label>
                   <Input
                     id="portal-password"
+                    name="password"
                     type="password"
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    {...autofillHandlers(setPassword)}
                     required
                     minLength={8}
                   />

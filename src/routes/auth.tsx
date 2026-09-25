@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import { autofillHandlers, LoginAutofill } from "@/components/auth/login-autofill";
 import { PasswordResetRequest } from "@/components/auth/password-reset-request";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -146,15 +147,23 @@ function AuthPage() {
             />
           ) : (
             <>
-              <form onSubmit={(e) => void submit(e)} className="mt-5 space-y-3">
+              <form onSubmit={(e) => void submit(e)} autoComplete="on" className="mt-5 space-y-3">
+                <LoginAutofill
+                  onFill={(nextEmail, nextPassword) => {
+                    setEmail(nextEmail);
+                    setPassword(nextPassword);
+                  }}
+                />
                 <div className="field-stack">
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
+                    name="username"
                     type="email"
-                    autoComplete="email"
+                    autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    {...autofillHandlers(setEmail)}
                     required
                   />
                 </div>
@@ -163,10 +172,12 @@ function AuthPage() {
                   <div className="relative">
                     <Input
                       id="password"
+                      name="password"
                       type={showPassword ? "text" : "password"}
                       autoComplete="current-password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      {...autofillHandlers(setPassword)}
                       required
                       minLength={8}
                       className="pr-10"
