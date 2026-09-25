@@ -226,13 +226,13 @@ export const PERMISSION_GROUPS: { label: string; keys: PermissionKey[] }[] = [
 ];
 
 type IdentityLike =
-  | { isOwner?: boolean; isManager?: boolean; permissions?: string[] }
+  | { isOwner?: boolean; isAdmin?: boolean; isManager?: boolean; permissions?: string[] }
   | null
   | undefined;
 
-/** Clinic owners always hold every capability; other staff need an explicit grant. */
+/** Clinic owners and the software admin hold every capability; other staff need an explicit grant. */
 export function can(identity: IdentityLike, key: PermissionKey) {
   if (!identity) return false;
-  if (identity.isOwner) return true;
+  if (identity.isOwner || identity.isAdmin) return true;
   return (identity.permissions ?? []).includes(key);
 }

@@ -247,8 +247,8 @@ function identity(): Identity {
   const isStaff = role !== "patient";
   const isOwner = role === "owner";
   const isAdmin = role === "admin";
-  const isManager = isOwner || role === "manager";
-  const permissions = isOwner
+  const isManager = isOwner || isAdmin || role === "manager";
+  const permissions = isOwner || isAdmin
     ? [...PERMISSION_KEYS]
     : rolePermissions
         .filter((p) => p.enabled && p.role === role)

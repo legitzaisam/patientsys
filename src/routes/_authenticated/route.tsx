@@ -176,10 +176,6 @@ function IdentityGate() {
 
   useEffect(() => {
     if (!identity) return;
-    if (identity.isAdmin && !identity.isOwner) {
-      if (pathname !== "/access") navigate({ to: "/access", replace: true });
-      return;
-    }
     if (pathname === "/access") {
       if (!isAccessAdmin(identity)) navigate({ to: "/dashboard", replace: true });
       return;

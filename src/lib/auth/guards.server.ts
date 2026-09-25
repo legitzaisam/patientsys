@@ -80,9 +80,9 @@ async function readIdentity(context: Ctx) {
     (r) => r === "owner" || r === "manager" || r === "practitioner" || r === "front_desk" || r === "admin",
   );
   /** Management tier (clinic owner or manager) — used for overview UI, not full access. */
-  const isManager = isOwner || roleList.includes("manager");
+  const isManager = isOwner || isAdmin || roleList.includes("manager");
   // Only clinic owners get every capability automatically; managers use role_permissions.
-  const permissions: string[] = isOwner
+  const permissions: string[] = isOwner || isAdmin
     ? [...PERMISSION_KEYS]
     : Array.from(
         new Set(
@@ -108,7 +108,7 @@ async function readIdentity(context: Ctx) {
     isStaff,
     /** Clinic owner — full access; customises manager / staff permissions. */
     isOwner,
-    /** Software developer. May edit the access catalogue, and nothing else by default. */
+    /** Software developer. Holds every clinic page, and is the only role that opens /access. */
     isAdmin,
     /** Owner or manager role (management portal tier). */
     isManager,

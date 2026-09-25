@@ -32,8 +32,7 @@ export function DemoRoleSwitcher() {
     queryClient.clear();
     await router.invalidate();
     if (next === "patient") router.navigate({ to: "/my-record" });
-    else if (next === "admin") router.navigate({ to: "/access" });
-    else if (window.location.pathname === "/my-record" || window.location.pathname === "/access") {
+    else if (window.location.pathname === "/my-record" || (window.location.pathname === "/access" && next !== "admin")) {
       router.navigate({ to: "/dashboard" });
     }
   }

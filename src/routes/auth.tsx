@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
-import { autofillHandlers, LoginAutofill } from "@/components/auth/login-autofill";
+import { autofillHandlers } from "@/components/auth/login-autofill";
 import { PasswordResetRequest } from "@/components/auth/password-reset-request";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -148,12 +148,6 @@ function AuthPage() {
           ) : (
             <>
               <form onSubmit={(e) => void submit(e)} autoComplete="on" className="mt-5 space-y-3">
-                <LoginAutofill
-                  onFill={(nextEmail, nextPassword) => {
-                    setEmail(nextEmail);
-                    setPassword(nextPassword);
-                  }}
-                />
                 <div className="field-stack">
                   <Label htmlFor="email">Email</Label>
                   <Input

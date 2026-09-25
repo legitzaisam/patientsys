@@ -297,7 +297,7 @@ export function catalogueChildren(parentId: string | null) {
 }
 
 type SeeIdentity =
-  | { isOwner?: boolean; permissions?: string[] }
+  | { isOwner?: boolean; isAdmin?: boolean; permissions?: string[] }
   | null
   | undefined;
 

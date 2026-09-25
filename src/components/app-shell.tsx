@@ -331,7 +331,7 @@ function SidebarChrome({
     <div className="flex h-full min-h-0 flex-col gap-5 px-4 py-5">
       <div className="flex items-center gap-1">
         <BrandLockup
-          to={identity.isAdmin && !identity.isOwner ? "/access" : identity.isStaff ? "/dashboard" : "/my-record"}
+          to={identity.isStaff ? "/dashboard" : "/my-record"}
           className="min-w-0 flex-1 px-1.5"
         />
         <Button
@@ -537,6 +537,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
           ? [{ to: "/schedule", label: "Diary", icon: CalendarDays, badge: diaryCount }]
           : []),
         ...(canSee(identity, "patients") ? [{ to: "/patients", label: "Patients", icon: Users }] : []),
+        ...(isAccessAdmin(identity) ? [{ to: "/access", label: "Access", icon: ShieldCheck }] : []),
       ]
     : [
         ...(canSee(identity, "portal-home") ? [{ to: "/my-record", label: "Home", icon: LayoutDashboard }] : []),
