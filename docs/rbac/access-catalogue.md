@@ -4,7 +4,7 @@ Baseline of what the four demo pill roles can see, captured from the demo clinic
 
 Personas: Dr Amara Osei (clinic owner), Dr Nadia Rahman (practitioner), Sofia Marchetti (receptionist), Olivia Bennett (patient).
 
-The live editor is at `/access`. Only the clinic owner and the software-developer admin can open it. It is not a grant, and it is not in the tables below.
+The live editor is at `/access`. Only the software-developer admin can open it. The clinic owner edits staff access on Team. It is not a grant, and it is not in the tables below.
 
 ## How to read the tables
 

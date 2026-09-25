@@ -293,6 +293,7 @@ function requireCapability(key: PermissionKey) {
 
 function requireAccessAdmin() {
   const me = identity();
+  // Owner saves the Team staff-access grid. Admin saves the /access catalogue.
   if (!me.isOwner && !me.isAdmin) throw new Error("Admin access required");
   return me;
 }

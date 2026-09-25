@@ -115,6 +115,7 @@ export function AlertBubble({ roles }: { roles: string[] }) {
       ? ARRIVAL_PILL[arrivalPhase]
       : TEAM_PILL;
   const PillIcon = pill.icon;
+  // Closed pill stays the overdue pink. Open still follows the alert type.
   const Chevron = showPanel ? ChevronDown : ChevronUp;
 
   return (
@@ -172,7 +173,7 @@ export function AlertBubble({ roles }: { roles: string[] }) {
           data-qc="alert-bubble"
           className={cn(
             "pointer-events-auto inline-flex h-10 cursor-pointer items-center gap-2 rounded-full px-3.5 text-xs font-semibold shadow-glass ring-1 transition-all hover:-translate-y-0.5",
-            pill.className,
+            showPanel ? pill.className : ARRIVAL_PILL.overdue.className,
           )}
         >
           <PillIcon className="h-3.5 w-3.5" aria-hidden />

@@ -268,6 +268,7 @@ export async function authorize(
       break;
     case "accessAdmin":
       identity = await loadIdentity(context);
+      // Owner saves the Team staff-access grid. Admin saves the /access catalogue.
       if (!identity.isOwner && !identity.isAdmin) throw new Error("Admin access required");
       break;
     case "staff":

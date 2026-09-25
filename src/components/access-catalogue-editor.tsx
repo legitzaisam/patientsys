@@ -23,7 +23,7 @@ const COLUMNS: { key: SwitchRole | "owner"; label: string }[] = [
 
 const FIXED = [
   "The clinic owner always holds every staff grant. That column cannot be turned off.",
-  "This page is limited to the clinic owner and the software-developer admin. It is not a grant, so no role can be given it from here.",
+  "This page is limited to the software-developer admin. It is not a grant, so no role can be given it from here.",
   "Patients stay inside their portal. Staff do not open the live portal, and patients do not open the clinic.",
   "A practitioner's own book on the dashboard and retention is a data rule, not a switch.",
   "Archiving a patient, inviting staff and revoking access stay with the clinic owner.",
@@ -114,7 +114,7 @@ function Rows({
   );
 }
 
-/** Owner and admin edit which pages, tabs and components each role can see. */
+/** Software-developer admin edits which pages, tabs and components each role can see. */
 export function AccessCatalogueEditor() {
   const queryClient = useQueryClient();
   const stepUp = useStepUp();

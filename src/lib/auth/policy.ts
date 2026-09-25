@@ -37,7 +37,7 @@ export type Access =
    * `view` additionally requires that visibility grant.
    */
   | { kind: "self"; view?: PermissionKey }
-  /** Clinic owner or software-developer admin. This is not a catalogue grant. */
+  /** Clinic owner (Team staff-access grid) or software-developer admin (/access). Not a catalogue grant. */
   | { kind: "accessAdmin" };
 
 export const POLICY = {

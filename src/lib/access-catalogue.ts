@@ -312,8 +312,9 @@ export function canSee(identity: SeeIdentity, nodeId: string) {
   return true;
 }
 
+/** Software-developer admin. Clinic owners edit staff access on Team, not on /access. */
 export function isAccessAdmin(identity: { isOwner?: boolean; isAdmin?: boolean } | null | undefined) {
-  return Boolean(identity?.isOwner || identity?.isAdmin);
+  return Boolean(identity?.isAdmin && !identity?.isOwner);
 }
 
 function routeScore(route: string, pathname: string) {
