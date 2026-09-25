@@ -4218,7 +4218,7 @@ export const listTeam = createServerFn({ method: "GET" })
     const signedInAt = new Map<string, string | null>(
       (users.data?.users ?? []).map((u) => [u.id, u.last_sign_in_at ?? null]),
     );
-    const staffRoles = (roles ?? []).filter((r) => r.role !== "patient");
+    const staffRoles = (roles ?? []).filter((r) => r.role !== "patient" && r.role !== "admin");
     return staffRoles
       .map((r) => {
         const profile = (profiles ?? []).find((p) => p.id === r.user_id);
@@ -4955,7 +4955,7 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" })
       (users.data?.users ?? []).map((u) => [u.id, u.email ?? ""]),
     );
     const staff = (roles ?? [])
-      .filter((r) => r.role !== "patient")
+      .filter((r) => r.role !== "patient" && r.role !== "admin")
       .filter((r) => !emailFor.get(r.user_id))
       .map((r) => {
         const profile = (profiles ?? []).find((p) => p.id === r.user_id);

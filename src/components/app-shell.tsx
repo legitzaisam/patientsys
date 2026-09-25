@@ -576,7 +576,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     ? identity.isOwner
       ? "Clinic owner"
       : identity.isAdmin
-        ? "Admin"
+        ? "Software admin"
         : identity.roles.includes("manager")
           ? "Manager"
           : identity.profile?.job_title || identity.roles[0]?.replace("_", " ") || "Staff"

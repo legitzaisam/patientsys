@@ -8,6 +8,7 @@ const ROLES = [
   { value: "practitioner", label: "Practitioner", who: "Dr Nadia Rahman" },
   { value: "front_desk", label: "Front desk", who: "Sofia Marchetti" },
   { value: "patient", label: "Patient", who: "Olivia Bennett" },
+  { value: "admin", label: "Software admin", who: "Software developer" },
 ] as const;
 
 function readCookie() {
@@ -31,7 +32,10 @@ export function DemoRoleSwitcher() {
     queryClient.clear();
     await router.invalidate();
     if (next === "patient") router.navigate({ to: "/my-record" });
-    else if (window.location.pathname === "/my-record") router.navigate({ to: "/dashboard" });
+    else if (next === "admin") router.navigate({ to: "/access" });
+    else if (window.location.pathname === "/my-record" || window.location.pathname === "/access") {
+      router.navigate({ to: "/dashboard" });
+    }
   }
 
   const current = ROLES.find((r) => r.value === role) ?? ROLES[0];

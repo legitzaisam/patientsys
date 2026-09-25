@@ -2572,7 +2572,7 @@ export const listIncomingTeamAlerts = createServerFn({ method: "GET" }).handler(
 });
 
 export const listStaffDirectory = createServerFn({ method: "GET" }).handler(async () => {
-  const staff = userRoles.filter((r) => r.role !== "patient");
+  const staff = userRoles.filter((r) => r.role !== "patient" && r.role !== "admin");
   const ids = [...new Set(staff.map((r) => r.user_id))];
   return profiles
     .filter((p) => ids.includes(p.id))
@@ -3433,7 +3433,7 @@ export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
   if (!me.isStaff) throw new Error("Staff access only");
   return userRoles
-    .filter((r) => r.role !== "patient")
+    .filter((r) => r.role !== "patient" && r.role !== "admin")
     .map((r) => {
       const profile = profiles.find((p) => p.id === r.user_id);
       return {
@@ -3748,7 +3748,7 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handle
       ].filter(Boolean) as string[],
     })),
   staff: userRoles
-    .filter((r) => r.role !== "patient" && !db.staffEmails[r.user_id])
+    .filter((r) => r.role !== "patient" && r.role !== "admin" && !db.staffEmails[r.user_id])
     .map((r) => {
       const profile = profiles.find((p) => p.id === r.user_id);
       return {

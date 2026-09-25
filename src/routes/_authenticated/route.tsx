@@ -15,6 +15,7 @@ import {
   shouldShowWelcomeAfterGate,
 } from "@/lib/password-gate-session";
 import { DEMO_MODE } from "@/lib/demo/enabled";
+import { applyDemoRoleForEmail } from "@/lib/demo/persona";
 import { FloatingDockProvider } from "@/components/floating-dock/dock-context";
 import { FloatingNotesProvider } from "@/components/dashboard/floating-notes";
 import {
@@ -66,10 +67,26 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 function AuthenticatedLayout() {
-  const [ready, setReady] = useState(DEMO_MODE);
+  const [ready, setReady] = useState(() => {
+    if (!DEMO_MODE || typeof document === "undefined") return false;
+    return /(?:^|;\s*)demo_role=/.test(document.cookie);
+  });
 
   useEffect(() => {
-    if (DEMO_MODE) return;
+    if (DEMO_MODE) {
+      if (ready) return;
+      let active = true;
+      // A developer signed in on this browser has no demo pill choice yet.
+      // Use that account instead of falling through to the clinic owner.
+      void supabase.auth.getSession().then(({ data }) => {
+        if (!active) return;
+        applyDemoRoleForEmail(data.session?.user.email);
+        setReady(true);
+      });
+      return () => {
+        active = false;
+      };
+    }
     let active = true;
     // getSession reads local storage and survives Vite HMR; getUser() hits the
     // network and was treating a reload blip as a missing account.

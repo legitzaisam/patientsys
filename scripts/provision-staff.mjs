@@ -36,6 +36,13 @@ const STAFF = [
     registrationNumber: "7719034",
     commissionRate: 42,
   },
+  {
+    email: "developer@aetheria.clinic",
+    password: "Developer1!",
+    fullName: "Software developer",
+    jobTitle: "Admin",
+    role: "admin",
+  },
 ];
 
 function loadDotEnv() {
@@ -73,7 +80,10 @@ if (listError) throw listError;
 
 const results = [];
 
+const only = (process.env.ONLY ?? "").trim().toLowerCase();
+
 for (const staff of STAFF) {
+  if (only && staff.email.toLowerCase() !== only) continue;
   let user = (list.users ?? []).find((u) => (u.email ?? "").toLowerCase() === staff.email.toLowerCase());
 
   if (!user) {

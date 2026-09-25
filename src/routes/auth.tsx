@@ -8,6 +8,8 @@ import { toastEmailError } from "@/lib/email-toast";
 import { getMe } from "@/lib/clinic.functions";
 import { assertLoginAllowed, recordLoginEvent } from "@/lib/auth/login-throttle";
 import { destinationFor, isSessionEndingIdentityError } from "@/lib/auth/surfaces";
+import { DEMO_MODE } from "@/lib/demo/enabled";
+import { applyDemoRoleForEmail } from "@/lib/demo/persona";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +57,7 @@ function AuthPage() {
     void supabase.auth.getSession().then(async ({ data }) => {
       if (!active || !data.session) return;
       try {
+        if (DEMO_MODE) applyDemoRoleForEmail(data.session.user.email);
         const identity = await fetchMe();
         navigate({ to: destinationFor("staff", identity), replace: true });
       } catch (err) {
@@ -87,6 +90,7 @@ function AuthPage() {
         await recordLoginEvent(emailCheck.email, "staff", false);
         throw error;
       }
+      if (DEMO_MODE) applyDemoRoleForEmail(emailCheck.email);
       const identity = await fetchMe();
       await recordLoginEvent(emailCheck.email, "staff", true);
       navigate({ to: destinationFor("staff", identity), replace: true });
