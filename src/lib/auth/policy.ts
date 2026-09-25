@@ -86,6 +86,7 @@ export const POLICY = {
   saveTreatmentSessionDraft: { kind: "capability", key: "treatments.record" },
   getTreatmentRecord: { kind: "staff" },
   addPhoto: { kind: "capability", key: "photos.manage" },
+  deletePhoto: { kind: "capability", key: "photos.manage" },
   sendDocument: { kind: "capability", key: "documents.send" },
   resendDocument: { kind: "capability", key: "documents.send" },
   getAppointmentConsent: { kind: "staff" },

@@ -143,7 +143,7 @@ test("the three-page form drives the stage and fans out into the record", async 
   await page.waitForURL(/\/patients\/[^/]+\?treat=/);
   const form = page.locator('[data-qc="treatment-form"]');
   await expect(form).toBeVisible();
-  await expect(form.locator('[data-qc="form-stage"]')).toHaveText("Waiting");
+  await expect(form.locator('[data-qc="form-page1"]')).toBeVisible();
 
   // Page 1: consent shows as signed; every question must be answered. Yes is a contraindication and needs a note.
   await expect(form.getByText(/Signed by Freya Sundqvist/)).toBeVisible();
@@ -158,7 +158,7 @@ test("the three-page form drives the stage and fans out into the record", async 
   await form.getByLabel(/Note for Any change in health/).fill("Started a new blood thinner since the last visit. Bruising risk discussed.");
   await form.locator('[data-qc="start-treatment-btn"]').click();
   await expect(page.getByText(/Treatment started/)).toBeVisible();
-  await expect(form.locator('[data-qc="form-stage"]')).toHaveText("In treatment");
+  await expect(form.locator('[data-qc="form-page2"]')).toBeVisible();
 
   // Page 2: results, both notes, then aftercare.
   await form.locator('[data-qc="tf-area"]').fill("Full face");
@@ -166,15 +166,20 @@ test("the three-page form drives the stage and fans out into the record", async 
   await form.locator('[data-qc="tf-strength"]').fill("20%");
   await form.locator('[data-qc="tf-time_applied"]').fill("3 minutes");
   await form.locator('[data-qc="form-page2"] textarea').first().fill("Two passes of 20% glycolic. Endpoint reached at 3 minutes, neutralised. Peel #2 done. Strict SPF, no actives for five days. Next sitting in four weeks.");
+  const photo = { name: "visit.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") };
+  await expect(form.locator('[data-qc="move-to-aftercare-hint"]')).toHaveCount(0);
+  await form.locator('[data-qc="move-to-aftercare-btn"]').click();
+  await expect(form.locator('[data-qc="move-to-aftercare-hint"]')).toBeVisible();
+  await expect(form.locator('[data-qc="form-page2"]')).toBeVisible();
+  await form.locator('[data-qc="tf-photo-before"]').setInputFiles(photo);
+  await form.locator('[data-qc="tf-photo-after"]').setInputFiles(photo);
+  await expect(form.locator('[data-qc="move-to-aftercare-hint"]')).toHaveCount(0);
   await form.locator('[data-qc="move-to-aftercare-btn"]').click();
   await expect(page.getByText(/Moved to aftercare/)).toBeVisible();
-  await expect(form.locator('[data-qc="form-stage"]')).toHaveText("Aftercare");
+  await expect(form.locator('[data-qc="form-page3"]')).toBeVisible();
 
-  // Page 3: the catalogue's own Chemical Peel points, ticked, plus a custom line.
+  // Page 3: the catalogue's own Chemical Peel points, plus a custom line.
   await expect(form.getByText(/Do not pick or peel flaking skin/)).toBeVisible();
-  const points = form.locator('[data-qc="aftercare-point"]');
-  const n = await points.count();
-  for (let i = 0; i < n; i++) await points.nth(i).click();
   await form.locator('[data-qc="aftercare-custom"]').fill("Book the four-week sitting before leaving.");
   await form.getByRole("button", { name: "Add" }).click();
   await form.locator('[data-qc="complete-treatment-btn"]').click();
@@ -195,8 +200,6 @@ test("the three-page form drives the stage and fans out into the record", async 
   const historyRow = page.locator("main li", { hasText: "Chemical Peel" }).first();
   await expect(historyRow).toContainText("Full face");
   await expect(historyRow.locator('[data-qc="view-treatment-record"]')).toBeVisible();
-  await page.getByRole("tab", { name: "Visit notes" }).click();
-  await expect(page.getByText(/Peel #2 done/).first()).toBeVisible();
   await page.getByRole("tab", { name: "Documents" }).click();
   await expect(page.locator('[data-qc="treatment-records"]')).toContainText("Chemical Peel — treatment record");
 
@@ -219,11 +222,17 @@ test("a completed session lands on the patient's timeline and the journey card",
     await form.locator(`[data-qc="pre-check-${key}"] [role=radio]`).nth(1).click();
   }
   await form.locator('[data-qc="start-treatment-btn"]').click();
-  await expect(form.locator('[data-qc="form-stage"]')).toHaveText("In treatment");
+  await expect(form.locator('[data-qc="form-page2"]')).toBeVisible();
   await form.locator('[data-qc="tf-area"]').fill("Glabella and frontalis");
-  await form.locator('[data-qc="form-page2"] textarea').nth(1).fill("Session three delivered. Review at two weeks.");
+  await form.locator('[data-qc="tf-product"]').fill("Botox");
+  await form.locator('[data-qc="tf-batch"]').fill("Lot 4471");
+  await form.locator('[data-qc="tf-units"]').fill("32 units");
+  await form.locator('[data-qc="form-page2"] textarea').first().fill("Session three delivered. Review at two weeks.");
+  const photo = { name: "visit.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") };
+  await form.locator('[data-qc="tf-photo-before"]').setInputFiles(photo);
+  await form.locator('[data-qc="tf-photo-after"]').setInputFiles(photo);
   await form.locator('[data-qc="move-to-aftercare-btn"]').click();
-  await expect(form.locator('[data-qc="form-stage"]')).toHaveText("Aftercare");
+  await expect(form.locator('[data-qc="form-page3"]')).toBeVisible();
   await form.locator('[data-qc="complete-treatment-btn"]').click();
   await expect(form.locator('[data-qc="form-done"]')).toBeVisible();
   await page.keyboard.press("Escape");

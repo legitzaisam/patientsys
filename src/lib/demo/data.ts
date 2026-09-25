@@ -329,7 +329,7 @@ const CATALOGUE_SPECS: CatalogueSpec[] = [
     name: "Skin Consultation",
     category: "Consultation",
     price: 50,
-    interval: null,
+    interval: 180,
     consent: false,
     description: "Thirty minute assessment and treatment plan.",
   },
@@ -1285,7 +1285,9 @@ for (const patient of patients) {
     const daysAgo = spec.lastVisit + visit * (interval + between(-12, 25));
     if (daysAgo > 730) continue;
     const useFavourite = visit === 0 || rand() > 0.35;
-    const item = useFavourite ? cat : pick(activeCatalogue);
+    const treatmentMenu = activeCatalogue.filter((c) => c["category"] !== "Consultation");
+    const item = useFavourite ? cat : pick(treatmentMenu);
+    const consultation = item["category"] === "Consultation";
     const price = Number(item["price"] ?? 0) + (rand() > 0.7 ? between(1, 4) * 25 : 0);
     const itemInterval = (item["interval_days"] as number | null) ?? null;
 
@@ -1296,8 +1298,14 @@ for (const patient of patients) {
       catalogue_id: item["id"],
       practitioner_id: spec.practitioner,
       name: item["name"],
-      ...detailsFor(item["name"] as string),
-      notes: visit === 0 ? "Tolerated well. Aftercare advice given, review at two weeks." : null,
+      ...(consultation ? { product: null, area: null, dose: null } : detailsFor(item["name"] as string)),
+      notes: consultation
+        ? visit === 0
+          ? "Assessment and plan agreed. Next consultation in six months."
+          : null
+        : visit === 0
+          ? "Tolerated well. Aftercare advice given, review at two weeks."
+          : null,
       price,
       performed_at: iso(-daysAgo, between(9, 16), pick([0, 15, 30, 45])),
       next_due_at: itemInterval ? dateOnly(-daysAgo + itemInterval) : null,
@@ -3839,6 +3847,24 @@ const PLAN_RECIPES: PlanRecipe[] = [
   },
 ];
 
+const PLAN_TREATMENTS: Record<string, string> = {
+  "Anti-Wrinkle Maintenance Plan": "Anti-Wrinkle Injections",
+  "Anti-Wrinkle Maintenance": "Anti-Wrinkle Injections",
+  "Profhilo Skin Quality Programme": "Profhilo",
+  "Lip Enhancement Journey": "Lip Filler",
+  "3-Month Microneedling Plan": "Microneedling",
+  "Chemical Peel Course": "Chemical Peel",
+  "Rosacea Management Programme": "Laser Skin Resurfacing",
+  "Anti-Ageing Programme": "Anti-Wrinkle Injections",
+  "Lip Shape & Balance Plan": "Lip Filler",
+  "Midface Volume Programme": "Cheek Filler",
+  "Lip Filler Aftercare Track": "Lip Filler",
+  "Peel Course": "Chemical Peel",
+  "Skin Booster Course": "Skin Booster",
+  "Hydrafacial Series": "Hydrafacial",
+  "Laser Hair Course": "Laser Hair Removal",
+};
+
 const PLAN_STRAPLINES = [
   "Smoother texture. Brighter tone. A stronger, healthier you.",
   "Firmer, better-hydrated skin, session by session.",
@@ -3987,38 +4013,43 @@ for (const recipe of PLAN_RECIPES) {
   while (pastVisits.length < doneSessions) {
     const k = doneSessions - pastVisits.length;
     const daysAgo = 9 * k + 4;
-    const treatmentName = catalogueByName.has(recipe.name.replace(/ (Plan|Course|Programme|Series|Track|Journey).*$/, ""))
-      ? recipe.name.replace(/ (Plan|Course|Programme|Series|Track|Journey).*$/, "")
-      : "Skin Consultation";
-    const doc = makeDocument(patient["id"] as string, "consent", `${treatmentName} — consent form`, "signed", daysAgo);
+    const stripped = recipe.name.replace(/ (Plan|Course|Programme|Series|Track|Journey).*$/, "");
+    const treatmentName =
+      PLAN_TREATMENTS[recipe.name] ?? (catalogueByName.has(stripped) ? stripped : spec.favourite);
+    const item = catalogueByName.get(treatmentName) ?? activeCatalogue.find((c) => c["category"] !== "Consultation")!;
+    const consultation = item["category"] === "Consultation";
+    if (consultation && pastVisits.some((v) => v["treatment_name"] === item["name"])) break;
+    const visitDaysAgo = consultation ? 180 : daysAgo;
+    const doc = makeDocument(patient["id"] as string, "consent", `${item["name"]} — consent form`, "signed", visitDaysAgo);
     doc["signed_name"] = `${patient["first_name"]} ${patient["last_name"]}`;
     doc["signature_data"] = doc["signed_name"];
     const visit = makeAppointment({
       patient,
       practitionerId: spec.practitioner ?? USERS.practitioner,
-      treatmentName,
-      dayOffset: -daysAgo,
+      treatmentName: item["name"] as string,
+      dayOffset: -visitDaysAgo,
       hour: 10 + (k % 5),
       minute: 0,
-      durationMinutes: 45,
+      durationMinutes: consultation ? 30 : 45,
       status: "attended",
       stage: "complete",
       paymentStatus: "paid",
       consentDocumentId: doc["id"] as string,
     });
-    const item = catalogueByName.get(treatmentName) ?? activeCatalogue[0]!;
     treatments.push({
       id: id("e1"),
       clinic_id: CLINIC_ID,
       patient_id: patient["id"],
       catalogue_id: item["id"],
       practitioner_id: spec.practitioner ?? USERS.practitioner,
-      name: treatmentName,
-      ...detailsFor(treatmentName),
-      notes: PLAN_VISIT_NOTES[k % PLAN_VISIT_NOTES.length],
+      name: item["name"],
+      ...(consultation ? { product: null, area: null, dose: null } : detailsFor(item["name"] as string)),
+      notes: consultation
+        ? "Assessment and plan agreed. Next consultation in six months."
+        : PLAN_VISIT_NOTES[k % PLAN_VISIT_NOTES.length],
       price: visit["price"],
       performed_at: visit["starts_at"],
-      next_due_at: null,
+      next_due_at: consultation ? dateOnly(-visitDaysAgo + 180) : null,
       status: "completed",
       consent_document_id: doc["id"],
       appointment_id: visit["id"],
@@ -4028,6 +4059,7 @@ for (const recipe of PLAN_RECIPES) {
       updated_at: visit["starts_at"],
     });
     pastVisits.unshift(visit);
+    if (consultation) break;
   }
   const sessionVisits = pastVisits.slice(-doneSessions);
   let sessionIdx = 0;

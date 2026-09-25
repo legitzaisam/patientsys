@@ -1940,6 +1940,33 @@ export const addPhoto = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const deletePhoto = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.DeletePhoto, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "deletePhoto");
+    const { data: photo, error: readError } = await ctx.supabase
+      .from("treatment_photos")
+      .select("id, storage_path, patient_id")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!photo) throw new Error("Photo not found");
+    const path = photo.storage_path;
+    if (path && !path.startsWith("blob:") && !path.startsWith("data:")) {
+      try {
+        await ctx.supabase.storage.from("patient-photos").remove([path]);
+      } catch {
+        // The form follows the row. A storage miss should not keep the photo on screen.
+      }
+    }
+    const { error } = await ctx.supabase.from("treatment_photos").delete().eq("id", photo.id);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "delete", "photo", photo.id, photo.patient_id, {});
+    return { ok: true };
+  });
+
 /** Signing links stop working after this long; a resend issues a fresh window. */
 const DOCUMENT_LINK_TTL_DAYS = 14;
 
@@ -7334,7 +7361,7 @@ export const moveToAftercare = createServerFn({ method: "POST" })
   .validator(
     (data: {
       appointment_id: string;
-      results: { area?: string; product?: string; dose?: string };
+      results: Record<string, string | undefined>;
       treatment_notes?: string;
       visit_notes?: string;
     }) => parseInput(schemas.MoveToAftercare, data),

@@ -122,6 +122,8 @@ export const AddPhoto = z.object({
   marketing_consent: z.boolean().optional(),
 });
 
+export const DeletePhoto = z.object({ id });
+
 export const RescheduleAppointment = z.object({
   id,
   starts_at: dateString,

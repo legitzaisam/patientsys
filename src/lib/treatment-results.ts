@@ -24,7 +24,12 @@ export const RESULT_TEMPLATES: ResultTemplate[] = [
     label: "Anti-wrinkle injections",
     fields: [
       area("e.g. Glabella and frontalis"),
-      { key: "product", label: "Brand and product", placeholder: "e.g. Botox, Azzalure, Bocouture", column: "product" },
+      {
+        key: "product",
+        label: "Brand and product",
+        placeholder: "e.g. Botox, Azzalure, Bocouture",
+        column: "product",
+      },
       { key: "batch", label: "Batch / lot", placeholder: "e.g. Lot 4471", column: "dose" },
       { key: "units", label: "Units", placeholder: "e.g. 32 units", column: "dose" },
     ],
@@ -44,7 +49,12 @@ export const RESULT_TEMPLATES: ResultTemplate[] = [
     label: "Skin booster",
     fields: [
       area("e.g. Full face"),
-      { key: "product", label: "Product", placeholder: "e.g. Profhilo, Plinest", column: "product" },
+      {
+        key: "product",
+        label: "Product",
+        placeholder: "e.g. Profhilo, Plinest",
+        column: "product",
+      },
       { key: "batch", label: "Batch / lot", placeholder: "e.g. Lot PH220", column: "dose" },
       { key: "volume", label: "Volume", placeholder: "e.g. 2ml", column: "dose" },
     ],
@@ -64,7 +74,12 @@ export const RESULT_TEMPLATES: ResultTemplate[] = [
     label: "Microneedling",
     fields: [
       area("e.g. Full face"),
-      { key: "solution", label: "Product / solution", placeholder: "e.g. Hyaluronic glide", column: "product" },
+      {
+        key: "solution",
+        label: "Product / solution",
+        placeholder: "e.g. Hyaluronic glide",
+        column: "product",
+      },
       { key: "depth", label: "Needle depth", placeholder: "e.g. 0.5mm", column: "dose" },
       { key: "passes", label: "Passes", placeholder: "e.g. 2 passes", column: "dose" },
     ],
@@ -103,7 +118,12 @@ export const RESULT_TEMPLATES: ResultTemplate[] = [
     label: "Dermaplaning",
     fields: [
       area("e.g. Full face"),
-      { key: "blade", label: "Blade", placeholder: "e.g. Size 10 sterile blade", column: "product" },
+      {
+        key: "blade",
+        label: "Blade",
+        placeholder: "e.g. Size 10 sterile blade",
+        column: "product",
+      },
       { key: "serum", label: "Serum used", placeholder: "e.g. Hyaluronic serum", column: "dose" },
     ],
   },
@@ -121,7 +141,12 @@ export const RESULT_TEMPLATES: ResultTemplate[] = [
     label: "Laser hair removal",
     fields: [
       area("e.g. Underarms"),
-      { key: "device", label: "Device / wavelength", placeholder: "e.g. Nd:YAG 1064nm", column: "product" },
+      {
+        key: "device",
+        label: "Device / wavelength",
+        placeholder: "e.g. Nd:YAG 1064nm",
+        column: "product",
+      },
       { key: "fluence", label: "Fluence", placeholder: "e.g. 30 J/cm²", column: "dose" },
       { key: "pulse", label: "Pulse duration", placeholder: "e.g. 20ms", column: "dose" },
     ],
@@ -189,8 +214,18 @@ export const RESULT_TEMPLATES: ResultTemplate[] = [
     label: "Semi-permanent makeup",
     fields: [
       { key: "area", label: "Area", placeholder: "e.g. Brows", column: "area" },
-      { key: "pigment", label: "Pigment and brand", placeholder: "e.g. PhiBrows espresso", column: "product" },
-      { key: "needle", label: "Needle configuration", placeholder: "e.g. 1RL 0.25", column: "dose" },
+      {
+        key: "pigment",
+        label: "Pigment and brand",
+        placeholder: "e.g. PhiBrows espresso",
+        column: "product",
+      },
+      {
+        key: "needle",
+        label: "Needle configuration",
+        placeholder: "e.g. 1RL 0.25",
+        column: "dose",
+      },
     ],
   },
   {
@@ -198,7 +233,12 @@ export const RESULT_TEMPLATES: ResultTemplate[] = [
     label: "Laser tattoo removal",
     fields: [
       area("e.g. Left wrist"),
-      { key: "device", label: "Device / wavelength", placeholder: "e.g. Q-switched 1064nm", column: "product" },
+      {
+        key: "device",
+        label: "Device / wavelength",
+        placeholder: "e.g. Q-switched 1064nm",
+        column: "product",
+      },
       { key: "fluence", label: "Fluence", placeholder: "e.g. 4 J/cm²", column: "dose" },
       { key: "passes", label: "Passes", placeholder: "e.g. 2 passes", column: "dose" },
     ],
@@ -207,8 +247,18 @@ export const RESULT_TEMPLATES: ResultTemplate[] = [
     id: "consultation",
     label: "Consultation",
     fields: [
-      { key: "concern", label: "Presenting concern", placeholder: "e.g. Texture and pigmentation", column: "area" },
-      { key: "recommendation", label: "Recommendation", placeholder: "e.g. Peel course, then review", column: "product" },
+      {
+        key: "concern",
+        label: "Presenting concern",
+        placeholder: "e.g. Texture and pigmentation",
+        column: "area",
+      },
+      {
+        key: "recommendation",
+        label: "Recommendation",
+        placeholder: "e.g. Peel course, then review",
+        column: "product",
+      },
     ],
   },
 ];
@@ -257,14 +307,20 @@ const NAME_TO_TEMPLATE: Record<string, string> = {
   "Follow-up Review": "consultation",
 };
 
-export function templateFor(name: string | null | undefined, templateId?: string | null): ResultTemplate {
+export function templateFor(
+  name: string | null | undefined,
+  templateId?: string | null,
+): ResultTemplate {
   const chosen = templateId ? TEMPLATE_BY_ID.get(templateId) : undefined;
   if (chosen) return chosen;
   const byName = name ? TEMPLATE_BY_ID.get(NAME_TO_TEMPLATE[name] ?? "") : undefined;
   return byName ?? RESULT_TEMPLATES.find((t) => t.id === "consultation")!;
 }
 
-export function fieldsFor(name: string | null | undefined, templateId?: string | null): ResultField[] {
+export function fieldsFor(
+  name: string | null | undefined,
+  templateId?: string | null,
+): ResultField[] {
   return templateFor(name, templateId).fields;
 }
 

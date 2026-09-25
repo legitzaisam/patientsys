@@ -1606,6 +1606,15 @@ export const addPhoto = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const deletePhoto = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.DeletePhoto, data))
+  .handler(async ({ data }) => {
+    requireStaff();
+    const index = photos.findIndex((p) => p.id === data.id);
+    if (index >= 0) photos.splice(index, 1);
+    return { ok: true };
+  });
+
 /** Signing links stop working after this long; a resend issues a fresh window. */
 const DOCUMENT_LINK_TTL_DAYS = 14;
 
@@ -5300,7 +5309,7 @@ export const moveToAftercare = createServerFn({ method: "POST" })
   .validator(
     (data: {
       appointment_id: string;
-      results: { area?: string; product?: string; dose?: string };
+      results: Record<string, string | undefined>;
       treatment_notes?: string;
       visit_notes?: string;
     }) => parseInput(schemas.MoveToAftercare, data),

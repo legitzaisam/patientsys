@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import {
   addPhoto,
+  deletePhoto,
   completeTreatment,
   getTreatmentSession,
   moveToAftercare,
@@ -27,14 +28,25 @@ import {
 } from "@/lib/clinic.functions";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { supabase } from "@/integrations/supabase/client";
-import { STAGE_LABEL, preCheckFlags, type PreChecks } from "@/lib/visit-stage";
+import { preCheckFlags, type PreChecks } from "@/lib/visit-stage";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { NotesTextarea, NotesToolbar, insertBullet, useNotesPrefs } from "@/components/notes/ios-notes-editor";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  NotesTextarea,
+  NotesToolbar,
+  insertBullet,
+  useNotesPrefs,
+} from "@/components/notes/ios-notes-editor";
 
 /**
  * The three-page treatment form. Each page's button moves the appointment's
@@ -60,18 +72,27 @@ function pageFor(status: string | undefined): Page {
   return 1;
 }
 
-const INVALIDATE = ["dashboard", "dashboard-week", "appointments", "patient", "treatment-session", "staff-notifications"];
+const INVALIDATE = [
+  "dashboard",
+  "dashboard-week",
+  "appointments",
+  "patient",
+  "treatment-session",
+  "staff-notifications",
+];
 
 export function TreatmentFormDialog({
   appointmentId,
   patientId,
   open,
   onOpenChange,
+  onShowTreatments,
 }: {
   appointmentId: string | null;
   patientId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onShowTreatments: () => void;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -122,7 +143,9 @@ export function TreatmentFormDialog({
     setTreatmentNotes(s?.treatmentNotes ?? "");
     setVisitNotes(s?.visitNotes ?? "");
     setPoints(
-      s?.aftercarePoints?.length ? s.aftercarePoints : data.aftercarePoints.map((label: string) => ({ label, covered: false })),
+      s?.aftercarePoints?.length
+        ? s.aftercarePoints
+        : data.aftercarePoints.map((label: string) => ({ label, covered: false })),
     );
     setExtra(s?.aftercareExtra ?? "");
     if (s?.status === "complete" && s.treatmentId) setDone({ treatmentId: s.treatmentId });
@@ -166,9 +189,12 @@ export function TreatmentFormDialog({
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(() => void flushDraft(), 900);
   };
-  useEffect(() => () => {
-    if (draftTimer.current) clearTimeout(draftTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+    },
+    [],
+  );
 
   // ---- the three stage-moving mutations ----
   const start = useMutation({
@@ -205,24 +231,45 @@ export function TreatmentFormDialog({
   // ---- photos during the visit ----
   const savePhoto = useMutation({
     mutationFn: useServerFn(addPhoto),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["treatment-session", appointmentId] }),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: ["treatment-session", appointmentId] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const removePhoto = useMutation({
+    mutationFn: useServerFn(deletePhoto),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: ["treatment-session", appointmentId] }),
     onError: (e: Error) => toast.error(e.message),
   });
   const [uploading, setUploading] = useState(false);
   async function uploadPhoto(file: File, kind: "before" | "after") {
     if (!appointmentId) return;
+    const already = (data?.photos ?? []).filter((p: { kind: string }) => p.kind === kind).length;
+    if (already >= 3) {
+      toast.error("Three photos is the limit for this set");
+      return;
+    }
     setUploading(true);
     try {
       const path = `${patientId}/${kind}-${Date.now()}-${file.name.replace(/[^\w.-]/g, "")}`;
       if (DEMO_MODE) {
         await savePhoto.mutateAsync({
-          data: { patient_id: patientId, storage_path: URL.createObjectURL(file), kind, appointment_id: appointmentId },
+          data: {
+            patient_id: patientId,
+            storage_path: URL.createObjectURL(file),
+            kind,
+            appointment_id: appointmentId,
+          },
         });
         return;
       }
-      const { error: uploadError } = await supabase.storage.from("patient-photos").upload(path, file);
+      const { error: uploadError } = await supabase.storage
+        .from("patient-photos")
+        .upload(path, file);
       if (uploadError) throw uploadError;
-      await savePhoto.mutateAsync({ data: { patient_id: patientId, storage_path: path, kind, appointment_id: appointmentId } });
+      await savePhoto.mutateAsync({
+        data: { patient_id: patientId, storage_path: path, kind, appointment_id: appointmentId },
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -253,22 +300,17 @@ export function TreatmentFormDialog({
         data-qc="treatment-form"
       >
         <DialogHeader className="border-b border-edge-2 px-6 pb-4 pt-5">
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <DialogTitle className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-accent-ink" aria-hidden />
-                {data ? `${data.appointment.treatment} · ${data.patient.name}` : "Treatment form"}
-              </DialogTitle>
-              <DialogDescription>
-                {data
-                  ? `${data.appointment.date} · ${data.appointment.time}${data.appointment.sessionNumber ? ` · Session ${data.appointment.sessionNumber} of ${data.appointment.sessionTotal}` : ` · #${data.appointment.treatmentNumber}`}${data.appointment.practitionerName ? ` · ${data.appointment.practitionerName}` : ""}`
-                  : isLoading
-                    ? "Loading the visit…"
-                    : "The three-page treatment form for this visit."}
-              </DialogDescription>
-            </div>
-            {data ? <StagePill stage={stageNow} /> : null}
-          </div>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-accent-ink" aria-hidden />
+            {data ? `${data.appointment.treatment} · ${data.patient.name}` : "Treatment form"}
+          </DialogTitle>
+          <DialogDescription>
+            {data
+              ? `${data.appointment.date} · ${data.appointment.time}${data.appointment.sessionNumber ? ` · Session ${data.appointment.sessionNumber} of ${data.appointment.sessionTotal}` : ` · #${data.appointment.treatmentNumber}`}${data.appointment.practitionerName ? ` · ${data.appointment.practitionerName}` : ""}`
+              : isLoading
+                ? "Loading the visit…"
+                : "The three-page treatment form for this visit."}
+          </DialogDescription>
           <ol className="mt-4 flex items-center gap-2" aria-label="Form pages">
             {PAGES.map((p, i) => {
               const Icon = p.icon;
@@ -294,7 +336,9 @@ export function TreatmentFormDialog({
                     <span
                       className={cn(
                         "grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold",
-                        reached ? "bg-accent text-accent-foreground" : "bg-glass-2 text-ink-3 shadow-inset-hi",
+                        reached
+                          ? "bg-accent text-accent-foreground"
+                          : "bg-glass-2 text-ink-3 shadow-inset-hi",
                       )}
                     >
                       {page > p.n || locked ? <Check className="h-3 w-3" strokeWidth={3} /> : p.n}
@@ -302,7 +346,9 @@ export function TreatmentFormDialog({
                     <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     <span className="truncate">{p.label}</span>
                   </button>
-                  {i < PAGES.length - 1 ? <span className="h-px w-4 shrink-0 bg-edge-2" aria-hidden /> : null}
+                  {i < PAGES.length - 1 ? (
+                    <span className="h-px w-4 shrink-0 bg-edge-2" aria-hidden />
+                  ) : null}
                 </li>
               );
             })}
@@ -311,19 +357,24 @@ export function TreatmentFormDialog({
 
         <div className="max-h-[calc(92vh-9.5rem)] overflow-y-auto px-6 py-5">
           {error ? (
-            <p className="rounded-xl bg-destructive-bg px-3 py-2 text-sm text-destructive-ink">{(error as Error).message}</p>
+            <p className="rounded-xl bg-destructive-bg px-3 py-2 text-sm text-destructive-ink">
+              {(error as Error).message}
+            </p>
           ) : !data ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : done ? (
             <DoneState
               treatmentId={done.treatmentId}
-              patientId={patientId}
               patientName={data.patient.firstName}
-              onClose={() => onOpenChange(false)}
               onViewRecord={() => {
                 onOpenChange(false);
-                void navigate({ to: "/patients/$id", params: { id: patientId }, search: { record: done.treatmentId } });
+                void navigate({
+                  to: "/patients/$id",
+                  params: { id: patientId },
+                  search: { record: done.treatmentId },
+                });
               }}
+              onShowTreatments={onShowTreatments}
             />
           ) : page === 1 ? (
             <PageOne
@@ -342,9 +393,9 @@ export function TreatmentFormDialog({
               pending={start.isPending}
               canStart={data.canStart}
               alreadyStarted={stageNow === "in_treatment" || stageNow === "aftercare"}
-              uploading={uploading}
-              onUpload={uploadPhoto}
-              onStart={() => start.mutate({ data: { appointment_id: appointmentId!, pre_checks: checks } })}
+              onStart={() =>
+                start.mutate({ data: { appointment_id: appointmentId!, pre_checks: checks } })
+              }
               onSkipToPage={() => setPage(pageFor(data.session?.status))}
             />
           ) : page === 2 ? (
@@ -364,6 +415,7 @@ export function TreatmentFormDialog({
               treatmentRef={treatmentRef}
               uploading={uploading}
               onUpload={uploadPhoto}
+              onRemove={(id) => removePhoto.mutate({ data: { id } })}
               pending={aftercare.isPending}
               onNext={() =>
                 aftercare.mutate({
@@ -383,10 +435,6 @@ export function TreatmentFormDialog({
             <PageThree
               data={data}
               points={points}
-              onToggle={(i) => {
-                setPoints((p) => p.map((x, j) => (j === i ? { ...x, covered: !x.covered } : x)));
-                scheduleDraft();
-              }}
               onRemove={(i) => {
                 setPoints((p) => p.filter((_, j) => j !== i));
                 scheduleDraft();
@@ -410,7 +458,7 @@ export function TreatmentFormDialog({
                 complete.mutate({
                   data: {
                     appointment_id: appointmentId!,
-                    aftercare_points: points,
+                    aftercare_points: points.map((p) => ({ ...p, covered: true })),
                     ...(extra.trim() ? { aftercare_extra: extra } : {}),
                   },
                 })
@@ -425,30 +473,20 @@ export function TreatmentFormDialog({
 
 /* ------------------------------------------------------------------ pieces */
 
-function StagePill({ stage }: { stage: string }) {
-  const tone: Record<string, string> = {
-    booked: "border border-edge bg-glass-2 text-muted-foreground",
-    arrived: "bg-sky-bg text-sky-ink",
-    waiting: "bg-warning-bg text-warning-ink",
-    in_treatment: "bg-accent-soft text-accent-ink",
-    aftercare: "bg-destructive-bg text-aftercare-ink",
-    complete: "bg-success-bg text-success-ink",
-    no_show: "bg-destructive-bg text-destructive-ink",
-  };
-  return (
-    <span
-      data-qc="form-stage"
-      className={cn("inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-2xs font-semibold shadow-inset-hi", tone[stage] ?? tone["booked"])}
-    >
-      {STAGE_LABEL[stage as keyof typeof STAGE_LABEL] ?? stage}
-    </span>
-  );
-}
-
-function Section({ title, icon: Icon, children, action }: { title: string; icon: typeof FileText; children: React.ReactNode; action?: React.ReactNode }) {
+function Section({
+  title,
+  icon: Icon,
+  children,
+  action,
+}: {
+  title: string;
+  icon: typeof FileText;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
     <section className="rounded-2xl bg-glass-2 p-4 shadow-inset-hi">
-      <div className="mb-2.5 flex items-center gap-2">
+      <div className={cn("flex items-center gap-2", children ? "mb-2.5" : "")}>
         <Icon className="h-3.5 w-3.5 text-accent-ink" aria-hidden />
         <h3 className="text-xs font-semibold tracking-[0.02em] text-foreground">{title}</h3>
         {action ? <div className="ml-auto">{action}</div> : null}
@@ -458,19 +496,38 @@ function Section({ title, icon: Icon, children, action }: { title: string; icon:
   );
 }
 
-function Detail({ label, value, alert }: { label: string; value?: string | null; alert?: boolean }) {
+function Detail({
+  label,
+  value,
+  alert,
+}: {
+  label: string;
+  value?: string | null;
+  alert?: boolean;
+}) {
   const has = Boolean(value && value.trim() && !/^none( known)?$/i.test(value.trim()));
   return (
     <div>
       <p className="text-2xs uppercase tracking-[0.06em] text-ink-3">{label}</p>
-      <p className={cn("text-sm", alert && has ? "font-semibold text-destructive-ink" : "text-foreground")}>{value?.trim() || "None recorded"}</p>
+      <p
+        className={cn(
+          "text-sm",
+          alert && has ? "font-semibold text-destructive-ink" : "text-foreground",
+        )}
+      >
+        {value?.trim() || "None recorded"}
+      </p>
     </div>
   );
 }
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 // The server function's return type carries TanStack's fetcher generics;
@@ -483,42 +540,54 @@ function PhotoCard({
   photos,
   uploading,
   onUpload,
+  onRemove,
 }: {
   kind: "before" | "after";
   photos: { id: string; url?: string | null }[];
   uploading: boolean;
   onUpload: (file: File, kind: "before" | "after") => Promise<void>;
+  onRemove: (id: string) => void;
 }) {
   const title = kind === "before" ? "Before" : "After";
+  const shown = photos.slice(0, 3);
+  const add = shown.length < 3 ? (
+    <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full bg-glass-2 px-3 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.08)]">
+      <Camera className="h-3.5 w-3.5" aria-hidden />
+      {uploading ? "Uploading…" : "Add photo"}
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        data-qc={`tf-photo-${kind}`}
+        disabled={uploading}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void onUpload(file, kind);
+          e.target.value = "";
+        }}
+      />
+    </label>
+  ) : null;
   return (
-    <Section title={title} icon={Camera}>
-      <div className="mb-2 flex items-center justify-end">
-        <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full bg-glass-2 px-3 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--edge-2)] hover:bg-[rgba(47,63,102,0.08)]">
-          <Camera className="h-3.5 w-3.5" aria-hidden />
-          {uploading ? "Uploading…" : "Add photo"}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            data-qc={`tf-photo-${kind}`}
-            disabled={uploading}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void onUpload(file, kind);
-              e.target.value = "";
-            }}
-          />
-        </label>
-      </div>
-      {photos.length === 0 ? (
-        <p className="text-2xs text-muted-foreground">No {kind} photo yet.</p>
-      ) : (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {photos.map((p) => (
-            <img key={p.id} src={p.url ?? ""} alt="" className="h-20 w-full rounded-lg object-cover" />
+    <Section title={title} icon={Camera} action={add}>
+      {shown.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {shown.map((p) => (
+            <div key={p.id} className="relative h-24 w-32 shrink-0">
+              <img src={p.url ?? ""} alt="" className="h-full w-full rounded-lg object-cover" />
+              <button
+                type="button"
+                aria-label="Remove photo"
+                data-qc={`tf-photo-remove-${kind}`}
+                onClick={() => onRemove(p.id)}
+                className="absolute right-1 top-1 grid h-5 w-5 cursor-pointer place-items-center rounded-full bg-popover/90 text-foreground shadow-inset-hi hover:bg-destructive-bg hover:text-destructive-ink"
+              >
+                <X className="h-3 w-3" aria-hidden />
+              </button>
+            </div>
           ))}
         </div>
-      )}
+      ) : null}
     </Section>
   );
 }
@@ -535,8 +604,6 @@ function PageOne({
   alreadyStarted,
   onStart,
   onSkipToPage,
-  uploading,
-  onUpload,
 }: {
   data: SessionData;
   checks: PreChecks;
@@ -549,18 +616,17 @@ function PageOne({
   alreadyStarted: boolean;
   onStart: () => void;
   onSkipToPage: () => void;
-  uploading: boolean;
-  onUpload: (file: File, kind: "before" | "after") => Promise<void>;
 }) {
-  const before = data.photos.filter((p: any) => p.kind === "before");
   return (
     <div className="space-y-4" data-qc="form-page1">
-      <PhotoCard kind="before" photos={before} uploading={uploading} onUpload={onUpload} />
       <div className="grid gap-4 md:grid-cols-2">
         <Section title="Patient" icon={FileText}>
           <p className="text-sm font-semibold">{data.patient.name}</p>
           <p className="text-xs text-muted-foreground">
-            {[data.patient.reference, data.patient.dateOfBirth ? `DOB ${formatDate(data.patient.dateOfBirth)}` : null]
+            {[
+              data.patient.reference,
+              data.patient.dateOfBirth ? `DOB ${formatDate(data.patient.dateOfBirth)}` : null,
+            ]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -574,7 +640,9 @@ function PageOne({
           <p className="text-sm font-semibold">{data.appointment.treatment}</p>
           <p className="text-xs text-muted-foreground">
             {data.appointment.date} · {data.appointment.time}
-            {data.appointment.sessionNumber ? ` · Session ${data.appointment.sessionNumber} of ${data.appointment.sessionTotal}` : ""}
+            {data.appointment.sessionNumber
+              ? ` · Session ${data.appointment.sessionNumber} of ${data.appointment.sessionTotal}`
+              : ""}
           </p>
           <div className="mt-3 grid gap-2.5">
             <Detail label="Practitioner" value={data.appointment.practitionerName} />
@@ -590,12 +658,15 @@ function PageOne({
                   </>
                 ) : data.consent.state === "not_required" ? (
                   <>
-                    <ShieldCheck className="h-4 w-4 text-ink-3" aria-hidden /> Not required for this treatment
+                    <ShieldCheck className="h-4 w-4 text-ink-3" aria-hidden /> Not required for this
+                    treatment
                   </>
                 ) : (
                   <>
                     <AlertTriangle className="h-4 w-4 text-destructive-ink" aria-hidden />
-                    <span className="font-semibold text-destructive-ink">Outstanding — complete consent before starting</span>
+                    <span className="font-semibold text-destructive-ink">
+                      Outstanding — complete consent before starting
+                    </span>
                   </>
                 )}
               </p>
@@ -607,7 +678,9 @@ function PageOne({
 
       <Section title="Booking notes" icon={FileText}>
         {data.bookingNote ? (
-          <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">{data.bookingNote}</p>
+          <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">
+            {data.bookingNote}
+          </p>
         ) : (
           <p className="text-xs text-muted-foreground">No booking notes for this appointment.</p>
         )}
@@ -662,7 +735,8 @@ function PageOne({
         {flags.length > 0 ? (
           <p className="mt-3 flex items-start gap-2 rounded-xl bg-warning-bg px-3 py-2 text-xs text-warning-ink">
             <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
-            {flags.length} question{flags.length === 1 ? "" : "s"} answered Yes — make sure each has a note before you start.
+            {flags.length} question{flags.length === 1 ? "" : "s"} answered Yes — make sure each has
+            a note before you start.
           </p>
         ) : null}
       </Section>
@@ -677,11 +751,20 @@ function PageOne({
         <Button
           type="button"
           data-qc="start-treatment-btn"
-          disabled={pending || !canStart.ok || !allAnswered || flags.some((f) => !checks[f.key]?.note?.trim())}
+          disabled={
+            pending ||
+            !canStart.ok ||
+            !allAnswered ||
+            flags.some((f) => !checks[f.key]?.note?.trim())
+          }
           onClick={onStart}
         >
           <Sparkles className="h-4 w-4" aria-hidden />
-          {pending ? "Starting…" : alreadyStarted ? "Update checks and continue" : "Start treatment"}
+          {pending
+            ? "Starting…"
+            : alreadyStarted
+              ? "Update checks and continue"
+              : "Start treatment"}
         </Button>
       </div>
     </div>
@@ -698,6 +781,7 @@ function PageTwo({
   treatmentRef,
   uploading,
   onUpload,
+  onRemove,
   pending,
   onNext,
 }: {
@@ -710,18 +794,28 @@ function PageTwo({
   treatmentRef: React.RefObject<HTMLTextAreaElement | null>;
   uploading: boolean;
   onUpload: (file: File, kind: "before" | "after") => Promise<void>;
+  onRemove: (id: string) => void;
   pending: boolean;
   onNext: () => void;
 }) {
-  const after = data.photos.filter((p: any) => p.kind === "after");
+  const before = data.photos.filter((p: { kind: string }) => p.kind === "before");
+  const after = data.photos.filter((p: { kind: string }) => p.kind === "after");
   const fields = (data.resultFields ?? []) as { key: string; label: string; placeholder: string }[];
+  const detailsFilled = fields.every((field) => (results[field.key] ?? "").trim());
+  const notesFilled = treatmentNotes.replace(/<[^>]+>/g, "").trim().length > 0;
+  const photosFilled = before.length > 0 && after.length > 0;
+  const ready = detailsFilled && notesFilled && photosFilled;
+  const [showGap, setShowGap] = useState(false);
   return (
     <div className="space-y-4" data-qc="form-page2">
-      <Section title="Treatment results" icon={Sparkles}>
+      <PhotoCard kind="before" photos={before} uploading={uploading} onUpload={onUpload} onRemove={onRemove} />
+      <Section title="Treatment details" icon={Sparkles}>
         <div className={cn("grid gap-3", fields.length > 3 ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
           {fields.map((field) => (
             <div key={field.key} className="field-stack">
-              <Label htmlFor={`tf-${field.key}`} className="text-xs">{field.label}</Label>
+              <Label htmlFor={`tf-${field.key}`} className="text-xs">
+                {field.label}
+              </Label>
               <Input
                 id={`tf-${field.key}`}
                 data-qc={`tf-${field.key}`}
@@ -737,9 +831,16 @@ function PageTwo({
       <Section
         title="Treatment notes"
         icon={FileText}
-        action={<NotesToolbar prefs={prefs} onBullet={() => insertBullet(treatmentRef.current, treatmentNotes, onTreatmentNotes)} />}
+        action={
+          <NotesToolbar
+            prefs={prefs}
+            onBullet={() => insertBullet(treatmentRef.current, treatmentNotes, onTreatmentNotes)}
+          />
+        }
       >
-        <p className="mb-2 text-2xs text-muted-foreground">What was done and how it went. Saved to the treatment history.</p>
+        <p className="mb-2 text-2xs text-muted-foreground">
+          What was done and how it went. Saved to the treatment history.
+        </p>
         <NotesTextarea
           textareaRef={treatmentRef}
           value={treatmentNotes}
@@ -750,10 +851,26 @@ function PageTwo({
         />
       </Section>
 
-      <PhotoCard kind="after" photos={after} uploading={uploading} onUpload={onUpload} />
+      <PhotoCard kind="after" photos={after} uploading={uploading} onUpload={onUpload} onRemove={onRemove} />
 
-      <div className="flex justify-end">
-        <Button type="button" data-qc="move-to-aftercare-btn" disabled={pending} onClick={onNext}>
+      <div className="flex items-center justify-end gap-3">
+        {showGap && !ready ? (
+          <p className="text-xs text-muted-foreground" data-qc="move-to-aftercare-hint">
+            Add a before photo, the treatment details, the treatment notes, and an after photo.
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          data-qc="move-to-aftercare-btn"
+          disabled={pending}
+          onClick={() => {
+            if (!ready) {
+              setShowGap(true);
+              return;
+            }
+            onNext();
+          }}
+        >
           <Heart className="h-4 w-4" aria-hidden />
           {pending ? "Saving…" : "Move on to aftercare"}
         </Button>
@@ -765,7 +882,6 @@ function PageTwo({
 function PageThree({
   data,
   points,
-  onToggle,
   onRemove,
   customPoint,
   onCustomPoint,
@@ -777,7 +893,6 @@ function PageThree({
 }: {
   data: SessionData;
   points: { label: string; covered: boolean }[];
-  onToggle: (i: number) => void;
   onRemove: (i: number) => void;
   customPoint: string;
   onCustomPoint: (v: string) => void;
@@ -787,35 +902,20 @@ function PageThree({
   pending: boolean;
   onComplete: () => void;
 }) {
-  const covered = points.filter((p) => p.covered).length;
   return (
     <div className="space-y-4" data-qc="form-page3">
-      <Section
-        title={`Aftercare for ${data.appointment.treatment}`}
-        icon={Heart}
-        action={<span className="text-xs tabular-nums text-muted-foreground">{covered} of {points.length} read out</span>}
-      >
+      <Section title={`Aftercare for ${data.appointment.treatment}`} icon={Heart}>
         <p className="mb-3 text-2xs text-muted-foreground">
-          Read each point to {data.patient.firstName || "the patient"} and tick it. These are saved with the record.
+          Read these to {data.patient.firstName || "the patient"}. They are saved with the record.
         </p>
         <ul className="space-y-1.5" data-qc="aftercare-points">
           {points.map((p, i) => (
-            <li key={`${p.label}-${i}`} className="group flex items-start gap-2.5 rounded-xl bg-glass-hi px-3 py-2">
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={p.covered}
-                aria-label={p.label}
-                data-qc="aftercare-point"
-                onClick={() => onToggle(i)}
-                className={cn(
-                  "mt-0.5 grid h-4 w-4 shrink-0 cursor-pointer place-items-center rounded-[5px] transition-colors",
-                  p.covered ? "bg-success text-white" : "bg-glass-2 shadow-[inset_0_0_0_1.5px_var(--bar)]",
-                )}
-              >
-                {p.covered ? <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> : null}
-              </button>
-              <span className={cn("min-w-0 flex-1 text-sm leading-relaxed", p.covered ? "text-foreground" : "text-ink-2")}>{p.label}</span>
+            <li
+              key={`${p.label}-${i}`}
+              data-qc="aftercare-point"
+              className="group flex items-start gap-2.5 rounded-xl bg-glass-hi px-3 py-2"
+            >
+              <span className="min-w-0 flex-1 text-sm leading-relaxed text-foreground">{p.label}</span>
               <button
                 type="button"
                 aria-label={`Remove: ${p.label}`}
@@ -841,7 +941,13 @@ function PageThree({
             className="h-8 text-xs"
             data-qc="aftercare-custom"
           />
-          <Button type="submit" variant="outline" size="sm" className="h-8 shrink-0" disabled={!customPoint.trim()}>
+          <Button
+            type="submit"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0"
+            disabled={!customPoint.trim()}
+          >
             <Plus className="h-3.5 w-3.5" aria-hidden /> Add
           </Button>
         </form>
@@ -859,12 +965,12 @@ function PageThree({
       </Section>
 
       <div className="flex items-center justify-end gap-3">
-        {covered < points.length ? (
-          <p className="text-xs text-muted-foreground">
-            {points.length - covered} point{points.length - covered === 1 ? "" : "s"} not yet read out
-          </p>
-        ) : null}
-        <Button type="button" data-qc="complete-treatment-btn" disabled={pending} onClick={onComplete}>
+        <Button
+          type="button"
+          data-qc="complete-treatment-btn"
+          disabled={pending}
+          onClick={onComplete}
+        >
           <CheckCircle2 className="h-4 w-4" aria-hidden />
           {pending ? "Completing…" : "Complete treatment"}
         </Button>
@@ -875,16 +981,14 @@ function PageThree({
 
 function DoneState({
   treatmentId,
-  patientId,
   patientName,
-  onClose,
   onViewRecord,
+  onShowTreatments,
 }: {
   treatmentId: string;
-  patientId: string;
   patientName: string;
-  onClose: () => void;
   onViewRecord: () => void;
+  onShowTreatments: () => void;
 }) {
   void treatmentId;
   return (
@@ -894,8 +998,8 @@ function DoneState({
       </span>
       <h3 className="mt-3 text-base font-semibold">Treatment complete</h3>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-        {patientName ? `${patientName}'s` : "The"} record now carries this visit: treatment history, visit note, photos
-        and the aftercare read out. The diary card reads Complete.
+        {patientName ? `${patientName}'s` : "The"} record now carries this visit: treatment history,
+        visit note, photos and the aftercare read out. The diary card reads Complete.
       </p>
       <div className="mt-5 flex flex-wrap justify-center gap-2">
         <Button type="button" data-qc="view-record" onClick={onViewRecord}>
@@ -904,14 +1008,16 @@ function DoneState({
         <Button asChild type="button" variant="outline">
           <Link to="/dashboard">Back to diary</Link>
         </Button>
-        <Button type="button" variant="outline" onClick={onClose}>
-          <X className="h-4 w-4" aria-hidden /> Close
-        </Button>
       </div>
       <p className="mt-4 text-2xs text-ink-3">
-        <Link to="/patients/$id" params={{ id: patientId }} search={{ tab: "treatments" }} className="hover:underline">
+        <button
+          type="button"
+          data-qc="open-treatments-tab"
+          onClick={onShowTreatments}
+          className="cursor-pointer hover:underline"
+        >
           Open the Treatments tab
-        </Link>
+        </button>
       </p>
     </div>
   );

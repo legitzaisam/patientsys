@@ -21,6 +21,7 @@ import {
   toneForTreatment,
   treatmentKey,
 } from "@/lib/practitioner-colours";
+import { SaveCatalogueItem } from "@/lib/validation/schemas";
 import { RESULT_TEMPLATES, templateFor } from "@/lib/treatment-results";
 import { numericText } from "@/lib/validation/primitives";
 import { ColourWheelButton } from "@/components/colour-wheel-button";
@@ -272,7 +273,10 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                 name="result_template"
                 render={({ field }) => (
                   <div className="field-stack sm:col-span-2">
-                    <label htmlFor="catalogue-result-template" className="text-xs text-muted-foreground">
+                    <label
+                      htmlFor="catalogue-result-template"
+                      className="text-xs text-muted-foreground"
+                    >
                       Details to record
                     </label>
                     <select
@@ -308,7 +312,8 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                 render={({ field }) => (
                   <div className="field-stack sm:col-span-2 lg:col-span-3">
                     <label htmlFor="catalogue-aftercare" className="text-xs text-muted-foreground">
-                      Aftercare read out after this treatment (one point per line — blank uses the {draftForm.watch("category") || "category"} defaults)
+                      Aftercare read out after this treatment (one point per line — blank uses the{" "}
+                      {draftForm.watch("category") || "category"} defaults)
                     </label>
                     <textarea
                       id="catalogue-aftercare"
@@ -317,7 +322,9 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                       onChange={field.onChange}
                       onBlur={field.onBlur}
                       rows={4}
-                      placeholder={"Stay upright for four hours.\nNo make-up or exercise for 24 hours."}
+                      placeholder={
+                        "Stay upright for four hours.\nNo make-up or exercise for 24 hours."
+                      }
                       className="w-full rounded-xl border border-edge-2 bg-glass-2 px-3 py-2 text-sm shadow-inset-hi outline-none focus:border-edge"
                     />
                   </div>
@@ -371,7 +378,9 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                   overrides={overrides}
                   disabled={saveColour.isPending}
                   onPick={(lane, hex) =>
-                    saveColour.mutate({ data: { treatment_name: treatmentKey(item.name), lane, hex } })
+                    saveColour.mutate({
+                      data: { treatment_name: treatmentKey(item.name), lane, hex },
+                    })
                   }
                 />
                 <Button
@@ -397,9 +406,15 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                   variant="ghost"
                   size="sm"
                   disabled={toggleActive.isPending}
-                  onClick={() => toggleActive.mutate({ data: { id: item.id, active: !item.active } })}
+                  onClick={() =>
+                    toggleActive.mutate({ data: { id: item.id, active: !item.active } })
+                  }
                 >
-                  {item.active ? <Archive className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                  {item.active ? (
+                    <Archive className="h-3.5 w-3.5" />
+                  ) : (
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  )}
                   {item.active ? "Archive" : "Restore"}
                 </Button>
               </div>

@@ -99,6 +99,14 @@ function PatientRecord() {
     setTreatOpen(null);
     if (treatParam) void navigate({ to: "/patients/$id", params: { id }, search: (prev: any) => ({ ...prev, treat: undefined }), replace: true });
   };
+  const showTreatments = () => {
+    setTreatOpen(null);
+    void navigate({
+      to: "/patients/$id",
+      params: { id },
+      search: (prev: any) => ({ ...prev, tab: "treatments", treat: undefined }),
+    });
+  };
   const closeRecord = () => {
     setRecordOpen(null);
     if (recordParam) void navigate({ to: "/patients/$id", params: { id }, search: (prev: any) => ({ ...prev, record: undefined }), replace: true });
@@ -1265,7 +1273,13 @@ function PatientRecord() {
           </Tabs>
         </div>
 
-        <TreatmentFormDialog appointmentId={treatOpen} patientId={id} open={Boolean(treatOpen)} onOpenChange={(o) => !o && closeTreat()} />
+        <TreatmentFormDialog
+          appointmentId={treatOpen}
+          patientId={id}
+          open={Boolean(treatOpen)}
+          onOpenChange={(o) => !o && closeTreat()}
+          onShowTreatments={showTreatments}
+        />
         <TreatmentRecordDialog treatmentId={recordOpen} open={Boolean(recordOpen)} onOpenChange={(o) => !o && closeRecord()} />
 
         {chatCollapsed ? null : (

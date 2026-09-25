@@ -1,11 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Camera, Check, ClipboardList, FileText, Heart, Printer, ShieldCheck, Sparkles, X } from "lucide-react";
+import {
+  Camera,
+  ClipboardList,
+  FileText,
+  Heart,
+  Printer,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import { getTreatmentRecord } from "@/lib/clinic.functions";
 import { fieldsFor } from "@/lib/treatment-results";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /**
  * A completed treatment as a document: the three pages of the form, the
@@ -49,14 +63,22 @@ export function TreatmentRecordDialog({
                     : "The saved treatment form for this visit."}
               </DialogDescription>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => window.print()} className="print:hidden">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="print:hidden"
+            >
               <Printer className="h-3.5 w-3.5" aria-hidden /> Print
             </Button>
           </div>
         </DialogHeader>
         <div className="max-h-[calc(92vh-6rem)] overflow-y-auto px-6 py-5 print:max-h-none print:overflow-visible">
           {error ? (
-            <p className="rounded-xl bg-destructive-bg px-3 py-2 text-sm text-destructive-ink">{(error as Error).message}</p>
+            <p className="rounded-xl bg-destructive-bg px-3 py-2 text-sm text-destructive-ink">
+              {(error as Error).message}
+            </p>
           ) : !data ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
@@ -70,15 +92,33 @@ export function TreatmentRecordDialog({
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function formatDateTime(iso: string | null | undefined) {
   if (!iso) return "";
-  return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function Block({ title, icon: Icon, children }: { title: string; icon: typeof FileText; children: React.ReactNode }) {
+function Block({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: typeof FileText;
+  children: React.ReactNode;
+}) {
   return (
     <section className="break-inside-avoid rounded-2xl bg-glass-2 p-4 shadow-inset-hi print:bg-white print:shadow-none print:ring-1 print:ring-black/10">
       <div className="mb-2.5 flex items-center gap-2">
@@ -101,14 +141,20 @@ function Row({ label, value }: { label: string; value?: string | null }) {
 
 export function TreatmentRecordView({ data }: { data: any }) {
   const s = data.session;
-  const answered = s ? Object.entries(s.preChecks as Record<string, { answer: string; note?: string }>) : [];
+  const answered = s
+    ? Object.entries(s.preChecks as Record<string, { answer: string; note?: string }>)
+    : [];
   return (
     <article className="space-y-4 text-foreground" data-qc="treatment-record-body">
       <header className="print:mb-4">
-        <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-3">Aetheria Skin Clinic · Treatment record</p>
+        <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-3">
+          Aetheria Skin Clinic · Treatment record
+        </p>
         <h2 className="mt-1 text-lg font-semibold">
           {data.treatment.name}
-          {data.treatment.treatmentNumber ? <span className="text-muted-foreground"> · #{data.treatment.treatmentNumber}</span> : null}
+          {data.treatment.treatmentNumber ? (
+            <span className="text-muted-foreground"> · #{data.treatment.treatmentNumber}</span>
+          ) : null}
         </h2>
         <p className="text-sm text-muted-foreground">
           {data.patient.name}
@@ -133,11 +179,15 @@ export function TreatmentRecordView({ data }: { data: any }) {
                   {data.consent.witnessed ? " · witnessed in clinic" : ""}
                 </>
               ) : (
-                <span className="text-muted-foreground">{data.consent.title} · {data.consent.status}</span>
+                <span className="text-muted-foreground">
+                  {data.consent.title} · {data.consent.status}
+                </span>
               )}
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground">No consent document linked to this treatment.</p>
+            <p className="text-sm text-muted-foreground">
+              No consent document linked to this treatment.
+            </p>
           )}
         </Block>
         <Block title="Results" icon={Sparkles}>
@@ -145,10 +195,16 @@ export function TreatmentRecordView({ data }: { data: any }) {
             name={data.treatment.name}
             template={data.treatment.resultTemplate}
             stored={s?.results ?? {}}
-            fallback={{ area: data.treatment.area, product: data.treatment.product, dose: data.treatment.dose }}
+            fallback={{
+              area: data.treatment.area,
+              product: data.treatment.product,
+              dose: data.treatment.dose,
+            }}
           />
           {data.treatment.nextDueAt ? (
-            <p className="mt-2 text-xs text-muted-foreground">Next due {formatDate(data.treatment.nextDueAt)}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Next due {formatDate(data.treatment.nextDueAt)}
+            </p>
           ) : null}
         </Block>
       </div>
@@ -167,14 +223,18 @@ export function TreatmentRecordView({ data }: { data: any }) {
                     <span
                       className={cn(
                         "mt-0.5 inline-flex h-5 min-w-[2.4rem] shrink-0 items-center justify-center rounded-full px-1.5 text-2xs font-semibold",
-                        a.answer === "yes" ? "bg-destructive-bg text-destructive-ink" : "bg-success-bg text-success-ink",
+                        a.answer === "yes"
+                          ? "bg-destructive-bg text-destructive-ink"
+                          : "bg-success-bg text-success-ink",
                       )}
                     >
                       {a.answer === "yes" ? "Yes" : a.answer === "no" ? "No" : "N/A"}
                     </span>
                     <span className="min-w-0">
                       {c.label}
-                      {a.note ? <span className="block text-xs text-muted-foreground">{a.note}</span> : null}
+                      {a.note ? (
+                        <span className="block text-xs text-muted-foreground">{a.note}</span>
+                      ) : null}
                     </span>
                   </li>
                 );
@@ -186,7 +246,9 @@ export function TreatmentRecordView({ data }: { data: any }) {
 
       <div className="grid gap-4 md:grid-cols-2">
         <Block title="Treatment notes" icon={FileText}>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">{s?.treatmentNotes ?? data.treatment.notes ?? "—"}</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">
+            {s?.treatmentNotes ?? data.treatment.notes ?? "—"}
+          </p>
         </Block>
         <Block title="Visit notes" icon={FileText}>
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{s?.visitNotes ?? "—"}</p>
@@ -198,9 +260,14 @@ export function TreatmentRecordView({ data }: { data: any }) {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {data.photos.map((p: any) => (
               <figure key={p.id}>
-                {p.url ? <img src={p.url} alt="" className="h-28 w-full rounded-xl object-cover" /> : <div className="h-28 rounded-xl bg-glass-hi" />}
+                {p.url ? (
+                  <img src={p.url} alt="" className="h-28 w-full rounded-xl object-cover" />
+                ) : (
+                  <div className="h-28 rounded-xl bg-glass-hi" />
+                )}
                 <figcaption className="mt-1 text-2xs text-muted-foreground">
-                  <span className="font-semibold capitalize text-foreground">{p.kind}</span> · {formatDate(p.takenAt)}
+                  <span className="font-semibold capitalize text-foreground">{p.kind}</span> ·{" "}
+                  {formatDate(p.takenAt)}
                   {p.caption ? ` · ${p.caption}` : ""}
                 </figcaption>
               </figure>
@@ -214,20 +281,17 @@ export function TreatmentRecordView({ data }: { data: any }) {
           {s.aftercarePoints.length === 0 ? (
             <p className="text-sm text-muted-foreground">No aftercare recorded.</p>
           ) : (
-            <ul className="space-y-1">
-              {s.aftercarePoints.map((p: { label: string; covered: boolean }, i: number) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  {p.covered ? (
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-success-ink" strokeWidth={3} aria-hidden />
-                  ) : (
-                    <X className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden />
-                  )}
-                  <span className={p.covered ? "" : "text-muted-foreground"}>{p.label}</span>
+            <ul className="space-y-1.5">
+              {s.aftercarePoints.map((p: { label: string }, i: number) => (
+                <li key={i} className="text-sm leading-relaxed">
+                  {p.label}
                 </li>
               ))}
             </ul>
           )}
-          {s.aftercareExtra ? <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">{s.aftercareExtra}</p> : null}
+          {s.aftercareExtra ? (
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">{s.aftercareExtra}</p>
+          ) : null}
           {s.completedAt ? (
             <p className="mt-3 text-2xs text-ink-3">
               Completed {formatDateTime(s.completedAt)}
@@ -236,7 +300,9 @@ export function TreatmentRecordView({ data }: { data: any }) {
           ) : null}
         </Block>
       ) : (
-        <p className="text-xs text-muted-foreground">This treatment was recorded directly, without the treatment form.</p>
+        <p className="text-xs text-muted-foreground">
+          This treatment was recorded directly, without the treatment form.
+        </p>
       )}
     </article>
   );
@@ -254,14 +320,16 @@ function ResultRows({
   fallback: { area?: string | null; product?: string | null; dose?: string | null };
 }) {
   const fields = fieldsFor(name, template);
-  const specific = fields.filter((f) => f.key !== "area" && f.key !== "product" && f.key !== "dose");
+  const specific = fields.filter(
+    (f) => f.key !== "area" && f.key !== "product" && f.key !== "dose",
+  );
   const hasSpecific = specific.some((f) => stored[f.key]?.trim());
   if (!hasSpecific) {
     return (
       <div className="grid grid-cols-3 gap-3">
-        <Row label="Area" value={fallback.area} />
-        <Row label="Product" value={fallback.product} />
-        <Row label="Dose" value={fallback.dose} />
+        <Row label="Area" value={fallback.area ?? null} />
+        <Row label="Product" value={fallback.product ?? null} />
+        <Row label="Dose" value={fallback.dose ?? null} />
       </div>
     );
   }
@@ -269,7 +337,7 @@ function ResultRows({
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {filled.map((f) => (
-        <Row key={f.key} label={f.label} value={stored[f.key]} />
+        <Row key={f.key} label={f.label} value={stored[f.key] ?? null} />
       ))}
     </div>
   );
