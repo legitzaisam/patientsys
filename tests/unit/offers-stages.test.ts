@@ -135,6 +135,8 @@ describe("renderOffer", () => {
       value_text: "£25 off your first treatment",
       code: "WELCOME25",
       cta_label: "Book now",
+      image_url: null,
+      image_placement: null,
     });
   });
 
@@ -147,6 +149,23 @@ describe("renderOffer", () => {
     expect(out.subject).toBe("An offer from Aetheria");
     expect(out.text.startsWith("Hi there,")).toBe(true);
     expect(out.card.cta_label).toBe("Claim this offer");
+  });
+
+  it("places a picture on the email and the card", () => {
+    const out = renderOffer(
+      {
+        subject: "S",
+        headline: "H",
+        body: "B",
+        image_url: "https://clinic.test/offer.jpg",
+        image_placement: "left",
+      },
+      { first_name: "Olivia" },
+      { clinicName: "Aetheria", claimUrl: "https://x" },
+    );
+    expect(out.html).toContain('src="https://clinic.test/offer.jpg"');
+    expect(out.card.image_url).toBe("https://clinic.test/offer.jpg");
+    expect(out.card.image_placement).toBe("left");
   });
 });
 

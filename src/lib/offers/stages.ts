@@ -3,6 +3,7 @@
  * designer page (previews) and the tests. Nothing in here touches the
  * database or the network.
  */
+import { asOfferImagePlacement, wrapOfferEmailCard, type OfferImagePlacement } from "./picture";
 
 export const OFFER_STAGES = [
   "pre_consultation",
@@ -138,6 +139,8 @@ export type OfferTemplateLike = {
   code?: string | null;
   cta_label?: string | null;
   valid_days?: number | null;
+  image_url?: string | null;
+  image_placement?: OfferImagePlacement | string | null;
 };
 
 export type OfferRecipient = {
@@ -155,6 +158,8 @@ export type RenderedOffer = {
     value_text: string | null;
     code: string | null;
     cta_label: string;
+    image_url: string | null;
+    image_placement: OfferImagePlacement | null;
   };
 };
 
@@ -228,9 +233,7 @@ export function renderOffer(
     .map((p) => `<p style="margin:0 0 14px;line-height:1.6">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
     .join("");
 
-  const html = `<!doctype html><html><body style="margin:0;padding:24px;background:#f4f1ea;font-family:Georgia,'Times New Roman',serif;color:#1e2436">
-<div style="max-width:560px;margin:0 auto;background:#fffdf8;border:1px solid #e6dfd0;border-radius:18px;padding:32px">
-<p style="margin:0 0 18px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#7a8199">${escapeHtml(opts.clinicName)}</p>
+  const inner = `<p style="margin:0 0 18px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#7a8199">${escapeHtml(opts.clinicName)}</p>
 <p style="margin:0 0 14px;line-height:1.6">Hi ${escapeHtml(firstName)},</p>
 ${personal ? `<p style="margin:0 0 14px;line-height:1.6">${escapeHtml(personal)}</p>` : ""}
 <h1 style="margin:0 0 14px;font-size:26px;font-weight:600;line-height:1.25">${escapeHtml(headline)}</h1>
@@ -248,8 +251,11 @@ ${
 }
 ${expiry ? `<p style="margin:0 0 18px;font-size:13px;color:#5b6379">Valid until ${escapeHtml(expiry)}.</p>` : ""}
 <p style="margin:24px 0"><a href="${escapeHtml(opts.claimUrl)}" style="display:inline-block;padding:13px 22px;background:#f2c14e;color:#1e2436;text-decoration:none;border-radius:999px;font-weight:600">${escapeHtml(cta)}</a></p>
-<p style="margin:0;font-size:13px;color:#7a8199">Or paste this link into your browser:<br><a href="${escapeHtml(opts.claimUrl)}" style="color:#2f3f66">${escapeHtml(opts.claimUrl)}</a></p>
-</div></body></html>`;
+<p style="margin:0;font-size:13px;color:#7a8199">Or paste this link into your browser:<br><a href="${escapeHtml(opts.claimUrl)}" style="color:#2f3f66">${escapeHtml(opts.claimUrl)}</a></p>`;
+
+  const placement = asOfferImagePlacement(template.image_placement ?? null);
+  const imageUrl = template.image_url?.trim() || null;
+  const html = `<!doctype html><html><body style="margin:0;padding:24px;background:#f4f1ea;font-family:Georgia,'Times New Roman',serif;color:#1e2436">${wrapOfferEmailCard(inner, imageUrl, placement)}</body></html>`;
 
   return {
     subject,
@@ -261,6 +267,8 @@ ${expiry ? `<p style="margin:0 0 18px;font-size:13px;color:#5b6379">Valid until 
       value_text: template.value_text?.trim() || null,
       code: template.code?.trim() || null,
       cta_label: cta,
+      image_url: imageUrl,
+      image_placement: imageUrl ? placement ?? "top" : null,
     },
   };
 }

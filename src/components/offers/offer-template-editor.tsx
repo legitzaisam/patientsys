@@ -16,8 +16,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { supabase } from "@/integrations/supabase/client";
 import { draftOfferTemplate, saveOfferTemplate } from "@/lib/clinic.functions";
+import { DEMO_MODE } from "@/lib/demo/enabled";
 import type { DraftResult } from "@/lib/offers/draft.server";
+import type { OfferImagePlacement } from "@/lib/offers/picture";
 import type { OfferTemplateRow } from "@/lib/offers/shape";
 import {
   OFFER_STAGES,
@@ -29,6 +32,7 @@ import {
   type TemplateStage,
 } from "@/lib/offers/stages";
 import { OfferCardPreview, OfferEmailPreview } from "./offer-preview";
+import { OfferImageField } from "./offer-image-field";
 
 type Form = {
   name: string;
@@ -43,6 +47,8 @@ type Form = {
   send_email: boolean;
   send_sms: boolean;
   show_in_portal: boolean;
+  image_url: string | null;
+  image_placement: OfferImagePlacement;
 };
 
 function formFor(template: OfferTemplateRow | null, stage: TemplateStage): Form {
@@ -60,6 +66,8 @@ function formFor(template: OfferTemplateRow | null, stage: TemplateStage): Form 
       send_email: template.send_email,
       send_sms: template.send_sms,
       show_in_portal: template.show_in_portal,
+      image_url: template.image_url ?? null,
+      image_placement: template.image_placement ?? "top",
     };
   }
   const d = STAGE_DEFAULT_DRAFT[stage];
@@ -76,6 +84,8 @@ function formFor(template: OfferTemplateRow | null, stage: TemplateStage): Form 
     send_email: true,
     send_sms: false,
     show_in_portal: true,
+    image_url: null,
+    image_placement: "top",
   };
 }
 
@@ -168,6 +178,8 @@ export function OfferTemplateEditor({
           code: form.code || null,
           cta_label: form.cta_label,
           valid_days: form.valid_days,
+          image_url: form.image_url,
+          image_placement: form.image_placement,
         },
         { first_name: previewName, last_name: "" },
         { clinicName, claimUrl: "https://example.invalid/portal?next=%2Fmy-record%3Foffer%3Dpreview", expiresAt },
@@ -178,7 +190,23 @@ export function OfferTemplateEditor({
   const canPickStage = !template;
   const stageOptions: TemplateStage[] = [...OFFER_STAGES, "custom"];
 
-  function submit() {
+  async function persistImage(url: string | null) {
+    if (!url || DEMO_MODE || !url.startsWith("data:")) return url;
+    try {
+      const blob = await (await fetch(url)).blob();
+      const path = `offers/${crypto.randomUUID()}.jpg`;
+      const { error } = await supabase.storage.from("offer-images").upload(path, blob, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+      if (error) return url;
+      return supabase.storage.from("offer-images").getPublicUrl(path).data.publicUrl;
+    } catch {
+      return url;
+    }
+  }
+
+  async function submit() {
     if (!form.name.trim() || !form.subject.trim() || !form.headline.trim() || !form.body.trim()) {
       toast.error("Name, subject, headline and body are needed.");
       return;
@@ -187,6 +215,7 @@ export function OfferTemplateEditor({
       toast.error("Choose at least one way to deliver the offer.");
       return;
     }
+    const imageUrl = await persistImage(form.image_url);
     save.mutate({
       data: {
         ...(template ? { id: template.id } : {}),
@@ -202,6 +231,8 @@ export function OfferTemplateEditor({
         send_email: form.send_email,
         send_sms: form.send_sms,
         show_in_portal: form.show_in_portal,
+        image_url: imageUrl,
+        image_placement: imageUrl ? form.image_placement : null,
       },
     });
   }
@@ -281,7 +312,12 @@ export function OfferTemplateEditor({
                   disabled={!canPickStage}
                   onChange={(e) => {
                     const next = e.target.value as TemplateStage;
-                    setForm((f) => ({ ...formFor(null, next), name: f.name === STAGE_DEFAULT_DRAFT[f.stage].name ? STAGE_DEFAULT_DRAFT[next].name : f.name }));
+                    setForm((f) => ({
+                      ...formFor(null, next),
+                      name: f.name === STAGE_DEFAULT_DRAFT[f.stage].name ? STAGE_DEFAULT_DRAFT[next].name : f.name,
+                      image_url: f.image_url,
+                      image_placement: f.image_placement,
+                    }));
                   }}
                   className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 px-3 text-sm shadow-inset-hi disabled:opacity-70"
                 >
@@ -348,6 +384,14 @@ export function OfferTemplateEditor({
               </div>
             </div>
 
+            <OfferImageField
+              imageUrl={form.image_url}
+              placement={form.image_placement}
+              onChange={({ imageUrl, placement }) =>
+                setForm((f) => ({ ...f, image_url: imageUrl, image_placement: placement }))
+              }
+            />
+
             <div className="rounded-2xl border border-edge bg-glass-2 p-4 shadow-inset-hi">
               <p className="text-sm font-semibold text-foreground">How it reaches the patient</p>
               <div className="mt-3 space-y-3">
@@ -409,7 +453,7 @@ export function OfferTemplateEditor({
           </div>
         </div>
 
-        <SheetFooter className="border-t border-edge px-6 py-4">
+        <SheetFooter className="justify-center border-t border-edge px-6 py-4 sm:justify-center">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

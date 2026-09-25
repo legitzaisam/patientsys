@@ -242,7 +242,7 @@ export function SendOfferDialog({
           </div>
         )}
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="justify-center gap-2 sm:justify-center">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {result ? "Done" : "Cancel"}
           </Button>

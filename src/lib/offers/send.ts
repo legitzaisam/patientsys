@@ -20,6 +20,8 @@ export type SendableTemplate = {
   send_email: boolean;
   send_sms: boolean;
   show_in_portal: boolean;
+  image_url?: string | null;
+  image_placement?: string | null;
 };
 
 export type SendablePatient = {
@@ -51,6 +53,8 @@ export type PatientOfferInsert = {
   sent_by: string | null;
   sent_at: string;
   expires_at: string;
+  image_url?: string | null;
+  image_placement?: string | null;
 };
 
 export type OfferStore = {
@@ -140,6 +144,8 @@ export async function sendOfferToPatients(
       sent_by: opts.sentBy,
       sent_at: sentAt,
       expires_at: expiresAt,
+      image_url: template.image_url ?? null,
+      image_placement: template.image_placement ?? null,
     });
 
     const rendered = renderOffer(template, patient, {

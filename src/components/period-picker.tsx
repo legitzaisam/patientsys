@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -182,9 +181,9 @@ export function periodWindowLabel(period: PeriodKey | PeriodSelection, now: Date
 }
 
 const PRESET_HEADING: Record<PeriodPreset, string> = {
-  "1w": "1 week",
-  "1m": "1 month",
-  "6m": "6 months",
+  "1w": "This week",
+  "1m": "This month",
+  "6m": "Last 6 months",
   "1y": "This year",
   custom: "Select dates",
 };
@@ -198,7 +197,7 @@ function rangeHeading(from: string, to: string) {
   return `${dayMonth(start)} – ${dayMonth(end)}`;
 }
 
-/** Friendly heading: Today / 3 months / 12 Aug – 24 Sep. */
+/** Friendly heading: This week / This month / Last 6 months / This year. */
 export function periodHeading(period: PeriodKey | PeriodSelection, now: Date = new Date()) {
   const current = asPeriod(period);
   if (current.preset === "custom" && current.from && current.to) return rangeHeading(current.from, current.to);
@@ -296,10 +295,9 @@ export function PeriodPicker({
             role="tab"
             aria-selected={selected === "custom"}
             aria-expanded={open}
-            className={cn(pill, "gap-1 px-3", selected === "custom" ? pillActive : pillIdle)}
+            className={cn(pill, "px-3", selected === "custom" ? pillActive : pillIdle)}
           >
             Select dates
-            {open ? <ChevronUp className="h-3 w-3" aria-hidden /> : <ChevronDown className="h-3 w-3" aria-hidden />}
           </button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-[22rem] rounded-2xl p-4">

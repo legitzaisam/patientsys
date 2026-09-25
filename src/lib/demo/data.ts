@@ -4756,6 +4756,8 @@ export const patientOffers: Row[] = [];
       automation_enabled: fields.automation_enabled ?? false,
       automation_delay_days: fields.automation_delay_days ?? 0,
       last_automation_at: fields.last_automation_at ?? null,
+      image_url: null,
+      image_placement: null,
       created_by: USERS.owner,
       archived_at: null,
       created_at: iso(-30, 9, 0),
@@ -4881,6 +4883,8 @@ export const patientOffers: Row[] = [];
       viewed_at: fields.viewedDaysAgo != null ? iso(-fields.viewedDaysAgo, 18, 10) : null,
       claimed_at: fields.claimedDaysAgo != null ? iso(-fields.claimedDaysAgo, 18, 12) : null,
       expires_at: new Date(new Date(sentAt).getTime() + Number(tmpl["valid_days"]) * DAY).toISOString(),
+      image_url: tmpl["image_url"] ?? null,
+      image_placement: tmpl["image_placement"] ?? null,
       created_at: sentAt,
     };
     if (communicationId) {

@@ -661,6 +661,8 @@ export const SaveOfferTemplate = z.object({
   send_email: z.boolean(),
   send_sms: z.boolean(),
   show_in_portal: z.boolean(),
+  image_url: optionalText(1_500_000),
+  image_placement: z.enum(["background", "top", "left", "right", "bottom"]).nullable().optional(),
 });
 
 export const ArchiveOfferTemplate = z.object({ id });

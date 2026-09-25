@@ -8,6 +8,7 @@ import { openPortalChat } from "@/components/portal/portal-dock";
 import type { PatientOfferView } from "@/lib/offers/shape";
 import { shortDate } from "@/lib/offers/shape";
 import { cn } from "@/lib/utils";
+import { OfferArtFrame } from "@/components/offers/offer-art";
 
 /** The draft the dock chat opens with after a claim, so booking is one tap. */
 export function bookWithOfferDraft(offer: Pick<PatientOfferView, "headline" | "code">) {
@@ -66,12 +67,14 @@ export function PortalOffer({
       ref={ref}
       id={`offer-${offer.id}`}
       className={cn(
-        "rounded-[14px] bg-accent-wash px-3.5 py-3 shadow-[inset_0_0_0_1px_var(--accent-line)]",
+        "overflow-hidden rounded-[14px] bg-accent-wash shadow-[inset_0_0_0_1px_var(--accent-line)]",
         highlighted && "shadow-[inset_0_0_0_2px_var(--accent-line)]",
+        !offer.image_url && "px-3.5 py-3",
       )}
       data-qc="portal-offer"
       data-status={claimed ? "claimed" : offer.status}
     >
+      <OfferArtFrame imageUrl={offer.image_url} placement={offer.image_placement}>
       <div className="flex items-start justify-between gap-2">
         <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-accent-ink shadow-inset-hi">
           <Gift className="h-3 w-3" aria-hidden />
@@ -122,6 +125,7 @@ export function PortalOffer({
           <span className="text-xs text-muted-foreground">This offer has ended.</span>
         )}
       </div>
+      </OfferArtFrame>
     </div>
   );
 }

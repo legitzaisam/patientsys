@@ -74,7 +74,10 @@ describe("custom dates", () => {
     const range = periodRange({ key: "week", offset: 0, preset: "1w" }, NOW);
     expect(new Date(range.from).getDate()).toBe(14);
     expect(new Date(range.to).getDate()).toBe(20);
-    expect(periodHeading({ key: "week", offset: 0, preset: "1w" }, NOW)).toBe("1 week");
+    expect(periodHeading({ key: "week", offset: 0, preset: "1w" }, NOW)).toBe("This week");
+    expect(periodHeading({ key: "month", offset: 0, preset: "1m" }, NOW)).toBe("This month");
+    expect(periodHeading({ key: "month", offset: 0, preset: "6m" }, NOW)).toBe("Last 6 months");
+    expect(periodHeading({ key: "year", offset: 0, preset: "1y" }, NOW)).toBe("This year");
   });
 });
 

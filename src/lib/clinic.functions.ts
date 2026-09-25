@@ -7876,6 +7876,8 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       send_email: boolean;
       send_sms: boolean;
       show_in_portal: boolean;
+      image_url?: string | null;
+      image_placement?: "background" | "top" | "left" | "right" | "bottom" | null;
     }) => parseInput(schemas.SaveOfferTemplate, data),
   )
   .middleware([requireSupabaseAuth])
@@ -7896,6 +7898,8 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       send_email: data.send_email,
       send_sms: data.send_sms,
       show_in_portal: data.show_in_portal,
+      image_url: data.image_url?.trim() || null,
+      image_placement: data.image_url?.trim() ? data.image_placement ?? "top" : null,
     };
     if (data.stage !== "custom") {
       // One live template per stage: a second one for the same stage would

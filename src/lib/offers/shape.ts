@@ -1,4 +1,5 @@
 /** Read-side shapes shared by the portal, the record page and the designer. */
+import { asOfferImagePlacement, type OfferImagePlacement } from "./picture";
 import type { OfferSource, OfferStatus, TemplateStage } from "./stages";
 
 export type OfferTemplateRow = {
@@ -23,6 +24,8 @@ export type OfferTemplateRow = {
   archived_at: string | null;
   created_at: string;
   updated_at: string;
+  image_url?: string | null;
+  image_placement?: OfferImagePlacement | null;
   /** From listOfferTemplates: sends by effective status. */
   counts?: Record<string, number>;
 };
@@ -65,6 +68,8 @@ export type PatientOfferRow = {
   viewed_at: string | null;
   claimed_at: string | null;
   expires_at: string | null;
+  image_url?: string | null;
+  image_placement?: OfferImagePlacement | null;
 };
 
 export type PatientOfferView = {
@@ -85,6 +90,8 @@ export type PatientOfferView = {
   viewed_at: string | null;
   claimed_at: string | null;
   expires_at: string | null;
+  image_url: string | null;
+  image_placement: OfferImagePlacement | null;
   /** Still claimable: sent or viewed and not past its expiry. */
   live: boolean;
 };
@@ -118,6 +125,8 @@ export function patientOfferView(row: PatientOfferRow, now = new Date()): Patien
     viewed_at: row.viewed_at,
     claimed_at: row.claimed_at,
     expires_at: row.expires_at,
+    image_url: row.image_url ?? null,
+    image_placement: asOfferImagePlacement(row.image_placement ?? null),
     live: status === "sent" || status === "viewed",
   };
 }

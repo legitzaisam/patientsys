@@ -32,7 +32,7 @@ test.describe("access", () => {
     await page.goto("/offers");
     await expect(page).toHaveURL(/\/dashboard/);
     await page.getByRole("button", { name: "Account menu" }).click();
-    await expect(page.getByRole("menuitem", { name: "Offer templates" })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: "Offers" })).toHaveCount(0);
     await page.keyboard.press("Escape");
 
     // The owner grants it from the Team access matrix.
@@ -47,7 +47,7 @@ test.describe("access", () => {
     await page.goto("/offers");
     await expect(page.getByRole("heading", { level: 1, name: "Offers" })).toBeVisible();
     await page.getByRole("button", { name: "Account menu" }).click();
-    await expect(page.getByRole("menuitem", { name: "Offer templates" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Offers" })).toBeVisible();
     await page.keyboard.press("Escape");
 
     // Put it back so the rest of the suite sees the seed default.

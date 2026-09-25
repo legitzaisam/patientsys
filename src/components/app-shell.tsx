@@ -254,7 +254,7 @@ function AccountMenu({
             {canOffers && (
               <DropdownMenuItem onClick={() => navigate({ to: "/offers" })} data-qc="menu-offers">
                 <Megaphone className="h-4 w-4" />
-                Offer templates
+                Offers
               </DropdownMenuItem>
             )}
             {canSee(identity, "settings") && (

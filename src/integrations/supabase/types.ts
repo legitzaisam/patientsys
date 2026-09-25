@@ -948,6 +948,8 @@ export type Database = {
           cta_label: string;
           headline: string;
           id: string;
+          image_placement: string | null;
+          image_url: string | null;
           last_automation_at: string | null;
           name: string;
           send_email: boolean;
@@ -971,6 +973,8 @@ export type Database = {
           cta_label?: string;
           headline: string;
           id?: string;
+          image_placement?: string | null;
+          image_url?: string | null;
           last_automation_at?: string | null;
           name: string;
           send_email?: boolean;
@@ -994,6 +998,8 @@ export type Database = {
           cta_label?: string;
           headline?: string;
           id?: string;
+          image_placement?: string | null;
+          image_url?: string | null;
           last_automation_at?: string | null;
           name?: string;
           send_email?: boolean;
@@ -1027,6 +1033,8 @@ export type Database = {
           expires_at: string | null;
           headline: string;
           id: string;
+          image_placement: string | null;
+          image_url: string | null;
           patient_id: string;
           sent_at: string;
           sent_by: string | null;
@@ -1048,6 +1056,8 @@ export type Database = {
           expires_at?: string | null;
           headline: string;
           id?: string;
+          image_placement?: string | null;
+          image_url?: string | null;
           patient_id: string;
           sent_at?: string;
           sent_by?: string | null;
@@ -1069,6 +1079,8 @@ export type Database = {
           expires_at?: string | null;
           headline?: string;
           id?: string;
+          image_placement?: string | null;
+          image_url?: string | null;
           patient_id?: string;
           sent_at?: string;
           sent_by?: string | null;

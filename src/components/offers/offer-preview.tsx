@@ -2,6 +2,7 @@ import { Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RenderedOffer } from "@/lib/offers/stages";
 import { shortDate } from "@/lib/offers/shape";
+import { OfferArtFrame } from "./offer-art";
 
 /** The email as the patient's client would show it. Sandboxed: no scripts, no navigation. */
 export function OfferEmailPreview({ html, subject, className }: { html: string; subject: string; className?: string }) {
@@ -42,7 +43,12 @@ export function OfferCardPreview({
   return (
     <div className={cn("rounded-2xl border border-edge bg-glass-2 p-4 shadow-inset-hi", className)}>
       <p className="mb-3 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Portal card</p>
-      <div className="glass-card rounded-2xl p-5" data-qc="offer-card-preview">
+      <div className="glass-card overflow-hidden rounded-2xl" data-qc="offer-card-preview">
+        <OfferArtFrame
+          imageUrl={card.image_url}
+          placement={card.image_placement}
+          className={card.image_url ? undefined : "p-5"}
+        >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-accent-ink">
@@ -77,6 +83,7 @@ export function OfferCardPreview({
         >
           {card.cta_label || "Claim this offer"}
         </button>
+        </OfferArtFrame>
       </div>
     </div>
   );

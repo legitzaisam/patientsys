@@ -60,38 +60,46 @@ function InsightsPage() {
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
   if (!can(identity, "reports.insights")) return null;
   const canSendOffers = can(identity, "comms.send");
+  const tabs = (
+    [
+      ...(canSee(identity, "insights-pipeline") ? [{ key: "pipeline" as const, label: "Pipeline" }] : []),
+      ...(canSee(identity, "insights-book") ? [{ key: "book" as const, label: "Book" }] : []),
+    ] as { key: InsightsTab; label: string }[]
+  );
 
   return (
     <AppShell identity={identity}>
       <div className="page-header">
-        <div>
-          <h1 className="page-title">Insights</h1>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="min-w-0 flex-1 page-title">Insights</h1>
+            <div className="flex shrink-0 items-center justify-end gap-2">
+              {tabs.length > 0 ? (
+                <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
+                  {tabs.map((item) => (
+                    <Link
+                      key={item.key}
+                      to="/insights"
+                      search={item.key === "book" ? { tab: "book" } : {}}
+                      className={`flex h-7 cursor-pointer items-center rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors ${
+                        tab === item.key
+                          ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
+                          : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+              {tab === "pipeline" ? <PeriodPicker value={period} onChange={setPeriod} /> : null}
+            </div>
+          </div>
           <p className="page-subtitle">
             {tab === "book"
               ? "List size, mix and quality — not a recall list."
-              : "New enquiries, who still needs a booking, and what sold."}
+              : `${periodHeading(period)}. Sign-ups, bookings, consultations and first treatments.`}
           </p>
-        </div>
-        <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
-            {(
-            [
-              ...(canSee(identity, "insights-pipeline") ? [{ key: "pipeline" as const, label: "Pipeline" }] : []),
-              ...(canSee(identity, "insights-book") ? [{ key: "book" as const, label: "Book" }] : []),
-            ] as { key: InsightsTab; label: string }[]
-          ).map((item) => (
-            <Link
-              key={item.key}
-              to="/insights"
-              search={item.key === "book" ? { tab: "book" } : {}}
-              className={`flex h-7 cursor-pointer items-center rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors ${
-                tab === item.key
-                  ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
-                  : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
         </div>
       </div>
 
@@ -100,17 +108,6 @@ function InsightsPage() {
       ) : (
         <div className="space-y-8">
           <section>
-            <div className="mb-3 flex items-end justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <h2 className="section-title">{periodHeading(period)}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Sign-ups, bookings, consultations and first treatments.
-                </p>
-              </div>
-              <div className="shrink-0">
-                <PeriodPicker value={period} onChange={setPeriod} />
-              </div>
-            </div>
             <FunnelTiles funnel={data?.funnel} />
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
               <FunnelChart monthly={data?.monthly} />
