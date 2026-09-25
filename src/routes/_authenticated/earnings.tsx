@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { Wallet } from "lucide-react";
 import { getMyEarnings } from "@/lib/clinic.functions";
+import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -35,7 +36,7 @@ function EarningsPage() {
   const { data } = useQuery({
     queryKey: ["my-earnings", range.from, range.to],
     queryFn: () => fetchEarnings({ data: range }),
-    enabled: !!identity?.isStaff,
+    enabled: Boolean(identity && can(identity, "view.earnings")),
   });
 
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;

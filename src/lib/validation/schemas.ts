@@ -17,7 +17,7 @@ import { z } from "zod";
 import {
   appointmentStage,
   appointmentStatus,
-  assignableRole,
+  grantRole,
   attachments,
   dateString,
   documentKind,
@@ -472,7 +472,7 @@ export const UpdateClinicDetails = z.object({
 });
 
 export const SetRolePermission = z.object({
-  role: assignableRole,
+  role: grantRole,
   /** The handler checks this against PERMISSION_KEYS and names the bad key. */
   permission: requiredText(100),
   enabled: z.boolean(),

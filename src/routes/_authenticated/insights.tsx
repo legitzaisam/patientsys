@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { getInsights } from "@/lib/clinic.functions";
+import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
@@ -72,10 +73,10 @@ function InsightsPage() {
           </p>
         </div>
         <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
-          {(
+            {(
             [
-              { key: "pipeline", label: "Pipeline" },
-              { key: "book", label: "Book" },
+              ...(canSee(identity, "insights-pipeline") ? [{ key: "pipeline" as const, label: "Pipeline" }] : []),
+              ...(canSee(identity, "insights-book") ? [{ key: "book" as const, label: "Book" }] : []),
             ] as { key: InsightsTab; label: string }[]
           ).map((item) => (
             <Link

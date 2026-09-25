@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { getPractitionerPerformance } from "@/lib/clinic.functions";
+import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -46,15 +47,15 @@ function PerformancePage() {
       fetchPerformance({
         data: { ...range, previousFrom: previous.from, previousTo: previous.to },
       }),
-    enabled: Boolean(identity?.isOwner || identity?.isManager),
+    enabled: Boolean(identity && can(identity, "reports.performance")),
   });
 
   useEffect(() => {
-    if (identity && !identity.isOwner && !identity.isManager) navigate({ to: "/dashboard", replace: true });
+    if (identity && !can(identity, "reports.performance")) navigate({ to: "/dashboard", replace: true });
   }, [identity, navigate]);
 
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
-  if (!identity.isOwner && !identity.isManager) return null;
+  if (!can(identity, "reports.performance")) return null;
 
   const totals = data?.totals;
 

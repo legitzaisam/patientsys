@@ -30,7 +30,6 @@ import {
   loadIdentity,
   reloadIdentity,
   requireOwner,
-  requireManager,
   requireStaff,
   requireStepUp,
   scopeFor,
@@ -5024,7 +5023,6 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "getPractitionerPerformance");
-    await requireManager(ctx);
     const supabaseAdmin = await adminClient(context);
     const { buildStats, buildTrend, moneyChanges, moneyTotals, trendViewWindows } = await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
@@ -6482,11 +6480,12 @@ export const listRolePermissions = createServerFn({ method: "GET" })
       .select("role, permission, enabled");
     if (error) throw new Error(error.message);
     const rows = (data ?? []) as { role: string; permission: string; enabled: boolean }[];
-    const editableRoles = ["manager", "front_desk", "practitioner"] as const;
+    const editableRoles = ["manager", "front_desk", "practitioner", "patient"] as const;
     const grants: Record<string, Record<string, boolean>> = {
       manager: {},
       front_desk: {},
       practitioner: {},
+      patient: {},
     };
     for (const role of editableRoles) {
       for (const key of PERMISSION_KEYS) {
@@ -6494,14 +6493,14 @@ export const listRolePermissions = createServerFn({ method: "GET" })
           rows.find((r) => r.role === role && r.permission === key)?.enabled ?? false;
       }
     }
-    return { grants, canEdit: identity.isOwner };
+    return { grants, canEdit: identity.isOwner || identity.isAdmin };
   });
 
 /** Clinic owner: turn a single capability on or off for a staff role. */
 export const setRolePermission = createServerFn({ method: "POST" })
   .validator(
     (data: {
-      role: "manager" | "front_desk" | "practitioner";
+      role: "manager" | "front_desk" | "practitioner" | "patient";
       permission: string;
       enabled: boolean;
     }) => parseInput(schemas.SetRolePermission, data),

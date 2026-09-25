@@ -35,7 +35,7 @@ export function BrandLockup({
   className,
   light,
 }: {
-  to?: "/" | "/dashboard" | "/my-record";
+  to?: "/" | "/dashboard" | "/my-record" | "/access";
   size?: "sm" | "md";
   variant?: "gold" | "on-gold";
   className?: string;

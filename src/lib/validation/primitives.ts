@@ -70,6 +70,8 @@ export const nullableDurationMinutes = durationMinutes.nullable().optional();
 export const staffRole = z.enum(["owner", "manager", "practitioner", "front_desk"]);
 /** `owner` is not assignable through the permission grid. */
 export const assignableRole = z.enum(["manager", "front_desk", "practitioner"]);
+/** Roles whose grants the access catalogue can change. Admin is never a target. */
+export const grantRole = z.enum(["manager", "front_desk", "practitioner", "patient"]);
 
 export const appointmentStatus = z.enum(["booked", "attended", "cancelled", "no_show"]);
 export const paymentStatus = z.enum(["unpaid", "deposit_paid", "paid", "refunded"]);

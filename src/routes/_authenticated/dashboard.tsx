@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getDashboard, getRetention, getCatalogue, listAccountsMissingEmail, listAppointments, listPatients, listPractitioners } from "@/lib/clinic.functions";
 import { clinicWeekRange } from "@/lib/clinic-time";
 import { useIdentity } from "@/lib/use-identity";
+import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -162,7 +163,7 @@ function DashboardPage() {
             />
       </section>
 
-      <section className="mb-2">
+      {canSee(identity, "dashboard-diary") && <section className="mb-2">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="min-w-0 section-title">
             {diaryHeading}
@@ -184,7 +185,7 @@ function DashboardPage() {
                 </button>
               ))}
             </div>
-            <QuickAddAppointment
+            {canSee(identity, "schedule-book") && <QuickAddAppointment
               patients={patients ?? []}
               practitioners={practitioners ?? []}
               catalogue={catalogue ?? []}
@@ -193,14 +194,14 @@ function DashboardPage() {
               title="Quick book"
             >
               <Button>Quick book</Button>
-            </QuickAddAppointment>
+            </QuickAddAppointment>}
           </div>
         </div>
         <TodaySnapshot appointments={diaryAppointments} isManager={isManager} span={diarySpan} />
-      </section>
+      </section>}
 
       <section className="flex flex-1 flex-col gap-6">
-        <div>
+        {canSee(identity, "dashboard-attention") && <div>
           <div className="mb-4">
             <h2 className="section-title">Attention needed</h2>
             <p className="text-xs text-muted-foreground">
@@ -208,14 +209,14 @@ function DashboardPage() {
             </p>
           </div>
           <AttentionList items={[...(data?.attentionItems ?? []), ...incompleteItems]} />
-        </div>
+        </div>}
         <div className="space-y-4">
-          <PauseRequests />
-          <FollowUpTasks />
+          {canSee(identity, "dashboard-pauses") && <PauseRequests />}
+          {canSee(identity, "dashboard-followups") && <FollowUpTasks />}
         </div>
       </section>
 
-      <TreatmentJourneys journeys={(data as any)?.journeys} />
+      {canSee(identity, "dashboard-journeys") && <TreatmentJourneys journeys={(data as any)?.journeys} />}
     </AppShell>
   );
 }

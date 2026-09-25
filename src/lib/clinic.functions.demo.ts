@@ -126,7 +126,8 @@ function currentRole(): DemoRole {
     value === "practitioner" ||
     value === "front_desk" ||
     value === "patient" ||
-    value === "owner"
+    value === "owner" ||
+    value === "admin"
   ) {
     return value;
   }
@@ -225,6 +226,7 @@ type Identity = {
   roles: string[];
   isStaff: boolean;
   isOwner: boolean;
+  isAdmin: boolean;
   isManager: boolean;
   canDelete: boolean;
   isPatient: boolean;
@@ -244,6 +246,7 @@ function identity(): Identity {
   const account = DEMO_ACCOUNTS[role];
   const isStaff = role !== "patient";
   const isOwner = role === "owner";
+  const isAdmin = role === "admin";
   const isManager = isOwner || role === "manager";
   const permissions = isOwner
     ? [...PERMISSION_KEYS]
@@ -258,6 +261,7 @@ function identity(): Identity {
     roles: [role],
     isStaff,
     isOwner,
+    isAdmin,
     isManager,
     canDelete: isOwner,
     isPatient: !isStaff,
@@ -278,6 +282,18 @@ function identity(): Identity {
 function requireStaff() {
   const me = identity();
   if (!me.isStaff) throw new Error("Staff access only");
+  return me;
+}
+
+function requireCapability(key: PermissionKey) {
+  const me = identity();
+  if (!can(me, key)) throw new Error("You do not have access to this area");
+  return me;
+}
+
+function requireAccessAdmin() {
+  const me = identity();
+  if (!me.isOwner && !me.isAdmin) throw new Error("Admin access required");
   return me;
 }
 
@@ -347,7 +363,7 @@ function sortAsc(list: any[], key: string) {
 export const getMe = createServerFn({ method: "GET" }).handler(async () => identity());
 
 export const getDashboard = createServerFn({ method: "GET" }).handler(async () => {
-  const me = identity();
+  const me = requireCapability("view.dashboard");
   const today = new Date();
   const in30 = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
   const weekAhead = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
@@ -802,6 +818,8 @@ export const getPatientMetrics = createServerFn({ method: "GET" }).handler(async
 export const getPatient = createServerFn({ method: "GET" })
   .validator((data: { id: string }) => parseInput(schemas.GetPatient, data))
   .handler(async ({ data }) => {
+    const me = identity();
+    if (me.patient?.id !== data.id) requireCapability("view.patients");
     const patient = patientById(data.id);
     if (!patient) throw new Error("Patient not found");
     const nowIso = new Date().toISOString();
@@ -951,6 +969,7 @@ export const savePatient = createServerFn({ method: "POST" })
     }) => parseInput(schemas.SavePatient, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("patients.edit");
     const email = assertEmail(data.email ?? "", "email address", true);
     if (data.id) {
       const row = patientById(data.id);
@@ -1031,6 +1050,7 @@ export const decidePlanPause = createServerFn({ method: "POST" })
     parseInput(schemas.DecidePlanPause, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("treatments.record");
     const me = identity();
     const request = planPauseRequests.find((r) => r.id === data.id);
     if (!request) throw new Error("Request not found");
@@ -1089,6 +1109,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
     }) => parseInput(schemas.SaveAppointment, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("appointments.edit");
     const me = identity();
     const start = new Date(data.starts_at);
     const endsAt = new Date(start.getTime() + (data.duration_minutes || 30) * 60000).toISOString();
@@ -1293,6 +1314,7 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
     }) => parseInput(schemas.UpdateAppointmentState, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("appointments.edit");
     const row = appointments.find((a) => a.id === data.id);
     if (!row) return { ok: true, stage: null };
     if (data.status) row.status = data.status;
@@ -1360,6 +1382,7 @@ export const completeConsentInClinic = createServerFn({ method: "POST" })
     contraindications?: Record<string, "yes" | "no" | "na">;
   }) => parseInput(schemas.CompleteConsentInClinic, data))
   .handler(async ({ data }) => {
+    requireCapability("documents.send");
     const me = requireStaff();
     const name = data.signed_name.trim().slice(0, 240);
     const signature =
@@ -1422,6 +1445,7 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
     }) => parseInput(schemas.RescheduleAppointment, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("appointments.edit");
     const start = new Date(data.starts_at);
     if (Number.isNaN(start.getTime())) throw new Error("Invalid date and time");
     const row = appointments.find((a) => a.id === data.id);
@@ -1493,7 +1517,10 @@ export const saveAppointmentNote = createServerFn({ method: "POST" })
       body: plainVisitNote(sanitizeNoteHtml(String(data?.body ?? ""))).slice(0, 20000),
     }),
   )
-  .handler(async ({ data }) => demoWriteBookingNote(data.appointment_id, data.body));
+  .handler(async ({ data }) => {
+    requireCapability("treatments.record");
+    return demoWriteBookingNote(data.appointment_id, data.body);
+  });
 
 /** Booking notes stay on the appointment. The diary card reads only these. */
 function demoWriteBookingNote(appointmentId: string, body: string) {
@@ -1550,6 +1577,7 @@ export const addTreatment = createServerFn({ method: "POST" })
     }) => parseInput(schemas.AddTreatment, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("treatments.record");
     const me = identity();
     const created = {
       id: newId("e9"),
@@ -1593,6 +1621,7 @@ export const addPhoto = createServerFn({ method: "POST" })
     }) => parseInput(schemas.AddPhoto, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("photos.manage");
     photos.push({
       id: newId("g9"),
       clinic_id: CLINIC_ID,
@@ -1613,6 +1642,7 @@ export const addPhoto = createServerFn({ method: "POST" })
 export const deletePhoto = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => parseInput(schemas.DeletePhoto, data))
   .handler(async ({ data }) => {
+    requireCapability("photos.manage");
     requireStaff();
     const index = photos.findIndex((p) => p.id === data.id);
     if (index >= 0) photos.splice(index, 1);
@@ -1863,6 +1893,7 @@ export const sendDocument = createServerFn({ method: "POST" })
     }) => parseInput(schemas.SendDocument, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("documents.send");
     const me = identity();
     const now = new Date().toISOString();
     const created = {
@@ -1917,6 +1948,7 @@ export const resendDocument = createServerFn({ method: "POST" })
       parseInput(schemas.ResendDocument, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("documents.send");
     const me = identity();
     const row = documents.find((d) => d.id === data.id);
     if (!row) throw new Error("Document not found");
@@ -2115,6 +2147,8 @@ export const sendMessage = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = identity();
+    if (me.isStaff) requireCapability("comms.send");
+    else if (me.patient?.id !== data.patient_id) throw new Error("Not your record");
     const body = data.body.trim().slice(0, 2000);
     const attachments = (data.attachments ?? []).slice(0, 5);
     if (!body && attachments.length === 0) throw new Error("Message cannot be empty");
@@ -2438,6 +2472,7 @@ export const markStaffNotificationRead = createServerFn({ method: "POST" })
 export const dismissStaffInboxItem = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => parseInput(schemas.DismissStaffInboxItem, data))
   .handler(async ({ data }) => {
+    requireCapability("notifications.delete");
     dismissDemoInboxIds([data.id]);
     return { ok: true };
   });
@@ -2446,6 +2481,7 @@ export const dismissStaffInboxItem = createServerFn({ method: "POST" })
 export const dismissStaffInboxItems = createServerFn({ method: "POST" })
   .validator((data: { ids: string[] }) => parseInput(schemas.DismissStaffInboxItems, data))
   .handler(async ({ data }) => {
+    requireCapability("notifications.delete");
     dismissDemoInboxIds(data.ids);
     return { ok: true };
   });
@@ -2558,6 +2594,7 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
     }) => parseInput(schemas.SendStaffAlert, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("comms.send");
     const me = requireStaff();
     const body = data.body.trim();
     if (!body) throw new Error("Write a message");
@@ -2654,6 +2691,7 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
 export const reviewHistory = createServerFn({ method: "POST" })
   .validator((data: { id: string; patient_id: string }) => parseInput(schemas.ReviewHistory, data))
   .handler(async ({ data }) => {
+    requireCapability("treatments.record");
     const me = identity();
     const row = medicalHistory.find((h) => h.id === data.id);
     if (row) {
@@ -2809,6 +2847,7 @@ export const getPortalHome = createServerFn({ method: "GET" }).handler(async () 
 });
 
 export const getPortalPlan = createServerFn({ method: "GET" }).handler(async () => {
+  requireCapability("view.portal.plan");
   const patient = demoPortalPatient();
   if (!patient) return null;
   const plan = demoPortalPlan(patient.id);
@@ -2879,6 +2918,7 @@ export const getPortalPlan = createServerFn({ method: "GET" }).handler(async () 
 });
 
 export const getPortalTimeline = createServerFn({ method: "GET" }).handler(async () => {
+  requireCapability("view.portal.plan.timeline");
   const patient = demoPortalPatient();
   if (!patient) return null;
   const plan = demoPortalPlan(patient.id);
@@ -2934,6 +2974,7 @@ export const getPortalTimeline = createServerFn({ method: "GET" }).handler(async
 });
 
 export const getPortalJournal = createServerFn({ method: "GET" }).handler(async () => {
+  requireCapability("view.portal.plan.journal");
   const patient = demoPortalPatient();
   if (!patient) return null;
   const entries = sortDesc(journalEntries.filter((e) => e.patient_id === patient.id), "entry_date");
@@ -2953,6 +2994,7 @@ export const getPortalJournal = createServerFn({ method: "GET" }).handler(async 
 });
 
 export const getPortalRoutine = createServerFn({ method: "GET" }).handler(async () => {
+  requireCapability("view.portal.plan.routine");
   const patient = demoPortalPatient();
   if (!patient) return null;
   const routine = skincareRoutines.find((r) => r.patient_id === patient.id) ?? null;
@@ -3564,6 +3606,7 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
   });
 
 export const listExTeamMembers = createServerFn({ method: "GET" }).handler(async () => {
+    requireCapability("team.view");
   purgeExpiredExTeamMembersDemo();
   const now = Date.now();
   return exTeamMembers
@@ -3773,11 +3816,8 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
     parseInput(schemas.GetPractitionerPerformance, data),
   )
   .handler(async ({ data }) => {
-    const me = identity();
+    const me = requireCapability("reports.performance");
     if (!me.isStaff) throw new Error("Staff access only");
-    if (!me.isManager) {
-      throw new Error("You do not have access to this area");
-    }
     const { buildStats, buildTrend, moneyChanges, moneyTotals, trendViewWindows } = await import("./earnings.server");
     const inputs = earningsInputs(data.from, data.to);
     const prevInputs = earningsInputs(data.previousFrom, data.previousTo);
@@ -3890,7 +3930,8 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
 export const getMyEarnings = createServerFn({ method: "POST" })
   .validator((data: { from: string; to: string }) => parseInput(schemas.GetMyEarnings, data))
   .handler(async ({ data }) => {
-    const me = requireStaff();
+    const me = requireCapability("view.earnings");
+    if (!me.isStaff) throw new Error("Staff access only");
     const { buildStats } = await import("./earnings.server");
     const inputs = earningsInputs(data.from, data.to);
     const rate = Number(me.profile?.commission_rate ?? 0);
@@ -4006,7 +4047,8 @@ export const saveMyProfile = createServerFn({ method: "POST" })
   });
 
 export const getMyProfile = createServerFn({ method: "GET" }).handler(async () => {
-  const me = requireStaff();
+  const me = requireCapability("view.profile");
+  if (!me.isStaff) throw new Error("Staff access only");
   return {
     profile: me.profile,
     isManager: me.isManager,
@@ -4033,7 +4075,7 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" }).handl
 export const reviewProfileChange = createServerFn({ method: "POST" })
   .validator((data: { id: string; approve: boolean; reviewerNote?: string }) => parseInput(schemas.ReviewProfileChange, data))
   .handler(async ({ data }) => {
-    const me = requireStaff();
+    const me = requireCapability("team.approve_changes");
     const req = profileChangeRequests.find((r) => r.id === data.id);
     if (!req) throw new Error("Request not found");
     if (req.status !== "pending") throw new Error("This request has already been reviewed");
@@ -4730,24 +4772,29 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
   });
 
 export const listRolePermissions = createServerFn({ method: "GET" }).handler(async () => {
-  const me = requireStaff();
-  const grants: Record<string, Record<string, boolean>> = { manager: {}, front_desk: {}, practitioner: {} };
-  for (const role of ["manager", "front_desk", "practitioner"]) {
+  const me = requireAccessAdmin();
+  const grants: Record<string, Record<string, boolean>> = {
+    manager: {},
+    front_desk: {},
+    practitioner: {},
+    patient: {},
+  };
+  for (const role of ["manager", "front_desk", "practitioner", "patient"]) {
     for (const key of PERMISSION_KEYS) {
       grants[role]![key] =
         rolePermissions.find((r) => r.role === role && r.permission === key)?.enabled ?? false;
     }
   }
-  return { grants, canEdit: me.isOwner };
+  return { grants, canEdit: me.isOwner || me.isAdmin };
 });
 
 export const setRolePermission = createServerFn({ method: "POST" })
   .validator(
-    (data: { role: "manager" | "front_desk" | "practitioner"; permission: string; enabled: boolean }) => parseInput(schemas.SetRolePermission, data),
+    (data: { role: "manager" | "front_desk" | "practitioner" | "patient"; permission: string; enabled: boolean }) =>
+      parseInput(schemas.SetRolePermission, data),
   )
   .handler(async ({ data }) => {
-    const me = identity();
-    if (!me.isOwner) throw new Error("Clinic owner access only");
+    const me = requireAccessAdmin();
     if (!(PERMISSION_KEYS as readonly string[]).includes(data.permission))
       throw new Error("Unknown permission");
     const row = rolePermissions.find(
@@ -5043,6 +5090,7 @@ export const createTreatmentPlan = createServerFn({ method: "POST" })
     }) => parseInput(schemas.CreateTreatmentPlan, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("treatments.record");
     const planId = newId("d7");
     const nowISO = new Date().toISOString();
     treatmentPlans.push({
@@ -5087,6 +5135,7 @@ export const updatePlanMilestone = createServerFn({ method: "POST" })
     parseInput(schemas.UpdatePlanMilestone, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("treatments.record");
     demoSetMilestoneStatus(data.id, data.status);
     return { ok: true };
   });
@@ -5297,6 +5346,7 @@ export const startTreatment = createServerFn({ method: "POST" })
     parseInput(schemas.StartTreatment, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("treatments.record");
     requireStaff();
     const appt = demoFormAppointment(data.appointment_id);
     const gate = canStartTreatment({ stage: appt.stage ?? "booked", consent: demoConsentStateOf(appt) });
@@ -5319,6 +5369,7 @@ export const moveToAftercare = createServerFn({ method: "POST" })
     }) => parseInput(schemas.MoveToAftercare, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("treatments.record");
     requireStaff();
     const appt = demoFormAppointment(data.appointment_id);
     const now = new Date().toISOString();
@@ -5343,6 +5394,7 @@ export const completeTreatment = createServerFn({ method: "POST" })
       parseInput(schemas.CompleteTreatment, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("treatments.record");
     const me = requireStaff();
     const appt = demoFormAppointment(data.appointment_id);
     const session = treatmentSessions.find((s) => s.appointment_id === appt.id);
@@ -5415,6 +5467,7 @@ export const saveTreatmentSessionDraft = createServerFn({ method: "POST" })
     }) => parseInput(schemas.SaveTreatmentSessionDraft, data),
   )
   .handler(async ({ data }) => {
+    requireCapability("treatments.record");
     requireStaff();
     const appt = demoFormAppointment(data.appointment_id);
     const existing = treatmentSessions.find((s) => s.appointment_id === appt.id);

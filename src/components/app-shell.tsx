@@ -19,6 +19,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   Search,
+  ShieldCheck,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,7 +44,7 @@ import { DEMO_MODE } from "@/lib/demo/enabled";
 import { listAppointments, listTeam } from "@/lib/clinic.functions";
 import { clinicDayRange } from "@/lib/clinic-time";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
-import { can } from "@/lib/permissions";
+import { canSee, isAccessAdmin } from "@/lib/access-catalogue";
 import { initialsOf, laneFor } from "@/lib/practitioner-colours";
 import { useStaffPresence } from "@/lib/use-staff-presence";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,7 @@ type Identity = {
   email: string;
   isStaff: boolean;
   isOwner?: boolean;
+  isAdmin?: boolean;
   isManager?: boolean;
   roles: string[];
   permissions?: string[];
@@ -72,10 +74,10 @@ function toolbarScrollBlend(scrollTop: number) {
 
 /** Indented sub-items under a nav entry (the portal's plan sections). */
 const PLAN_SUBNAV = [
-  { to: "/my-record/plan", label: "Overview", exact: true },
-  { to: "/my-record/plan/timeline", label: "Timeline" },
-  { to: "/my-record/plan/journal", label: "Journal" },
-  { to: "/my-record/plan/routine", label: "Skincare Routine" },
+  { to: "/my-record/plan", label: "Overview", exact: true, node: "portal-plan-overview" },
+  { to: "/my-record/plan/timeline", label: "Timeline", node: "portal-plan-timeline" },
+  { to: "/my-record/plan/journal", label: "Journal", node: "portal-plan-journal" },
+  { to: "/my-record/plan/routine", label: "Skincare Routine", node: "portal-plan-routine" },
 ];
 
 function SubNav({
@@ -171,7 +173,7 @@ function ToolbarAlerts({
   const chipSurface = "toolbar-scroll-chip";
   return (
     <>
-      {identity.isStaff && (
+      {identity.isStaff && canSee(identity, "shell-alerts") && (
         <StaffAlertDialog>
           <Button
             variant="ghost"
@@ -183,10 +185,10 @@ function ToolbarAlerts({
           </Button>
         </StaffAlertDialog>
       )}
-      {identity.isStaff && (
+      {identity.isStaff && canSee(identity, "shell-alerts") && (
         <FloatingNotes triggerClassName={cn(chipSurface, iconHover)} />
       )}
-      {identity.isStaff && (
+      {identity.isStaff && canSee(identity, "shell-alerts") && (
         <SentStaffAlerts className={cn(chipSurface, iconHover)} />
       )}
       <NotificationBell isStaff={identity.isStaff} chipClassName={cn(chipSurface, iconHover)} />
@@ -199,7 +201,6 @@ function AccountMenu({
   displayName,
   roleLabel,
   canTeam,
-  canSettings,
   canOffers,
   signOut,
 }: {
@@ -207,7 +208,6 @@ function AccountMenu({
   displayName: string;
   roleLabel: string;
   canTeam: boolean;
-  canSettings: boolean;
   canOffers: boolean;
   signOut: () => void;
 }) {
@@ -233,10 +233,18 @@ function AccountMenu({
       <DropdownMenuContent align="end" className="w-52">
         {identity.isStaff ? (
           <>
-            <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
-              <IdCard className="h-4 w-4" />
-              My profile
-            </DropdownMenuItem>
+            {canSee(identity, "profile") && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
+                <IdCard className="h-4 w-4" />
+                My profile
+              </DropdownMenuItem>
+            )}
+            {isAccessAdmin(identity) && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/access" })}>
+                <ShieldCheck className="h-4 w-4" />
+                Access
+              </DropdownMenuItem>
+            )}
             {canTeam && (
               <DropdownMenuItem onClick={() => navigate({ to: "/team" })}>
                 <UserCog className="h-4 w-4" />
@@ -249,7 +257,7 @@ function AccountMenu({
                 Offer templates
               </DropdownMenuItem>
             )}
-            {(identity.isManager || canSettings) && (
+            {canSee(identity, "settings") && (
               <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
                 <SettingsIcon className="h-4 w-4" />
                 Settings
@@ -258,18 +266,24 @@ function AccountMenu({
           </>
         ) : (
           <>
-            <DropdownMenuItem onClick={() => navigate({ to: "/my-record" })}>
-              <HeartPulse className="h-4 w-4" />
-              My record
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate({ to: "/my-record/billing" })}>
-              <Wallet className="h-4 w-4" />
-              Billing
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate({ to: "/my-record/settings" })}>
-              <SettingsIcon className="h-4 w-4" />
-              Settings
-            </DropdownMenuItem>
+            {canSee(identity, "portal-home") && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/my-record" })}>
+                <HeartPulse className="h-4 w-4" />
+                My record
+              </DropdownMenuItem>
+            )}
+            {canSee(identity, "portal-billing") && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/my-record/billing" })}>
+                <Wallet className="h-4 w-4" />
+                Billing
+              </DropdownMenuItem>
+            )}
+            {canSee(identity, "portal-settings") && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/my-record/settings" })}>
+                <SettingsIcon className="h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+            )}
           </>
         )}
         <DropdownMenuSeparator />
@@ -316,7 +330,10 @@ function SidebarChrome({
   return (
     <div className="flex h-full min-h-0 flex-col gap-5 px-4 py-5">
       <div className="flex items-center gap-1">
-        <BrandLockup to={identity.isStaff ? "/dashboard" : "/my-record"} className="min-w-0 flex-1 px-1.5" />
+        <BrandLockup
+          to={identity.isAdmin && !identity.isOwner ? "/access" : identity.isStaff ? "/dashboard" : "/my-record"}
+          className="min-w-0 flex-1 px-1.5"
+        />
         <Button
           variant="ghost"
           size="icon"
@@ -328,7 +345,7 @@ function SidebarChrome({
         </Button>
       </div>
 
-      {identity.isStaff && (
+      {identity.isStaff && canSee(identity, "shell-search") && (
         <form onSubmit={onSearch} className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -354,7 +371,11 @@ function SidebarChrome({
                 onNavigate={onNavigate}
               />
               {item.to === "/my-record/plan" && pathname.startsWith("/my-record/plan") && (
-                <SubNav items={PLAN_SUBNAV} pathname={pathname} onNavigate={onNavigate} />
+                <SubNav
+                  items={PLAN_SUBNAV.filter((entry) => canSee(identity, entry.node))}
+                  pathname={pathname}
+                  onNavigate={onNavigate}
+                />
               )}
             </div>
           ))}
@@ -376,7 +397,7 @@ function SidebarChrome({
           </NavGroup>
         )}
 
-        {identity.isStaff && teamMembers.length > 0 && (
+        {identity.isStaff && canSee(identity, "team") && teamMembers.length > 0 && (
           <NavGroup label="Team">
             {teamMembers.map((member) => {
               const name = member.fullName || "Team member";
@@ -502,45 +523,50 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     queryKey: ["sidebar-diary-count", startISO],
     queryFn: () => fetchAppointments({ data: { from: startISO, to: endISO } }),
     refetchInterval: 60_000,
-    enabled: identity.isStaff && sessionReady,
+    enabled: identity.isStaff && sessionReady && canSee(identity, "schedule"),
   });
   const diaryCount = (todayAppointments ?? []).length;
 
-  const canInsights = can(identity, "reports.insights");
-  const canRetention = can(identity, "reports.retention");
-  const canPerformance = can(identity, "reports.performance");
-  const canTeam = can(identity, "team.view");
-  const canSettings = can(identity, "settings.treatments");
-  const canOffers = can(identity, "offers.manage");
-  const isPractitioner = identity.roles.includes("practitioner");
+  const canTeam = canSee(identity, "team");
+  const canOffers = canSee(identity, "offers");
 
   const clinicLinks: NavLink[] = identity.isStaff
     ? [
-        { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-        { to: "/schedule", label: "Diary", icon: CalendarDays, badge: diaryCount },
-        { to: "/patients", label: "Patients", icon: Users },
+        ...(canSee(identity, "dashboard") ? [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
+        ...(canSee(identity, "schedule")
+          ? [{ to: "/schedule", label: "Diary", icon: CalendarDays, badge: diaryCount }]
+          : []),
+        ...(canSee(identity, "patients") ? [{ to: "/patients", label: "Patients", icon: Users }] : []),
       ]
     : [
-        { to: "/my-record", label: "Home", icon: LayoutDashboard },
-        { to: "/my-record/plan", label: "Skin Plan & Journey", icon: TrendingUp },
-        { to: "/my-record/clinic", label: "My Clinic", icon: HeartPulse },
-        { to: "/my-record/records", label: "My Profile / Records", icon: Users },
-        { to: "/my-record/appointments", label: "Appointments", icon: CalendarDays },
+        ...(canSee(identity, "portal-home") ? [{ to: "/my-record", label: "Home", icon: LayoutDashboard }] : []),
+        ...(canSee(identity, "portal-plan")
+          ? [{ to: "/my-record/plan", label: "Skin Plan & Journey", icon: TrendingUp }]
+          : []),
+        ...(canSee(identity, "portal-clinic")
+          ? [{ to: "/my-record/clinic", label: "My Clinic", icon: HeartPulse }]
+          : []),
+        ...(canSee(identity, "portal-records")
+          ? [{ to: "/my-record/records", label: "My Profile / Records", icon: Users }]
+          : []),
+        ...(canSee(identity, "portal-appointments")
+          ? [{ to: "/my-record/appointments", label: "Appointments", icon: CalendarDays }]
+          : []),
       ];
 
   // Billing and Settings live in the account menu (top right); messages are
   // the chat bubble in the corner, so neither needs a sidebar entry.
   const supportLinks: NavLink[] = identity.isStaff
     ? []
-    : [{ to: "/my-record/resources", label: "Resources", icon: Lightbulb }];
+    : canSee(identity, "portal-resources")
+      ? [{ to: "/my-record/resources", label: "Resources", icon: Lightbulb }]
+      : [];
 
   const reportLinks: NavLink[] = [
-    ...(canInsights ? [{ to: "/insights", label: "Insights", icon: Lightbulb }] : []),
-    ...(canRetention ? [{ to: "/retention", label: "Retention", icon: Repeat }] : []),
-    ...(canPerformance ? [{ to: "/performance", label: "Performance", icon: TrendingUp }] : []),
-    ...(identity.isStaff && isPractitioner && !identity.isManager
-      ? [{ to: "/earnings", label: "Earnings", icon: Wallet }]
-      : []),
+    ...(canSee(identity, "insights") ? [{ to: "/insights", label: "Insights", icon: Lightbulb }] : []),
+    ...(canSee(identity, "retention") ? [{ to: "/retention", label: "Retention", icon: Repeat }] : []),
+    ...(canSee(identity, "performance") ? [{ to: "/performance", label: "Performance", icon: TrendingUp }] : []),
+    ...(canSee(identity, "earnings") ? [{ to: "/earnings", label: "Earnings", icon: Wallet }] : []),
   ];
 
   const displayName =
@@ -549,9 +575,11 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   const roleLabel = identity.isStaff
     ? identity.isOwner
       ? "Clinic owner"
-      : identity.roles.includes("manager")
-        ? "Manager"
-        : identity.profile?.job_title || identity.roles[0]?.replace("_", " ") || "Staff"
+      : identity.isAdmin
+        ? "Admin"
+        : identity.roles.includes("manager")
+          ? "Manager"
+          : identity.profile?.job_title || identity.roles[0]?.replace("_", " ") || "Staff"
     : "Patient";
 
   async function signOut() {
@@ -722,7 +750,6 @@ export function AppShell({ identity, children }: { identity: Identity; children:
                 displayName={displayName}
                 roleLabel={roleLabel}
                 canTeam={canTeam}
-                canSettings={canSettings}
                 canOffers={canOffers}
                 signOut={signOut}
               />
@@ -734,7 +761,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
         </main>
       </div>
 
-      {identity.isStaff && <FloatingDock roles={identity.roles} />}
+      {identity.isStaff && canSee(identity, "shell-dock") && <FloatingDock roles={identity.roles} />}
       {identity.isStaff && <AlertAckToaster />}
       {DEMO_MODE && <DemoRoleSwitcher />}
     </div>

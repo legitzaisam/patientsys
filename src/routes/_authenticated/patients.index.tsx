@@ -8,6 +8,7 @@ import type { z } from "zod";
 import { toast } from "sonner";
 import { Calendar, X, ChevronUp, ChevronDown, ChevronsUpDown, Send } from "lucide-react";
 import { listPatients, savePatient } from "@/lib/clinic.functions";
+import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SendOfferDialog } from "@/components/offers/send-offer-dialog";
@@ -195,10 +196,10 @@ function PatientsPage() {
           </p>
         </div>
         <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
-          {(
+            {(
             [
-              { key: "records", label: "Records" },
-              { key: "board", label: "Journey board" },
+              ...(canSee(identity, "patients-records") ? [{ key: "records" as const, label: "Records" }] : []),
+              ...(canSee(identity, "patients-board") ? [{ key: "board" as const, label: "Journey board" }] : []),
             ] as { key: PatientsTab; label: string }[]
           ).map((t) => (
             <Link
@@ -288,7 +289,9 @@ function PatientsPage() {
               </button>
             )}
           </div>
-          <Button type="button" onClick={() => setOpen(true)}>New patient</Button>
+          {canSee(identity, "patients-add") && (
+            <Button type="button" onClick={() => setOpen(true)}>New patient</Button>
+          )}
         </div>
       </div>
 

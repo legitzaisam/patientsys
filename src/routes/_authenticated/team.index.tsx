@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { Children, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Trash2, Pencil, Clock, KeyRound } from "lucide-react";
+import { Trash2, Pencil, Clock, KeyRound, Search, X } from "lucide-react";
 import {
   listTeam,
   updateStaffMember,
@@ -14,7 +14,9 @@ import {
   reviewProfileChange,
   setStaffPassword,
 } from "@/lib/clinic.functions";
+import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
@@ -46,6 +48,139 @@ const ROLES = [
   { value: "practitioner", label: "Practitioner" },
   { value: "front_desk", label: "Receptionist" },
 ] as const;
+
+const VISIBLE_TEAM_CARDS = 5;
+
+function staffMatches(
+  query: string,
+  person: {
+    fullName?: string;
+    email?: string;
+    jobTitle?: string;
+    role?: string;
+    registrationBody?: string;
+    registrationNumber?: string;
+  },
+) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  const roleLabel = ROLES.find((role) => role.value === person.role)?.label ?? "";
+  return [person.fullName, person.email, person.jobTitle, person.role, roleLabel, person.registrationBody, person.registrationNumber]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(needle);
+}
+
+/** Shows five cards, then scrolls the rest. Fewer than five stay at their natural height. */
+function StaffCardList({ children, measureKey }: { children: ReactNode; measureKey: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [maxHeight, setMaxHeight] = useState<number>();
+  const count = Children.count(children);
+  const limited = count > VISIBLE_TEAM_CARDS;
+
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root || !limited) {
+      setMaxHeight(undefined);
+      return;
+    }
+    const measure = () => {
+      const cards = [...root.children].slice(0, VISIBLE_TEAM_CARDS) as HTMLElement[];
+      const last = cards[VISIBLE_TEAM_CARDS - 1];
+      if (!last) return;
+      setMaxHeight(last.offsetTop + last.offsetHeight);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const child of [...root.children].slice(0, VISIBLE_TEAM_CARDS)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [limited, count, measureKey]);
+
+  return (
+    <div
+      ref={ref}
+      className={cn("relative min-h-0 space-y-3", limited && "overflow-y-auto overscroll-contain pr-1")}
+      style={limited && maxHeight ? { maxHeight } : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+function StaffSearch({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const searching = open || value.trim().length > 0;
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  const close = () => {
+    onChange("");
+    setOpen(false);
+  };
+
+  return (
+    <div
+      className={cn(
+        "relative h-[34px] overflow-hidden rounded-full border border-edge bg-glass-2 shadow-inset-hi transition-[width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+        searching
+          ? "w-[200px] focus-within:border-accent-deep"
+          : "w-[34px] hover:border-accent-line hover:bg-accent-wash hover:shadow-lift",
+      )}
+    >
+      <Search className="pointer-events-none absolute left-[10px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        ref={inputRef}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            close();
+          }
+        }}
+        onBlur={() => {
+          if (!value.trim()) setOpen(false);
+        }}
+        placeholder={searching ? "Search staff" : ""}
+        tabIndex={searching ? 0 : -1}
+        className="h-[34px] w-[200px] rounded-full border-0 bg-transparent pl-8 pr-8 text-xs shadow-none focus-visible:border-transparent focus-visible:ring-0"
+        aria-label="Search staff"
+        aria-expanded={searching}
+      />
+      {!searching && (
+        <button
+          type="button"
+          className="absolute inset-0 rounded-full"
+          aria-label="Search staff"
+          onClick={() => setOpen(true)}
+        />
+      )}
+      <button
+        type="button"
+        aria-label="Clear search"
+        tabIndex={searching ? 0 : -1}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={close}
+        className={cn(
+          "absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-opacity duration-200 hover:text-foreground",
+          searching ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
 
 function RoleSelect({
   value,
@@ -100,6 +235,7 @@ function TeamPage() {
   });
 
   const [staffTab, setStaffTab] = useState<"current" | "former">("current");
+  const [staffQuery, setStaffQuery] = useState("");
 
   const restoreEx = useMutation({
     mutationFn: useServerFn(restoreExTeamMember),
@@ -208,6 +344,8 @@ function TeamPage() {
     if (m.isSelf) return true;
     return Boolean(String(m.fullName ?? "").trim() || String(m.email ?? "").trim());
   });
+  const visibleMembers = members.filter((m: any) => staffMatches(staffQuery, m));
+  const visibleFormer = (exTeam ?? []).filter((m: any) => staffMatches(staffQuery, m));
   if (!canViewTeam)
     return (
       <AppShell identity={identity}>
@@ -232,13 +370,18 @@ function TeamPage() {
             </p>
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <StaffSearch value={staffQuery} onChange={setStaffQuery} />
             <TabsList className="h-[34px] p-0.5">
-              <TabsTrigger value="current" className="h-7 px-3.5 text-xs tracking-[0.02em]">
-                Current staff
-              </TabsTrigger>
-              <TabsTrigger value="former" className="h-7 px-3.5 text-xs tracking-[0.02em]">
-                Former staff
-              </TabsTrigger>
+              {canSee(identity, "team-current") && (
+                <TabsTrigger value="current" className="h-7 px-3.5 text-xs tracking-[0.02em]">
+                  Current staff
+                </TabsTrigger>
+              )}
+              {canSee(identity, "team-former") && (
+                <TabsTrigger value="former" className="h-7 px-3.5 text-xs tracking-[0.02em]">
+                  Former staff
+                </TabsTrigger>
+              )}
             </TabsList>
             {canAdmin && <InviteStaffDialog onInvited={invalidate} />}
           </div>
@@ -248,12 +391,17 @@ function TeamPage() {
           <div
             className={
               canApprove
-                ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] lg:items-start"
+                ? "grid items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]"
                 : undefined
             }
           >
-            <div className="space-y-3">
-              {members.map((m: any) => (
+            <StaffCardList measureKey={visibleMembers.map((m: any) => m.userId).join("|")}>
+              {visibleMembers.length === 0 ? (
+                <Card className="border-dashed p-4 text-sm text-muted-foreground">
+                  {staffQuery.trim() ? "No staff match that search." : "No current staff."}
+                </Card>
+              ) : (
+                visibleMembers.map((m: any) => (
                 <Card key={m.userId} className="p-4">
                   <div className="flex flex-wrap items-center gap-4">
                     <div className="min-w-56 flex-1 space-y-0.5">
@@ -332,44 +480,45 @@ function TeamPage() {
                     )}
                   </div>
                 </Card>
-              ))}
-            </div>
+                ))
+              )}
+            </StaffCardList>
 
             {canApprove && (
-              <aside
-                id="profile-change-requests"
-                className="rounded-[22px] border border-edge bg-glass-2/50 p-4 lg:sticky lg:top-4"
-              >
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <h2 className="section-title">
-                    Profile change requests
-                  </h2>
-                  {(requests ?? []).filter((r: any) => r.status === "pending").length > 0 && (
-                    <Badge variant="secondary" className="rounded-full">
-                      {(requests ?? []).filter((r: any) => r.status === "pending").length} pending
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Staff updates wait here until you approve.
-                </p>
-                <div className="mt-3 space-y-3">
-                  {(requests ?? []).length === 0 && (
-                    <Card className="border-dashed p-4 text-xs text-muted-foreground">
-                      No requests yet.
-                    </Card>
-                  )}
-                  {(requests ?? []).map((r: any) => (
-                    <RequestCard key={r.id} r={r} onReview={(v) => review.mutate({ data: v })} busy={review.isPending} />
-                  ))}
-                </div>
-              </aside>
+              <div className="relative min-h-0">
+                <aside
+                  id="profile-change-requests"
+                  className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-edge bg-glass-2/50 p-4 lg:absolute lg:inset-0"
+                >
+                  <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
+                    <h2 className="section-title">
+                      Profile change requests
+                    </h2>
+                    {(requests ?? []).filter((r: any) => r.status === "pending").length > 0 && (
+                      <Badge variant="secondary" className="rounded-full">
+                        {(requests ?? []).filter((r: any) => r.status === "pending").length} pending
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="shrink-0 text-xs text-muted-foreground">
+                    Staff updates wait here until you approve.
+                  </p>
+                  <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
+                    {(requests ?? []).length === 0 && (
+                      <Card className="border-dashed p-4 text-xs text-muted-foreground">
+                        No requests yet.
+                      </Card>
+                    )}
+                    {(requests ?? []).map((r: any) => (
+                      <RequestCard key={r.id} r={r} onReview={(v) => review.mutate({ data: v })} busy={review.isPending} />
+                    ))}
+                  </div>
+                </aside>
+              </div>
             )}
           </div>
 
-          {canAdmin && (
-            <AccessControlSettings canEdit={Boolean(identity.isOwner)} />
-          )}
+          {identity.isOwner && <AccessControlSettings canEdit />}
         </TabsContent>
 
         <TabsContent value="former" className="mt-0 space-y-3">
@@ -381,9 +530,13 @@ function TeamPage() {
             <Card className="border-dashed p-4 text-sm text-muted-foreground">
               No former team members in the retention window.
             </Card>
+          ) : visibleFormer.length === 0 ? (
+            <Card className="border-dashed p-4 text-sm text-muted-foreground">
+              No former staff match that search.
+            </Card>
           ) : (
-            <div className="space-y-3">
-              {(exTeam ?? []).map((m: any) => (
+            <StaffCardList measureKey={visibleFormer.map((m: any) => m.id).join("|")}>
+              {visibleFormer.map((m: any) => (
                 <Card key={m.id} className="p-4">
                   <div className="flex flex-wrap items-center gap-4">
                     <div className="min-w-56 flex-1">
@@ -419,7 +572,7 @@ function TeamPage() {
                   </div>
                 </Card>
               ))}
-            </div>
+            </StaffCardList>
           )}
         </TabsContent>
       </Tabs>

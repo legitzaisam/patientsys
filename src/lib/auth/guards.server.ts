@@ -75,8 +75,9 @@ async function readIdentity(context: Ctx) {
   const { data: perms } = permsRes;
   const roleList: string[] = (roles ?? []).map((r: { role: string }) => r.role);
   const isOwner = roleList.includes("owner");
+  const isAdmin = roleList.includes("admin");
   const isStaff = roleList.some(
-    (r) => r === "owner" || r === "manager" || r === "practitioner" || r === "front_desk",
+    (r) => r === "owner" || r === "manager" || r === "practitioner" || r === "front_desk" || r === "admin",
   );
   /** Management tier (clinic owner or manager) — used for overview UI, not full access. */
   const isManager = isOwner || roleList.includes("manager");
@@ -107,6 +108,8 @@ async function readIdentity(context: Ctx) {
     isStaff,
     /** Clinic owner — full access; customises manager / staff permissions. */
     isOwner,
+    /** Software developer. May edit the access catalogue, and nothing else by default. */
+    isAdmin,
     /** Owner or manager role (management portal tier). */
     isManager,
     /** Hard deletes stay with the clinic owner. */
@@ -259,6 +262,13 @@ export async function authorize(
   switch (rule.kind) {
     case "self":
       identity = await loadIdentity(context);
+      if (rule.view && !can(identity, rule.view)) {
+        throw new Error("You do not have access to this area");
+      }
+      break;
+    case "accessAdmin":
+      identity = await loadIdentity(context);
+      if (!identity.isOwner && !identity.isAdmin) throw new Error("Admin access required");
       break;
     case "staff":
       identity = await requireStaff(context);

@@ -63,13 +63,14 @@ function roleAccessDescription(
   if (role === "owner") return baseline;
   if (!grants) return baseline;
 
-  const extras = PERMISSION_KEYS.filter((key) => grants[role]?.[key]).map(
+  const capabilityKeys = PERMISSION_KEYS.filter((key) => !key.startsWith("view."));
+  const extras = capabilityKeys.filter((key) => grants[role]?.[key]).map(
     (key: PermissionKey) => PERMISSION_META[key].label,
   );
   if (extras.length === 0) return baseline;
 
   const base = baseline.replace(/\.$/, "");
-  if (extras.length === PERMISSION_KEYS.length) {
+  if (extras.length === capabilityKeys.length) {
     return `${base}, with full staff access.`;
   }
   if (extras.length === 1) return `${base}, plus access to ${extras[0]}.`;

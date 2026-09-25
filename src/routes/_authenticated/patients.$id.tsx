@@ -39,6 +39,7 @@ import { PatientOffersCard } from "@/components/offers/patient-offers-card";
 import { TreatmentFormDialog } from "@/components/treatment-form-dialog";
 import { TreatmentRecordDialog } from "@/components/treatment-record-view";
 import { STAGE_LABEL } from "@/lib/visit-stage";
+import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
 import {
   Dialog,
@@ -502,7 +503,7 @@ function PatientRecord() {
                   </DialogContent>
                 </Dialog>
 
-                <Dialog open={docOpen} onOpenChange={setDocOpen}>
+                {canSee(identity, "patient-send-documents") && <Dialog open={docOpen} onOpenChange={setDocOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline">
                       Send form
@@ -558,7 +559,7 @@ function PatientRecord() {
                       </Button>
                     </DialogFooter>
                   </DialogContent>
-                </Dialog>
+                </Dialog>}
 
                 {can(identity, "comms.send") && !p.deleted_at ? (
                   <>
@@ -651,19 +652,21 @@ function PatientRecord() {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Let the pill wrap on narrower layouts rather than run under the docked chat panel. */}
             <TabsList className="h-auto max-w-full flex-wrap justify-start">
-              <TabsTrigger value="treatments" className="items-center pr-2.5">
-                Treatments
-                {bookingChase.length > 0 ? (
-                  <span className="ml-1.5 inline-flex h-[15px] min-w-[15px] shrink-0 items-center justify-center rounded-full bg-destructive-bg px-0.5 text-[10px] font-semibold leading-none text-destructive-ink tabular-nums">
-                    {bookingChase.length}
-                  </span>
-                ) : null}
-              </TabsTrigger>
-              <TabsTrigger value="photos">Before and after</TabsTrigger>
-              <TabsTrigger value="documents">Documents</TabsTrigger>
-              <TabsTrigger value="history">History updates</TabsTrigger>
-              <TabsTrigger value="portal">From the patient</TabsTrigger>
-              <TabsTrigger value="contact">Contact</TabsTrigger>
+              {canSee(identity, "patient-treatments") && (
+                <TabsTrigger value="treatments" className="items-center pr-2.5">
+                  Treatments
+                  {bookingChase.length > 0 ? (
+                    <span className="ml-1.5 inline-flex h-[15px] min-w-[15px] shrink-0 items-center justify-center rounded-full bg-destructive-bg px-0.5 text-[10px] font-semibold leading-none text-destructive-ink tabular-nums">
+                      {bookingChase.length}
+                    </span>
+                  ) : null}
+                </TabsTrigger>
+              )}
+              {canSee(identity, "patient-photos") && <TabsTrigger value="photos">Before and after</TabsTrigger>}
+              {canSee(identity, "patient-documents") && <TabsTrigger value="documents">Documents</TabsTrigger>}
+              {canSee(identity, "patient-history") && <TabsTrigger value="history">History updates</TabsTrigger>}
+              {canSee(identity, "patient-from-patient") && <TabsTrigger value="portal">From the patient</TabsTrigger>}
+              {canSee(identity, "patient-contact") && <TabsTrigger value="contact">Contact</TabsTrigger>}
             </TabsList>
 
             {/* How we may reach this patient, and what has been sent. Lives in
@@ -976,7 +979,7 @@ function PatientRecord() {
                   <div className="flex flex-col gap-5 border-t border-edge bg-glass-2 p-5 lg:border-t-0">
                     <div className="flex items-center justify-between">
                       <h3 className="section-title">Treatment history</h3>
-                      <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-edge-2 bg-glass-2 shadow-inset-hi px-2.5 py-1.5 text-xs font-medium text-accent-ink hover:bg-accent-wash">
+                      {canSee(identity, "patient-upload-photos") && <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-edge-2 bg-glass-2 shadow-inset-hi px-2.5 py-1.5 text-xs font-medium text-accent-ink hover:bg-accent-wash">
                         <Upload className="h-3.5 w-3.5" /> Upload
                         <input
                           type="file"
@@ -989,7 +992,7 @@ function PatientRecord() {
                             e.target.value = "";
                           }}
                         />
-                      </label>
+                      </label>}
                     </div>
 
                     <div className="flex flex-col gap-2">
@@ -1058,7 +1061,7 @@ function PatientRecord() {
                       )}
                     </div>
 
-                    <div className="rounded-xl border-2 border-dashed border-edge-2 p-4 text-center transition-colors hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)]">
+                    {canSee(identity, "patient-upload-photos") && <div className="rounded-xl border-2 border-dashed border-edge-2 p-4 text-center transition-colors hover:border-edge-2 hover:bg-[rgba(47,63,102,0.08)]">
                       <label className="flex cursor-pointer flex-col items-center gap-1">
                         <Upload className="h-4 w-4 text-ink-3" />
                         <span className="text-2xs font-medium text-muted-foreground">Drop photos to upload</span>
@@ -1074,7 +1077,7 @@ function PatientRecord() {
                           }}
                         />
                       </label>
-                    </div>
+                    </div>}
                   </div>
                 </div>
               </Card>

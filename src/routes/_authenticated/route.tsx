@@ -17,6 +17,13 @@ import {
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { FloatingDockProvider } from "@/components/floating-dock/dock-context";
 import { FloatingNotesProvider } from "@/components/dashboard/floating-notes";
+import {
+  canSee,
+  firstVisiblePortalPath,
+  firstVisibleStaffPath,
+  isAccessAdmin,
+  pageNodeForPath,
+} from "@/lib/access-catalogue";
 import { useIdentity } from "@/lib/use-identity";
 
 const wasStaffKey = (userId: string) => `aetheria:was-staff:${userId}`;
@@ -151,10 +158,50 @@ function IdentityGate() {
   }, [isError, error, signingOutRevoked]);
 
   useEffect(() => {
-    if (!identity || identity.isStaff) return;
-    // The patient portal is a subtree now, not a single page.
-    if (pathname === "/my-record" || pathname.startsWith("/my-record/")) return;
-    navigate({ to: "/my-record", replace: true });
+    if (!identity) return;
+    if (identity.isAdmin && !identity.isOwner) {
+      if (pathname !== "/access") navigate({ to: "/access", replace: true });
+      return;
+    }
+    if (pathname === "/access") {
+      if (!isAccessAdmin(identity)) navigate({ to: "/dashboard", replace: true });
+      return;
+    }
+    if (!identity.isStaff) {
+      const inPortal = pathname === "/my-record" || pathname.startsWith("/my-record/");
+      const node = pageNodeForPath(pathname);
+      if (inPortal && node && !canSee(identity, node.id)) {
+        const next = firstVisiblePortalPath(identity);
+        if (next && next !== pathname) navigate({ to: next, replace: true });
+        return;
+      }
+      if (inPortal && pathname === "/my-record/plan" && !canSee(identity, "portal-plan-overview")) {
+        const next =
+          (["portal-plan-timeline", "portal-plan-journal", "portal-plan-routine"] as const).find((id) =>
+            canSee(identity, id),
+          ) ?? null;
+        const route =
+          next === "portal-plan-timeline"
+            ? "/my-record/plan/timeline"
+            : next === "portal-plan-journal"
+              ? "/my-record/plan/journal"
+              : next === "portal-plan-routine"
+                ? "/my-record/plan/routine"
+                : null;
+        if (route) navigate({ to: route, replace: true });
+        return;
+      }
+      if (!inPortal) {
+        const next = firstVisiblePortalPath(identity) ?? "/my-record";
+        navigate({ to: next, replace: true });
+      }
+      return;
+    }
+    const node = pageNodeForPath(pathname);
+    if (node && !canSee(identity, node.id)) {
+      const next = firstVisibleStaffPath(identity);
+      if (next !== pathname) navigate({ to: next, replace: true });
+    }
   }, [identity, navigate, pathname]);
 
   if (signingOutRevoked) {

@@ -1,3 +1,4 @@
+import { viewGrantRows } from "@/lib/access-catalogue";
 import { DEMO_NOW } from "@/lib/demo/enabled";
 import { templateFor } from "@/lib/treatment-results";
 import { defaultDurationMinutes } from "@/lib/treatment-duration";
@@ -19,9 +20,10 @@ export const USERS = {
   frontDesk: "10000000-0000-4000-8000-000000000004",
   patient: "10000000-0000-4000-8000-000000000005",
   former: "10000000-0000-4000-8000-000000000006",
+  admin: "10000000-0000-4000-8000-000000000007",
 } as const;
 
-export type DemoRole = "owner" | "practitioner" | "front_desk" | "patient";
+export type DemoRole = "owner" | "practitioner" | "front_desk" | "patient" | "admin";
 
 export const DEMO_ACCOUNTS: Record<DemoRole, { userId: string; email: string; label: string }> = {
   owner: { userId: USERS.owner, email: "amara.osei@aetheria.clinic", label: "Clinic owner" },
@@ -36,6 +38,7 @@ export const DEMO_ACCOUNTS: Record<DemoRole, { userId: string; email: string; la
     label: "Receptionist",
   },
   patient: { userId: USERS.patient, email: "olivia.bennett@example.com", label: "Patient" },
+  admin: { userId: USERS.admin, email: "developer@aetheria.clinic", label: "Admin" },
 };
 
 /* ---------------------------------------------------------------- */
@@ -179,6 +182,18 @@ export const profiles: Row[] = [
     created_at: iso(-500),
     updated_at: iso(-21),
   },
+  {
+    id: USERS.admin,
+    clinic_id: CLINIC_ID,
+    full_name: "Software developer",
+    job_title: "Admin",
+    registration_body: null,
+    registration_number: null,
+    avatar_url: null,
+    commission_rate: 0,
+    created_at: iso(-10),
+    updated_at: iso(-1),
+  },
 ];
 
 export const userRoles: Row[] = [
@@ -187,6 +202,7 @@ export const userRoles: Row[] = [
   { id: id("a1"), user_id: USERS.practitioner2, role: "practitioner", created_at: iso(-400) },
   { id: id("a1"), user_id: USERS.frontDesk, role: "front_desk", created_at: iso(-300) },
   { id: id("a1"), user_id: USERS.patient, role: "patient", created_at: iso(-200) },
+  { id: id("a1"), user_id: USERS.admin, role: "admin", created_at: iso(-10) },
 ];
 
 export const staffEmails: Record<string, string> = {
@@ -194,6 +210,7 @@ export const staffEmails: Record<string, string> = {
   [USERS.practitioner]: "nadia.rahman@aetheria.clinic",
   [USERS.practitioner2]: "tom.whitfield@aetheria.clinic",
   [USERS.frontDesk]: "sofia.marchetti@aetheria.clinic",
+  [USERS.admin]: "developer@aetheria.clinic",
 };
 
 export const rolePermissions: Row[] = [
@@ -245,6 +262,17 @@ export const rolePermissions: Row[] = [
   { role: "practitioner", permission: "offers.manage", enabled: false },
   { role: "front_desk", permission: "offers.manage", enabled: false },
 ].map((r) => ({ ...r, id: id("b1"), updated_by: USERS.owner, updated_at: iso(-12) }));
+
+for (const row of viewGrantRows()) {
+  rolePermissions.push({
+    role: row.role,
+    permission: row.permission,
+    enabled: row.enabled,
+    id: id("b1"),
+    updated_by: USERS.owner,
+    updated_at: iso(-12),
+  });
+}
 
 /* ---------------------------------------------------------------- */
 /* treatment catalogue                                               */

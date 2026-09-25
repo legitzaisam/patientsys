@@ -2,6 +2,8 @@ import type { AuthSurface } from "@/lib/auth/constants";
 
 type SurfaceIdentity = {
   isStaff: boolean;
+  isOwner?: boolean;
+  isAdmin?: boolean;
   patient: { id?: string } | null;
 };
 
@@ -33,12 +35,19 @@ export function isSessionEndingIdentityError(message: string) {
  * After a session exists, decide whether this identity may stay on this surface.
  * Throws when the account does not belong on that surface.
  */
-export function destinationFor(surface: AuthSurface, identity: SurfaceIdentity): "/dashboard" | "/my-record" {
+export function destinationFor(
+  surface: AuthSurface,
+  identity: SurfaceIdentity,
+): "/dashboard" | "/my-record" | "/access" {
   if (surface === "staff") {
     if (!identity.isStaff) throw new Error(wrongSurfaceMessage("staff"));
+    if (identity.isAdmin && !identity.isOwner) return "/access";
     return staffHomePath();
   }
-  if (identity.isStaff && !identity.patient) return staffHomePath();
+  if (identity.isStaff && !identity.patient) {
+    if (identity.isAdmin && !identity.isOwner) return "/access";
+    return staffHomePath();
+  }
   if (!identity.patient && !identity.isStaff) {
     throw new Error("No patient record is linked to this account. Contact your clinic.");
   }

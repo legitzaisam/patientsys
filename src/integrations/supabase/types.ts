@@ -2996,7 +2996,7 @@ export type Database = {
       patient_retain_until: { Args: { _patient_id: string }; Returns: string };
     };
     Enums: {
-      app_role: "owner" | "practitioner" | "front_desk" | "patient" | "manager";
+      app_role: "owner" | "practitioner" | "front_desk" | "patient" | "manager" | "admin";
       appointment_status: "booked" | "attended" | "cancelled" | "no_show";
       change_request_status: "pending" | "approved" | "declined";
       communication_channel: "email" | "sms" | "call";
@@ -3149,7 +3149,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      app_role: ["owner", "practitioner", "front_desk", "patient", "manager"],
+      app_role: ["owner", "practitioner", "front_desk", "patient", "manager", "admin"],
       appointment_status: ["booked", "attended", "cancelled", "no_show"],
       change_request_status: ["pending", "approved", "declined"],
       communication_channel: ["email", "sms", "call"],

@@ -11,9 +11,9 @@ import type { PermissionKey } from "@/lib/permissions";
  * fails the completeness check in `policy.assert.ts` at startup, so the same
  * hole cannot open silently again.
  *
- * Capabilities describe staff only. Patients hold no capabilities — they are
- * governed by ownership (`patientSelf`, `staffOrOwnPatient`), because a patient
- * has no row in `role_permissions` and would otherwise be refused everywhere.
+ * Capabilities describe staff, plus the patient portal view keys. A patient
+ * holds only those view keys. Clinical writes stay on ownership
+ * (`patientSelf`, `staffOrOwnPatient`).
  */
 export type Access =
   /** Any clinic staff member. No specific capability needed. */
@@ -34,8 +34,11 @@ export type Access =
   /**
    * Any signed-in user. The handler reads and writes only its own caller's rows,
    * so it is safe by construction rather than by a role check.
+   * `view` additionally requires that visibility grant.
    */
-  | { kind: "self" };
+  | { kind: "self"; view?: PermissionKey }
+  /** Clinic owner or software-developer admin. This is not a catalogue grant. */
+  | { kind: "accessAdmin" };
 
 export const POLICY = {
   /* Session */
@@ -50,10 +53,10 @@ export const POLICY = {
   revokeOtherSessions: { kind: "self" },
 
   /* Dashboard and patient reads */
-  getDashboard: { kind: "staff" },
+  getDashboard: { kind: "capability", key: "view.dashboard" },
   listPatients: { kind: "staff" },
   getPatientMetrics: { kind: "capability", key: "reports.insights" },
-  getPatient: { kind: "staffOrOwnPatient" },
+  getPatient: { kind: "staffOrOwnPatient", staffKey: "view.patients" },
   getCatalogue: { kind: "staff" },
   listPractitioners: { kind: "staff" },
 
@@ -118,10 +121,10 @@ export const POLICY = {
   /* Patient portal. Reads resolve the caller's own patient row, so "self" is
      the whole boundary — none of them accept a patient_id. */
   getPortalHome: { kind: "self" },
-  getPortalPlan: { kind: "self" },
-  getPortalTimeline: { kind: "self" },
-  getPortalJournal: { kind: "self" },
-  getPortalRoutine: { kind: "self" },
+  getPortalPlan: { kind: "self", view: "view.portal.plan" },
+  getPortalTimeline: { kind: "self", view: "view.portal.plan.timeline" },
+  getPortalJournal: { kind: "self", view: "view.portal.plan.journal" },
+  getPortalRoutine: { kind: "self", view: "view.portal.plan.routine" },
   getPortalClinic: { kind: "self" },
   getPortalRecords: { kind: "self" },
   createJournalEntry: { kind: "self" },
@@ -177,7 +180,7 @@ export const POLICY = {
   listAccountsMissingEmail: { kind: "owner" },
 
   /* Own staff profile */
-  getMyProfile: { kind: "staff" },
+  getMyProfile: { kind: "capability", key: "view.profile" },
   saveMyProfile: { kind: "staff" },
   setMyAvatar: { kind: "staff" },
   submitProfileChange: { kind: "staff" },
@@ -192,7 +195,7 @@ export const POLICY = {
   /* Reports */
   getInsights: { kind: "capability", key: "reports.insights" },
   getPractitionerPerformance: { kind: "capability", key: "reports.performance" },
-  getMyEarnings: { kind: "staff" },
+  getMyEarnings: { kind: "capability", key: "view.earnings" },
   getRetention: { kind: "capability", key: "reports.retention" },
   logRetentionOutreach: { kind: "staff" },
   sendRecall: { kind: "capability", key: "comms.send" },
@@ -231,8 +234,8 @@ export const POLICY = {
   setCatalogueItemActive: { kind: "capability", key: "settings.treatments" },
   getClinicDetails: { kind: "staff" },
   updateClinicDetails: { kind: "capability", key: "settings.treatments" },
-  listRolePermissions: { kind: "staff" },
-  setRolePermission: { kind: "owner" },
+  listRolePermissions: { kind: "accessAdmin" },
+  setRolePermission: { kind: "accessAdmin" },
   listRetailProducts: { kind: "staff" },
   saveRetailProduct: { kind: "capability", key: "settings.treatments" },
   setRetailProductActive: { kind: "capability", key: "settings.treatments" },

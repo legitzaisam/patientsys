@@ -2,6 +2,7 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { PortalDock } from "@/components/portal/portal-dock";
+import { canSee } from "@/lib/access-catalogue";
 import { useIdentity } from "@/lib/use-identity";
 
 export const Route = createFileRoute("/_authenticated/my-record")({
@@ -61,7 +62,7 @@ function PortalLayout() {
   return (
     <AppShell identity={identity}>
       <Outlet />
-      <PortalDock />
+      {canSee(identity, "portal-chat") && <PortalDock />}
     </AppShell>
   );
 }

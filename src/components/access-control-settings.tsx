@@ -35,6 +35,11 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
   });
 
   const grants = data?.grants;
+  // Page and tab visibility stays on /access. This grid is the capability matrix.
+  const groups = PERMISSION_GROUPS.map((group) => ({
+    ...group,
+    keys: group.keys.filter((key) => !key.startsWith("view.")),
+  })).filter((group) => group.keys.length > 0);
 
   return (
     <Card className="space-y-5 p-5">
@@ -63,7 +68,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
             </span>
           ))}
         </div>
-        {PERMISSION_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.label}>
             <div className="border-b border-glass-line bg-glass-1 px-4 py-1.5">
               <span className="text-2xs font-medium uppercase tracking-[0.08em] text-ink-3">
