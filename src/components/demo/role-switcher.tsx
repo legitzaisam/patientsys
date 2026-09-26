@@ -40,10 +40,12 @@ export function DemoRoleSwitcher() {
   const current = ROLES.find((r) => r.value === role) ?? ROLES[0];
 
   // Bottom-left: the floating dock (alert + chat bubbles) owns bottom-right.
+  // On a phone the bottom corners are full, so the pill sits in the toolbar
+  // row next to the sidebar button and its menu opens downwards.
   return (
-    <div className="fixed bottom-5 left-5 z-40 print:hidden">
+    <div className="fixed z-40 print:hidden max-sm:left-[3.75rem] max-sm:top-2 max-sm:flex max-sm:flex-col-reverse max-sm:items-start sm:bottom-5 sm:left-5">
       {open && (
-        <div className="glass-card mb-2 w-56 overflow-hidden">
+        <div className="glass-card w-56 overflow-hidden max-sm:mt-2 sm:mb-2">
           <p className="border-b border-edge px-3 py-2 text-2xs tracking-[0.02em] text-muted-foreground">
             View the app as
           </p>
@@ -66,11 +68,13 @@ export function DemoRoleSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex cursor-pointer items-center gap-2 rounded-full border border-edge bg-glass px-4 py-2 text-sm shadow-glass backdrop-blur-glass transition-colors hover:bg-card"
+        className="flex h-10 cursor-pointer items-center gap-2 rounded-full border border-edge bg-glass px-3 text-sm shadow-glass backdrop-blur-glass transition-colors hover:bg-card sm:h-auto sm:px-4 sm:py-2"
       >
         <span className="h-2 w-2 rounded-full bg-accent" />
-        <span className="text-muted-foreground">Demo:</span>
-        <span className="text-foreground">{current.label}</span>
+        <span className="text-muted-foreground">
+          Demo<span className="max-sm:hidden">:</span>
+        </span>
+        <span className="text-foreground max-sm:hidden">{current.label}</span>
       </button>
     </div>
   );

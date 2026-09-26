@@ -820,6 +820,7 @@ function StageBadge({
   reopenGraceMs?: number;
 }) {
   const [open, setOpen] = useState(false);
+  const lastPointerType = useRef<string>("");
   const ignoreOpenUntil = useRef(0);
 
   useEffect(() => {
@@ -843,7 +844,20 @@ function StageBadge({
   const trigger = (
     <button
       type="button"
-      className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-2xs font-semibold shadow-inset-hi transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9] ${STAGE_TONE[stage]}`}
+      className={`inline-flex min-h-6 cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-2xs font-semibold shadow-inset-hi transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9] ${STAGE_TONE[stage]}`}
+      onPointerDown={(event) => {
+        lastPointerType.current = event.pointerType;
+      }}
+      onClick={(event) => {
+        // HoverCard ignores touch. A tap toggles the menu where hover does not exist.
+        const touch =
+          lastPointerType.current === "touch" ||
+          (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches);
+        if (touch) {
+          event.stopPropagation();
+          setOpen((v) => !v);
+        }
+      }}
     >
       <StageIcon className="h-3 w-3" />
       {label}
@@ -986,7 +1000,7 @@ function ConsentChip({ appointment: a, signed }: { appointment: any; signed: boo
 
   const chip = (
     <span
-      className={`inline-flex h-5 items-center gap-1 rounded-full px-2 text-2xs font-semibold leading-none shadow-inset-hi transition-[filter,box-shadow] ${
+      className={`inline-flex h-6 items-center gap-1 rounded-full px-2 text-2xs font-semibold leading-none shadow-inset-hi transition-[filter,box-shadow] ${
         signed ? "bg-success-bg text-success-ink" : "bg-warning-bg text-consent-ink"
       }`}
     >
@@ -1039,7 +1053,7 @@ function ClaimedOfferChip({ offer }: { offer: { id: string; headline: string; co
     <HoverCard openDelay={80} closeDelay={140}>
       <HoverCardTrigger asChild>
         <span
-          className="inline-flex h-5 shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-accent-soft px-1.5 text-[10px] font-semibold leading-none text-accent-ink shadow-inset-hi"
+          className="inline-flex h-6 shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-accent-soft px-1.5 text-[10px] font-semibold leading-none text-accent-ink shadow-inset-hi"
           data-qc="claimed-offer-chip"
           aria-label="Offer claimed"
         >
@@ -1116,7 +1130,7 @@ function PaymentChip({ appointment: a, status }: { appointment: any; status: str
 
   const chip = (
     <span
-      className={`inline-flex h-5 items-center gap-1 rounded-full px-2 text-2xs font-semibold capitalize leading-none shadow-inset-hi ${
+      className={`inline-flex h-6 items-center gap-1 rounded-full px-2 text-2xs font-semibold capitalize leading-none shadow-inset-hi ${
         paid
           ? "bg-success-bg text-success-ink"
           : deposit

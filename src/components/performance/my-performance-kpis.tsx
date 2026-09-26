@@ -55,14 +55,14 @@ export function MyPerformanceKpis() {
 
   return (
     <section>
-      <div className="mb-3 flex items-end justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="section-title">Your performance</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Your own figures for this period — not the clinic total.
           </p>
         </div>
-        <div className="shrink-0">
+        <div className="min-w-0 max-w-full shrink-0">
           <PeriodPicker value={period} onChange={setPeriod} />
         </div>
       </div>

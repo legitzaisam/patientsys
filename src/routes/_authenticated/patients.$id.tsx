@@ -403,7 +403,7 @@ function PatientRecord() {
   return (
     <AppShell identity={identity}>
       {stepUp.dialog}
-      <Link to="/patients" className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+      <Link to="/patients" className="-my-1 mb-3 inline-flex min-h-6 items-center gap-2 py-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> All patients
       </Link>
 
@@ -835,42 +835,49 @@ function PatientRecord() {
 
             <TabsContent value="photos">
               <Card className="p-0">
-                <div className="grid gap-0 lg:grid-cols-[1fr_280px]">
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-0 lg:grid-cols-[minmax(0,1fr)_280px]">
                   {/* Main comparison panel */}
                   <div className="p-5 lg:border-r lg:border-edge">
-                    <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+                    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                       <div>
                         <h3 className="section-title">Image comparison</h3>
                         <p className="text-xs text-muted-foreground">
                           Select two points in the course to compare side by side.
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={left?.id ?? ""}
-                          onChange={(e) => setLeftId(e.target.value)}
-                          className="h-10 w-48 rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-sm"
-                          aria-label="Before comparison photo"
-                        >
-                          {timeline.map((p: any) => (
-                            <option key={p.id} value={p.id}>
-                              {p.label}
-                            </option>
-                          ))}
-                        </select>
-                        <span className="shrink-0 text-xs text-muted-foreground">vs</span>
-                        <select
-                          value={right?.id ?? ""}
-                          onChange={(e) => setRightId(e.target.value)}
-                          className="h-10 w-48 rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-sm"
-                          aria-label="After comparison photo"
-                        >
-                          {timeline.map((p: any) => (
-                            <option key={p.id} value={p.id}>
-                              {p.label}
-                            </option>
-                          ))}
-                        </select>
+                      {/* Each select sits in a clipping box: WebKit reports a select's
+                          longest option as scrollable overflow, which would let the
+                          page scroll sideways on a phone. */}
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <div className="min-w-0 flex-1 basis-full overflow-hidden sm:basis-auto lg:flex-none">
+                          <select
+                            value={left?.id ?? ""}
+                            onChange={(e) => setLeftId(e.target.value)}
+                            className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-sm lg:w-48"
+                            aria-label="Before comparison photo"
+                          >
+                            {timeline.map((p: any) => (
+                              <option key={p.id} value={p.id}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <span className="shrink-0 text-xs text-muted-foreground max-sm:hidden">vs</span>
+                        <div className="min-w-0 flex-1 basis-full overflow-hidden sm:basis-auto lg:flex-none">
+                          <select
+                            value={right?.id ?? ""}
+                            onChange={(e) => setRightId(e.target.value)}
+                            className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-sm lg:w-48"
+                            aria-label="After comparison photo"
+                          >
+                            {timeline.map((p: any) => (
+                              <option key={p.id} value={p.id}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
 
@@ -880,7 +887,8 @@ function PatientRecord() {
                       </div>
                     ) : (
                       <>
-                        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                        {/* minmax(0,…): a photo's natural width must not set the column. */}
+                        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                           {[
                             { label: "Before", photo: left },
                             { label: "After", photo: right },
@@ -891,7 +899,7 @@ function PatientRecord() {
                                   <img
                                     src={photo.url}
                                     alt={photo.label}
-                                    className="aspect-3/4 w-full object-cover"
+                                    className="aspect-3/4 w-full min-w-0 object-cover"
                                   />
                                 ) : (
                                   <div className="aspect-3/4 w-full" />

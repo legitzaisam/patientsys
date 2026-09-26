@@ -13,13 +13,13 @@ const workers = Number(process.env["RESPONSIVE_WORKERS"] ?? "3") || 3;
 
 export default defineConfig({
   testDir: "./e2e/responsive",
-  outputDir: "./test-results/responsive/artifacts",
+  outputDir: "./test-results-responsive/artifacts",
   fullyParallel: false,
   workers,
   timeout: 120_000,
   forbidOnly: !!process.env["CI"],
   retries: 0,
-  reporter: [["list"], ["json", { outputFile: "test-results/responsive/playwright.json" }]],
+  reporter: [["list"], ["json", { outputFile: "test-results-responsive/playwright.json" }]],
   use: {
     baseURL: "http://localhost:8091",
     // A control hidden under floating chrome makes tap() wait; fail it fast

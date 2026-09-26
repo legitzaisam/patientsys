@@ -482,10 +482,14 @@ function ColourPicker({
             aria-label={`${opt.label} for ${name}`}
             aria-pressed={active}
             onClick={() => onPick(opt.lane, null)}
-            className={`h-4 w-4 rounded-full ${tone.dot} transition-all hover:scale-125 hover:opacity-100 ${
-              active ? "ring-2 ring-foreground ring-offset-1 ring-offset-background" : "opacity-70"
-            }`}
-          />
+            className="-m-1 grid h-6 w-6 place-items-center"
+          >
+            <span
+              className={`block h-4 w-4 rounded-full ${tone.dot} transition-all hover:scale-125 hover:opacity-100 ${
+                active ? "ring-2 ring-foreground ring-offset-1 ring-offset-background" : "opacity-70"
+              }`}
+            />
+          </button>
         );
       })}
       <ColourWheelButton
@@ -501,7 +505,7 @@ function ColourPicker({
         title="Reset colour"
         aria-label={`Reset colour for ${name}`}
         onClick={() => onPick(null, null)}
-        className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+        className="-m-1 grid h-6 w-6 place-items-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
       >
         <RotateCcw className="h-3.5 w-3.5" />
       </button>

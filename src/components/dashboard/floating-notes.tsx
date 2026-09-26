@@ -286,7 +286,7 @@ export function FloatingNotesProvider({ children }: { children: ReactNode }) {
                     type="button"
                     onClick={close}
                     aria-label="Close notes"
-                    className="ml-auto rounded-full p-1 text-muted-foreground hover:bg-glass-2 hover:text-foreground"
+                    className="ml-auto rounded-full p-[5px] text-muted-foreground hover:bg-glass-2 hover:text-foreground"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden />
                   </button>

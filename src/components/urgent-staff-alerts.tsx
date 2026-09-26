@@ -202,7 +202,7 @@ export function UrgentStaffAlerts({
                     setReply("");
                     setCursor(index - 1);
                   }}
-                  className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground disabled:opacity-30"
+                  className="rounded-full p-[5px] text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground disabled:opacity-30"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
@@ -218,7 +218,7 @@ export function UrgentStaffAlerts({
                     setReply("");
                     setCursor(index + 1);
                   }}
-                  className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground disabled:opacity-30"
+                  className="rounded-full p-[5px] text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground disabled:opacity-30"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
@@ -236,7 +236,7 @@ export function UrgentStaffAlerts({
                 }
                 setCollapsed(true);
               }}
-              className="rounded-full p-1 text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"
+              className="rounded-full p-[5px] text-muted-foreground hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"
             >
               <ChevronDown className="h-3.5 w-3.5" />
             </button>

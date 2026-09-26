@@ -7,8 +7,8 @@
  *                                               into docs/responsive/captures
  *                                               (JPEG via sips when available)
  *
- * Reads test-results/responsive/findings/<project>/<role>--<page>--<state>.json
- * and test-results/responsive/interactions/<project>/*.json. Findings are
+ * Reads test-results-responsive/findings/<project>/<role>--<page>--<state>.json
+ * and test-results-responsive/interactions/<project>/*.json. Findings are
  * grouped by probe, page and state so one row lists every device it affects.
  * docs/responsive/REVIEW.md, if present, is inlined as the manual review.
  */
@@ -25,7 +25,7 @@ import {
 import { join, relative, basename } from "node:path";
 
 const ROOT = process.cwd();
-const RESULTS = join(ROOT, "test-results", "responsive");
+const RESULTS = join(ROOT, "test-results-responsive");
 const FINDINGS = join(RESULTS, "findings");
 const INTERACTIONS = join(RESULTS, "interactions");
 const DOCS = join(ROOT, "docs", "responsive");
@@ -70,7 +70,9 @@ const FIX_HINT = {
   "overlay.overlap":
     "Two floating overlays share a corner: on phones move the demo switcher to the top or into the account menu, stack the dock bubbles vertically, and keep toasts above them.",
   "overlay.covers-action":
-    "A floating overlay sits over a control: add bottom padding to the scroller equal to the dock height (pb-24 is not enough when cards are tall) or shrink the dock on phones.",
+    "A pinned control (sticky/fixed, or at the end of its scroller) sits under a floating overlay: reserve the dock height (var(--dock-h)) or add bottom padding to the scroller.",
+  "overlay.covers-scrollable":
+    "Informational: the dock covers this control at load, but scrolling clears it. No action.",
   "tap.small":
     "Icon controls under 24px: raise to h-9 w-9 (36) or at least h-6 (24) with padding; chips that act as buttons need min-h-6.",
   "tap.small-link":
@@ -276,7 +278,7 @@ md.push(
 );
 md.push("");
 md.push(
-  `Findings are grouped by probe, page and state; one row lists every device it affects. Severity → tier: blocker → Tier 1, major → Tier 2, minor → Tier 3. Nothing here fails the build yet; Stage 2 turns the probes into gates tier by tier.`,
+  `Findings are grouped by probe, page and state; one row lists every device it affects. Severity → tier: blocker → Tier 1, major → Tier 2, minor → Tier 3. \`npm run test:responsive\` reports only; \`npm run test:responsive:gate\` runs the matrix with RESPONSIVE_GATE=major (blocker and minor are the other levels) and fails a page's test when findings at that severity or worse remain.`,
 );
 md.push("");
 

@@ -208,7 +208,7 @@ function StaffProfilePage() {
       {canViewTeam ? (
         <Link
           to="/team"
-          className="-mt-1 mb-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          className="-mt-2 mb-2 inline-flex min-h-6 items-center gap-2 py-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> Back to team
         </Link>
@@ -256,9 +256,10 @@ function StaffProfilePage() {
             </Card>
           ) : null}
 
-          <Card className="overflow-hidden p-0">
-            <div className="grid sm:grid-cols-[13.5rem_minmax(0,1fr)]">
-              <aside className="flex flex-col items-center border-b border-edge bg-glass-2/70 px-5 pt-5 pb-6 sm:border-b-0 sm:border-r sm:px-6 sm:pt-6 sm:pb-7">
+          <Card className="@container overflow-hidden p-0">
+            {/* Container queries, not viewport ones: beside the chat column this card can be ~340px wide on an iPad. */}
+            <div className="grid @xl:grid-cols-[13.5rem_minmax(0,1fr)]">
+              <aside className="flex flex-col items-center border-b border-edge bg-glass-2/70 px-5 pt-5 pb-6 @xl:border-b-0 @xl:border-r @xl:px-6 @xl:pt-6 @xl:pb-7">
                 <div className="flex w-full max-w-[8.5rem] flex-col items-center gap-3">
                   <div className="w-full text-center">
                     <p className="text-balance text-sm font-semibold leading-none tracking-[-0.012em] text-foreground">
@@ -279,7 +280,7 @@ function StaffProfilePage() {
                 </div>
               </aside>
 
-              <div className="flex min-w-0 flex-col">
+              <div className="@container flex min-w-0 flex-col">
                 <Form {...profileForm}>
                   <form
                     noValidate
@@ -296,7 +297,7 @@ function StaffProfilePage() {
                         },
                       }),
                     )}
-                    className="grid gap-x-5 gap-y-4 p-5 pb-4 sm:grid-cols-2 sm:gap-x-6 sm:p-6 sm:px-7 sm:pb-4"
+                    className="grid gap-x-5 gap-y-4 p-5 pb-4 @sm:grid-cols-2 @sm:gap-x-6 @sm:p-6 @sm:px-7 @sm:pb-4"
                   >
                     <FormField
                       control={profileForm.control}
@@ -432,7 +433,7 @@ function StaffProfilePage() {
                       />
                     ) : null}
                     {canEdit ? (
-                      <div className="flex items-center justify-end sm:col-span-2">
+                      <div className="flex items-center justify-end @sm:col-span-2">
                         <Button type="submit" disabled={save.isPending}>
                           {save.isPending ? "Saving…" : "Save changes"}
                         </Button>

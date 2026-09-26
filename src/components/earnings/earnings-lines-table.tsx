@@ -152,7 +152,7 @@ function GroupRow({
           type="button"
           aria-expanded={open}
           aria-label={ariaLabel}
-          className="flex w-full items-center gap-2 text-left font-semibold text-foreground"
+          className="flex min-h-6 w-full items-center gap-2 text-left font-semibold text-foreground"
           onClick={(event) => {
             event.stopPropagation();
             onToggle();

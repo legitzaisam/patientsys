@@ -144,6 +144,24 @@ async function capture(
     shots: { viewport: null, full: null },
   };
   if (!opened) return result;
+  // The staff dock peeks its alert cards for 8s whenever the alert count
+  // rises during a session (the two count hooks resolve at different times,
+  // so even a seeded "seen" count cannot stop it). That is a transient nudge;
+  // probe with it collapsed unless this state opened the cards on purpose.
+  if (stateId !== "dock-alerts") {
+    const peeking = page.locator('[data-qc="alert-bubble"][aria-expanded="true"]');
+    // Clicking the pill would also dismiss an open menu or popover, so leave
+    // those states alone.
+    const popoverOpen = await page
+      .locator(
+        '[role="menu"], [role="dialog"][data-state="open"], [data-radix-popper-content-wrapper]',
+      )
+      .count();
+    if (popoverOpen === 0 && (await peeking.isVisible().catch(() => false))) {
+      await peeking.click({ timeout: 2_000 }).catch(() => {});
+      await page.waitForTimeout(250);
+    }
+  }
   try {
     result.probe = await page.evaluate(runProbes, { touch, phone: device === "phone", webkit });
   } catch (error) {
@@ -319,10 +337,29 @@ for (const entry of PAGES) {
         writeJson(`findings/${project}/${slugOf(role, entry.id, cap.state)}.json`, cap);
       }
 
-      // Never fail the matrix on findings: the report ranks them. Only a
-      // broken harness (nothing captured) fails the test.
+      // By default findings only feed the report; a broken harness (nothing
+      // captured) is the only failure. RESPONSIVE_GATE=blocker|major|minor
+      // turns findings at that severity or worse into test failures, which is
+      // how the matrix becomes a regression gate once a tier is clean.
       const anyProbe = captures.some((c) => c.probe);
       if (!anyProbe) throw new Error(`No probe ran for ${role} ${entry.id} at ${path}`);
+      const gate = process.env["RESPONSIVE_GATE"];
+      if (gate === "blocker" || gate === "major" || gate === "minor") {
+        const rank = { blocker: 0, major: 1, minor: 2, info: 3 } as const;
+        const failing = captures.flatMap((c) =>
+          (c.probe?.findings ?? [])
+            .filter((f) => rank[f.severity] <= rank[gate])
+            .map(
+              (f) =>
+                `${c.state}: ${f.probe} — ${f.message}${f.samples?.[0] ? ` (e.g. ${f.samples[0]})` : ""}`,
+            ),
+        );
+        if (failing.length > 0) {
+          throw new Error(
+            `${failing.length} ${gate}+ finding${failing.length === 1 ? "" : "s"} for ${role} ${entry.id} on ${project}:\n  ${failing.join("\n  ")}`,
+          );
+        }
+      }
     });
   }
 }

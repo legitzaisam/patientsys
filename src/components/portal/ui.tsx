@@ -68,7 +68,7 @@ export function PortalLink({
   /** External destination; rendered as a real link that opens in a new tab. */
   href?: string;
 }) {
-  const className = "inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-accent-ink hover:underline";
+  const className = "-my-1 inline-flex min-h-6 cursor-pointer items-center gap-1 py-1 text-xs font-semibold text-accent-ink hover:underline";
   if (href) {
     return (
       <a href={href} target="_blank" rel="noreferrer" className={className}>
@@ -210,7 +210,7 @@ export function PortalSlider({
             onPointerUp={(e) => onCommit?.(Number((e.target as HTMLInputElement).value))}
             onKeyUp={(e) => onCommit?.(Number((e.target as HTMLInputElement).value))}
             onBlur={(e) => onCommit?.(Number(e.target.value))}
-            className="absolute -inset-y-2.5 inset-x-0 m-0 w-full cursor-pointer opacity-0"
+            className="absolute -inset-y-3.5 inset-x-0 m-0 w-full cursor-pointer opacity-0"
           />
         ) : null}
       </span>

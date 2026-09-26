@@ -60,7 +60,7 @@ function Resources() {
           {home?.offer ? (
             <div className="rounded-[14px] bg-rose-bg px-3.5 py-3">
               {home.offer.flag && (
-                <span className="inline-flex items-center rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-semibold text-rose-ink">
+                <span className="inline-flex items-center rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-rose-ink">
                   {home.offer.flag}
                 </span>
               )}

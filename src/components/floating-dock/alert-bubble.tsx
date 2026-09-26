@@ -82,9 +82,10 @@ export function AlertBubble({ roles }: { roles: string[] }) {
   const seen = useRef(loadSeen());
   const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hovered = useRef(false);
-  // On a phone the peeking card stack covers half the page; the pill's count
-  // is the nudge there, and a tap opens the cards.
-  const phone = useIsMobile(640);
+  // Below lg the peeking card stack covers the page (half of it on a phone,
+  // the diary controls on an iPad); the pill's count is the nudge there, and
+  // a tap opens the cards.
+  const phone = useIsMobile(1280);
 
   function armPeekTimer() {
     if (peekTimer.current) clearTimeout(peekTimer.current);

@@ -68,6 +68,13 @@ export function runProbes(opts: ProbeOptions): ProbeResult {
       if (node === main) return false;
       const style = getComputedStyle(node);
       if (style.overflowX === "auto" || style.overflowX === "scroll") return true;
+      // A truncating line (overflow hidden + ellipsis) clips its children on
+      // purpose; the ellipsis is the affordance.
+      if (
+        (style.overflowX === "hidden" || style.overflowX === "clip") &&
+        style.textOverflow === "ellipsis"
+      )
+        return true;
       if (
         node.hasAttribute("data-diary-slide") ||
         node.classList.contains("diary-carousel-scroller")
@@ -271,27 +278,73 @@ export function runProbes(opts: ProbeOptions): ProbeResult {
         samples: pairs.slice(0, 6),
       });
     }
-    // Overlays sitting on top of interactive content in the main area.
+    // Overlays sitting on top of interactive content in the main area. A
+    // control the user can scroll out from under the dock is only noise at
+    // the current scroll position; one that is pinned (sticky/fixed ancestor,
+    // or no scroll room left below it) is genuinely unreachable.
     if (main && outer.length > 0) {
       const covered: string[] = [];
+      const passing: string[] = [];
       let count = 0;
+      let passingCount = 0;
       const actions = Array.from(
         main.querySelectorAll<HTMLElement>(
           'button, a[href], [role="tab"], [role="switch"], input, select',
         ),
       );
+      // Room accumulates across nested scrollers. A sticky element rides
+      // with its own scroller (that scroller cannot move it) but any outer
+      // scroller still can; a fixed ancestor pins it for good.
+      const canScrollPast = (action: HTMLElement, needed: number): boolean => {
+        let node: HTMLElement | null = action;
+        let sticky = false;
+        let room = 0;
+        while (node && node !== document.body) {
+          const st = getComputedStyle(node);
+          if (st.position === "fixed") return false;
+          const oy = st.overflowY;
+          const scrollContainer = oy !== "visible" || st.overflowX !== "visible";
+          const scrollsY =
+            (oy === "auto" || oy === "scroll") && node.scrollHeight > node.clientHeight + 1;
+          if (sticky && scrollContainer) {
+            // The sticky element sticks to this box; only boxes above it can move it.
+            sticky = false;
+          } else if (scrollsY) {
+            room += node.scrollHeight - node.scrollTop - node.clientHeight;
+            if (room >= needed) return true;
+          }
+          if (st.position === "sticky") sticky = true;
+          node = node.parentElement;
+        }
+        if (sticky) return false;
+        const doc = document.scrollingElement ?? document.documentElement;
+        room += doc.scrollHeight - doc.scrollTop - doc.clientHeight;
+        return room >= needed;
+      };
       for (const action of actions) {
         if (!visible(action)) continue;
         const r = action.getBoundingClientRect();
         if (r.bottom < 0 || r.top > vh) continue;
         for (const overlay of outer) {
-          if (overlay.contains(action) || overlay.closest('[role="dialog"]')) continue;
+          if (
+            overlay.contains(action) ||
+            overlay.closest('[role="dialog"], [data-radix-popper-content-wrapper]') ||
+            overlay.querySelector('[role="menu"], [role="listbox"]')
+          )
+            continue;
           const o = overlay.getBoundingClientRect();
           const ox = Math.min(r.right, o.right) - Math.max(r.left, o.left);
           const oy = Math.min(r.bottom, o.bottom) - Math.max(r.top, o.top);
           if (ox > Math.min(12, r.width / 2) && oy > Math.min(12, r.height / 2)) {
-            count += 1;
-            if (covered.length < 6) covered.push(`${describe(action)} under ${describe(overlay)}`);
+            if (canScrollPast(action, r.bottom - o.top)) {
+              passingCount += 1;
+              if (passing.length < 3)
+                passing.push(`${describe(action)} under ${describe(overlay)}`);
+            } else {
+              count += 1;
+              if (covered.length < 6)
+                covered.push(`${describe(action)} under ${describe(overlay)}`);
+            }
             break;
           }
         }
@@ -300,9 +353,18 @@ export function runProbes(opts: ProbeOptions): ProbeResult {
         findings.push({
           probe: "overlay.covers-action",
           severity: "major",
-          message: `${count} control${count === 1 ? " is" : "s are"} covered by a floating overlay at the current scroll position.`,
+          message: `${count} pinned control${count === 1 ? " is" : "s are"} covered by a floating overlay and cannot be scrolled clear of it.`,
           count,
           samples: covered,
+        });
+      }
+      if (passingCount > 0) {
+        findings.push({
+          probe: "overlay.covers-scrollable",
+          severity: "info",
+          message: `${passingCount} control${passingCount === 1 ? " sits" : "s sit"} under a floating overlay at this scroll position but can be scrolled clear of it.`,
+          count: passingCount,
+          samples: passing,
         });
       }
     }
@@ -593,7 +655,11 @@ export function runProbes(opts: ProbeOptions): ProbeResult {
       const c = last.getBoundingClientRect();
       if (c.width > 0) {
         if (vw >= 640) {
-          const sameRow = Math.abs(c.top - t.top) <= 12;
+          // Same row: the control starts within the title block (an eyebrow
+          // above the title is part of that block) and no lower than the
+          // title's baseline.
+          const f = first.getBoundingClientRect();
+          const sameRow = c.top >= f.top - 12 && c.top <= t.bottom;
           if (!sameRow) {
             findings.push({
               probe: "header.control-dropped",

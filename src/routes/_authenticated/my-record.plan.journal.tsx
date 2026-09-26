@@ -90,8 +90,8 @@ function PlanJournal() {
           <h1 className="page-title">Your Journal</h1>
           <p className="page-subtitle">Track your progress, stay consistent, and see how far you've come.</p>
         </div>
-        <div className="flex items-center gap-2.5">
-          <label className="relative block">
+        <div className="flex max-w-full flex-wrap items-center gap-2.5">
+          <label className="relative block min-w-0 flex-1 sm:flex-none">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
             <input
               data-qc="journal-search"
@@ -99,7 +99,7 @@ function PlanJournal() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search journal..."
               aria-label="Search journal"
-              className="h-[34px] w-[210px] rounded-[11px] border border-edge-2 bg-glass-2 pl-8 pr-3 text-xs shadow-inset-hi"
+              className="h-[34px] w-full rounded-[11px] border border-edge-2 bg-glass-2 pl-8 pr-3 text-xs shadow-inset-hi sm:w-[210px]"
             />
           </label>
           <button
@@ -115,8 +115,8 @@ function PlanJournal() {
 
       <PlanTabs />
 
-      <div className="grid items-stretch gap-3.5 xl:grid-cols-[2.05fr_1fr]">
-        <div>
+      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 xl:grid-cols-[2.05fr_1fr]">
+        <div className="min-w-0">
           {/* One Tags button in place of the chip row: the menu lists every tag
               and shows which one is active; "All" clears it. */}
           <div className="mb-2 flex items-center justify-between gap-3">
@@ -168,7 +168,7 @@ function PlanJournal() {
           <div className="grid gap-2.5">
             {entries.map((e: any) => (
               <PortalCard key={e.id} className="p-4">
-                <div className="flex items-start gap-3.5">
+                <div className="flex flex-wrap items-start gap-3.5 sm:flex-nowrap">
                   <p className="w-[74px] shrink-0 pt-px text-xs tabular-nums text-muted-foreground">
                     {new Date(e.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                   </p>
@@ -208,7 +208,7 @@ function PlanJournal() {
                     )}
                   </div>
                   {e.attachments.filter((a: any) => a.kind === "photo").length > 0 && (
-                    <div className="flex shrink-0 gap-1.5">
+                    <div className="flex shrink-0 basis-full gap-1.5 sm:basis-auto">
                       {e.attachments
                         .filter((a: any) => a.kind === "photo")
                         .slice(0, 2)
@@ -244,7 +244,7 @@ function PlanJournal() {
             <PortalHead title={monthLabel} />
             <div className="grid grid-cols-7 gap-0.5 text-center">
               {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
-                <span key={d} className="pb-1 text-[9.5px] text-muted-foreground">
+                <span key={d} className="pb-1 text-[11px] text-muted-foreground">
                   {d}
                 </span>
               ))}

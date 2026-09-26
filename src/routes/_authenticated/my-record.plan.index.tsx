@@ -112,7 +112,7 @@ function PlanOverview() {
           <h1 className="page-title">{plan.name}</h1>
           {plan.strapline && <p className="page-subtitle">{plan.strapline}</p>}
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2 max-sm:self-stretch sm:justify-end">
           <div className="glass-card flex items-center gap-2 rounded-[22px] px-3 py-2">
             <PortalRing pct={plan.completion} size={36} stroke={4.5} />
             <span>

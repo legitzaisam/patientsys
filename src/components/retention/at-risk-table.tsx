@@ -101,7 +101,7 @@ function SortHeader({
         onClick={() => onSort(column)}
         aria-label={`Sort by ${label}`}
         className={cn(
-          "flex items-center gap-1.5 font-semibold tracking-[0.02em] text-ink-3 transition-colors hover:text-foreground",
+          "-my-1 flex min-h-6 items-center gap-1.5 py-1 font-semibold tracking-[0.02em] text-ink-3 transition-colors hover:text-foreground",
           align === "center" ? "w-full justify-center" : "text-left",
         )}
       >

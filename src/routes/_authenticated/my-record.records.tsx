@@ -255,7 +255,7 @@ function MyRecords() {
                 className="relative h-[72px] w-[72px] shrink-0 cursor-pointer overflow-hidden rounded-[12px] shadow-inset-hi transition-transform hover:scale-[1.03]"
               >
                 {photo.url ? <img src={photo.url} alt="" className="h-full w-full object-cover" /> : <span className="block h-full w-full bg-glass-2" />}
-                <span className="absolute bottom-1 left-1 rounded-full bg-white/85 px-1.5 text-[9px] font-semibold capitalize text-foreground">
+                <span className="absolute bottom-1 left-1 rounded-full bg-white/85 px-1.5 text-[10px] font-semibold capitalize text-foreground">
                   {photo.kind}
                 </span>
               </button>

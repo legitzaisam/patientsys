@@ -55,7 +55,7 @@ export function PatientChatPanel({
   return (
     <Card
       id="patient-chat"
-      className="relative flex h-[calc(100dvh-6rem-1.25rem)] max-h-[calc(100dvh-6rem-1.25rem)] min-h-0 flex-col self-start overflow-hidden rounded-2xl p-0 sm:h-[calc(100dvh-6rem-26px)] sm:max-h-[calc(100dvh-6rem-26px)] md:sticky md:top-24"
+      className="relative flex h-[calc(100dvh-6rem-1.25rem)] max-h-[calc(100dvh-6rem-1.25rem)] min-h-0 flex-col self-start overflow-hidden rounded-2xl p-0 sm:h-[calc(100dvh-6rem-26px)] sm:max-h-[calc(100dvh-6rem-26px)] md:sticky md:top-24 md:h-[calc(100dvh-6rem-max(26px,var(--dock-h,0px)+0.75rem))] md:max-h-[calc(100dvh-6rem-max(26px,var(--dock-h,0px)+0.75rem))]"
     >
       {onResizeStart ? (
         <div
@@ -85,7 +85,7 @@ export function PatientChatPanel({
             type="button"
             size="icon"
             variant="ghost"
-            className="h-5 w-5 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
+            className="h-6 w-6 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
             aria-label="Decrease message text size"
             disabled={fontSize <= 11}
             onClick={() => setFontSize(Math.max(11, fontSize - 1))}
@@ -96,7 +96,7 @@ export function PatientChatPanel({
             type="button"
             size="icon"
             variant="ghost"
-            className="h-5 w-5 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
+            className="h-6 w-6 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
             aria-label="Increase message text size"
             disabled={fontSize >= 18}
             onClick={() => setFontSize(Math.min(18, fontSize + 1))}

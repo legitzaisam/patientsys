@@ -165,14 +165,14 @@ export function StaffPerformanceKpis({
 
   return (
     <section>
-      <div className="mb-3 flex items-end justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="section-title">Performance</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             How they sit against the rest of the clinic.
           </p>
         </div>
-        <div className="shrink-0">
+        <div className="min-w-0 max-w-full shrink-0">
           <PeriodPicker value={period} onChange={setPeriod} />
         </div>
       </div>
@@ -180,7 +180,7 @@ export function StaffPerformanceKpis({
       {!row || !clinic ? (
         <Card className="p-5 text-sm text-muted-foreground">No treatments or bookings in this period.</Card>
       ) : (
-        <Card className="overflow-hidden p-0">
+        <Card className="@container overflow-hidden p-0">
           <div className="flex flex-wrap items-end justify-between gap-4 px-5 py-5 sm:px-6">
             <div className="min-w-0">
               <p className="text-2xs font-medium tracking-[0.02em] text-ink-3">Earned this period</p>
@@ -210,7 +210,7 @@ export function StaffPerformanceKpis({
             </div>
           </div>
 
-          <div className="grid border-t border-edge sm:grid-cols-3">
+          <div className="grid border-t border-edge @lg:grid-cols-3">
             <SplitCell
               label="Their share"
               value={money(row.earnedShare)}
@@ -233,7 +233,7 @@ export function StaffPerformanceKpis({
             />
           </div>
 
-          <div className="grid gap-x-8 border-t border-edge px-5 py-4 sm:grid-cols-2 sm:px-6">
+          <div className="grid gap-x-8 border-t border-edge px-5 py-4 @md:grid-cols-2 @md:px-6">
             <div>
               <p className="text-2xs font-medium uppercase tracking-[0.08em] text-ink-3">Activity</p>
               <div className="mt-1 divide-y divide-edge">

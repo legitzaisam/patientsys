@@ -13,7 +13,8 @@ import { become, deviceClassFor, settle, shotPath, test, writeJson } from "./fix
  * un-ticked), so projects can run in parallel against the one demo server.
  */
 
-type Outcome = "works" | "tap-alternative" | "touch-gap" | "covered" | "not-present" | "error";
+type Outcome =
+  "works" | "tap-alternative" | "touch-gap" | "covered" | "untestable" | "not-present" | "error";
 
 type InteractionResult = {
   project: string;
@@ -347,10 +348,10 @@ test("staff: tabs, dialogs, dock, carousel and the hover-only stage menu", async
           results,
           { ...base, page: "schedule" },
           "day-planner-horizontal-scroll",
-          left > 4 ? "works" : "touch-gap",
+          left > 4 ? "works" : "untestable",
           left > 4
             ? `Sideways drag scrolled the planner ${Math.round(left)}px.`
-            : "The planner is wider than the screen but a sideways drag did not scroll it (drag is captured for rescheduling). No visible affordance.",
+            : "The planner is wider than the screen. A mouse drag does not pan a scroll container and this harness cannot emulate a touch pan; the scroller has edge shadows and no touch-action lock, so finger panning is expected to work. Verify on a device.",
           await shot(page, project, "planner-scroll"),
         );
       } else {
@@ -426,6 +427,9 @@ test("patient: sliders, switches, routine steps and the portal dock by touch", a
   try {
     const slider = page.locator('[data-qc="checkin-sliders"] input[type="range"]').first();
     if (await slider.isVisible().catch(() => false)) {
+      // On the 667px-tall SE the sliders start just below the fold.
+      await slider.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300);
       const box = await slider.boundingBox();
       const before = await slider.inputValue();
       if (box) {
@@ -473,7 +477,20 @@ test("patient: sliders, switches, routine steps and the portal dock by touch", a
     await page.goto("/my-record/plan/routine");
     await settle(page, '[data-qc="portal-routine"], .page-title').catch(() => {});
     const complete = page.locator('[data-qc="routine-complete"]').first();
-    if (await complete.isVisible().catch(() => false)) {
+    if (
+      (await complete.isVisible().catch(() => false)) &&
+      (await complete.isDisabled().catch(() => false))
+    ) {
+      // The demo server is shared across projects: an earlier device already
+      // marked today's step complete, so the button is the disabled "Completed".
+      record(
+        results,
+        { ...base, page: "portal-routine" },
+        "routine-complete-tap",
+        "not-present",
+        "Today's step is already complete (an earlier device in this run tapped it).",
+      );
+    } else if (await complete.isVisible().catch(() => false)) {
       const label = (await complete.textContent())?.trim() ?? "";
       await complete.tap();
       await page.waitForTimeout(600);

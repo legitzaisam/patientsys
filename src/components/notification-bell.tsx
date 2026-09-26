@@ -334,7 +334,7 @@ export function NotificationBell({
                     {canClear && (
                       <button
                         type="button"
-                        className="inline-flex text-muted-foreground hover:text-destructive"
+                        className="-m-1 inline-flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-destructive"
                         aria-label="Dismiss notification"
                         onClick={async () => {
                           await markAlertRead({ data: { id: alert.id } });

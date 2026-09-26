@@ -273,7 +273,7 @@ export function VisitNoteChip({
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
         aria-label="Open booking notes"
-        className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+        className="-m-[5px] grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
       >
         <StickyNote className="h-2 w-2" />
       </button>
@@ -283,7 +283,7 @@ export function VisitNoteChip({
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
         aria-label="Open booking notes"
-        className={`inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-full bg-sky-bg text-sky-ink shadow-inset-hi transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9] ${chipClass ?? ""}`}
+        className={`inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full bg-sky-bg text-sky-ink shadow-inset-hi transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-lift active:brightness-[0.9] ${chipClass ?? ""}`}
       >
         <StickyNote className="h-2.5 w-2.5 shrink-0" />
       </button>

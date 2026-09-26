@@ -13,7 +13,9 @@ import { dirname, join } from "node:path";
 export type DemoRole = "owner" | "practitioner" | "front_desk" | "patient" | "admin" | "public";
 
 export const BASE = "http://localhost:8091";
-export const OUT_DIR = join(process.cwd(), "test-results", "responsive");
+// A sibling of test-results/: the regression suite wipes its own outputDir at
+// the start of every run and would take these findings with it.
+export const OUT_DIR = join(process.cwd(), "test-results-responsive");
 
 export type DeviceClass = "phone" | "tablet" | "laptop" | "desktop";
 
@@ -30,6 +32,16 @@ export async function become(page: Page, role: DemoRole) {
   if (role !== "public") {
     await context.addCookies([{ name: "demo_role", value: role, url: BASE }]);
   }
+  // The staff dock "peeks" its alert cards for 8s the first time a session
+  // sees a new alert count. A fresh context would capture that transient
+  // state on every page; the dock-alerts state opens the cards deliberately.
+  await context.addInitScript(() => {
+    try {
+      sessionStorage.setItem("aetheria.dock-alerts-seen", "9999");
+    } catch {
+      /* storage unavailable */
+    }
+  });
 }
 
 export type RuntimeErrors = { console: string[]; page: string[]; requests: string[] };

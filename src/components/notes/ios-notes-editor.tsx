@@ -234,7 +234,7 @@ export function NotesTextarea({
         onChange(res.text);
       }}
       placeholder={placeholder}
-      style={{ fontSize: prefs.size, lineHeight: 1.65 }}
+      style={{ fontSize: `max(${prefs.size}px, var(--input-min-fs, 0px))`, lineHeight: 1.65 }}
       className={`${
         autoGrow ? "h-auto resize-none overflow-hidden" : "min-h-[120px] resize-y"
       } w-full rounded-2xl border ${theme.rule} ${theme.surface} ${theme.text} ${FONTS[prefs.font].cls} p-3.5 outline-none transition-colors placeholder:text-muted-foreground focus:border-accent-line ${className ?? ""}`}

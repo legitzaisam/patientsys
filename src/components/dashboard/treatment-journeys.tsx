@@ -132,7 +132,7 @@ export function TreatmentJourneys({ journeys }: { journeys: Journeys | undefined
                               ) : null}
                             </p>
                             {plan.nextStep ? (
-                              <p className="mt-0.5 truncate text-2xs text-ink-2">
+                              <p className="mt-0.5 min-w-0 truncate text-2xs text-ink-2">
                                 Next: {plan.nextStep}
                                 {plan.nextDue ? (
                                   <span

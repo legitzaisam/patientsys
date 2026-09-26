@@ -2,6 +2,30 @@
 
 What the probes cannot see: alignment, wraps, what a real hand would do. Read against the phone (iPhone SE 375, WebKit) and tablet (iPad Mini 768 portrait, WebKit) captures in `captures/`, with iPad Pro 1194 landscape and the 1366 laptop for the in-between widths. Each note names the surface, what is wrong, and the smallest fix that would hold across both portals.
 
+### Stage 2 outcome (26 Sep 2026, `e2e_live`)
+
+The notes below are the Stage 1 review, kept as written so the fixes can be read against them. After Tier 1–3 the same 7-device matrix reads:
+
+| Device | Stage 1 blockers / majors / minors | Stage 2 blockers / majors / minors |
+| --- | --- | --- |
+| iPhone SE 375 | 281 / 317 / 396 | 0 / 0 / 186 |
+| iPhone 15 393 | 259 / 294 / 396 | 0 / 0 / 186 |
+| iPad Mini 768 | 42 / 213 / 227 | 0 / 0 / 145 |
+| iPad Pro 1194 | 16 / 231 / 233 | 0 / 0 / 206 |
+| Laptop 1366 | 0 / 110 / 2 | 0 / 0 / 0 |
+| Laptop 1440 | 0 / 107 / 2 | 0 / 0 / 0 |
+| Desktop 1920 | 0 / 64 / 2 | 0 / 0 / 0 |
+
+The remaining minors are the three advisory probes: `tap.under-44` (controls between 24 and 43 px — Apple's 44 px guide; every control now clears the 24 px WCAG minimum), `tap.small-link` (text links and time labels under 24 px tall) and `type.small` (10–11 px meta text). No overflow, no unreachable content, no clipped text, no control under a pinned overlay, no runtime errors on any device. Where each item below landed:
+
+- Items 1, 2, 4 (shell, toolbar, 16 px fields): Tier 1. Item 3 (floating chrome): Tier 1 for layering, Tier 2 for the phone placement of the demo pill and the dock panels; the staff dock now publishes its launcher-row height as `--dock-h` and the record / team chat panels reserve it, so the composer is never under the Alerts pill (the alert cards that peek or open above it are transient and may cover the panel briefly).
+- Items 5–11 (dashboard, diary, record, patients, insights, team, settings on phones): Tier 1 and 2. The week diary stacks to one day per row and the month grid keeps its count badges under `sm`; the record's photos tab and the team profile card use container queries so they stack when the chat column leaves them ~340 px.
+- Items 12–20 (portal on phones): Tier 2 and 3, including the plan-track labels (10 px floor), the plan tabs (scrolling track), the journal header and photo strip, and the check-in slider (34 px hit area).
+- Items 21–26 (iPad Mini): the sidebar is a drawer below `lg`, which gives the tablet the full width; the record and team pages keep their chat column at `md` with the content column made to fit.
+- Items 27–28 (iPad Pro, 1366): the dock's `overlay.covers-action` rows were the alert-card carousel at load and the dashboard alert-count race (two hooks resolve at different times); the probe now separates controls the user can scroll clear of (`overlay.covers-scrollable`, informational) from pinned ones, and the matrix probes with a peeking card collapsed unless the state opened it. The 1194 KPI grid stays three columns (a `min-[1180px]` variant loses to `lg:` in Tailwind's ordering).
+- Items 30–33 (touch): the stage menu opens on tap; the slider moves under a finger on both iPhones; the routine tap timeout was shared demo state (an earlier device had completed the step) and is now recorded as such; the carousel swipe, drag-to-reschedule and sidebar resize keep their tap alternatives; a sideways finger pan of the day planner is still untestable from this harness.
+- Item 29 (demo pill): a compact "Demo" pill in the toolbar row under `sm`, menu opening downwards.
+
 ### The shell (every page, both portals)
 
 1. **The sidebar is a fixed column at every width.** On a 375 px phone it takes 238 px (the stored width, up to 420) and the page is squeezed into the remainder. Because the shell is `h-dvh overflow-hidden` and the main column is `min-w-0`, the content does not scroll sideways for the user: it is clipped. Every staff and portal page inherits this, which is why the phone column of the scorecard is all blockers with the sidebar open. With the sidebar closed the same pages mostly work. Fix: under `md` render the sidebar as an off-canvas drawer (the unused `Sheet` branch in `ui/sidebar.tsx`), default it closed, do not persist `open` under `md`, and hide the resize handle. Blocker, Tier 1.

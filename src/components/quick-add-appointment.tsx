@@ -473,7 +473,7 @@ export function QuickAddAppointment({
                 setEmailError(null);
                 setEmailSuggestion(null);
               }}
-              className="inline-flex items-center gap-1 text-2xs text-accent-ink hover:underline"
+              className="inline-flex min-h-6 items-center gap-1 text-2xs text-accent-ink hover:underline"
             >
               <UserPlus className="h-3 w-3" />
               {newPatient ? "Existing patient" : "New patient"}

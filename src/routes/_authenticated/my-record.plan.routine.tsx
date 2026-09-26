@@ -313,16 +313,16 @@ function ProductRow({ item: p, onEdit }: { item: any; onEdit: () => void }) {
     <div className="group flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 hover:bg-[rgba(47,63,102,0.04)]" data-qc="routine-item">
       <PortalPhoto icon={Droplet} height={30} className="w-[25px] shrink-0 rounded-lg" />
       <div className="w-[42%] shrink-0">
-        <p className="flex items-center gap-1 text-[9.5px] leading-tight text-muted-foreground">
+        <p className="flex items-center gap-1 text-[11px] leading-tight text-muted-foreground">
           {p.step}
           {own ? (
-            <span className="rounded-full bg-accent-soft px-1.5 text-[8.5px] font-semibold text-accent-ink" data-qc="routine-own">
+            <span className="rounded-full bg-accent-soft px-1.5 text-[10px] font-semibold text-accent-ink" data-qc="routine-own">
               Your product
             </span>
           ) : null}
         </p>
         <p className="text-xs font-semibold leading-tight">{own ? own.product_name : p.product_name}</p>
-        {own ? <p className="text-[9.5px] leading-tight text-ink-3">Clinic suggested {p.product_name}</p> : null}
+        {own ? <p className="text-[11px] leading-tight text-ink-3">Clinic suggested {p.product_name}</p> : null}
       </div>
       <p className="min-w-0 flex-1 text-[10.5px] leading-snug text-muted-foreground">{own ? (own.how_to ?? p.how_to) : p.how_to}</p>
       <button

@@ -16,7 +16,7 @@ export function PlanTabs() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <div
-      className="mb-3.5 inline-flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi"
+      className="scroll-x-plain mb-3.5 flex h-[34px] max-w-full items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi sm:inline-flex"
       role="tablist"
       aria-label="Skin plan sections"
     >
@@ -29,7 +29,7 @@ export function PlanTabs() {
             role="tab"
             aria-selected={active}
             className={cn(
-              "flex h-7 cursor-pointer items-center rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors",
+              "flex h-7 shrink-0 cursor-pointer items-center whitespace-nowrap rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors",
               active
                 ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
                 : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground",

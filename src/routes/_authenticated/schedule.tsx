@@ -1400,7 +1400,7 @@ function PractitionerFilter({
             toggle("all");
           }}
         >
-          <Checkbox checked={allSelected} className="h-4 w-4 rounded border-edge" />
+          <Checkbox checked={allSelected} />
           All practitioners
         </DropdownMenuItem>
         <div className="my-1 h-px bg-border" />
@@ -1413,7 +1413,7 @@ function PractitionerFilter({
               toggle(p.id);
             }}
           >
-            <Checkbox checked={selected.includes(p.id)} className="h-4 w-4 rounded border-edge" />
+            <Checkbox checked={selected.includes(p.id)} />
             <span className="truncate">{p.full_name}</span>
           </DropdownMenuItem>
         ))}
@@ -2034,7 +2034,7 @@ function ChipRow({ a, onState }: { a: any; onState: (v: any) => Promise<unknown>
   return (
     <HoverCard openDelay={120} closeDelay={140}>
       <HoverCardTrigger asChild>
-        <button type="button" className="flex shrink-0 items-center gap-1" aria-label="Appointment status">
+        <button type="button" className="-my-1 flex min-h-6 shrink-0 items-center gap-1 py-1" aria-label="Appointment status">
           <span className={`grid h-3.5 w-3.5 place-items-center rounded-full ${paymentTone}`} title="Payment">
             <CreditCard className="h-2 w-2" />
           </span>
@@ -2154,8 +2154,8 @@ function WeekView({
         </div>
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col p-5">
-        <div className="min-h-0 min-w-0 flex-1 overflow-x-auto" data-qc="week-planner-scroll">
-          <div className="grid min-h-0 h-full min-w-[1820px] auto-rows-fr grid-cols-7 divide-y divide-glass-line sm:divide-y-0">
+        <div className="scroll-x-shadows min-h-0 min-w-0 flex-1 overflow-auto" data-qc="week-planner-scroll">
+          <div className="grid min-h-0 min-w-0 auto-rows-auto grid-cols-1 divide-y divide-glass-line md:h-full md:min-w-[1820px] md:auto-rows-fr md:grid-cols-7 md:divide-y-0">
         {days.map((day, i) => {
           const items = rows
             .filter((a) => new Date(a.starts_at).toDateString() === day.toDateString())
@@ -2166,7 +2166,7 @@ function WeekView({
             <div
               key={day.toISOString()}
               className={`flex min-h-0 min-w-0 flex-1 flex-col ${
-                i > 0 ? "border-l border-glass-line" : ""
+                i > 0 ? "md:border-l md:border-glass-line" : ""
               }`}
             >
               <div
@@ -2343,7 +2343,7 @@ function MonthView({
           </div>
         ))}
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1.5">
+      <div className="grid min-h-0 flex-1 auto-rows-[minmax(3.75rem,1fr)] grid-cols-7 gap-1.5 overflow-y-auto sm:auto-rows-[minmax(4.5rem,1fr)] md:grid-rows-6 md:auto-rows-auto">
         {days.map((day) => {
           const items = rows
             .filter((a) => new Date(a.starts_at).toDateString() === day.toDateString())
@@ -2367,7 +2367,7 @@ function MonthView({
                   className="pointer-events-none absolute inset-1 rounded-lg bg-[rgba(47,63,102,0.06)] opacity-0 transition-opacity group-hover/mday:opacity-100"
                 />
               )}
-              <span className="relative flex shrink-0 items-center justify-between gap-1">
+              <span className="relative flex shrink-0 flex-wrap items-center justify-between gap-1">
                 <span
                   className={`inline-grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs font-semibold tabular-nums ${
                     isToday ? "bg-accent text-accent-foreground shadow-bloom" : "text-muted-foreground"
@@ -2381,7 +2381,7 @@ function MonthView({
                   </span>
                 )}
               </span>
-              <span className="relative mt-1.5 flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
+              <span className="relative mt-1.5 flex min-h-0 flex-1 flex-col gap-1 overflow-hidden max-sm:hidden">
                 {items.slice(0, 3).map((a) => {
                   const tone = toneForTreatment(a.treatment_name, treatmentColours);
                   return (

@@ -76,12 +76,12 @@ export function PortalOffer({
     >
       <OfferArtFrame imageUrl={offer.image_url} placement={offer.image_placement}>
       <div className="flex items-start justify-between gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-accent-ink shadow-inset-hi">
+        <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-accent-ink shadow-inset-hi">
           <Gift className="h-3 w-3" aria-hidden />
           {claimed ? "Claimed" : isNew ? "New offer" : "Offer for you"}
         </span>
         {offer.expires_at ? (
-          <span className="text-[10.5px] text-muted-foreground">Valid until {shortDate(offer.expires_at)}</span>
+          <span className="text-[11px] text-muted-foreground">Valid until {shortDate(offer.expires_at)}</span>
         ) : null}
       </div>
       <p className="mt-1.5 text-[13.5px] font-semibold text-foreground">{offer.headline}</p>

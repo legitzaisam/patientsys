@@ -20,6 +20,7 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test:responsive": "playwright test --config playwright.responsive.config.ts",
+    "test:responsive:gate": "RESPONSIVE_GATE=major playwright test --config playwright.responsive.config.ts e2e/responsive/matrix.spec.ts",
     "qc:responsive": "npm run test:responsive; node scripts/responsive-report.mjs",
     "verify": "npm run check:policy && npm run check:validators && npm run check:tenancy && npm run test:unit && npm run test:e2e"
   },

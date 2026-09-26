@@ -474,7 +474,7 @@
     -webkit-backdrop-filter: blur(14px);
     box-shadow: var(--shadow-inset-hi);
     color: var(--ink-3);
-    font-size: calc(var(--staff-chat-fs) * 0.78);
+    font-size: max(calc(var(--staff-chat-fs) * 0.78), 10px);
     padding: 0.35em 0.9em;
   }
 
@@ -556,7 +556,7 @@
 
   .staff-chat-alert__label {
     margin-bottom: 0.35em;
-    font-size: 0.72em;
+    font-size: max(0.72em, 10px);
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -575,7 +575,7 @@
     justify-content: flex-end;
     align-items: center;
     gap: 0.2em;
-    font-size: 0.78em;
+    font-size: max(0.78em, 10px);
     color: var(--ink-3);
     opacity: 0.8;
   }
@@ -1083,6 +1083,10 @@ input:-webkit-autofill {
 
 /* iOS Safari zooms the page when a field under 16px gains focus. */
 @media (max-width: 767px) {
+  :root {
+    /* Fields that set their own size inline (the notes editor) clamp to this. */
+    --input-min-fs: 16px;
+  }
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
   select,
   textarea {

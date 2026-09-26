@@ -595,7 +595,7 @@ function TaskCell({ tasks }: { tasks: { id: string; label: string; kind: string 
       <HoverCardTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2.5 py-1 text-[11px] font-semibold text-warning-ink shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
+          className="inline-flex min-h-6 items-center gap-1 rounded-full bg-warning-bg px-2.5 py-1 text-[11px] font-semibold text-warning-ink shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
         >
           {tasks.length} open
         </button>
@@ -661,7 +661,7 @@ function SortHeader({
             direction: active && sort.direction === "asc" ? "desc" : "asc",
           })
         }
-        className="flex items-center gap-1 font-normal tracking-[0.02em] text-muted-foreground transition-colors hover:text-foreground"
+        className="-my-1 flex min-h-6 items-center gap-1 py-1 font-normal tracking-[0.02em] text-muted-foreground transition-colors hover:text-foreground"
       >
         {label}
         <Icon className={`h-3.5 w-3.5 ${active ? "text-foreground" : "text-muted-foreground/50"}`} />

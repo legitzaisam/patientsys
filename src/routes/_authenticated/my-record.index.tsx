@@ -215,13 +215,13 @@ function PortalHome() {
                         {s.state === "done" && <Tick className="h-2.5 w-2.5" />}
                         {s.state === "current" && <span className="h-1.5 w-1.5 rounded-full bg-accent-ink" />}
                       </span>
-                      <p className="mt-1.5 line-clamp-2 text-[9.5px] leading-tight text-ink-2">{s.label}</p>
+                      <p className="mt-1.5 line-clamp-2 break-words text-[10.5px] leading-tight text-ink-2">{s.label}</p>
                       {/* Done steps carry a small green tick under the label, as in the
                           wireframe; current and upcoming steps carry their state word. */}
                       {s.state === "done" ? (
                         <Tick className="mx-auto mt-0.5 h-2.5 w-2.5 text-success" data-qc="step-tick" />
                       ) : (
-                        s.note && <p className="text-[8.5px] text-ink-3">{s.note}</p>
+                        s.note && <p className="text-[10px] text-ink-3">{s.note}</p>
                       )}
                     </div>
                   ))}
@@ -256,7 +256,7 @@ function PortalHome() {
               <div className="flex items-center gap-2.5 rounded-[14px] bg-rose-bg px-3.5 py-3">
                 <div className="min-w-0 flex-1">
                   {offer.flag && (
-                    <span className="inline-flex items-center rounded-full bg-rose-bg px-2 py-0.5 text-[9px] font-semibold text-rose-ink shadow-[inset_0_0_0_1px_rgba(168,80,117,0.25)]">
+                    <span className="inline-flex items-center rounded-full bg-rose-bg px-2 py-0.5 text-[10px] font-semibold text-rose-ink shadow-[inset_0_0_0_1px_rgba(168,80,117,0.25)]">
                       {offer.flag}
                     </span>
                   )}
