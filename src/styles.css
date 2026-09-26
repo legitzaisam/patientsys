@@ -1076,3 +1076,44 @@ input:-webkit-autofill {
     animation-duration: 0.01ms;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Small screens                                                        */
+/* ------------------------------------------------------------------ */
+
+/* iOS Safari zooms the page when a field under 16px gains focus. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/*
+ * A horizontal scroller that shows where it can go: soft shadows appear on
+ * whichever edge has more content. Pure CSS (background-attachment: local),
+ * so it needs no measurement and disappears when everything fits.
+ */
+@layer components {
+  /* A pill or chip row that scrolls sideways on narrow screens without a scrollbar. */
+  .scroll-x-plain {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroll-x-plain::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scroll-x-shadows {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    background:
+      linear-gradient(to right, var(--glass) 30%, rgba(255, 255, 255, 0)) left / 28px 100% no-repeat,
+      linear-gradient(to left, var(--glass) 30%, rgba(255, 255, 255, 0)) right / 28px 100% no-repeat,
+      linear-gradient(to right, rgba(47, 63, 102, 0.14), rgba(47, 63, 102, 0)) left / 14px 100% no-repeat,
+      linear-gradient(to left, rgba(47, 63, 102, 0.14), rgba(47, 63, 102, 0)) right / 14px 100% no-repeat;
+    background-attachment: local, local, scroll, scroll;
+  }
+}

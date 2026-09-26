@@ -224,8 +224,8 @@ function PatientsPage() {
       {tab === "board" && <JourneyBoard identity={identity} />}
       {tab === "records" && (
       <>
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="scroll-x-plain -mx-1 flex min-w-0 flex-1 gap-2 px-1 py-0.5 md:flex-wrap">
         {([
           { key: "all", label: "All" },
           { key: "active", label: "Active" },
@@ -236,7 +236,7 @@ function PatientsPage() {
             key={f.key}
             to="/patients"
             search={{ view: f.key, ...(q ? { q } : {}) }}
-            className={`rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
+            className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
               view === f.key
                 ? "border-transparent bg-accent-soft text-accent-ink shadow-inset-hi"
                 : "border-edge bg-glass-2 text-ink-2 shadow-inset-hi hover:border-accent-line hover:bg-accent-wash hover:text-foreground"
@@ -246,7 +246,7 @@ function PatientsPage() {
           </Link>
         ))}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {canSendOffers && selected.size > 0 ? (
             <Button
               type="button"
@@ -266,7 +266,7 @@ function PatientsPage() {
             aria-label="Search by name or reference"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-[34px] w-56 rounded-xl"
+            className="h-[34px] w-full min-w-0 basis-full rounded-xl sm:w-56 sm:basis-auto"
           />
           <div className="relative">
             <Input
@@ -296,7 +296,7 @@ function PatientsPage() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="rounded-xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
               <DialogHeader>
                 <DialogTitle>New patient</DialogTitle>
               </DialogHeader>
@@ -413,7 +413,8 @@ function PatientsPage() {
           </Dialog>
 
       <Card className="overflow-hidden rounded-2xl p-0">
-        <table className="glass-table w-full text-sm">
+        <div className="scroll-x-shadows">
+        <table className="glass-table w-full min-w-[720px] text-sm">
           <thead>
             <tr>
               {canSendOffers ? (
@@ -507,6 +508,7 @@ function PatientsPage() {
             )}
           </tbody>
         </table>
+        </div>
       </Card>
       {canSendOffers ? (
         <SendOfferDialog

@@ -10,7 +10,7 @@ export function FloatingDock({ roles }: { roles: string[] }) {
   return (
     <div
       data-qc="floating-dock"
-      className="pointer-events-none fixed bottom-5 right-5 z-[60] flex items-end gap-3 print:hidden"
+      className="pointer-events-none fixed bottom-5 right-5 z-40 flex items-end gap-3 print:hidden"
     >
       <AlertBubble roles={roles} />
       <ChatBubble />

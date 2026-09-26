@@ -191,7 +191,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
             </p>
           </div>
         </div>
-        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 sm:shrink-0">
           <div className="relative w-full sm:w-56">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input

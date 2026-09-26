@@ -317,7 +317,7 @@ export function TreatmentFormDialog({
               const reached = page >= p.n;
               const current = page === p.n;
               return (
-                <li key={p.n} className="flex flex-1 items-center gap-2">
+                <li key={p.n} className="flex min-w-0 flex-1 items-center gap-2">
                   <button
                     type="button"
                     data-qc={`form-page-${p.n}`}

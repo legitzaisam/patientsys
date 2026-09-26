@@ -143,7 +143,7 @@ export function PortalTile({
     <button
       type="button"
       onClick={onClick}
-      className="glass-card block cursor-pointer rounded-[22px] p-[14px] text-left transition-shadow hover:shadow-lift"
+      className="glass-card block min-w-0 cursor-pointer overflow-hidden rounded-[22px] p-[14px] text-left transition-shadow hover:shadow-lift"
     >
       <div className="flex items-center gap-2.5">
         {lead ??

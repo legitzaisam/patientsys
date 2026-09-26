@@ -149,11 +149,11 @@ export function PerformanceTrends({ trend, trendViews, practitioners }: Props) {
 
   return (
     <section className="mb-8">
-      <div className="mb-3 flex items-end justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="section-title">Trends</h2>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">
           <div
             role="tablist"
             aria-label="Trend period"

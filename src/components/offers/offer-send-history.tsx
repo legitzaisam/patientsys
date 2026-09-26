@@ -40,7 +40,7 @@ export function OfferSendHistoryDialog({
   const counts = template.counts ?? {};
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl rounded-xl" data-qc="offer-history">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto rounded-xl" data-qc="offer-history">
         <DialogHeader>
           <DialogTitle>{template.name}: who received it</DialogTitle>
           <DialogDescription>

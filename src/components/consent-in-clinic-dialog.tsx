@@ -83,7 +83,7 @@ export function ConsentInClinicDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg" data-qc="consent-in-clinic">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto" data-qc="consent-in-clinic">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-accent-ink" aria-hidden />

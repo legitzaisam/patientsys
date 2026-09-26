@@ -1710,7 +1710,7 @@ function DayPlanner({
           No bookings on {date.toLocaleDateString("en-GB")}.
         </div>
       ) : (
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto" data-qc="day-planner-scroll">
+        <div className="scroll-x-shadows min-h-0 min-w-0 flex-1 overflow-auto" data-qc="day-planner-scroll">
           <div
             className={cn(!slideCols && "min-w-[680px]")}
             style={boardMinWidth ? { minWidth: boardMinWidth } : undefined}
@@ -1956,7 +1956,7 @@ function DayPlanner({
 
       {/* Confirm move */}
       <Dialog open={!!confirmDrop} onOpenChange={(v) => { if (!v) setConfirmDrop(null); }}>
-        <DialogContent className="rounded-xl sm:max-w-md">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Move this appointment?</DialogTitle>
           </DialogHeader>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ElementType } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { CalendarClock, ChevronDown, ChevronUp, Clock, Hourglass, Megaphone, ShieldAlert, TriangleAlert } from "lucide-react";
 import { ArrivalAlerts } from "@/components/arrival-alerts";
 import { UrgentStaffAlerts } from "@/components/urgent-staff-alerts";
@@ -81,6 +82,9 @@ export function AlertBubble({ roles }: { roles: string[] }) {
   const seen = useRef(loadSeen());
   const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hovered = useRef(false);
+  // On a phone the peeking card stack covers half the page; the pill's count
+  // is the nudge there, and a tap opens the cards.
+  const phone = useIsMobile(640);
 
   function armPeekTimer() {
     if (peekTimer.current) clearTimeout(peekTimer.current);
@@ -92,7 +96,7 @@ export function AlertBubble({ roles }: { roles: string[] }) {
 
   useEffect(() => {
     if (!ready) return;
-    if (total > seen.current && !open) {
+    if (total > seen.current && !open && !phone) {
       setPeeking(true);
       armPeekTimer();
     }
@@ -100,7 +104,7 @@ export function AlertBubble({ roles }: { roles: string[] }) {
       seen.current = total;
       storeSeen(total);
     }
-  }, [ready, total, open]);
+  }, [ready, total, open, phone]);
 
   useEffect(
     () => () => {

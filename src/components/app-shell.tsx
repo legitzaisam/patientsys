@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/notification-bell";
 import { StaffAlertDialog } from "@/components/staff-alert-dialog";
 import { FloatingNotes } from "@/components/dashboard/floating-notes";
@@ -44,6 +45,7 @@ import { DEMO_MODE } from "@/lib/demo/enabled";
 import { listAppointments, listTeam } from "@/lib/clinic.functions";
 import { clinicDayRange } from "@/lib/clinic-time";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { canSee, isAccessAdmin } from "@/lib/access-catalogue";
 import { initialsOf, laneFor } from "@/lib/practitioner-colours";
 import { useStaffPresence } from "@/lib/use-staff-presence";
@@ -217,17 +219,18 @@ function AccountMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="toolbar-scroll-chip flex h-10 max-w-[220px] cursor-pointer items-center gap-2 rounded-full py-0 pl-1 pr-2.5 text-left active:bg-[rgba(47,63,102,0.14)]"
+          className="toolbar-scroll-chip flex h-10 max-w-[220px] cursor-pointer items-center gap-2 rounded-full py-0 pl-1 pr-1 text-left active:bg-[rgba(47,63,102,0.14)] sm:pr-2.5"
           aria-label="Account menu"
         >
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground shadow-bloom">
             {initialsOf(displayName)}
           </span>
-          <span className="min-w-0">
+          {/* Name and role need ~150px; on a phone the avatar alone is the pill. */}
+          <span className="hidden min-w-0 sm:block">
             <span className="block truncate text-[12.5px] font-semibold leading-tight text-foreground">{displayName}</span>
             <span className="block truncate text-[11px] capitalize text-ink-2">{roleLabel}</span>
           </span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <ChevronDown className="hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
@@ -473,6 +476,9 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   const searchRef = useRef<HTMLInputElement>(null);
   const mainScrollRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState("");
+  // Below lg the sidebar is an off-canvas drawer: closed by default, never
+  // persisted, dismissed on navigation. The fixed column only exists from lg.
+  const narrow = useIsMobile(1024);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const [scrollBlend, setScrollBlend] = useState(0);
@@ -592,6 +598,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
 
   function setOpen(next: boolean) {
     setSidebarOpen(next);
+    if (narrow) return;
     try {
       localStorage.setItem(SIDEBAR_KEY, next ? "open" : "closed");
     } catch {
@@ -617,6 +624,25 @@ export function AppShell({ identity, children }: { identity: Identity; children:
       /* ignore */
     }
   }, []);
+
+  // Crossing the lg breakpoint: the drawer starts closed; the column comes
+  // back the way the user left it.
+  useEffect(() => {
+    if (narrow) {
+      setSidebarOpen(false);
+      return;
+    }
+    try {
+      setSidebarOpen(localStorage.getItem(SIDEBAR_KEY) !== "closed");
+    } catch {
+      setSidebarOpen(true);
+    }
+  }, [narrow]);
+
+  // A drawer should not outlive the page it was opened on.
+  useEffect(() => {
+    if (narrow) setSidebarOpen(false);
+  }, [narrow, pathname]);
 
   function persistWidth(next: number) {
     const width = clampSidebarWidth(next);
@@ -691,7 +717,22 @@ export function AppShell({ identity, children }: { identity: Identity; children:
 
   return (
     <div className="flex h-dvh overflow-hidden">
-      {sidebarOpen && (
+      {narrow && (
+        <Sheet open={sidebarOpen} onOpenChange={setOpen}>
+          <SheetContent
+            side="left"
+            className="w-[min(20rem,88vw)] gap-0 border-edge bg-sidebar p-0 shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass [&>button]:hidden"
+            data-qc="sidebar-drawer"
+          >
+            <SheetTitle className="sr-only">Navigation</SheetTitle>
+            <SheetDescription className="sr-only">Pages, reports and your team.</SheetDescription>
+            <div className="flex h-full min-h-0 flex-col">
+              <SidebarChrome {...chrome} searchRef={searchRef} onNavigate={() => setOpen(false)} />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
+      {!narrow && sidebarOpen && (
         <aside
           className="relative flex h-dvh shrink-0 flex-col border-r border-edge bg-sidebar shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass"
           style={{ width: sidebarWidth }}

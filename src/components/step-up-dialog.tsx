@@ -73,7 +73,7 @@ export function useStepUp() {
 
   const dialog = (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="rounded-[22px] border-edge-2 bg-card/95 sm:max-w-md">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[22px] border-edge-2 bg-card/95 sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Confirm it is you</DialogTitle>
           <DialogDescription>{STEP_UP_COPY[kind]}</DialogDescription>

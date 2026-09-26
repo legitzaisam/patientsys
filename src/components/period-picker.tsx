@@ -272,7 +272,7 @@ export function PeriodPicker({
   }
 
   return (
-    <div role="tablist" aria-label="Reporting period" className={cn(track, "shrink-0")}>
+    <div role="tablist" aria-label="Reporting period" className={cn(track, "scroll-x-plain max-w-full shrink-0 flex-nowrap")}>
       {PRESETS.map((option) => {
         const on = selected === option.id;
         return (

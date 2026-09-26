@@ -454,7 +454,7 @@ export function QuickAddAppointment({
     window.addEventListener("pointerup", onUp);
   }
 
-  const field = "h-9 rounded-xl text-xs";
+  const field = "h-9 min-w-0 rounded-xl text-xs";
 
   const form = (
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
@@ -607,7 +607,7 @@ export function QuickAddAppointment({
               </select>
             </div>
 
-            <div className="col-span-2 grid grid-cols-[1fr_1fr_5.5rem] gap-2">
+            <div className="col-span-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_5.5rem] gap-2">
               <div className="field-stack">
                 <Label className="text-2xs tracking-[0.02em] text-muted-foreground">Date</Label>
                 <div className="relative">

@@ -437,12 +437,12 @@ function PatientRecord() {
                   </div>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Dialog open={treatmentOpen} onOpenChange={setTreatmentOpen}>
                   <DialogTrigger asChild>
                     <Button>Record treatment</Button>
                   </DialogTrigger>
-                  <DialogContent className="rounded-xl">
+                  <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
                     <DialogHeader>
                       <DialogTitle>Record treatment</DialogTitle>
                     </DialogHeader>
@@ -509,7 +509,7 @@ function PatientRecord() {
                       Send form
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="rounded-xl">
+                  <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
                     <DialogHeader>
                       <DialogTitle>Send to patient</DialogTitle>
                     </DialogHeader>
@@ -589,7 +589,7 @@ function PatientRecord() {
                       <DialogTrigger asChild>
                         <Button variant="outline">Archive</Button>
                       </DialogTrigger>
-                      <DialogContent className="rounded-xl">
+                      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
                         <DialogHeader>
                           <DialogTitle>Archive this patient</DialogTitle>
                         </DialogHeader>

@@ -155,7 +155,7 @@ function ChatWindow({
       role="dialog"
       aria-label={active ? `Chat with ${active.patientName}` : "Patient conversations"}
       data-qc="chat-window"
-      className="pointer-events-auto absolute bottom-[calc(100%+0.75rem)] right-0 flex h-[560px] max-h-[70vh] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-edge bg-popover shadow-[var(--shadow-popover)] backdrop-blur-glass backdrop-saturate-150"
+      className="pointer-events-auto absolute bottom-[calc(100%+0.75rem)] right-0 flex h-[560px] max-h-[70vh] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-edge bg-popover shadow-[var(--shadow-popover)] backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:h-auto max-sm:max-h-[min(70dvh,32rem)] max-sm:w-auto max-sm:max-w-none"
     >
       <header className="flex shrink-0 items-center gap-2.5 border-b border-edge px-3.5 py-3">
         {active ? (
