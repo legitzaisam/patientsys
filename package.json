@@ -19,6 +19,8 @@
     "check:tenancy": "node scripts/check-tenancy.mjs",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "test:responsive": "playwright test --config playwright.responsive.config.ts",
+    "qc:responsive": "npm run test:responsive; node scripts/responsive-report.mjs",
     "verify": "npm run check:policy && npm run check:validators && npm run check:tenancy && npm run test:unit && npm run test:e2e"
   },
   "dependencies": {

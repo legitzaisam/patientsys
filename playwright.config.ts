@@ -11,6 +11,8 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
+  // The device matrix has its own config (playwright.responsive.config.ts).
+  testIgnore: ["**/responsive/**"],
   // The demo data layer is one shared in-memory fixture set on the dev server,
   // so parallel workers would race each other's mutations. Run serially.
   fullyParallel: false,
