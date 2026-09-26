@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clinic dashboard mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --fg:#2f3f66;--ink2:#46557a;--ink3:#6a7390;
+  --card:rgba(255,255,255,.88);--edge:rgba(47,63,102,.08);
+  --accent:#eed488;--accent-soft:rgba(238,212,136,.35);--accent-ink:#7a6220;
+  --rose-bg:rgba(250,204,226,.55);--rose:#a3456e;
+  --mint-bg:rgba(179,232,196,.55);--mint:#2d6a4c;
+  --lilac-bg:rgba(224,213,248,.6);--lilac:#5c4a94;
+  --sky-bg:rgba(190,224,244,.55);--sky:#3d6f96;
+  --peach-bg:rgba(250,204,226,.48);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:"Space Grotesk",system-ui,sans-serif;color:var(--fg);background:#f6f7f8;font-size:14px}
+button{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+
+/* Sidebar */
+.side{background:rgba(255,255,255,.55);border-right:1px solid var(--edge);padding:22px 16px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600;margin:0 6px 20px}
+.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#f5e4ad,#eed488);display:grid;place-items:center;font-size:13px;font-weight:600}
+.search{display:flex;align-items:center;gap:9px;background:#fff;border-radius:12px;padding:10px 12px;color:var(--ink3);font-size:13.5px;margin-bottom:24px}
+.nh{font-size:13px;color:var(--ink2);margin:0 8px 8px;font-weight:500}
+.nav a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;color:var(--fg);text-decoration:none;font-size:14.5px;font-weight:500;margin-bottom:2px}
+.nav a.on{background:var(--accent-soft)}
+.nav a .b{margin-left:auto;font-size:12.5px;color:var(--ink2)}
+.nav .ico{width:18px;text-align:center;color:var(--ink2);font-size:14px}
+.navgrp{margin-bottom:22px}
+.team a{display:flex;align-items:center;gap:10px;padding:7px 8px;color:var(--fg);text-decoration:none;font-size:14px}
+.av{border-radius:50%;display:grid;place-items:center;font-weight:600;flex:none}
+.team .av{width:34px;height:34px;font-size:11.5px;border:2.5px solid #9cc9ae;background:#fce3ee}
+.demo{margin-top:auto;display:inline-flex;align-items:center;gap:8px;background:#fff;border-radius:999px;padding:9px 14px;font-size:13.5px;box-shadow:0 4px 14px rgba(47,63,102,.08);align-self:flex-start}
+.demo i{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+
+/* Main */
+.main{padding:18px 34px 80px;background:linear-gradient(170deg,#fbf3df 0%,#f7f4ee 18%,#f6f7f8 40%);min-width:0}
+.top{display:flex;justify-content:flex-end;align-items:center;gap:10px;position:sticky;top:0;z-index:30;padding:6px 0;margin:-6px 0 0}
+.top .ib{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.85);display:grid;place-items:center;position:relative;font-size:15px;box-shadow:0 2px 8px rgba(47,63,102,.06)}
+.top .ib sup{position:absolute;top:-4px;right:-3px;background:#e0548a;color:#fff;font-size:10px;font-weight:600;border-radius:999px;min-width:17px;height:17px;display:grid;place-items:center}
+.me{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.85);border-radius:999px;padding:5px 14px 5px 5px;box-shadow:0 2px 8px rgba(47,63,102,.06)}
+.me .av{width:34px;height:34px;background:#f7e6b3;font-size:11.5px}
+.me b{display:block;font-size:14px;font-weight:600}.me small{font-size:12px;color:var(--ink2)}
+h1{font-size:28px;font-weight:600;margin:14px 0 4px;letter-spacing:-.01em}
+.lead{color:var(--ink2);margin:0 0 26px;font-size:15px}
+h2{font-size:21px;font-weight:600;margin:0}
+.sd{color:var(--ink2);font-size:13.5px;margin:3px 0 16px}
+section{margin-bottom:38px}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px}
+.kpi{background:var(--card);border-radius:22px;padding:20px;box-shadow:0 6px 22px rgba(47,63,102,.05)}
+.kpi .l{display:flex;justify-content:space-between;font-size:13.5px;color:var(--ink2)}
+.kpi .v{font-size:32px;font-weight:600;margin:12px 0 8px;letter-spacing:-.02em}
+.kpi .v.gold{color:var(--accent-ink)}
+.kpi .h{font-size:12.5px;color:var(--ink2)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.c{font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:999px}
+.c.mint{background:var(--mint-bg);color:var(--mint)}.c.rose{background:var(--rose-bg);color:var(--rose)}.c.lilac{background:var(--lilac-bg);color:var(--lilac)}.c.gold{background:var(--accent-soft);color:var(--accent-ink)}
+
+/* Diary strip */
+.dh{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.seg{margin-left:auto;display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:rgba(255,255,255,.7)}
+.seg span{padding:6px 16px;border-radius:999px;font-size:13px;color:var(--ink2)}
+.seg span.on{background:var(--accent-soft);color:var(--fg);font-weight:600}
+.btn{border:0;font-size:13px;font-weight:600;padding:9px 18px;border-radius:999px;background:var(--accent);color:#3d3210;cursor:pointer;white-space:nowrap}
+.strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+.ap{background:var(--card);border-radius:22px;padding:18px 20px;box-shadow:0 6px 22px rgba(47,63,102,.05)}
+.ap .t{display:flex;justify-content:space-between;align-items:flex-start;font-size:13px;color:var(--ink2)}
+.ap .t b{display:block;color:var(--fg);font-weight:500;margin-top:2px}
+.stage{font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:999px}
+.who{display:flex;gap:10px;align-items:center;margin:12px 0 8px}
+.who .av{width:40px;height:40px;background:#efe7f7;font-size:12px}
+.who b{font-size:15.5px;font-weight:600;display:block}.who small{font-size:12.5px;color:var(--ink2)}
+.ap .pr{font-size:12.5px;color:var(--ink2);margin-bottom:12px}
+
+/* Attention */
+.att{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.card{background:var(--card);border-radius:24px;padding:18px 20px 10px;box-shadow:0 6px 22px rgba(47,63,102,.05)}
+.ch{display:flex;align-items:center;gap:9px;font-weight:600;font-size:16px;padding:2px 2px 10px}
+.ch.urgent{color:var(--rose)}.ch .tot{margin-left:auto;font-size:13.5px;color:var(--fg)}
+.gh{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:11px 6px;cursor:pointer;border-radius:12px;text-align:left}
+.gh:hover{background:rgba(47,63,102,.04)}
+.chev{color:var(--ink3);font-size:13px;width:12px;display:inline-block;transition:transform .2s}
+.grp.open > .gh .chev{transform:rotate(90deg)}
+.gh .lbl{font-size:14px;font-weight:500}.gh .meta{font-size:12px;color:var(--ink3)}
+.new{font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--rose);background:#fff;border:1px solid var(--rose-bg);border-radius:999px;padding:2px 7px}
+.pill{margin-left:auto;font-size:11.5px;font-weight:600;min-width:26px;height:22px;padding:0 8px;border-radius:999px;display:inline-grid;place-items:center}
+.p-rose{background:var(--rose-bg);color:var(--rose)}.p-lilac{background:var(--lilac-bg);color:var(--lilac)}.p-gold{background:var(--accent-soft);color:var(--accent-ink)}.p-sky{background:var(--sky-bg);color:var(--sky)}
+.body{display:none;padding:0 0 10px 28px}.grp.open .body{display:block}
+.summary{font-size:12px;color:var(--ink3);margin:0 0 8px;display:flex;flex-wrap:wrap;gap:6px}
+.summary b{color:var(--fg);font-weight:600}
+.owner-only{display:none}body.owner .owner-only{display:inline}
+.item{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.8);border:1px solid var(--edge);margin-bottom:7px;transition:opacity .25s,background .25s}
+.item .nm{font-size:13.5px;font-weight:600}.item .nm span{font-weight:500;color:var(--ink3);font-size:12px;margin-left:6px}
+.item .ln{font-size:12px;color:var(--ink2);margin-top:2px}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tag{font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:999px}
+.t-rose{background:var(--rose-bg);color:var(--rose)}.t-lilac{background:var(--lilac-bg);color:var(--lilac)}.t-sky{background:var(--sky-bg);color:var(--sky)}.t-money{background:rgba(47,63,102,.06);color:var(--ink2)}
+.acts{display:flex;gap:6px;align-items:center}
+.acts .btn{font-size:12px;padding:7px 12px}
+.mw{position:relative}
+.more{border:0;background:rgba(47,63,102,.06);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;line-height:1}
+.mm{position:absolute;right:0;top:36px;background:#fff;border-radius:14px;box-shadow:0 14px 34px rgba(47,63,102,.16);border:1px solid var(--edge);padding:5px;width:190px;display:none;z-index:10}
+.mm.show{display:block}
+.mm button{display:block;width:100%;border:0;background:none;font-size:12.5px;padding:8px 10px;border-radius:9px;cursor:pointer;text-align:left}
+.mm button:hover{background:rgba(47,63,102,.05)}
+.item.done{background:rgba(179,232,196,.2)}.item.done .btn{background:var(--mint-bg);color:var(--mint);cursor:default}
+.item.gone{opacity:0;height:0;padding:0 12px;margin:0;border-width:0;overflow:hidden}
+.foot{display:flex;justify-content:space-between;font-size:12px;color:var(--ink3);padding:2px 2px 0}
+.foot a{color:var(--accent-ink);font-weight:600;text-decoration:none}
+.clear{display:none;font-size:13px;color:var(--mint);padding:8px 2px}
+
+/* Tasks */
+.tasks{background:var(--card);border-radius:24px;padding:6px 22px;box-shadow:0 6px 22px rgba(47,63,102,.05)}
+.task{display:flex;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid var(--edge)}
+.task:last-child{border:0}
+.task b{font-size:15px;font-weight:500;display:block}.task small{font-size:13px;color:var(--ink2)}
+.task .r{margin-left:auto;display:flex;align-items:center;gap:16px;color:var(--ink2);font-size:13px;white-space:nowrap}
+
+/* Journeys */
+.jh{display:flex;align-items:flex-end;gap:12px}
+.jh a{margin-left:auto;color:var(--accent-ink);font-weight:600;font-size:13.5px;text-decoration:none;margin-bottom:16px;white-space:nowrap}
+.jcols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;align-items:start}
+.jc{background:var(--card);border-radius:24px;padding:18px;box-shadow:0 6px 22px rgba(47,63,102,.05)}
+.jc h3{margin:0;font-size:16px;font-weight:600;display:flex;justify-content:space-between}
+.jc h3 span{font-size:12.5px;color:var(--ink2);font-weight:400;white-space:nowrap;margin-left:8px}
+.jc p{font-size:12.5px;color:var(--ink2);margin:4px 0 14px}
+.jr{display:flex;gap:10px;margin-bottom:16px}
+.jr .av{width:34px;height:34px;background:#f1ece1;font-size:11px}
+.jr b{font-size:13.5px;font-weight:600;display:block}
+.jr small{display:block;font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
+.jr .st{margin-left:auto;font-size:12px;color:var(--ink2);text-align:right;white-space:nowrap}
+.bar{height:4px;border-radius:4px;background:var(--accent);margin-top:6px}
+.bar.late{background:#d9749c}
+
+/* Floating */
+.float{position:fixed;right:24px;bottom:22px;display:flex;gap:12px;z-index:40}
+.float .al{background:#f4a9c6;color:#6b2446;border-radius:999px;padding:12px 18px;font-weight:600;font-size:14px;box-shadow:0 8px 22px rgba(163,69,110,.25)}
+.float .chat{width:48px;height:48px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-size:18px;box-shadow:0 8px 22px rgba(122,98,32,.25)}
+.banner{background:#2f3f66;color:#fff;font-size:13px;padding:9px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.banner .rs{display:inline-flex;gap:2px;background:rgba(255,255,255,.12);border-radius:999px;padding:2px}
+.banner .rs button{border:0;background:none;color:#fff;font-size:12.5px;padding:5px 12px;border-radius:999px;cursor:pointer}
+.banner .rs button.on{background:#fff;color:var(--fg);font-weight:600}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}.strip{grid-template-columns:repeat(2,1fr)}.jcols{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:820px){.app{grid-template-columns:1fr}.side{display:none}.main{padding:16px}.kpis,.strip,.att,.jcols{grid-template-columns:1fr}.item{grid-template-columns:1fr}.task{flex-wrap:wrap}.task .r{margin-left:0}}
+</style>
+</head>
+<body class="owner">
+<div class="banner">Mockup: Clinic overview with the “Due today” chase list in Attention needed. Everything else matches the current dashboard.
+  <span class="rs" id="roles"><button class="on" data-r="owner">Owner / Manager</button><button data-r="fd">Front desk</button></span>
+</div>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="logo">Æ</span>Aetheria</div>
+    <div class="search">⌕ Search patients</div>
+    <div class="navgrp"><div class="nh">Clinic</div><nav class="nav">
+      <a class="on" href="#"><span class="ico">▦</span>Dashboard</a>
+      <a href="#"><span class="ico">▤</span>Diary<span class="b">10</span></a>
+      <a href="#"><span class="ico">⚇</span>Patients</a></nav></div>
+    <div class="navgrp"><div class="nh">Reports</div><nav class="nav">
+      <a href="#"><span class="ico">◌</span>Insights</a>
+      <a href="#"><span class="ico">⇄</span>Retention</a>
+      <a href="#"><span class="ico">↗</span>Performance</a>
+      <a href="#"><span class="ico">▣</span>Earnings</a></nav></div>
+    <div class="nh">Team</div>
+    <div class="team">
+      <a href="#"><span class="av">DA</span>Dr Amara Osei</a>
+      <a href="#"><span class="av" style="background:#fbf1d2;border-color:#e5cf8a">DN</span>Dr Nadia Rahman</a>
+      <a href="#"><span class="av" style="background:#eee8fb;border-color:#c8b9ef">DT</span>Dr Tom Whitfield</a>
+    </div>
+    <div class="demo"><i></i>Demo: Clinic owner</div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <span class="ib">📣</span><span class="ib">▢</span><span class="ib">✉<sup>1</sup></span><span class="ib">🔔<sup>8</sup></span>
+      <span class="me"><span class="av">DA</span><span><b>Dr Amara Osei</b><small id="roleName">Clinic Owner</small></span></span>
+    </div>
+
+    <h1>Clinic overview</h1>
+    <p class="lead">Live picture of today's diary, what needs attention and clinic performance.</p>
+
+    <section class="kpis">
+      <div class="kpi"><div class="l">Retention rate<span>→</span></div><div class="v gold">65%</div><div class="h">416 of 637 seen in 12 months</div>
+        <div class="chips"><span class="c mint">↑ 27%</span><span class="c lilac owner-only">£73,890 at risk</span><span class="c rose">137 to chase</span></div></div>
+      <div class="kpi"><div class="l">Total clients<span>→</span></div><div class="v">641</div><div class="h">626 active · 15 inactive</div>
+        <div class="chips"><span class="c mint">↑ 4% vs last month</span></div></div>
+      <div class="kpi"><div class="l">Active skin plans<span>→</span></div><div class="v">20</div><div class="h">Patients on a treatment journey</div>
+        <div class="chips"><span class="c rose">5 overdue steps</span></div></div>
+      <div class="kpi"><div class="l">Treatments due<span>→</span></div><div class="v">272</div><div class="h">Whole clinic · next 30 days</div>
+        <div class="chips"><span class="c gold">119 due</span><span class="c rose">153 overdue</span></div></div>
+      <div class="kpi owner-only" style="display:block"><div class="l">Revenue this month<span>→</span></div><div class="v">£74,470</div><div class="h">307 treatments delivered</div>
+        <div class="chips"><span class="c rose">↓ 9%</span></div></div>
+    </section>
+
+    <section>
+      <div class="dh"><h2>Saturday 26 September</h2>
+        <span class="seg"><span class="on">Day</span><span>Week</span></span><button class="btn">Quick book</button></div>
+      <div class="strip">
+        <div class="ap"><div class="t"><span>Today<b>09:00 – 09:45</b></span><span class="stage" style="background:var(--mint-bg);color:var(--mint)">✓ Complete</span></div>
+          <div class="who"><span class="av">PC</span><span><b>Priya Chandrasekhar</b><small>Session 4 · Chemical Peel</small></span></div>
+          <div class="pr">⚕ Dr Nadia Rahman</div><div class="chips"><span class="c mint">Consent ✓</span><span class="c mint">Paid</span></div></div>
+        <div class="ap"><div class="t"><span>Today<b>09:30 – 10:30</b></span><span class="stage" style="background:var(--mint-bg);color:var(--mint)">✓ Complete</span></div>
+          <div class="who"><span class="av">AF</span><span><b>Amelia Fitzgerald</b><small>Session 1 · Lip Filler</small></span></div>
+          <div class="pr">⚕ Dr Tom Whitfield</div><div class="chips"><span class="c mint">Consent ✓</span><span class="c mint">Paid</span></div></div>
+        <div class="ap"><div class="t"><span>Today<b>10:15 – 11:30</b></span><span class="stage" style="background:var(--sky-bg);color:var(--sky)">In treatment</span></div>
+          <div class="who"><span class="av">GA</span><span><b>Grace Adeyemi</b><small>Session 1 · Microneedling with PRP</small></span></div>
+          <div class="pr">⚕ Dr Nadia Rahman</div><div class="chips"><span class="c lilac">Consent due</span><span class="c mint">Paid</span></div></div>
+        <div class="ap"><div class="t"><span>Today<b>11:00 – 11:45</b></span><span class="stage" style="background:var(--accent-soft);color:var(--accent-ink)">Arrived</span></div>
+          <div class="who"><span class="av">LF</span><span><b>Leila Farouk</b><small>Session 2 · Lip Filler</small></span></div>
+          <div class="pr">⚕ Dr Tom Whitfield</div><div class="chips"><span class="c mint">Consent ✓</span><span class="c rose">Unpaid</span></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Attention needed</h2>
+      <p class="sd">Outstanding items that need action — deposits must be paid at least 3 days before the appointment.</p>
+      <div class="att">
+        <div class="card">
+          <div class="ch urgent">⚠ Urgent <span class="tot" id="urgTot"></span></div>
+          <div class="grp open" id="today">
+            <button class="gh" id="todayToggle"><span class="chev">›</span><span class="lbl">Due today</span><span class="new">NEW</span><span class="meta">from today's diary</span><span class="pill p-rose" id="todayCount"></span></button>
+            <div class="body">
+              <div class="summary" id="summary"></div>
+              <div id="items"></div>
+              <div class="clear" id="allclear">✓ Everything for today is sorted.</div>
+              <div class="foot"><span id="doneTxt"></span><a href="#">Show in diary →</a></div>
+            </div>
+          </div>
+          <div class="grp"><button class="gh"><span class="chev">›</span><span class="lbl">No show</span><span class="pill p-rose">1</span></button></div>
+          <div class="grp"><button class="gh"><span class="chev">›</span><span class="lbl">Deposit due</span><span class="pill p-rose">17</span></button></div>
+          <div class="grp"><button class="gh"><span class="chev">›</span><span class="lbl">Consent due</span><span class="pill p-lilac">3</span></button></div>
+          <div class="grp"><button class="gh"><span class="chev">›</span><span class="lbl">Balance due</span><span class="pill p-lilac">2</span></button></div>
+        </div>
+        <div class="card">
+          <div class="ch">🔔 This week <span class="tot">124</span></div>
+          <div class="grp"><button class="gh"><span class="chev">›</span><span class="lbl">Deposit due</span><span class="pill p-rose">101</span></button></div>
+          <div class="grp"><button class="gh"><span class="chev">›</span><span class="lbl">Treatment due</span><span class="pill p-gold">12</span></button></div>
+          <div class="grp"><button class="gh"><span class="chev">›</span><span class="lbl">Message</span><span class="pill p-sky">7</span></button></div>
+          <div class="grp"><button class="gh"><span class="chev">›</span><span class="lbl">Incomplete profile</span><span class="pill p-lilac">4</span></button></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>My tasks</h2>
+      <p class="sd">Patients to contact and rebook by chat, phone or email.</p>
+      <div class="tasks">
+        <div class="task"><div><b>Oliver Ashworth</b><small>Rosacea laser overdue by a week.</small></div><div class="r">☏ ✉ ▭ <span>Mark contacted</span><button class="btn">Complete</button>✕</div></div>
+        <div class="task"><div><b>Fiona MacGregor</b><small>Six-month peel check-in. Prefers text.</small></div><div class="r">☏ ✉ ▭ <span>Mark contacted</span><button class="btn">Complete</button>✕</div></div>
+        <div class="task"><div><b>Theo Nakamura</b><small>Consultation only, never converted. Worth one follow-up.</small></div><div class="r">☏ ✉ ▭ <span>Mark contacted</span><button class="btn">Complete</button>✕</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="jh"><div><h2>Active treatment journeys</h2><p class="sd">20 patients on a phased plan, grouped by where they are. Each row shows the next step; late steps are flagged.</p></div><a href="#">View journey board →</a></div>
+      <div class="jcols">
+        <div class="jc"><h3>Consultation &amp; prep<span>4 patients</span></h3><p>Not yet in treatment — book the consultation or first session.</p>
+          <div class="jr"><span class="av">EW</span><div><b>Eleanor Whitmore</b><small>Skin Rejuvenation Plan</small><small>Next: Medical history review</small><div class="bar" style="width:40%"></div></div><span class="st">1 of 4</span></div>
+          <div class="jr"><span class="av">MD</span><div><b>Marcus Delaney</b><small>New Patient Consultation</small><small>Next: Consultation booking</small></div><span class="st">0 of 3</span></div></div>
+        <div class="jc"><h3>Foundation<span>6 patients</span></h3><p>Early sessions — keep the next booking in the diary.</p>
+          <div class="jr"><span class="av">AF</span><div><b>Amelia Fitzgerald</b><small>Lip Enhancement Journey</small><small>Next: Two-week review</small><div class="bar late" style="width:60%"></div></div><span class="st">2 of 5</span></div>
+          <div class="jr"><span class="av">PC</span><div><b>Priya Chandrasekhar</b><small>Chemical Peel Course</small><small>Next: Peel session 2</small><div class="bar" style="width:55%"></div></div><span class="st">2 of 5</span></div></div>
+        <div class="jc"><h3>Build &amp; support<span>7 patients</span></h3><p>Mid-course — watch progress and check in between visits.</p>
+          <div class="jr"><span class="av">OB</span><div><b>Olivia Bennett</b><small>Anti-Wrinkle Maintenance</small><small>Next: Treatment session</small><div class="bar" style="width:75%"></div></div><span class="st">4 of 6</span></div>
+          <div class="jr"><span class="av">GA</span><div><b>Grace Adeyemi</b><small>3-Month Microneedling</small><small>Next: Microneedling session</small><div class="bar" style="width:62%"></div></div><span class="st">5 of 8</span></div></div>
+        <div class="jc"><h3>Results &amp; confidence<span>3 patients</span></h3><p>Finishing — take results photos and agree maintenance.</p>
+          <div class="jr"><span class="av">CH</span><div><b>Charlotte Hargreaves</b><small>Profhilo Skin Quality</small><small>Next: Maintenance plan</small><div class="bar" style="width:85%"></div></div><span class="st">5 of 6</span></div>
+          <div class="jr"><span class="av">LF</span><div><b>Leila Farouk</b><small>Lip Filler Aftercare Track</small><small>Next: Photos &amp; discharge</small><div class="bar" style="width:75%"></div></div><span class="st">3 of 4</span></div></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="float"><span class="al">⚠ 4 Alerts ⌃</span><span class="chat">💬</span></div>
+
+<script>
+const data = [
+  {nm:"Grace Adeyemi",tm:"10:15",who:"Dr Nadia Rahman",tx:"Microneedling with PRP · Session 1",f:["consent"],amt:0},
+  {nm:"Leila Farouk",tm:"11:00",who:"Dr Tom Whitfield",tx:"Lip Filler · Session 2",f:["unpaid"],amt:320},
+  {nm:"Zara Haddad",tm:"11:30",who:"Dr Amara Osei",tx:"Anti-Wrinkle Injections · Session 2",f:["unpaid","consent"],amt:280},
+  {nm:"Hannah Ormshurst",tm:"11:45",who:"Dr Nadia Rahman",tx:"Cheek Filler · Session 3",f:["late","unpaid"],amt:420},
+  {nm:"Orla Kesfield",tm:"13:00",who:"Dr Nadia Rahman",tx:"Polynucleotides · Session 1",f:["deposit"],amt:90},
+];
+const T = {
+  late:["Running late","t-rose","Message practitioner","Message sent"],
+  unpaid:["Unpaid","t-rose","Send payment link","Link sent"],
+  consent:["Consent due","t-sky","Send consent form","Form sent"],
+  deposit:["Deposit due","t-lilac","Request deposit","Request sent"],
+};
+const MORE=["Call patient","Open patient record","Mark as paid in clinic","Snooze until tomorrow"];
+const itemsEl=document.getElementById("items");
+let done=0;
+const money = d => d.amt && d.f.some(x=>x==="unpaid"||x==="deposit") ? `<span class="tag t-money owner-only">£${d.amt}</span>` : "";
+const tagsHtml = d => d.f.map(x=>`<span class="tag ${T[x][1]}">${T[x][0]}</span>`).join("") + money(d);
+itemsEl.innerHTML = data.map((d,i)=>`<div class="item" data-i="${i}">
+  <div><div class="nm">${d.nm}<span>${d.tm}</span></div><div class="ln">${d.tx} · ${d.who}</div><div class="tags">${tagsHtml(d)}</div></div>
+  <div class="acts"><button class="btn" data-act="${d.f[0]}">${T[d.f[0]][2]}</button>
+  <div class="mw"><button class="more" aria-label="More actions">⋯</button><div class="mm">${MORE.map(m=>`<button>${m}</button>`).join("")}</div></div></div></div>`).join("");
+
+function live(){ return data.map((d,i)=>[d,itemsEl.querySelector(`[data-i="${i}"]`)]).filter(([,el])=>!el.classList.contains("done")&&!el.classList.contains("gone")).map(([d])=>d); }
+function counts(){
+  const L=live(), n=k=>L.filter(d=>d.f.includes(k)).length;
+  const owed=L.filter(d=>d.f.includes("unpaid")||d.f.includes("deposit")).reduce((s,d)=>s+d.amt,0);
+  document.getElementById("todayCount").textContent=L.length;
+  document.getElementById("urgTot").textContent=23+L.length;
+  document.getElementById("summary").innerHTML=`<span><b>${n("unpaid")}</b> unpaid</span>·<span><b>${n("consent")}</b> consent</span>·<span><b>${n("deposit")}</b> deposit</span>·<span><b>${n("late")}</b> running late</span><span class="owner-only">· <b>£${owed.toLocaleString()}</b> outstanding today</span>`;
+  document.getElementById("doneTxt").textContent=done?`${done} sorted so far today`:"";
+  document.getElementById("allclear").style.display=L.length?"none":"block";
+}
+itemsEl.addEventListener("click",e=>{
+  const more=e.target.closest(".more");
+  if(more){e.stopPropagation();const mm=more.nextElementSibling;itemsEl.querySelectorAll(".mm").forEach(m=>{if(m!==mm)m.classList.remove("show")});mm.classList.toggle("show");return;}
+  if(e.target.closest(".mm")) return;
+  const b=e.target.closest(".btn"); if(!b) return;
+  const row=b.closest(".item"); if(row.classList.contains("done")) return;
+  const d=data[row.dataset.i], k=b.dataset.act, rest=d.f.filter(x=>x!==k);
+  b.textContent="✓ "+T[k][3]; row.classList.add("done"); counts();
+  setTimeout(()=>{
+    if(rest.length){ d.f=rest; row.classList.remove("done"); row.querySelector(".tags").innerHTML=tagsHtml(d); b.dataset.act=d.f[0]; b.textContent=T[d.f[0]][2]; }
+    else { row.classList.add("gone"); done++; }
+    counts();
+  },1100);
+});
+document.addEventListener("click",()=>itemsEl.querySelectorAll(".mm").forEach(m=>m.classList.remove("show")));
+document.getElementById("todayToggle").onclick=()=>document.getElementById("today").classList.toggle("open");
+document.getElementById("roles").onclick=e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  document.querySelectorAll("#roles button").forEach(x=>x.classList.toggle("on",x===b));
+  const owner=b.dataset.r==="owner";
+  document.body.classList.toggle("owner",owner);
+  document.getElementById("roleName").textContent=owner?"Clinic Owner":"Front desk";
+  document.querySelector(".kpi.owner-only").style.display=owner?"block":"none";
+  document.querySelector(".kpis").style.gridTemplateColumns=owner?"":"repeat(4,minmax(0,1fr))";
+};
+counts();
+</script>
+</body>
+</html>

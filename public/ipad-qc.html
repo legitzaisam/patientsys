@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aetheria · iPad Mini QC</title>
+    <style>
+      :root {
+        --ink: #2f3f66;
+        --ink-2: #5b6784;
+        --paper: #f4efe6;
+        --panel: #fffdf8;
+        --edge: rgba(47, 63, 102, 0.16);
+        --bezel: #1c2233;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--paper);
+        color: var(--ink);
+        font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        justify-content: space-between;
+        gap: 12px 20px;
+        padding: 16px 20px 14px;
+        background: var(--paper);
+        border-bottom: 1px solid var(--edge);
+      }
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: -0.02em;
+      }
+      .sub {
+        margin: 4px 0 0;
+        color: var(--ink-2);
+        max-width: 52rem;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 8px;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        color: var(--ink-2);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      select, button {
+        height: 34px;
+        border: 1px solid var(--edge);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--ink);
+        padding: 0 12px;
+        font: inherit;
+      }
+      button { cursor: pointer; }
+      button:hover { background: #efe8da; }
+      .bench {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 28px;
+        padding: 24px 20px 48px;
+      }
+      figure { margin: 0; }
+      figcaption {
+        margin: 0 0 10px;
+        text-align: center;
+        font-size: 12px;
+        color: var(--ink-2);
+      }
+      .device {
+        background: var(--bezel);
+        border-radius: 28px;
+        padding: 18px 14px 22px;
+      }
+      .screen {
+        overflow: hidden;
+        background: #fff;
+        border-radius: 4px;
+      }
+      iframe {
+        display: block;
+        border: 0;
+        background: #fff;
+        transform-origin: top left;
+      }
+      .portrait .screen { width: calc(768px * var(--scale)); height: calc(1024px * var(--scale)); }
+      .landscape .screen { width: calc(1024px * var(--scale)); height: calc(768px * var(--scale)); }
+      .portrait iframe { width: 768px; height: 1024px; transform: scale(var(--scale)); }
+      .landscape iframe { width: 1024px; height: 768px; transform: scale(var(--scale)); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>iPad Mini QC</h1>
+        <p class="sub">
+          Live demo, same CSS pixels as the responsive matrix: portrait 768×1024 and landscape 1024×768.
+          Click inside either frame, then screenshot from your computer. Notes stay with you.
+        </p>
+      </div>
+      <div class="controls">
+        <label>Page
+          <select id="page">
+            <option value="/dashboard">Dashboard</option>
+            <option value="/schedule">Diary</option>
+            <option value="/patients">Patients</option>
+            <option value="/insights">Insights</option>
+            <option value="/retention">Retention</option>
+            <option value="/performance">Performance</option>
+            <option value="/earnings">Earnings</option>
+            <option value="/team">Team</option>
+            <option value="/offers">Offers</option>
+            <option value="/settings">Settings</option>
+            <option value="/profile">Profile</option>
+            <option value="/my-record">Portal home</option>
+          </select>
+        </label>
+        <label>Role
+          <select id="role">
+            <option value="owner">Clinic owner</option>
+            <option value="practitioner">Practitioner</option>
+            <option value="front_desk">Front desk</option>
+            <option value="patient">Patient</option>
+            <option value="admin">Software admin</option>
+          </select>
+        </label>
+        <label>Scale
+          <select id="scale">
+            <option value="0.48">48%</option>
+            <option value="0.56" selected>56%</option>
+            <option value="0.72">72%</option>
+            <option value="1">100%</option>
+          </select>
+        </label>
+        <button type="button" id="reload">Reload both</button>
+        <button type="button" id="open-portrait">Open portrait 1:1</button>
+        <button type="button" id="open-landscape">Open landscape 1:1</button>
+      </div>
+    </header>
+    <main class="bench" style="--scale: 0.56">
+      <figure class="portrait">
+        <figcaption>Portrait · 768 × 1024</figcaption>
+        <div class="device">
+          <div class="screen"><iframe id="frame-portrait" title="iPad Mini portrait"></iframe></div>
+        </div>
+      </figure>
+      <figure class="landscape">
+        <figcaption>Landscape · 1024 × 768</figcaption>
+        <div class="device">
+          <div class="screen"><iframe id="frame-landscape" title="iPad Mini landscape"></iframe></div>
+        </div>
+      </figure>
+    </main>
+    <script>
+      const page = document.getElementById("page");
+      const role = document.getElementById("role");
+      const scale = document.getElementById("scale");
+      const bench = document.querySelector(".bench");
+      const portrait = document.getElementById("frame-portrait");
+      const landscape = document.getElementById("frame-landscape");
+
+      function setRoleCookie(value) {
+        document.cookie = "demo_role=" + value + "; path=/; max-age=86400; samesite=lax";
+      }
+
+      function loadFrames() {
+        const url = page.value;
+        portrait.src = url;
+        landscape.src = url;
+      }
+
+      document.getElementById("reload").addEventListener("click", loadFrames);
+      page.addEventListener("change", loadFrames);
+      role.addEventListener("change", () => {
+        setRoleCookie(role.value);
+        loadFrames();
+      });
+      scale.addEventListener("change", () => {
+        bench.style.setProperty("--scale", scale.value);
+      });
+      document.getElementById("open-portrait").addEventListener("click", () => {
+        window.open(page.value, "ipad-portrait", "width=768,height=1024,resizable=yes");
+      });
+      document.getElementById("open-landscape").addEventListener("click", () => {
+        window.open(page.value, "ipad-landscape", "width=1024,height=768,resizable=yes");
+      });
+
+      setRoleCookie(role.value);
+      loadFrames();
+    </script>
+  </body>
+</html>
