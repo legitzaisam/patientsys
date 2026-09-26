@@ -1,0 +1,81 @@
+---
+import { links } from "../lib/links";
+---
+<section class="cta" aria-labelledby="cta-title">
+  <div class="cta__aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+  <div class="wrap cta__inner">
+    <h2 id="cta-title" class="display" data-lines>
+      <span class="line-mask"><span>Walk the journey</span></span>
+      <span class="line-mask"><span><em>yourself.</em></span></span>
+    </h2>
+    <p class="lede">The demo runs on the real product with a fictional clinic. Pick a door and look around; nothing you do reaches a real patient.</p>
+    <div class="cta__btns">
+      <a class="btn btn--butter" href={links.clinic} data-astro-reload data-magnetic>Explore the clinic portal</a>
+      <a class="btn btn--glass" href={links.patient} data-astro-reload data-magnetic>Explore the patient portal</a>
+      {links.contactEmail && <a class="btn btn--glass" href={`mailto:${links.contactEmail}?subject=Aetheria%20demo`}>Talk to us</a>}
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta {
+    position: relative;
+    overflow: hidden;
+    padding-block: clamp(6rem, 14vw, 12rem);
+    text-align: center;
+    isolation: isolate;
+  }
+  .cta__inner {
+    display: grid;
+    justify-items: center;
+    gap: 1.3rem;
+  }
+  .cta h2 {
+    font-size: clamp(3rem, 8vw, 7rem);
+  }
+  .cta__btns {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.8rem;
+    margin-top: 0.8rem;
+  }
+  .cta__aurora {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    filter: blur(60px);
+    opacity: 0.85;
+  }
+  .cta__aurora span {
+    position: absolute;
+    width: 55vw;
+    height: 55vw;
+    max-width: 760px;
+    max-height: 760px;
+    border-radius: 50%;
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  .cta__aurora span:nth-child(1) {
+    left: 5%;
+    top: 10%;
+    background: radial-gradient(circle, rgba(238, 212, 136, 0.7), transparent 65%);
+  }
+  .cta__aurora span:nth-child(2) {
+    right: 0;
+    top: 0;
+    background: radial-gradient(circle, rgba(246, 201, 176, 0.6), transparent 65%);
+    animation-duration: 22s;
+  }
+  .cta__aurora span:nth-child(3) {
+    left: 30%;
+    bottom: -30%;
+    background: radial-gradient(circle, rgba(185, 166, 232, 0.35), transparent 65%);
+    animation-duration: 26s;
+  }
+  @keyframes drift {
+    to {
+      transform: translate(8vw, 4vw) scale(1.15);
+    }
+  }
+</style>

@@ -1,0 +1,252 @@
+---
+import { links } from "../lib/links";
+const roadmap = ["Consultation", "Consent signed", "Treatment 1", "Aftercare check-in", "Review", "Treatment 2"];
+const diary = [
+  { t: "09:30", n: "Microneedling", c: "var(--mint)" },
+  { t: "10:15", n: "Chemical peel", c: "var(--butter)" },
+  { t: "11:00", n: "Skin consult", c: "var(--arrived)" },
+];
+---
+
+<section class="doors2 section" aria-labelledby="doors-title">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Two doors, one journey</p>
+      <h2 id="doors-title" class="display" data-lines>
+        <span class="line-mask"><span>Built for the people</span></span>
+        <span class="line-mask"><span>on <em>both sides</em> of the chair.</span></span>
+      </h2>
+    </div>
+
+    <div class="split">
+      <article class="side side--patient glass" id="patients" data-light data-reveal>
+        <header>
+          <p class="side__k">For patients</p>
+          <h3 class="side__t">A plan you can see, and care that follows you home.</h3>
+          <p class="side__p">
+            Your roadmap, aftercare and routine in one place, with a care assistant that knows your plan and passes
+            anything worrying straight to your clinic.
+          </p>
+        </header>
+        <div class="side__scene" aria-hidden="true">
+          <img src="/img/shots/patient-home-800.webp" srcset="/img/shots/patient-home-800.webp 800w, /img/shots/patient-home-1600.webp 1600w" sizes="(max-width: 800px) 90vw, 40vw" alt="" loading="lazy" width="800" height="450" />
+          <ol class="roadmap glass">
+            {roadmap.map((r, i) => <li style={`--i:${i}`}><span />{r}</li>)}
+          </ol>
+        </div>
+        <a class="btn side__cta" href={links.patient} data-astro-reload>See the patient portal <span aria-hidden="true">→</span></a>
+      </article>
+
+      <article class="side side--clinic glass" data-light data-reveal style="--d: 120ms">
+        <header>
+          <p class="side__k">For clinics</p>
+          <h3 class="side__t">The whole clinic, calm: diary to consent to return visit.</h3>
+          <p class="side__p">
+            Role-shaped dashboards for owners, practitioners and front desk, with consent-gated treatments and
+            retention that runs itself.
+          </p>
+        </header>
+        <div class="side__scene" aria-hidden="true">
+          <img src="/img/shots/dashboard-800.webp" srcset="/img/shots/dashboard-800.webp 800w, /img/shots/dashboard-1600.webp 1600w" sizes="(max-width: 800px) 90vw, 40vw" alt="" loading="lazy" width="800" height="500" />
+          <div class="diary glass">
+            {diary.map((d, i) => (
+              <div class="diary__card" style={`--i:${i}; --c:${d.c}`}>
+                <b>{d.t}</b>
+                <span>{d.n}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <a class="btn side__cta" href={links.clinic} data-astro-reload>See the clinic portal <span aria-hidden="true">→</span></a>
+      </article>
+    </div>
+  </div>
+</section>
+
+<style>
+  .split {
+    display: flex;
+    gap: 1.25rem;
+    min-height: 40rem;
+  }
+  .side {
+    flex: 1 1 0;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 1.5rem;
+    padding: clamp(1.4rem, 3vw, 2.4rem);
+    overflow: hidden;
+    transition: flex-grow 700ms var(--ease-dew);
+  }
+  @media (hover: hover) and (min-width: 900px) {
+    .split:hover .side {
+      flex-grow: 0.54;
+    }
+    .split .side:hover {
+      flex-grow: 1;
+    }
+  }
+  .side--patient {
+    background: linear-gradient(160deg, rgba(239, 155, 196, 0.16), var(--glass-2) 45%);
+  }
+  .side--clinic {
+    background: linear-gradient(160deg, rgba(143, 199, 234, 0.2), var(--glass-2) 45%);
+  }
+  .side__k {
+    margin: 0;
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .side__t {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(1.7rem, 2.6vw, 2.4rem);
+    line-height: 1.05;
+    margin: 0.5rem 0 0.8rem;
+    max-width: 26rem;
+  }
+  .side__p {
+    margin: 0;
+    color: var(--ink-2);
+    max-width: 30rem;
+  }
+  .side__cta {
+    justify-self: start;
+  }
+  .side__scene {
+    position: relative;
+    min-height: 16rem;
+    mask-image: linear-gradient(180deg, #000 72%, transparent 98%);
+    -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 98%);
+  }
+  .side__scene img {
+    position: absolute;
+    inset: 0 -30% auto 0;
+    width: 130%;
+    max-width: none;
+    height: auto;
+    border-radius: 14px;
+    box-shadow: var(--shadow-deep);
+    border: 1px solid var(--edge);
+    transform: rotate(-2deg) translateY(6px);
+    transition: transform 900ms var(--ease-dew);
+  }
+  .side:hover .side__scene img {
+    transform: rotate(0deg) translateY(0);
+  }
+
+  /* Patient micro-scene: the roadmap lights up step by step. */
+  .roadmap {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0;
+    margin: 0;
+    padding: 1rem 1.1rem;
+    list-style: none;
+    display: grid;
+    gap: 0.45rem;
+    font-size: 0.85rem;
+    background: var(--glass);
+    min-width: 13rem;
+  }
+  .roadmap li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--ink-3);
+    animation: step 9s var(--ease-dew) infinite;
+    animation-delay: calc(var(--i) * 1s);
+  }
+  .roadmap li span {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 1.5px solid var(--butter-deep);
+    animation: dot 9s var(--ease-dew) infinite;
+    animation-delay: calc(var(--i) * 1s);
+  }
+  @keyframes step {
+    0%,
+    6% {
+      color: var(--ink-3);
+    }
+    10%,
+    80% {
+      color: var(--ink);
+    }
+  }
+  @keyframes dot {
+    0%,
+    6% {
+      background: transparent;
+      box-shadow: none;
+    }
+    10%,
+    80% {
+      background: var(--butter);
+      box-shadow: 0 0 0 4px var(--butter-soft);
+    }
+  }
+
+  /* Clinic micro-scene: diary cards glide into place. */
+  .diary {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0;
+    padding: 0.8rem;
+    display: grid;
+    gap: 0.5rem;
+    background: var(--glass);
+    min-width: 13rem;
+  }
+  .diary__card {
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--c) 40%, white);
+    border-left: 3px solid var(--c);
+    font-size: 0.84rem;
+    animation: glide 8s var(--ease-dew) infinite;
+    animation-delay: calc(var(--i) * 0.5s);
+  }
+  .diary__card b {
+    font-size: 0.75rem;
+    color: var(--ink-3);
+    font-weight: 600;
+  }
+  @keyframes glide {
+    0% {
+      transform: translateX(40px);
+      opacity: 0;
+    }
+    12%,
+    85% {
+      transform: none;
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(-20px);
+      opacity: 0;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .split {
+      flex-direction: column;
+      min-height: 0;
+    }
+    .side {
+      flex: none;
+    }
+    .side__scene {
+      min-height: 14rem;
+    }
+    .side__scene img {
+      width: 115%;
+    }
+  }
+</style>

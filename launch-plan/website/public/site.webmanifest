@@ -1,0 +1,1 @@
+{ "name": "Aetheria", "short_name": "Aetheria", "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }], "theme_color": "#f6f7f8", "background_color": "#f6f7f8", "display": "browser" }

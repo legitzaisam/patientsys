@@ -1,0 +1,439 @@
+---
+// The journey: a pinned scroll story. A device frame stays put while a gold
+// thread advances through six chapters, each a real screen from the product.
+// Phones and reduced motion get the same chapters as a simple stacked list.
+const chapters = [
+  {
+    k: "Book",
+    title: "Booked, and already known.",
+    body: "Appointments land in a shared diary with practitioner, treatment and room. Front desk sees who has arrived, who is waiting and what is due.",
+    shot: "diary",
+    side: "Clinic",
+  },
+  {
+    k: "Consent",
+    title: "Consent before care.",
+    body: "No one moves to waiting, and no treatment starts, without a signed consent. In-clinic signatures are witnessed by the signed-in staff member, and signed documents can't be edited.",
+    shot: "consent",
+    side: "Clinic",
+  },
+  {
+    k: "Treat",
+    title: "One form, the whole record.",
+    body: "A three-page treatment form writes the treatment, visit note, photos and plan progress in a single step, against a named practitioner.",
+    shot: "treatment",
+    side: "Clinic",
+  },
+  {
+    k: "Aftercare",
+    title: "Care that follows them home.",
+    body: "A routine with adherence, recovery check-ins, and a care assistant that answers from the patient's own plan and hands swelling, infection or vision changes to a person.",
+    shot: "routine",
+    side: "Patient",
+  },
+  {
+    k: "Progress",
+    title: "A roadmap they can see.",
+    body: "Milestones grouped by month, a personal journal and visible progress turn a course of treatments into a journey the patient owns.",
+    shot: "timeline",
+    side: "Patient",
+  },
+  {
+    k: "Return",
+    title: "A reason to come back.",
+    body: "At-risk scoring, recall tasks and stage-based offers go out on email, SMS and the portal, only to patients who opted in.",
+    shot: "retention",
+    side: "Clinic",
+  },
+];
+---
+
+<section class="journey" id="journey" aria-labelledby="journey-title" data-journey>
+  <div class="journey__intro wrap section-head">
+    <p class="eyebrow">The journey</p>
+    <h2 id="journey-title" class="display" data-lines>
+      <span class="line-mask"><span>Six moments.</span></span>
+      <span class="line-mask"><span>One <em>golden thread.</em></span></span>
+    </h2>
+    <p class="lede">Follow one patient from the first booking to the return visit. Every screen below is the real product, running on demo data.</p>
+  </div>
+
+  <div class="journey__track" data-journey-track>
+    <div class="journey__stage">
+      <div class="wrap journey__grid">
+        <div class="journey__text">
+          <div class="journey__count" aria-hidden="true">
+            <span class="journey__roll" data-roll>
+              {chapters.map((_, i) => <span>{String(i + 1).padStart(2, "0")}</span>)}
+            </span>
+            <span class="journey__of">/ 06</span>
+          </div>
+          <ol class="journey__chapters">
+            {chapters.map((c, i) => (
+              <li class="chapter" data-chapter={i} aria-current={i === 0 ? "step" : undefined}>
+                <p class="chapter__k"><span class={`chapter__side chapter__side--${c.side.toLowerCase()}`}>{c.side}</span>{c.k}</p>
+                <h3 class="chapter__t">{c.title}</h3>
+                <p class="chapter__b">{c.body}</p>
+                <figure class="chapter__shot">
+                  <img src={`/img/shots/${c.shot}-800.webp`} alt={`${c.side} portal: ${c.k.toLowerCase()} screen`} loading="lazy" width="800" height="500" />
+                </figure>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div class="journey__device" aria-hidden="true">
+          <div class="device glass">
+            <div class="device__bar"><i></i><i></i><i></i><span data-device-url>app.aetheria / diary</span></div>
+            <div class="device__screen">
+              {chapters.map((c, i) => (
+                <img
+                  class="device__img"
+                  data-shot={i}
+                  src={`/img/shots/${c.shot}-1600.webp`}
+                  srcset={`/img/shots/${c.shot}-800.webp 800w, /img/shots/${c.shot}-1600.webp 1600w`}
+                  sizes="(max-width: 1200px) 55vw, 700px"
+                  alt=""
+                  loading={i < 2 ? "eager" : "lazy"}
+                  width="1600"
+                  height="1000"
+                />
+              ))}
+            </div>
+          </div>
+          <svg class="thread" viewBox="0 0 600 40" aria-hidden="true">
+            <path d="M10 20 H590" class="thread__base"></path>
+            <path d="M10 20 H590" class="thread__fill" pathLength="1" data-thread-fill></path>
+            {chapters.map((_, i) => <circle cx={10 + i * 116} cy="20" r="6" class="thread__dot" data-dot={i}></circle>)}
+          </svg>
+          <ol class="thread__labels">
+            {chapters.map((c, i) => <li style={`left:${((10 + i * 116) / 600) * 100}%`}>{c.k}</li>)}
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .journey {
+    position: relative;
+    padding-top: clamp(4.5rem, 10vw, 9rem);
+  }
+  .journey__intro {
+    margin-bottom: 2rem;
+  }
+
+  /* ---------- Pinned (desktop, motion allowed) ---------- */
+  .journey__track {
+    position: relative;
+    height: 560vh;
+  }
+  .journey__stage {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: grid;
+    align-items: center;
+    overflow: hidden;
+  }
+  .journey__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.25fr);
+    gap: clamp(2rem, 5vw, 5rem);
+    align-items: center;
+  }
+  .journey__count {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-family: var(--font-display);
+    font-size: clamp(4rem, 7vw, 6.5rem);
+    line-height: 1;
+    height: 1em;
+    overflow: hidden;
+    margin-bottom: 1.2rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .journey__roll {
+    display: grid;
+    transition: transform 700ms var(--ease-dew);
+    transform: translateY(calc(var(--step, 0) * -1em));
+    color: var(--butter-ink);
+  }
+  .journey__roll span {
+    height: 1em;
+  }
+  .journey__of {
+    font-size: 0.32em;
+    color: var(--ink-3);
+    font-family: var(--font-sans);
+  }
+  .journey__chapters {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+  }
+  .chapter {
+    grid-area: 1 / 1;
+    opacity: 0;
+    transform: translateY(26px);
+    clip-path: inset(0 0 100% 0);
+    transition:
+      opacity 500ms var(--ease-dew),
+      transform 700ms var(--ease-dew),
+      clip-path 700ms var(--ease-peel);
+    pointer-events: none;
+  }
+  .chapter[aria-current] {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 -10% 0);
+    pointer-events: auto;
+  }
+  .chapter__k {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0 0 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+  }
+  .chapter__side {
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+  }
+  .chapter__side--clinic {
+    background: rgba(143, 199, 234, 0.3);
+    color: var(--arrived-ink);
+  }
+  .chapter__side--patient {
+    background: rgba(239, 155, 196, 0.28);
+    color: var(--aftercare-ink);
+  }
+  .chapter__t {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(2rem, 3.4vw, 3.1rem);
+    line-height: 1.02;
+    margin: 0 0 1rem;
+  }
+  .chapter__b {
+    margin: 0;
+    color: var(--ink-2);
+    max-width: 30rem;
+  }
+  .chapter__shot {
+    display: none;
+  }
+
+  .device {
+    padding: 0;
+    overflow: hidden;
+    border-radius: 18px;
+    background: var(--glass);
+    box-shadow: var(--shadow-deep);
+  }
+  .device__bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.65rem 0.9rem;
+    border-bottom: 1px solid var(--edge-2);
+  }
+  .device__bar i {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: rgba(47, 63, 102, 0.15);
+  }
+  .device__bar span {
+    margin: 0 auto;
+    padding: 0.2rem 0.9rem;
+    border-radius: 999px;
+    background: rgba(47, 63, 102, 0.05);
+    font-size: 0.75rem;
+    color: var(--ink-3);
+  }
+  .device__screen {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    background: #fff;
+  }
+  .device__img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top left;
+    opacity: 0;
+    clip-path: inset(0 0 0 100%);
+    transform: scale(1.03);
+    transition:
+      clip-path 900ms var(--ease-peel),
+      opacity 400ms ease,
+      transform 1200ms var(--ease-dew);
+  }
+  .device__img.is-active {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: none;
+    z-index: 1;
+  }
+  .device__img.is-prev {
+    opacity: 1;
+  }
+
+  .thread {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 15 / 1;
+    margin-top: 1.4rem;
+    overflow: visible;
+  }
+  .thread__base {
+    stroke: rgba(47, 63, 102, 0.12);
+    stroke-width: 2;
+  }
+  .thread__fill {
+    stroke: var(--butter-deep);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: calc(1 - var(--p, 0));
+    filter: drop-shadow(0 0 6px rgba(226, 196, 107, 0.6));
+  }
+  .thread__dot {
+    fill: var(--background);
+    stroke: rgba(47, 63, 102, 0.2);
+    stroke-width: 2;
+    transition:
+      fill var(--t-ui),
+      stroke var(--t-ui);
+  }
+  .thread__dot.is-done {
+    fill: var(--butter);
+    stroke: var(--butter-deep);
+  }
+  .thread__labels {
+    position: relative;
+    height: 1.2rem;
+    list-style: none;
+    padding: 0;
+    margin: 0.3rem 0 0;
+    font-size: 0.75rem;
+    color: var(--ink-3);
+  }
+  .thread__labels li {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+
+  /* ---------- Stacked (phones, reduced motion, no JS) ---------- */
+  :global(html:not(.js)) .journey__track,
+  .journey.is-static .journey__track {
+    height: auto;
+  }
+  :global(html:not(.js)) .journey__stage,
+  .journey.is-static .journey__stage {
+    position: static;
+    height: auto;
+    padding-bottom: 4rem;
+  }
+  :global(html:not(.js)) .journey__grid,
+  .journey.is-static .journey__grid {
+    grid-template-columns: 1fr;
+  }
+  :global(html:not(.js)) .journey__device,
+  :global(html:not(.js)) .journey__count,
+  .journey.is-static .journey__device,
+  .journey.is-static .journey__count {
+    display: none;
+  }
+  :global(html:not(.js)) .journey__chapters,
+  .journey.is-static .journey__chapters {
+    gap: 3.5rem;
+  }
+  :global(html:not(.js)) .chapter,
+  .journey.is-static .chapter {
+    grid-area: auto;
+    opacity: 1;
+    transform: none;
+    clip-path: none;
+    pointer-events: auto;
+  }
+  :global(html:not(.js)) .chapter__shot,
+  .journey.is-static .chapter__shot {
+    display: block;
+    margin: 1.4rem 0 0;
+  }
+  .chapter__shot img {
+    width: 100%;
+    height: auto;
+    border-radius: 14px;
+    border: 1px solid var(--edge);
+    box-shadow: var(--shadow-lift);
+  }
+</style>
+
+<script>
+  import { ScrollTrigger, reducedMotion } from "../scripts/motion";
+
+  const root = document.querySelector<HTMLElement>("[data-journey]")!;
+  const track = root.querySelector<HTMLElement>("[data-journey-track]")!;
+  const chapters = [...root.querySelectorAll<HTMLElement>("[data-chapter]")];
+  const shots = [...root.querySelectorAll<HTMLImageElement>("[data-shot]")];
+  const dots = [...root.querySelectorAll<SVGCircleElement>("[data-dot]")];
+  const roll = root.querySelector<HTMLElement>("[data-roll]")!;
+  const fill = root.querySelector<SVGPathElement>("[data-thread-fill]")!;
+  const url = root.querySelector<HTMLElement>("[data-device-url]")!;
+  const urls = ["diary", "patients / grace / documents", "patients / grace / treatments", "my-record / routine", "my-record / timeline", "retention"];
+  const n = chapters.length;
+  let current = -1;
+
+  function show(i: number) {
+    if (i === current) return;
+    chapters.forEach((c, j) => (j === i ? c.setAttribute("aria-current", "step") : c.removeAttribute("aria-current")));
+    shots.forEach((s, j) => {
+      s.classList.toggle("is-active", j === i);
+      s.classList.toggle("is-prev", j === current);
+    });
+    dots.forEach((d, j) => d.classList.toggle("is-done", j <= i));
+    roll.style.setProperty("--step", String(i));
+    url.textContent = `app.aetheria / ${urls[i]}`;
+    current = i;
+  }
+
+  const mq = matchMedia("(min-width: 900px)");
+  let trigger: ScrollTrigger | null = null;
+
+  function setup() {
+    trigger?.kill();
+    trigger = null;
+    const pinned = mq.matches && !reducedMotion();
+    root.classList.toggle("is-static", !pinned);
+    if (!pinned) return;
+    show(0);
+    trigger = ScrollTrigger.create({
+      trigger: track,
+      start: "top top",
+      end: "bottom bottom",
+      onUpdate: (self) => {
+        const p = self.progress;
+        fill.style.setProperty("--p", String(Math.min(1, p * 1.04)));
+        show(Math.min(n - 1, Math.floor(p * n)));
+      },
+    });
+  }
+  setup();
+  mq.addEventListener("change", setup);
+</script>

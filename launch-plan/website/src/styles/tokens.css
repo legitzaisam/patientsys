@@ -1,0 +1,74 @@
+/*
+ * Aetheria design tokens for the marketing site.
+ *
+ * Colour values are copied from the app's src/styles.css (e2e branch, Sep 2026)
+ * so the site, the clinic portal and the patient portal read as one brand.
+ * The site never imports from src/; if the app's palette changes, update here.
+ */
+:root {
+  /* Product palette (from src/styles.css) */
+  --background: #f6f7f8;
+  --ink: #2f3f66;
+  --ink-2: #46557a;
+  --ink-3: #6a7390;
+  --butter: #eed488;
+  --butter-hi: #faedc2;
+  --butter-deep: #e2c46b;
+  --butter-ink: #7a6220;
+  --butter-soft: rgba(238, 212, 136, 0.3);
+  --butter-wash: rgba(238, 212, 136, 0.14);
+  --butter-line: rgba(214, 183, 92, 0.42);
+  --success: #4a9d75;
+  --success-ink: #2d6a4c;
+  --consent: #b9a6e8;
+  --consent-ink: #5c4a94;
+  --arrived: #8fc7ea;
+  --arrived-ink: #3d6f96;
+  --aftercare: #ef9bc4;
+  --aftercare-ink: #8a3d66;
+  --mint: #a6dccd;
+
+  /* Glass vocabulary (from src/styles.css) */
+  --glass: rgba(255, 255, 255, 0.82);
+  --glass-2: rgba(255, 255, 255, 0.62);
+  --glass-line: rgba(255, 255, 255, 0.55);
+  --edge: rgba(255, 255, 255, 0.7);
+  --edge-2: rgba(47, 63, 102, 0.07);
+  --edge-hi: rgba(255, 255, 255, 0.92);
+  --bloom: rgba(200, 175, 105, 0.3);
+  --rule: rgba(47, 63, 102, 0.035);
+  --shadow-glass:
+    0 1px 2px rgba(47, 63, 102, 0.06), 0 8px 24px -10px rgba(47, 63, 102, 0.18),
+    inset 0 1px 0 var(--edge-hi);
+  --shadow-lift: 0 14px 36px -14px rgba(47, 63, 102, 0.3);
+  --shadow-deep: 0 40px 80px -30px rgba(47, 63, 102, 0.35);
+  --blur-glass: 26px;
+  --radius: 0.875rem;
+
+  /* Skin-light ramp (site only): porcelain to deep umber. Illustrated skin
+     rotates through all of it so no single tone is the default. */
+  --skin-1: #f7e7dc;
+  --skin-2: #efd0bb;
+  --skin-3: #dcae8f;
+  --skin-4: #c08a67;
+  --skin-5: #9a6445;
+  --skin-6: #6f4430;
+  --skin-7: #4a2c20;
+  --peach: #f6c9b0;
+
+  /* Type */
+  --font-sans: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+
+  /* Motion tokens (launch plan 6.1) */
+  --ease-dew: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-peel: cubic-bezier(0.65, 0, 0.35, 1);
+  --t-micro: 160ms;
+  --t-ui: 320ms;
+  --t-section: 640ms;
+  --t-hero: 1200ms;
+
+  /* Layout */
+  --gutter: clamp(1rem, 4vw, 3rem);
+  --max: 1240px;
+}

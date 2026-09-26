@@ -1,0 +1,51 @@
+---
+// Website-only preview: explains where the live demo runs. Rendered only
+// when PUBLIC_PREVIEW_MODE=true.
+---
+<div class="demo-note glass" role="dialog" aria-modal="false" aria-labelledby="demo-note-t" hidden data-demo-note>
+  <p id="demo-note-t" class="demo-note__t">The live demo opens from the launch URL</p>
+  <p>This is a preview of the website. The clinic and patient portals run on the full launch address, with a fictional clinic and no real patient data.</p>
+  <button class="btn btn--glass" type="button" data-demo-close>Got it</button>
+</div>
+<style>
+  .demo-note {
+    position: fixed;
+    z-index: 120;
+    left: 50%;
+    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    width: min(28rem, calc(100% - 2rem));
+    padding: 1.2rem 1.3rem;
+    background: var(--glass);
+    display: grid;
+    gap: 0.6rem;
+    box-shadow: var(--shadow-deep);
+    animation: note-in var(--t-ui) var(--ease-dew);
+  }
+  .demo-note p { margin: 0; color: var(--ink-2); font-size: 0.95rem; }
+  .demo-note .demo-note__t { font-family: var(--font-display); font-size: 1.45rem; color: var(--ink); }
+  .demo-note .btn { justify-self: start; min-height: 2.5rem; padding: 0.5rem 1rem; }
+  @keyframes note-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+</style>
+<script>
+  const note = document.querySelector<HTMLElement>("[data-demo-note]")!;
+  let opener: HTMLElement | null = null;
+  document.addEventListener("click", (e) => {
+    const a = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[href="#demo-note"]');
+    if (a) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      opener = a;
+      note.hidden = false;
+      note.querySelector<HTMLButtonElement>("[data-demo-close]")!.focus();
+      return;
+    }
+    if ((e.target as HTMLElement).closest("[data-demo-close]")) {
+      note.hidden = true;
+      opener?.focus();
+    }
+  }, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !note.hidden) { note.hidden = true; opener?.focus(); }
+  });
+</script>

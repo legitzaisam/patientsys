@@ -1,0 +1,102 @@
+---
+// First-visit loader (≤ 1.2 s): a droplet forms the Æ mark while a butter ring
+// fills. Skipped on repeat visits, under reduced motion and without JS.
+---
+
+<script is:inline>
+  (function () {
+    var seen = false;
+    try {
+      seen = sessionStorage.getItem("aetheria:seen") === "1";
+      sessionStorage.setItem("aetheria:seen", "1");
+    } catch (e) {}
+    if (!seen && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.classList.add("loading");
+    }
+  })();
+</script>
+
+<div class="loader" aria-hidden="true" data-loader>
+  <svg viewBox="0 0 120 120" class="loader__svg">
+    <defs>
+      <radialGradient id="ld-g" cx="36%" cy="30%" r="75%">
+        <stop offset="0" stop-color="#fffaf0"></stop>
+        <stop offset=".5" stop-color="#eed488"></stop>
+        <stop offset="1" stop-color="#c9a64a"></stop>
+      </radialGradient>
+    </defs>
+    <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(47,63,102,.08)" stroke-width="2"></circle>
+    <circle cx="60" cy="60" r="54" fill="none" stroke="#e2c46b" stroke-width="2" stroke-linecap="round" pathLength="1" class="loader__ring" transform="rotate(-90 60 60)"></circle>
+    <path class="loader__drop" d="M60 22C60 22 38 48 38 62a22 22 0 0 0 44 0C82 48 60 22 60 22Z" fill="url(#ld-g)"></path>
+    <text class="loader__ae" x="60" y="72" text-anchor="middle" font-family="Instrument Serif, Georgia, serif" font-size="30" fill="#2f3f66">Æ</text>
+  </svg>
+</div>
+
+<style>
+  .loader {
+    display: none;
+  }
+  :global(html.loading) .loader {
+    display: grid;
+    place-items: center;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--background);
+    transition:
+      opacity 500ms var(--ease-dew),
+      visibility 0s 500ms;
+  }
+  :global(html.loading.loaded) .loader {
+    opacity: 0;
+    visibility: hidden;
+  }
+  .loader__svg {
+    width: 120px;
+    height: 120px;
+  }
+  .loader__ring {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: ring 1s var(--ease-dew) forwards;
+  }
+  .loader__drop {
+    transform-origin: 60px 62px;
+    animation: form 900ms var(--ease-dew) both;
+  }
+  .loader__ae {
+    opacity: 0;
+    animation: ae 500ms var(--ease-dew) 450ms forwards;
+  }
+  @keyframes ring {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes form {
+    from {
+      transform: translateY(-30px) scale(0.2, 0.5);
+      opacity: 0;
+    }
+    60% {
+      transform: translateY(2px) scale(1.06, 0.94);
+      opacity: 1;
+    }
+  }
+  @keyframes ae {
+    to {
+      opacity: 1;
+    }
+  }
+</style>
+
+<script>
+  const root = document.documentElement;
+  if (root.classList.contains("loading")) {
+    setTimeout(() => {
+      root.classList.add("loaded");
+      dispatchEvent(new Event("aetheria:loader-done"));
+      setTimeout(() => root.classList.remove("loading", "loaded"), 600);
+    }, 1100);
+  }
+</script>

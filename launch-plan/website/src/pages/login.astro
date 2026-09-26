@@ -1,0 +1,257 @@
+---
+import Base from "../layouts/Base.astro";
+import Mark from "../components/Mark.astro";
+import { links } from "../lib/links";
+const personas = [
+  { label: "Clinic owner", href: links.clinic },
+  { label: "Practitioner", href: links.practitioner },
+  { label: "Front desk", href: links.frontDesk },
+];
+---
+
+<Base title="Sign in · Aetheria" description="Sign in to the Aetheria clinic portal or your patient portal." bare>
+  <div class="login" data-login>
+    <a class="login__home" href="/" aria-label="Back to Aetheria home"><Mark size={34} /><span>Aetheria</span></a>
+
+    <section class="half half--clinic" data-half aria-labelledby="clinic-h">
+      <div class="scene scene--diary" aria-hidden="true">
+        {Array.from({ length: 12 }).map((_, i) => <span style={`--i:${i}`} />)}
+      </div>
+      <div class="half__body">
+        <p class="half__k">Clinic team</p>
+        <h1 id="clinic-h" class="display">Run today’s clinic.</h1>
+        <p class="half__p">Diary, records, consent, retention and reports for owners, practitioners and front desk.</p>
+        {links.showPersonas ? (
+          <div class="personas" role="group" aria-label="Choose a demo view">
+            {personas.map((p, i) => (
+              <a class={`btn ${i === 0 ? "" : "btn--glass"}`} href={p.href} data-astro-reload data-wipe>{p.label}</a>
+            ))}
+          </div>
+        ) : (
+          <a class="btn" href={links.clinic} data-astro-reload data-wipe>Sign in to the clinic portal</a>
+        )}
+      </div>
+    </section>
+
+    <section class="half half--patient" data-half aria-labelledby="patient-h">
+      <svg class="scene scene--thread" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <path d="M-20 480 C 120 380, 180 520, 300 400 S 460 180, 620 120" pathLength="1"></path>
+        {[0.12, 0.3, 0.5, 0.7, 0.88].map((t, i) => <circle r="7" style={`--i:${i}; offset-distance:${t * 100}%`} />)}
+      </svg>
+      <div class="half__body">
+        <p class="half__k">Patients</p>
+        <h2 id="patient-h" class="display">Follow your plan.</h2>
+        <p class="half__p">Your roadmap, aftercare, routine and messages from your clinic, in one place.</p>
+        <a class="btn btn--butter" href={links.patient} data-astro-reload data-wipe>Open the patient portal</a>
+      </div>
+    </section>
+
+    <p class="login__note">Demo environment: fictional clinic and patients, no real data. Emails and texts stay in a sandbox.</p>
+    <div class="wipe" aria-hidden="true" data-wipe-layer></div>
+  </div>
+</Base>
+
+<style>
+  .login {
+    position: relative;
+    min-height: 100svh;
+    display: flex;
+    overflow: hidden;
+  }
+  .login__home {
+    position: absolute;
+    top: 1.4rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.4rem 0.9rem 0.4rem 0.45rem;
+    border-radius: 999px;
+    background: var(--glass);
+    border: 1px solid var(--edge);
+    box-shadow: var(--shadow-glass);
+    text-decoration: none;
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+  }
+  .half {
+    position: relative;
+    flex: 1 1 0;
+    display: grid;
+    align-items: end;
+    padding: clamp(6rem, 12vh, 9rem) clamp(1.5rem, 5vw, 5rem) clamp(4rem, 10vh, 6rem);
+    overflow: hidden;
+    transition:
+      flex-grow 800ms var(--ease-dew),
+      filter 600ms var(--ease-dew);
+  }
+  .half--clinic {
+    background: linear-gradient(170deg, rgba(143, 199, 234, 0.28), rgba(246, 247, 248, 0.6) 55%);
+  }
+  .half--patient {
+    background: linear-gradient(190deg, rgba(239, 155, 196, 0.22), rgba(238, 212, 136, 0.18) 55%);
+  }
+  @media (hover: hover) and (min-width: 820px) {
+    .login:has(.half:hover) .half {
+      flex-grow: 0.54;
+      filter: saturate(0.8) brightness(0.98);
+    }
+    .login .half:hover {
+      flex-grow: 1;
+      filter: none;
+    }
+  }
+  .half__body {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    gap: 1rem;
+    max-width: 30rem;
+  }
+  .half__k {
+    margin: 0;
+    font-size: 0.8rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .half h1,
+  .half h2 {
+    font-size: clamp(2.8rem, 5.5vw, 5rem);
+  }
+  .half__p {
+    margin: 0;
+    color: var(--ink-2);
+  }
+  .half__body > .btn {
+    justify-self: start;
+  }
+  .personas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  .scene {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .scene--diary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: 4.2rem;
+    gap: 0.8rem;
+    padding: 7rem 2rem;
+    opacity: 0.55;
+    mask-image: linear-gradient(180deg, #000 30%, transparent 75%);
+  }
+  .scene--diary span {
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.65);
+    border: 1px solid var(--edge);
+    animation: tile 10s var(--ease-dew) infinite;
+    animation-delay: calc(var(--i) * -0.9s);
+  }
+  .scene--diary span:nth-child(3n + 1) {
+    border-left: 3px solid var(--mint);
+  }
+  .scene--diary span:nth-child(4n + 2) {
+    border-left: 3px solid var(--butter);
+  }
+  .scene--diary span:nth-child(5n + 3) {
+    border-left: 3px solid var(--aftercare);
+  }
+  @keyframes tile {
+    50% {
+      transform: translateY(-6px);
+      background: rgba(255, 255, 255, 0.85);
+    }
+  }
+  .scene--thread {
+    width: 100%;
+    height: 100%;
+    opacity: 0.9;
+  }
+  .scene--thread path {
+    fill: none;
+    stroke: var(--butter-deep);
+    stroke-width: 2.5;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: draw 2.4s var(--ease-dew) 0.3s forwards;
+  }
+  .scene--thread circle {
+    fill: var(--butter);
+    stroke: #fff;
+    stroke-width: 3;
+    offset-path: path("M-20 480 C 120 380, 180 520, 300 400 S 460 180, 620 120");
+    opacity: 0;
+    animation: pop 500ms var(--ease-dew) forwards;
+    animation-delay: calc(0.8s + var(--i) * 0.3s);
+  }
+  @keyframes draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes pop {
+    to {
+      opacity: 1;
+    }
+  }
+  .login__note {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 1rem;
+    margin: 0;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    z-index: 3;
+    padding-inline: 1rem;
+  }
+  /* 400 ms butter light wipe into the chosen portal. */
+  .wipe {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    background: linear-gradient(100deg, transparent, rgba(250, 237, 194, 0.95) 30%, var(--background) 60%);
+    transform: translateX(-110%);
+  }
+  .wipe.is-on {
+    transform: translateX(0);
+    transition: transform 420ms var(--ease-peel);
+  }
+  @media (max-width: 820px) {
+    .login {
+      flex-direction: column;
+    }
+    .half {
+      min-height: 50svh;
+    }
+    .login__note {
+      position: static;
+      padding: 1rem;
+    }
+  }
+</style>
+
+<script>
+  import { reducedMotion } from "../scripts/motion";
+  const layer = document.querySelector<HTMLElement>("[data-wipe-layer]")!;
+  document.querySelectorAll<HTMLAnchorElement>("[data-wipe]").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      if (reducedMotion() || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      e.preventDefault();
+      layer.classList.add("is-on");
+      setTimeout(() => (location.href = a.href), 400);
+    });
+  });
+  // Coming back via the back button: clear the wipe.
+  addEventListener("pageshow", () => layer.classList.remove("is-on"));
+</script>

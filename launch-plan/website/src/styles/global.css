@@ -1,0 +1,312 @@
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "./tokens.css";
+
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 420ms;
+  animation-timing-function: var(--ease-peel);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: auto;
+}
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  color: var(--ink);
+  background-color: var(--background);
+  background-image:
+    radial-gradient(900px 560px at 8% -10%, rgba(246, 201, 176, 0.35), transparent 68%),
+    radial-gradient(820px 520px at 96% 2%, var(--butter-soft), transparent 66%),
+    repeating-linear-gradient(
+      0deg,
+      var(--rule) 0px,
+      var(--rule) 1px,
+      transparent 1px,
+      transparent 14px
+    );
+  background-attachment: fixed;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+}
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+a {
+  color: inherit;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+::selection {
+  background: var(--butter);
+  color: var(--ink);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  text-decoration: none;
+  transition: top var(--t-ui) var(--ease-dew);
+}
+.skip-link:focus {
+  top: 1rem;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Layout helpers ---------- */
+.wrap {
+  width: min(100% - 2 * var(--gutter), var(--max));
+  margin-inline: auto;
+}
+.section {
+  padding-block: clamp(4.5rem, 10vw, 9rem);
+  position: relative;
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--butter-ink);
+}
+.eyebrow::before {
+  content: "";
+  width: 1.6rem;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.6;
+}
+.display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 0.98;
+  margin: 0;
+}
+.display em {
+  font-style: italic;
+  color: var(--butter-ink);
+}
+h2.display {
+  font-size: clamp(2.4rem, 5.6vw, 4.6rem);
+}
+.lede {
+  font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+  color: var(--ink-2);
+  max-width: 40rem;
+}
+.section-head {
+  display: grid;
+  gap: 1.1rem;
+  margin-bottom: clamp(2.5rem, 5vw, 4rem);
+  max-width: 50rem;
+}
+
+/* ---------- Glass ---------- */
+.glass {
+  position: relative;
+  background: var(--glass-2);
+  border: 1px solid var(--edge);
+  border-radius: calc(var(--radius) + 8px);
+  box-shadow: var(--shadow-glass);
+  backdrop-filter: blur(var(--blur-glass)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.2);
+}
+/* Cursor light: a soft glow under the pointer (set by motion.ts). */
+.glass[data-light]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    260px circle at var(--mx, -999px) var(--my, -999px),
+    rgba(255, 250, 235, 0.65),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity var(--t-ui) var(--ease-dew);
+}
+.glass[data-light]:hover::after {
+  opacity: 1;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  --bg: var(--ink);
+  --fg: #fff;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 3rem;
+  padding: 0.8rem 1.35rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 0.98rem;
+  text-decoration: none;
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform var(--t-ui) var(--ease-dew),
+    box-shadow var(--t-ui) var(--ease-dew);
+  box-shadow: 0 10px 24px -12px rgba(47, 63, 102, 0.6);
+}
+/* Liquid fill: a butter bead grows from the pointer entry point. */
+.btn::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: var(--bx, 50%);
+  top: var(--by, 50%);
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: var(--butter);
+  transform: translate(-50%, -50%);
+  transition:
+    width 520ms var(--ease-dew),
+    height 520ms var(--ease-dew);
+}
+.btn:hover::before {
+  width: 260%;
+  height: 520%;
+}
+.btn:hover {
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+.btn--glass {
+  --bg: var(--glass);
+  --fg: var(--ink);
+  border-color: var(--edge);
+  box-shadow: var(--shadow-glass);
+  backdrop-filter: blur(16px);
+}
+.btn--butter {
+  --bg: var(--butter);
+  --fg: var(--ink);
+  box-shadow: 0 10px 26px -12px var(--bloom);
+}
+.btn--butter::before {
+  background: var(--ink);
+}
+.btn--butter:hover {
+  color: #fff;
+}
+.btn svg {
+  width: 1.05em;
+  height: 1.05em;
+}
+
+/* ---------- Reveal (driven by motion.ts; visible by default without JS) ---------- */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(24px);
+}
+.js [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--t-section) var(--ease-dew),
+    transform var(--t-section) var(--ease-dew);
+  transition-delay: var(--d, 0ms);
+}
+.line-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.08em;
+}
+.line-mask > span {
+  display: block;
+}
+.js [data-lines] .line-mask > span {
+  transform: translateY(105%);
+}
+.js [data-lines].is-in .line-mask > span {
+  transform: none;
+  transition: transform 900ms var(--ease-dew);
+}
+.js [data-lines].is-in .line-mask:nth-child(2) > span {
+  transition-delay: 90ms;
+}
+.js [data-lines].is-in .line-mask:nth-child(3) > span {
+  transition-delay: 180ms;
+}
+
+/* ---------- Motion pause (WCAG 2.2.2) ---------- */
+.motion-paused *,
+.motion-paused *::before,
+.motion-paused *::after {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .js [data-reveal],
+  .js [data-lines] .line-mask > span {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  @view-transition {
+    navigation: none;
+  }
+}

@@ -1,0 +1,13 @@
+# Everything generated or secret inside launch-plan/ stays out of git.
+node_modules/
+dist/
+.astro/
+.run/
+*.log
+
+# Local secrets (ngrok authtoken, domain). Commit only .env.example.
+.env
+.env.local
+.env.*.local
+dist-preview/
+artifact/

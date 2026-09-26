@@ -1,0 +1,34 @@
+# Optional: a reusable ngrok agent config (v3) if you prefer `ngrok start`
+# over start-public.sh. start-public.sh does not need this file.
+#
+#   cp launch-plan/ngrok/ngrok.example.yml ~/aetheria-ngrok.yml   # outside the repo
+#   ngrok start --all --config ~/aetheria-ngrok.yml
+#
+# Keep the real file outside the repository: it would hold your authtoken.
+version: 3
+agent:
+  authtoken: <NGROK_AUTHTOKEN> # or omit and export NGROK_AUTHTOKEN
+endpoints:
+  - name: aetheria
+    url: https://<NGROK_DOMAIN> # e.g. aetheria-demo.ngrok-free.dev
+    upstream:
+      url: http://localhost:8099 # the gateway (GATEWAY_PORT)
+    # Uncomment to require a password for the whole site:
+    # traffic_policy:
+    #   on_http_request:
+    #     - actions:
+    #         - type: basic-auth
+    #           config:
+    #             credentials:
+    #               - "demo:choose-a-password"
+
+# Later, on the Pay-as-you-go plan with your own domain (see launch plan, Part 1b):
+#  - name: www
+#    url: https://www.<your-domain>
+#    upstream: { url: http://localhost:8099 }
+#  - name: clinic
+#    url: https://clinic.<your-domain>
+#    upstream: { url: http://localhost:8099 }
+#  - name: patients
+#    url: https://my.<your-domain>
+#    upstream: { url: http://localhost:8099 }

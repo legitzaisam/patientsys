@@ -1,0 +1,13 @@
+{
+  "name": "aetheria-launch-gateway",
+  "private": true,
+  "type": "module",
+  "description": "Serves the launch website and proxies everything else to the Aetheria demo app, behind one ngrok URL. No dependencies.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test.mjs"
+  }
+}

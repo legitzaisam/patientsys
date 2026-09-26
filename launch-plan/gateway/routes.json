@@ -1,0 +1,41 @@
+{
+  "$comment": "Which paths the website answers. Everything else goes to the Aetheria app. Paths must not collide with app routes (for example the app owns /patients, /auth, /portal, /dashboard, /my-record, /api).",
+  "website": {
+    "exact": [
+      "/",
+      "/login",
+      "/pricing",
+      "/about",
+      "/investors",
+      "/404",
+      "/robots.txt",
+      "/sitemap.xml",
+      "/favicon.svg",
+      "/site.webmanifest"
+    ],
+    "prefixes": [
+      "/for-patients",
+      "/for-clinics",
+      "/compliance",
+      "/journal",
+      "/watch",
+      "/legal",
+      "/_astro/",
+      "/media/",
+      "/img/",
+      "/fonts/",
+      "/og/"
+    ]
+  },
+  "demoRoles": {
+    "owner": "/dashboard",
+    "practitioner": "/dashboard",
+    "front_desk": "/dashboard",
+    "patient": "/my-record"
+  },
+  "hostRoots": {
+    "$comment": "When a custom domain is attached later: the root of these hosts redirects into the right portal.",
+    "clinic.": "/auth",
+    "my.": "/portal"
+  }
+}
