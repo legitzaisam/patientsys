@@ -130,16 +130,17 @@ test.describe("journey board", () => {
       if (firstOnTrack !== -1 && lastAtRisk !== -1) expect(lastAtRisk).toBeLessThan(firstOnTrack);
     }
     const dates = await page.locator('[data-qc="board-date"]').allInnerTexts();
-    expect(
-      dates.every((d) => /^((Booked|Due) .+|\d+d overdue)( · Booked .+)?$/.test(d.trim())),
-    ).toBe(true);
+    expect(dates.every((d) => /^(Booked|Due) /.test(d.trim()))).toBe(true);
 
-    // An overdue card names the step that slipped instead of a bare reason.
+    // An overdue card names the step that slipped and how late it is, once.
     await expect(cards.filter({ hasText: "Next step overdue" })).toHaveCount(0);
-    const overdue = cards.filter({ hasText: /Overdue:/ }).first();
+    const overdue = cards.filter({ has: page.locator('[data-qc="board-late"]') }).first();
     if ((await overdue.count()) > 0) {
-      await expect(overdue.locator('[data-qc="board-step"]')).toHaveText(/^Overdue: \S.+/);
-      await expect(overdue.locator('[data-qc="board-date"]')).toContainText(/overdue|Due today/);
+      await expect(overdue.locator('[data-qc="board-step"]')).toHaveText(
+        /^\S.+, \d+ days? overdue$/,
+      );
+      // Once on the chip, once on the step line.
+      expect((await overdue.innerText()).match(/overdue/gi)).toHaveLength(2);
     }
 
     const book = page.locator('[data-qc="board-book"]').first();

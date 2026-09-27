@@ -12,7 +12,12 @@ import {
 } from "@/lib/clinic.functions";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { QuickAddAppointment } from "@/components/quick-add-appointment";
-import { nextStepLine, planDateLabel, riskChipLabel } from "@/components/patients/plan-step-copy";
+import {
+  nextStepLine,
+  overdueLabel,
+  planDateLabel,
+  riskChipLabel,
+} from "@/components/patients/plan-step-copy";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -196,6 +201,7 @@ export function JourneyBoard({
               {col.plans.map((plan) => {
                 const pct = plan.total ? Math.round((plan.done / plan.total) * 100) : 0;
                 const dateLabel = planDateLabel(plan);
+                const lateLabel = overdueLabel(plan);
                 return (
                   <li
                     key={plan.id}
@@ -225,25 +231,29 @@ export function JourneyBoard({
                             plan.overdue ? "text-destructive-ink" : "text-ink-2",
                           )}
                         >
-                          <p className="flex items-center gap-1.5" data-qc="board-step">
+                          <p className="flex items-start gap-1.5" data-qc="board-step">
                             <ClipboardList
                               className={cn(
-                                "h-3 w-3 shrink-0",
+                                "mt-px h-3 w-3 shrink-0",
                                 plan.overdue ? "text-destructive-ink" : "text-muted-foreground",
                               )}
                               aria-hidden
                             />
-                            <span className={cn("truncate", plan.overdue && "font-semibold")}>
-                              {nextStepLine(plan)}
-                            </span>
+                            {lateLabel ? (
+                              <span className="line-clamp-2 min-w-0">
+                                <span className="font-semibold">{nextStepLine(plan)}</span>,{" "}
+                                <span className="whitespace-nowrap tabular-nums" data-qc="board-late">
+                                  {lateLabel}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="truncate">{nextStepLine(plan)}</span>
+                            )}
                           </p>
                           {dateLabel ? (
                             <p
                               data-qc="board-date"
-                              className={cn(
-                                "flex items-center gap-1 pl-[1.125rem] tabular-nums",
-                                plan.overdue ? "font-semibold" : "text-muted-foreground",
-                              )}
+                              className="flex items-center gap-1 pl-[1.125rem] tabular-nums text-muted-foreground"
                             >
                               <CalendarClock className="h-3 w-3 shrink-0" aria-hidden />
                               <span className="truncate">{dateLabel}</span>

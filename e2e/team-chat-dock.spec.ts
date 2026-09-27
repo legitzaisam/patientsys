@@ -56,6 +56,47 @@ test("an urgent alert on a teammate's day card opens where it lives, ready to ac
   await expect(chat.locator("textarea")).toBeFocused();
 });
 
+test("replying to an alert sends it to the sender's Team alerts with a toast", async ({ page, browser, baseURL }) => {
+  // The owner stays on the dashboard so the reply arrives while they are signed in.
+  await expect(page.getByRole("button", { name: /^Team alerts/ })).toBeVisible();
+
+  const deskContext = await browser.newContext();
+  await deskContext.addCookies([{ name: "demo_role", value: "front_desk", url: baseURL ?? "http://localhost:8091" }]);
+  const desk = await deskContext.newPage();
+  await desk.goto("/dashboard");
+  await desk.locator('[data-qc="chat-bubble"]').click();
+  const chat = desk.locator('[data-qc="chat-window"]');
+  await chat.locator('[data-qc="team-inbox"]').getByRole("button", { name: /Dr Amara Osei/ }).click();
+
+  const alert = chat.locator('[data-qc="staff-chat-alert"]', { hasText: "Please chase the two outstanding consent forms" });
+  await alert.locator('[data-qc="staff-chat-alert-reply"]').click();
+  const chip = chat.locator('[data-qc="composer-reply-chip"]');
+  await expect(chip).toContainText("Replying to Dr Amara Osei's alert");
+  await expect(chip).toContainText("Please chase the two outstanding consent forms");
+  await expect(chat.getByRole("button", { name: "Attach file" })).toHaveCount(0);
+
+  const reply = `Both chased ${Date.now()}`;
+  await chat.locator("textarea").fill(reply);
+  await chat.locator("textarea").press("Enter");
+  await expect(chip).toHaveCount(0);
+  const sent = chat.locator('[data-qc="staff-chat-alert"]', { hasText: reply });
+  await expect(sent).toContainText("Reply");
+  await expect(sent.locator('[data-qc="staff-chat-alert-quote"]')).toContainText("Please chase the two outstanding consent forms");
+  await deskContext.close();
+
+  const toast = page.locator("[data-sonner-toast]", { hasText: reply });
+  await expect(toast).toContainText("Replied to your alert", { timeout: 15_000 });
+  await expect(toast).toContainText("Sofia Marchetti");
+
+  await page.getByRole("button", { name: /^Team alerts/ }).click();
+  const inbox = page.getByRole("dialog").filter({ hasText: "Team alerts" });
+  const stack = inbox.getByRole("button", { name: /^Expand \d+ alerts with Sofia Marchetti/ });
+  if (await stack.isVisible()) await stack.click();
+  const row = inbox.getByRole("button", { name: "Open alert with Sofia Marchetti" }).filter({ hasText: reply });
+  await expect(row).toBeVisible();
+  await expect(row.locator('[data-qc="alert-reply-tag"]')).toBeVisible();
+});
+
 test("opening an alert jumps to that teammate in the Team tab", async ({ page }) => {
   await page.getByRole("button", { name: /^Team alerts/ }).click();
   await page.getByRole("button", { name: /^Expand \d+ alerts with Sofia Marchetti/ }).click();

@@ -289,7 +289,9 @@ export function StaffChatPanel({
   if (!enabled) return null;
 
   const title = peerName || data?.peer?.full_name || "Teammate";
-  const firstName = title.trim().split(/\s+/)[0] || title;
+  const nameParts = title.trim().split(/\s+/);
+  const firstName =
+    (/^(dr|mr|mrs|ms|miss|mx|prof)\.?$/i.test(nameParts[0] ?? "") ? nameParts[1] : nameParts[0]) || title;
 
   function invalidateChat() {
     void queryClient.invalidateQueries({ queryKey: ["staff-chat", peerUserId] });
@@ -302,7 +304,7 @@ export function StaffChatPanel({
     if (replyToId) {
       setReplyToId(null);
       invalidateAlerts();
-      toast.success(`Reply sent to ${firstName}`);
+      toast.success(`Reply sent to ${title}`);
     }
     invalidateChat();
   }
@@ -483,7 +485,7 @@ export function StaffChatPanel({
         replyingTo
           ? {
               id: replyingTo.id,
-              label: `Replying to ${firstName}'s ${replyingTo.urgent ? "urgent alert" : "alert"}`,
+              label: `Replying to ${title}'s ${replyingTo.urgent ? "urgent alert" : "alert"}`,
               quote: alertQuote(replyingTo),
               onCancel: () => setReplyToId(null),
               send: (body: string) => replyToAlert({ data: { alertId: replyingTo.id, body } }),

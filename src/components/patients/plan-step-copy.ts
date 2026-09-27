@@ -32,16 +32,30 @@ export function bookedLabel(iso: string) {
   return `Booked ${new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
 }
 
+/** "7 days overdue" for a slipped step; null when the step is not late. */
+export function overdueLabel(plan: PlanStepInput) {
+  const dueDate = plan.nextMilestone?.dueDate;
+  if (!plan.overdue || !dueDate) return null;
+  const due = new Date(`${dueDate}T12:00:00`);
+  const today = new Date();
+  const days = Math.max(
+    1,
+    Math.round(
+      (new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12).getTime() -
+        due.getTime()) /
+        86400000,
+    ),
+  );
+  return `${days} ${days === 1 ? "day" : "days"} overdue`;
+}
+
 /**
- * An overdue step keeps its due copy even when a visit is booked, so staff can
- * still see how late it is; the booking is added, not swapped in.
+ * The booking if there is one, else the due date. An overdue step's lateness
+ * lives on the step line, so here it only gets its booking.
  */
 export function planDateLabel(plan: PlanStepInput) {
   const booked = plan.nextBookingAt ? bookedLabel(plan.nextBookingAt) : null;
-  if (plan.overdue) {
-    const due = dueLabel(plan.nextMilestone?.dueDate);
-    return [due, booked].filter(Boolean).join(" · ") || null;
-  }
+  if (plan.overdue) return booked;
   return booked ?? dueLabel(plan.nextMilestone?.dueDate);
 }
 
@@ -51,7 +65,8 @@ export function riskChipLabel(plan: PlanStepInput) {
   return "On track";
 }
 
+/** The chip already says Overdue, so an overdue step is just its title. */
 export function nextStepLine(plan: PlanStepInput) {
-  const title = plan.nextMilestone?.title ?? "next step";
-  return plan.overdue ? `Overdue: ${title}` : `Next: ${title}`;
+  const title = plan.nextMilestone?.title ?? "Next step";
+  return plan.overdue ? title : `Next: ${title}`;
 }

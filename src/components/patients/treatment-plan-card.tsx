@@ -8,7 +8,12 @@ import { useServerFn } from "@tanstack/react-start";
 import { CalendarClock, ClipboardList } from "lucide-react";
 import { listTreatmentPlans } from "@/lib/clinic.functions";
 import { JOURNEY_PHASE_META } from "@/lib/journey-phases";
-import { nextStepLine, planDateLabel, riskChipLabel } from "@/components/patients/plan-step-copy";
+import {
+  nextStepLine,
+  overdueLabel,
+  planDateLabel,
+  riskChipLabel,
+} from "@/components/patients/plan-step-copy";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +52,7 @@ export function TreatmentPlanCard({ patientId }: { patientId: string }) {
         {plans.map((plan) => {
           const pct = plan.total ? Math.round((plan.done / plan.total) * 100) : 0;
           const label = planDateLabel(plan);
+          const late = overdueLabel(plan);
           const phase = JOURNEY_PHASE_META[plan.phase];
           return (
             <li
@@ -106,16 +112,11 @@ export function TreatmentPlanCard({ patientId }: { patientId: string }) {
                   />
                   <span className={cn("truncate", plan.overdue && "font-semibold")}>
                     {nextStepLine(plan)}
+                    {late ? "," : null}
                   </span>
+                  {late ? <span className="shrink-0 tabular-nums">{late}</span> : null}
                   {label ? (
-                    <span
-                      className={cn(
-                        "ml-auto flex shrink-0 items-center gap-1 tabular-nums",
-                        plan.overdue
-                          ? "font-semibold text-destructive-ink"
-                          : "text-muted-foreground",
-                      )}
-                    >
+                    <span className="ml-auto flex shrink-0 items-center gap-1 tabular-nums text-muted-foreground">
                       <CalendarClock className="h-3 w-3" aria-hidden />
                       {label}
                     </span>
