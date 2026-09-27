@@ -151,6 +151,7 @@ function AppointmentCarousel({
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
+    startY: number;
     startScroll: number;
     moved: boolean;
   } | null>(null);
@@ -234,13 +235,12 @@ function AppointmentCarousel({
 
     const onScroll = () => syncEdges();
     const onWheel = (event: WheelEvent) => {
+      // A vertical wheel belongs to the page, even with the cursor on the strip.
+      if (Math.abs(event.deltaY) >= Math.abs(event.deltaX)) return;
       const max = el.scrollWidth - el.clientWidth;
-      if (max <= 0) return;
-      const dx =
-        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-      if (dx === 0) return;
+      if (max <= 0 || event.deltaX === 0) return;
       event.preventDefault();
-      el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + dx));
+      el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + event.deltaX));
       syncEdges();
     };
 
@@ -324,6 +324,7 @@ function AppointmentCarousel({
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
+      startY: event.clientY,
       startScroll: el.scrollLeft,
       moved: false,
     };
@@ -337,10 +338,18 @@ function AppointmentCarousel({
     const el = scrollerRef.current;
     if (!drag || !el || drag.pointerId !== event.pointerId) return;
     const dx = event.clientX - drag.startX;
-    if (!drag.moved && Math.abs(dx) > 5) {
-      drag.moved = true;
-      el.dataset.diaryDragging = "1";
-      el.setPointerCapture(event.pointerId);
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved) {
+      // An up/down gesture is the page scrolling, so let go of it.
+      if (Math.abs(dy) > 5 && Math.abs(dy) >= Math.abs(dx)) {
+        dragRef.current = null;
+        return;
+      }
+      if (Math.abs(dx) > 5) {
+        drag.moved = true;
+        el.dataset.diaryDragging = "1";
+        el.setPointerCapture(event.pointerId);
+      }
     }
     if (!drag.moved) return;
     event.preventDefault();
@@ -385,7 +394,7 @@ function AppointmentCarousel({
             className="diary-carousel-scroller relative flex cursor-grab gap-4 overflow-x-auto overscroll-x-contain pl-5 pr-4 pt-3 pb-8 active:cursor-grabbing"
             style={{
               scrollPaddingInline: "1.25rem 1rem",
-              touchAction: "pan-x",
+              touchAction: "pan-x pan-y pinch-zoom",
             }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}

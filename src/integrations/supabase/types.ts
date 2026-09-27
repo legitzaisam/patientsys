@@ -2267,6 +2267,7 @@ export type Database = {
           read_at: string | null;
           recipient_dismissed_at: string | null;
           recipient_id: string;
+          reply_to_id: string | null;
           sender_dismissed_at: string | null;
           sender_id: string | null;
           title: string;
@@ -2283,6 +2284,7 @@ export type Database = {
           read_at?: string | null;
           recipient_dismissed_at?: string | null;
           recipient_id: string;
+          reply_to_id?: string | null;
           sender_dismissed_at?: string | null;
           sender_id?: string | null;
           title: string;
@@ -2299,6 +2301,7 @@ export type Database = {
           read_at?: string | null;
           recipient_dismissed_at?: string | null;
           recipient_id?: string;
+          reply_to_id?: string | null;
           sender_dismissed_at?: string | null;
           sender_id?: string | null;
           title?: string;
@@ -2317,6 +2320,13 @@ export type Database = {
             columns: ["patient_id"];
             isOneToOne: false;
             referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "staff_notifications_reply_to_id_fkey";
+            columns: ["reply_to_id"];
+            isOneToOne: false;
+            referencedRelation: "staff_notifications";
             referencedColumns: ["id"];
           },
         ];

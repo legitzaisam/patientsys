@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
-import { formatTeamAlertToast } from "@/lib/staff-alert-title";
+import { formatTeamAlertToast, isStaffAlertReply } from "@/lib/staff-alert-title";
 import { pinAetheriaToast, unpinAetheriaToast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 
 type ChatQuickReplyToastProps = {
   toastId: string | number;
   title: string;
+  tag: string;
   description?: string | undefined;
   onOpen: () => void;
 };
 
 function peerFromTitle(title: string) {
   const m = title.match(/^(.+?) messaged you$/i);
-  return m?.[1]?.trim() || title.replace(/^(Message|Urgent) from /i, "").trim() || "Teammate";
+  return m?.[1]?.trim() || title.replace(/^(Message|Urgent|Reply) from /i, "").trim() || "Teammate";
 }
 
 /** How much of the toast stays visible when docked off the left edge. */
@@ -45,7 +46,7 @@ function useQuickReplyToastDock(contentRef: React.RefObject<HTMLDivElement | nul
     el.style.transition = animate
       ? "left 0.38s cubic-bezier(0.4, 0, 0.2, 1)"
       : "none";
-    el.dataset.aetheriaDocked = x < -8 || dockedRef.current ? "true" : "false";
+    el.dataset["aetheriaDocked"] = x < -8 || dockedRef.current ? "true" : "false";
   };
 
   useEffect(() => {
@@ -61,7 +62,7 @@ function useQuickReplyToastDock(contentRef: React.RefObject<HTMLDivElement | nul
       ro.disconnect();
       el.style.left = "";
       el.style.transition = "";
-      delete el.dataset.aetheriaDocked;
+      delete el.dataset["aetheriaDocked"];
     };
   }, [contentRef, docked]);
 
@@ -138,6 +139,7 @@ function useQuickReplyToastDock(contentRef: React.RefObject<HTMLDivElement | nul
 function ChatQuickReplyToast({
   toastId,
   title,
+  tag,
   description,
   onOpen,
 }: ChatQuickReplyToastProps) {
@@ -193,7 +195,7 @@ function ChatQuickReplyToast({
           <span className="shrink-0 text-[10px] leading-none text-muted-foreground/45" aria-hidden>
             ·
           </span>
-          <p className="shrink-0 text-2xs text-muted-foreground">New message</p>
+          <p className="shrink-0 text-2xs text-muted-foreground">{tag}</p>
         </div>
       </header>
 
@@ -223,9 +225,9 @@ export function showChatQuickReplyToast(opts: {
   notificationId: string;
   senderId: string;
   title: string;
-  body?: string | null;
-  kind?: string | null;
-  urgent?: boolean | null;
+  body?: string | null | undefined;
+  kind?: string | null | undefined;
+  urgent?: boolean | null | undefined;
   onOpen: () => void;
 }) {
   const copy = formatTeamAlertToast({
@@ -240,6 +242,7 @@ export function showChatQuickReplyToast(opts: {
       <ChatQuickReplyToast
         toastId={toastId}
         title={copy.title}
+        tag={isStaffAlertReply(opts.title) ? "Replied to your alert" : "New message"}
         description={copy.description}
         onOpen={opts.onOpen}
       />

@@ -19,11 +19,11 @@ import { useOpenTeamChat } from "@/components/floating-dock/dock-context";
 
 function showTeamAlertToast(opts: {
   id: string;
-  senderId?: string | null;
+  senderId?: string | null | undefined;
   title: string;
-  body?: string | null;
-  kind?: string | null;
-  urgent?: boolean | null;
+  body?: string | null | undefined;
+  kind?: string | null | undefined;
+  urgent?: boolean | null | undefined;
   openTeamChat: (peer: { userId: string; name: string }) => void;
 }) {
   if (opts.senderId) {

@@ -12,6 +12,7 @@ import {
 } from "@/lib/clinic.functions";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { QuickAddAppointment } from "@/components/quick-add-appointment";
+import { nextStepLine, planDateLabel, riskChipLabel } from "@/components/patients/plan-step-copy";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -44,23 +45,6 @@ type BoardPlan = {
 const COLUMNS: Array<{ phase: BoardPlan["phase"]; label: string; sub: string }> = JOURNEY_PHASES.map(
   ({ phase, label, sub }) => ({ phase, label, sub }),
 );
-
-/** "Due 28 Sep" when nothing is booked, "3d overdue" once the step has slipped. */
-function dueLabel(dueDate?: string | null) {
-  if (!dueDate) return null;
-  const due = new Date(`${dueDate}T12:00:00`);
-  const today = new Date();
-  const days = Math.round((due.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12).getTime()) / 86400000);
-  if (days < 0) return `${Math.abs(days)}d overdue`;
-  if (days === 0) return "Due today";
-  if (days === 1) return "Due tomorrow";
-  return `Due ${due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
-}
-
-/** "Booked 28 Sep": the date is in the diary. */
-function bookedLabel(iso: string) {
-  return `Booked ${new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
-}
 
 /** At-risk cards first (overdue before no-booking), then by patient name. */
 function byRiskThenName(a: BoardPlan, b: BoardPlan) {
@@ -211,9 +195,7 @@ export function JourneyBoard({
             <ul className="space-y-2">
               {col.plans.map((plan) => {
                 const pct = plan.total ? Math.round((plan.done / plan.total) * 100) : 0;
-                const dateLabel = plan.nextBookingAt
-                  ? bookedLabel(plan.nextBookingAt)
-                  : dueLabel(plan.nextMilestone?.dueDate);
+                const dateLabel = planDateLabel(plan);
                 return (
                   <li
                     key={plan.id}
@@ -237,26 +219,37 @@ export function JourneyBoard({
                         </span>
                       </div>
                       {plan.nextMilestone || dateLabel ? (
-                        <p className="mt-2 flex items-center gap-1.5 text-2xs text-ink-2">
-                          <ClipboardList className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
-                          <span className="truncate">
-                            {plan.nextMilestone?.title ?? "Next step"}
-                          </span>
+                        <div
+                          className={cn(
+                            "mt-2 space-y-0.5 text-2xs",
+                            plan.overdue ? "text-destructive-ink" : "text-ink-2",
+                          )}
+                        >
+                          <p className="flex items-center gap-1.5" data-qc="board-step">
+                            <ClipboardList
+                              className={cn(
+                                "h-3 w-3 shrink-0",
+                                plan.overdue ? "text-destructive-ink" : "text-muted-foreground",
+                              )}
+                              aria-hidden
+                            />
+                            <span className={cn("truncate", plan.overdue && "font-semibold")}>
+                              {nextStepLine(plan)}
+                            </span>
+                          </p>
                           {dateLabel ? (
-                            <span
+                            <p
                               data-qc="board-date"
                               className={cn(
-                                "ml-auto flex shrink-0 items-center gap-1 tabular-nums",
-                                plan.overdue && !plan.nextBookingAt
-                                  ? "font-semibold text-destructive-ink"
-                                  : "text-muted-foreground",
+                                "flex items-center gap-1 pl-[1.125rem] tabular-nums",
+                                plan.overdue ? "font-semibold" : "text-muted-foreground",
                               )}
                             >
-                              <CalendarClock className="h-3 w-3" aria-hidden />
-                              {dateLabel}
-                            </span>
+                              <CalendarClock className="h-3 w-3 shrink-0" aria-hidden />
+                              <span className="truncate">{dateLabel}</span>
+                            </p>
                           ) : null}
-                        </p>
+                        </div>
                       ) : null}
                       {/* Same bar rule as the dashboard: pink once the next step is late. */}
                       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-glass-2 shadow-inset-hi">
@@ -275,7 +268,7 @@ export function JourneyBoard({
                           plan.atRisk ? "bg-destructive-bg text-destructive-ink" : "bg-success-bg text-success-ink"
                         }`}
                       >
-                        {plan.atRisk ? (plan.riskReason ?? "At risk") : "On track"}
+                        {riskChipLabel(plan)}
                       </span>
                       {plan.practitionerName ? (
                         <span className="min-w-0 truncate text-2xs text-muted-foreground">

@@ -130,7 +130,17 @@ test.describe("journey board", () => {
       if (firstOnTrack !== -1 && lastAtRisk !== -1) expect(lastAtRisk).toBeLessThan(firstOnTrack);
     }
     const dates = await page.locator('[data-qc="board-date"]').allInnerTexts();
-    expect(dates.every((d) => /^(Booked|Due) |overdue$/.test(d))).toBe(true);
+    expect(
+      dates.every((d) => /^((Booked|Due) .+|\d+d overdue)( · Booked .+)?$/.test(d.trim())),
+    ).toBe(true);
+
+    // An overdue card names the step that slipped instead of a bare reason.
+    await expect(cards.filter({ hasText: "Next step overdue" })).toHaveCount(0);
+    const overdue = cards.filter({ hasText: /Overdue:/ }).first();
+    if ((await overdue.count()) > 0) {
+      await expect(overdue.locator('[data-qc="board-step"]')).toHaveText(/^Overdue: \S.+/);
+      await expect(overdue.locator('[data-qc="board-date"]')).toContainText(/overdue|Due today/);
+    }
 
     const book = page.locator('[data-qc="board-book"]').first();
     const card = page.locator('[data-qc="board-card"]').filter({ has: book }).first();

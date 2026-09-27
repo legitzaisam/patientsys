@@ -840,6 +840,14 @@
   }
 
   /* Sonner toasts — glass cards aligned with popovers / dialogs. */
+  /* Stack from the live card height. Sonner's own offset stays large after text wraps. */
+  [data-sonner-toaster][data-y-position="bottom"]
+    [data-sonner-toast][data-mounted="true"][data-expanded="true"]:not([data-swiping="true"]):not(
+      [data-removed="true"]
+    ):not([data-swipe-out="true"]) {
+    transform: translateY(calc(var(--lift) * var(--aetheria-offset, var(--offset)))) !important;
+  }
+
   [data-sonner-toaster] {
     --normal-bg: transparent;
     --normal-border: transparent;

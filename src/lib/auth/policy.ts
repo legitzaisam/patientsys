@@ -156,6 +156,8 @@ export const POLICY = {
   /* Marking read is not clearing: the bell marks items read for every staff
      role, so gating it on notifications.delete would break the bell. */
   markStaffNotificationRead: { kind: "staff" },
+  // Only the alert's recipient may reply; the handler checks that against the row.
+  replyToStaffAlert: { kind: "staff" },
   dismissStaffInboxItem: { kind: "capability", key: "notifications.delete" },
   dismissStaffInboxItems: { kind: "capability", key: "notifications.delete" },
 

@@ -8,6 +8,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { CalendarClock, ClipboardList } from "lucide-react";
 import { listTreatmentPlans } from "@/lib/clinic.functions";
 import { JOURNEY_PHASE_META } from "@/lib/journey-phases";
+import { nextStepLine, planDateLabel, riskChipLabel } from "@/components/patients/plan-step-copy";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -24,24 +25,6 @@ type PlanRow = {
   nextBookingAt?: string | null;
   practitionerName?: string | null;
 };
-
-function dateLabel(plan: PlanRow) {
-  if (plan.nextBookingAt) {
-    return `Booked ${new Date(plan.nextBookingAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
-  }
-  const due = plan.nextMilestone?.dueDate;
-  if (!due) return null;
-  const d = new Date(`${due}T12:00:00`);
-  const today = new Date();
-  const days = Math.round(
-    (d.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12).getTime()) /
-      86400000,
-  );
-  if (days < 0) return `${Math.abs(days)}d overdue`;
-  if (days === 0) return "Due today";
-  if (days === 1) return "Due tomorrow";
-  return `Due ${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
-}
 
 export function TreatmentPlanCard({ patientId }: { patientId: string }) {
   const fetchPlans = useServerFn(listTreatmentPlans);
@@ -63,7 +46,7 @@ export function TreatmentPlanCard({ patientId }: { patientId: string }) {
       <ul className="space-y-3">
         {plans.map((plan) => {
           const pct = plan.total ? Math.round((plan.done / plan.total) * 100) : 0;
-          const label = dateLabel(plan);
+          const label = planDateLabel(plan);
           const phase = JOURNEY_PHASE_META[plan.phase];
           return (
             <li
@@ -86,7 +69,7 @@ export function TreatmentPlanCard({ patientId }: { patientId: string }) {
                       : "bg-success-bg text-success-ink",
                   )}
                 >
-                  {plan.atRisk ? (plan.riskReason ?? "At risk") : "On track"}
+                  {riskChipLabel(plan)}
                 </span>
               </div>
               <div className="mt-2 flex items-center gap-3">
@@ -107,14 +90,28 @@ export function TreatmentPlanCard({ patientId }: { patientId: string }) {
                 </span>
               </div>
               {plan.nextMilestone || label ? (
-                <p className="mt-2 flex items-center gap-1.5 text-2xs text-ink-2">
-                  <ClipboardList className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="truncate">Next: {plan.nextMilestone?.title ?? "next step"}</span>
+                <p
+                  className={cn(
+                    "mt-2 flex items-center gap-1.5 text-2xs",
+                    plan.overdue ? "text-destructive-ink" : "text-ink-2",
+                  )}
+                  data-qc="plan-step"
+                >
+                  <ClipboardList
+                    className={cn(
+                      "h-3 w-3 shrink-0",
+                      plan.overdue ? "text-destructive-ink" : "text-muted-foreground",
+                    )}
+                    aria-hidden
+                  />
+                  <span className={cn("truncate", plan.overdue && "font-semibold")}>
+                    {nextStepLine(plan)}
+                  </span>
                   {label ? (
                     <span
                       className={cn(
                         "ml-auto flex shrink-0 items-center gap-1 tabular-nums",
-                        plan.overdue && !plan.nextBookingAt
+                        plan.overdue
                           ? "font-semibold text-destructive-ink"
                           : "text-muted-foreground",
                       )}

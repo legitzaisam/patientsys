@@ -203,6 +203,11 @@ export const SendStaffAlert = z.object({
   urgent: z.boolean().optional(),
 });
 
+export const ReplyToStaffAlert = z.object({
+  alertId: id,
+  body: text(10_000),
+});
+
 export const MarkStaffNotificationRead = z.object({
   id: optionalId,
   all: z.boolean().optional(),

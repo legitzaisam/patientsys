@@ -3,7 +3,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Paperclip, Send, Trash2, X, FileText } from "lucide-react";
+import { CornerUpLeft, Paperclip, Send, Trash2, X, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import {
@@ -43,6 +43,7 @@ export function MessageComposer({
   variant = "default",
   autoFocus = false,
   initialDraft,
+  replyTo,
 }: {
   /** Patient thread id — required unless messaging a staff peer. */
   patientId?: string;
@@ -59,6 +60,19 @@ export function MessageComposer({
   autoFocus?: boolean;
   /** Pre-filled text, e.g. "I'd like to reschedule…" from a Reschedule button. */
   initialDraft?: string | undefined;
+  /**
+   * Answering a specific item (a team alert): shows a chip above the input and sends through
+   * `send` instead of the normal thread. Text only, so attachments are off while it is set.
+   */
+  replyTo?:
+    | {
+        id: string;
+        label: string;
+        quote?: string | undefined;
+        onCancel: () => void;
+        send: (body: string) => Promise<unknown>;
+      }
+    | undefined;
 }) {
   const queryClient = useQueryClient();
   const [body, setBody] = useState(initialDraft ?? "");
@@ -77,6 +91,10 @@ export function MessageComposer({
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus();
   }, [autoFocus, peerUserId, patientId]);
+
+  useEffect(() => {
+    if (replyTo?.id) inputRef.current?.focus();
+  }, [replyTo?.id]);
 
   const { data: templates } = useQuery({
     queryKey: ["message-templates"],
@@ -125,7 +143,23 @@ export function MessageComposer({
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const sending = isStaffPeer ? postStaff.isPending : postPatient.isPending;
+  const postReply = useMutation({
+    mutationFn: (text: string) => {
+      if (!replyTo) throw new Error("Nothing to reply to");
+      return replyTo.send(text);
+    },
+    onSuccess: () => {
+      setBody("");
+      onSent();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const sending = replyTo
+    ? postReply.isPending
+    : isStaffPeer
+      ? postStaff.isPending
+      : postPatient.isPending;
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -167,6 +201,15 @@ export function MessageComposer({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (replyTo) {
+      if (!body.trim() || postReply.isPending) return;
+      if (pending.length > 0) {
+        toast.error("Replies to alerts are text only. Remove the attachment or cancel the reply.");
+        return;
+      }
+      postReply.mutate(body.trim());
+      return;
+    }
     if (!body.trim() && pending.length === 0) return;
     if (isStaffPeer && peerUserId) {
       postStaff.mutate({ data: { peerUserId, body, attachments: pending } });
@@ -299,12 +342,49 @@ export function MessageComposer({
       type="submit"
       size="icon"
       className={cn(sizeClass, "shrink-0 rounded-full")}
-      aria-label="Send message"
-      disabled={sending || (!body.trim() && pending.length === 0)}
+      aria-label={replyTo ? "Send reply" : "Send message"}
+      disabled={sending || (replyTo ? !body.trim() : !body.trim() && pending.length === 0)}
     >
       <Send className={iconClass} />
     </Button>
   );
+
+  function onInputKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit(e as unknown as React.FormEvent);
+      return;
+    }
+    if (e.key === "Escape" && replyTo) {
+      // Escape drops the reply first; it must not also close the chat window.
+      e.preventDefault();
+      e.stopPropagation();
+      replyTo.onCancel();
+    }
+  }
+
+  const replyChip = replyTo ? (
+    <div
+      data-qc="composer-reply-chip"
+      className="flex items-start gap-2 rounded-2xl border border-accent-line bg-accent-soft px-3 py-1.5 shadow-inset-hi"
+    >
+      <CornerUpLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-ink" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-2xs font-semibold text-accent-ink">{replyTo.label}</p>
+        {replyTo.quote ? (
+          <p className="truncate text-2xs text-muted-foreground">{replyTo.quote}</p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        aria-label="Cancel reply"
+        onClick={replyTo.onCancel}
+        className="-mr-1 shrink-0 cursor-pointer rounded-full p-0.5 text-ink-3 transition-colors hover:bg-[rgba(47,63,102,0.1)] hover:text-foreground"
+      >
+        <X className="h-3.5 w-3.5" aria-hidden />
+      </button>
+    </div>
+  ) : null;
 
   return (
     <form
@@ -343,6 +423,8 @@ export function MessageComposer({
         </ul>
       )}
 
+      {replyChip}
+
       {variant === "chat" ? (
         <div className="flex items-center gap-1">
           <div className="flex min-w-0 flex-1 items-end rounded-[22px] border border-edge bg-glass-2 p-1.5 shadow-inset-hi">
@@ -350,19 +432,15 @@ export function MessageComposer({
               ref={inputRef}
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder={placeholder}
+              placeholder={replyTo ? "Write your reply…" : placeholder}
+              aria-label={replyTo ? replyTo.label : undefined}
               rows={1}
               className="min-h-9 max-h-28 flex-1 resize-none border-0 bg-transparent px-2.5 py-2 text-sm leading-5 shadow-none focus-visible:ring-0"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submit(e as unknown as React.FormEvent);
-                }
-              }}
+              onKeyDown={onInputKeyDown}
             />
           </div>
           <div className="flex h-9 shrink-0 items-center gap-0.5 self-center">
-            {attachButton("h-7 w-7")}
+            {replyTo ? null : attachButton("h-7 w-7")}
             {templatesButton("h-7 w-7")}
             {sendButton("h-7 w-7", "h-3.5 w-3.5")}
           </div>
@@ -373,18 +451,14 @@ export function MessageComposer({
             ref={inputRef}
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder={placeholder}
+            placeholder={replyTo ? "Write your reply…" : placeholder}
+            aria-label={replyTo ? replyTo.label : undefined}
             rows={1}
             className="min-h-9 h-9 flex-1 resize-none rounded-xl py-2 text-sm leading-5"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit(e as unknown as React.FormEvent);
-              }
-            }}
+            onKeyDown={onInputKeyDown}
           />
           <div className="flex items-center gap-1">
-            {attachButton("h-9 w-9")}
+            {replyTo ? null : attachButton("h-9 w-9")}
             {templatesButton("h-9 w-9")}
             {sendButton("h-9 w-9")}
           </div>

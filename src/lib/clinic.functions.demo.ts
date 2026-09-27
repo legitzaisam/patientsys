@@ -54,6 +54,7 @@ import {
 import { assertEmail } from "@/lib/email";
 import { assertPhone } from "@/lib/phone";
 import { practitionerDayAlerts, type PractitionerDayAlertRow } from "@/lib/practitioner-day-alerts";
+import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
 import {
   canSelfApplyIdentityChanges,
   clinicHasSeparateManager,
@@ -2771,6 +2772,40 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
       });
     }
     return { sent: recipients.length };
+  });
+
+export const replyToStaffAlert = createServerFn({ method: "POST" })
+  .validator((data: { alertId: string; body: string }) => parseInput(schemas.ReplyToStaffAlert, data))
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const body = data.body.trim();
+    if (!body) throw new Error("Write a reply");
+    const original = staffNotifications.find((n) => n.id === data.alertId);
+    if (!original || original.recipient_id !== me.userId) throw new Error("Alert not found");
+    if (original.kind !== "urgent" && original.kind !== "staff_message") throw new Error("Only team alerts can be replied to");
+    if (!original.sender_id || original.sender_id === me.userId) throw new Error("This alert has no one to reply to");
+
+    const from = me.profile?.full_name || me.email || "A colleague";
+    const { topic } = parseStaffAlertTitle(original.title as string);
+    const now = new Date().toISOString();
+    const reply = {
+      id: newId("l9"),
+      clinic_id: CLINIC_ID,
+      recipient_id: original.sender_id,
+      sender_id: me.userId,
+      urgent: false,
+      kind: "staff_message",
+      title: topic ? `Reply from ${from}: ${topic}` : `Reply from ${from}`,
+      body,
+      reply_to_id: original.id,
+      patient_id: null,
+      appointment_id: null,
+      read_at: null,
+      created_at: now,
+    };
+    staffNotifications.unshift(reply);
+    if (!original.read_at) original.read_at = now;
+    return { id: reply.id as string };
   });
 
 export const getPractitionerDay = createServerFn({ method: "GET" })
@@ -5495,6 +5530,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
         dismissed:
           n.recipient_id === me.userId &&
           Boolean((n as { recipient_dismissed_at?: string | null }).recipient_dismissed_at),
+        reply_to_id: (n.reply_to_id as string | null | undefined) ?? null,
         created_at: n.created_at as string,
         mine: n.sender_id === me.userId,
       }));

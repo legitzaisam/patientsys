@@ -206,15 +206,79 @@ function useToastPinning() {
   }, []);
 }
 
+const TOAST_STACK_GAP = 8;
+
+/** Sonner records each toast's height once. A later text wrap leaves that stale
+ * height in the stack offset, so the cards sit far apart. Re-space from the live height. */
+function useTightToastStack() {
+  useEffect(() => {
+    let detach = () => {};
+
+    const attach = (root: Element) => {
+      const layout = () => {
+        const visible = [...root.querySelectorAll<HTMLElement>("[data-sonner-toast]")]
+          .filter(
+            (el) =>
+              el.getAttribute("data-mounted") === "true" && el.getAttribute("data-removed") !== "true",
+          )
+          .sort((a, b) => Number(a.getAttribute("data-index")) - Number(b.getAttribute("data-index")));
+        let offset = 0;
+        for (const el of visible) {
+          const next = `${offset}px`;
+          if (el.style.getPropertyValue("--aetheria-offset") !== next) {
+            el.style.setProperty("--aetheria-offset", next);
+          }
+          offset += el.getBoundingClientRect().height + TOAST_STACK_GAP;
+        }
+      };
+
+      const ro = new ResizeObserver(layout);
+      const watch = () => {
+        for (const el of root.querySelectorAll("[data-sonner-toast]")) ro.observe(el);
+        layout();
+      };
+      const mo = new MutationObserver(watch);
+      mo.observe(root, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["data-index", "data-mounted", "data-removed"],
+      });
+      watch();
+      return () => {
+        ro.disconnect();
+        mo.disconnect();
+      };
+    };
+
+    const root = document.querySelector("[data-sonner-toaster]");
+    if (root) {
+      detach = attach(root);
+    } else {
+      const wait = new MutationObserver(() => {
+        const found = document.querySelector("[data-sonner-toaster]");
+        if (!found) return;
+        wait.disconnect();
+        detach = attach(found);
+      });
+      wait.observe(document.body, { childList: true, subtree: true });
+      detach = () => wait.disconnect();
+    }
+
+    return () => detach();
+  }, []);
+}
+
 const Toaster = ({ ...props }: ToasterProps) => {
   useToastPinning();
+  useTightToastStack();
 
   return (
     <Sonner
       className="toaster group"
       position="bottom-left"
       offset={24}
-      gap={12}
+      gap={8}
       expand
       visibleToasts={4}
       closeButton

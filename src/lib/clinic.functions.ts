@@ -30,6 +30,7 @@ import {
 import { assertEmail } from "@/lib/email";
 import { assertPhone } from "@/lib/phone";
 import { practitionerDayAlerts, type PractitionerDayAlertRow } from "@/lib/practitioner-day-alerts";
+import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
 import { GENERIC_STAFF_DEFAULTS, loginRoleForClinicPack } from "@/lib/access-catalogue";
 import { assertStaffInvite, normalizeClinicRoleName } from "@/lib/clinic-roles";
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
@@ -2767,6 +2768,58 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
       recipients: recipients.length,
     });
     return { sent: recipients.length };
+  });
+
+/**
+ * Answer a team alert. The reply is itself an alert (not a chat ping), so it lands in the
+ * sender's Team alerts and raises their toast. Replying also acknowledges the original.
+ */
+export const replyToStaffAlert = createServerFn({ method: "POST" })
+  .validator((data: { alertId: string; body: string }) => parseInput(schemas.ReplyToStaffAlert, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "replyToStaffAlert");
+    const body = data.body.trim();
+    if (!body) throw new Error("Write a reply");
+
+    const { data: original, error: fetchErr } = await ctx.supabase
+      .from("staff_notifications")
+      .select("id, recipient_id, sender_id, title, kind, read_at")
+      .eq("id", data.alertId)
+      .maybeSingle();
+    if (fetchErr) throw new Error(fetchErr.message);
+    if (!original || original.recipient_id !== ctx.userId) throw new Error("Alert not found");
+    if (original.kind !== "urgent" && original.kind !== "staff_message") throw new Error("Only team alerts can be replied to");
+    if (!original.sender_id || original.sender_id === ctx.userId) throw new Error("This alert has no one to reply to");
+
+    const from = identity.profile?.full_name || identity.email || "A colleague";
+    const { topic } = parseStaffAlertTitle(original.title);
+    const { data: inserted, error } = await ctx.supabase
+      .from("staff_notifications")
+      .insert({
+        clinic_id: clinicIdOf(context),
+        recipient_id: original.sender_id,
+        sender_id: ctx.userId,
+        urgent: false,
+        kind: "staff_message",
+        title: topic ? `Reply from ${from}: ${topic}` : `Reply from ${from}`,
+        body,
+        reply_to_id: original.id,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+
+    if (!original.read_at) {
+      await ctx.supabase
+        .from("staff_notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", original.id)
+        .eq("recipient_id", ctx.userId);
+    }
+    await audit(ctx, "notify", "staff_notification", inserted?.id ?? null, null, { reply_to: original.id });
+    return { id: inserted?.id ?? null };
   });
 
 /** Day summary for a practitioner: bookings, free windows and their urgent notes to me. */
@@ -7496,7 +7549,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
       // Direct alerts + alert-replies between these two people (not chat pings).
       ctx.supabase
         .from("staff_notifications")
-        .select("id, sender_id, recipient_id, title, body, urgent, kind, read_at, recipient_dismissed_at, created_at")
+        .select("id, sender_id, recipient_id, title, body, urgent, kind, read_at, recipient_dismissed_at, reply_to_id, created_at")
         .in("kind", ["urgent", "staff_message"])
         .or(
           `and(sender_id.eq.${ctx.userId},recipient_id.eq.${peer}),and(sender_id.eq.${peer},recipient_id.eq.${ctx.userId})`,
@@ -7568,6 +7621,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
           kind: string;
           read_at: string | null;
           recipient_dismissed_at: string | null;
+          reply_to_id: string | null;
           created_at: string;
         }[]
       )
@@ -7582,6 +7636,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
           kind: a.kind,
           read_at: a.read_at,
           dismissed: a.recipient_id === ctx.userId && Boolean(a.recipient_dismissed_at),
+          reply_to_id: a.reply_to_id ?? null,
           created_at: a.created_at,
           mine: a.sender_id === ctx.userId,
         })),

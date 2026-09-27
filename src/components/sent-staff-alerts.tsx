@@ -2,7 +2,7 @@ import { useMemo, useState, type MouseEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ChevronDown, Inbox, X } from "lucide-react";
+import { ChevronDown, CornerUpLeft, Inbox, X } from "lucide-react";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import {
   dismissStaffInboxItem,
@@ -18,7 +18,7 @@ import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useOpenTeamChat } from "@/components/floating-dock/dock-context";
-import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
+import { isStaffAlertReply, parseStaffAlertTitle } from "@/lib/staff-alert-title";
 import { cn } from "@/lib/utils";
 
 /** Team chat lives in the chat window's Team tab; this inbox is alerts only. */
@@ -70,6 +70,15 @@ const STACK_MOTION = "duration-400 ease-[cubic-bezier(0.4,0,0.2,1)]";
 
 const CHIP =
   "shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-semibold leading-none";
+
+function ReplyTag() {
+  return (
+    <span data-qc="alert-reply-tag" className={cn(CHIP, "inline-flex items-center gap-0.5 bg-accent-soft text-accent-ink")}>
+      <CornerUpLeft className="h-2.5 w-2.5" aria-hidden />
+      Reply
+    </span>
+  );
+}
 
 /** Status / read-receipt chip — always pill background, sits beside dismiss. */
 function StatusChip({ row }: { row: InboxRow }) {
@@ -163,8 +172,11 @@ function MessageRow({
         aria-label={`Open alert with ${row.peerName}`}
       >
         <div className="min-w-0">
-          <p className="truncate text-xs font-medium text-ink-2">
-            {row.direction === "in" ? "From" : "To"} {row.peerName}
+          <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-ink-2">
+            <span className="truncate">
+              {row.direction === "in" ? "From" : "To"} {row.peerName}
+            </span>
+            {isStaffAlertReply(row.title) ? <ReplyTag /> : null}
           </p>
           <p
             className={cn(
@@ -325,6 +337,7 @@ function PeerMessageStack({
               </p>
               <div className="mt-1.5 flex items-center gap-2">
                 <p className="text-2xs text-muted-foreground">{formatWhen(latest.created_at)}</p>
+                {isStaffAlertReply(latest.title) ? <ReplyTag /> : null}
               </div>
             </div>
           )}

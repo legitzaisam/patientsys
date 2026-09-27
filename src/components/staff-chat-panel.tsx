@@ -10,8 +10,10 @@ import {
   getStaffChat,
   markStaffChatRead,
   markStaffNotificationRead,
+  replyToStaffAlert,
 } from "@/lib/clinic.functions";
 import { can } from "@/lib/permissions";
+import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
 import { useIdentity } from "@/lib/use-identity";
 import { usePanelWidth } from "@/hooks/use-panel-width";
 import { MessageAttachments, type Attachment } from "@/components/message-attachments";
@@ -38,9 +40,15 @@ type ChatAlert = {
   kind: string;
   read_at: string | null;
   dismissed?: boolean;
+  reply_to_id?: string | null;
   created_at: string;
   mine: boolean;
 };
+
+function alertQuote(alert: ChatAlert) {
+  const text = alert.body?.trim() || parseStaffAlertTitle(alert.title).topic || alert.title;
+  return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+}
 
 type TimelineItem =
   | { type: "message"; at: string; message: ChatMessage }
@@ -98,6 +106,7 @@ export function StaffChatPanel({
   const markRead = useServerFn(markStaffChatRead);
   const markAlertRead = useServerFn(markStaffNotificationRead);
   const dismissAlert = useServerFn(dismissStaffInboxItem);
+  const replyToAlert = useServerFn(replyToStaffAlert);
   const [fontSize] = usePanelWidth("staff-chat-font", 13);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -201,6 +210,11 @@ export function StaffChatPanel({
     return items;
   }, [data?.alerts, data?.messages]);
 
+  const alertsById = useMemo(
+    () => new Map(((data?.alerts as ChatAlert[] | undefined) ?? []).map((a) => [a.id, a])),
+    [data?.alerts],
+  );
+
   const renderItems = useMemo(() => {
     const out: RenderItem[] = [];
     let lastDay = "";
@@ -285,11 +299,10 @@ export function StaffChatPanel({
   }
 
   function onSent() {
-    // Replying to an alert answers it, so it no longer waits on the sender's side.
     if (replyToId) {
-      const id = replyToId;
       setReplyToId(null);
-      void markAlertRead({ data: { id } }).then(invalidateAlerts);
+      invalidateAlerts();
+      toast.success(`Reply sent to ${firstName}`);
     }
     invalidateChat();
   }
@@ -298,6 +311,8 @@ export function StaffChatPanel({
     setReplyToId(id);
     rootRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
   }
+
+  const replyingTo = replyToId ? alertsById.get(replyToId) : undefined;
 
   const thread = (
     <div
@@ -376,7 +391,7 @@ export function StaffChatPanel({
                       a.urgent ? "text-destructive-ink" : "text-sky-ink",
                     )}
                   >
-                    {a.urgent ? "Urgent" : "Alert"}
+                    {a.reply_to_id ? "Reply" : a.urgent ? "Urgent" : "Alert"}
                     <span className="staff-chat-alert__label-name">{a.mine ? " · You" : ` · ${firstName}`}</span>
                   </p>
                   {actionable && canDismiss ? (
@@ -392,6 +407,14 @@ export function StaffChatPanel({
                     </button>
                   ) : null}
                 </div>
+                {a.reply_to_id ? (
+                  <p
+                    data-qc="staff-chat-alert-quote"
+                    className="mb-[0.35em] truncate rounded-[0.6em] bg-[rgba(47,63,102,0.06)] px-[0.55em] py-[0.2em] text-[0.85em] text-muted-foreground"
+                  >
+                    {alertsById.get(a.reply_to_id) ? alertQuote(alertsById.get(a.reply_to_id)!) : "Earlier alert"}
+                  </p>
+                ) : null}
                 {a.body ? (
                   <p className="whitespace-pre-wrap break-words text-foreground/90">{a.body}</p>
                 ) : null}
@@ -456,6 +479,17 @@ export function StaffChatPanel({
       variant="chat"
       autoFocus={autoFocus}
       onSent={onSent}
+      replyTo={
+        replyingTo
+          ? {
+              id: replyingTo.id,
+              label: `Replying to ${firstName}'s ${replyingTo.urgent ? "urgent alert" : "alert"}`,
+              quote: alertQuote(replyingTo),
+              onCancel: () => setReplyToId(null),
+              send: (body: string) => replyToAlert({ data: { alertId: replyingTo.id, body } }),
+            }
+          : undefined
+      }
     />
   );
 
