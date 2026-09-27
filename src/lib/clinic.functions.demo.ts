@@ -809,6 +809,14 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
         last_visit_at: p.last_visit_at,
         allergies: p.allergies,
         avatar_url: p.avatar_url,
+        // Contact and consent fields, so a bulk offer can say who is portal-only.
+        email: p.email ?? null,
+        phone: p.phone ?? null,
+        marketing_opt_in: p.marketing_opt_in ?? null,
+        email_opt_in: p.email_opt_in ?? null,
+        sms_opt_in: p.sms_opt_in ?? null,
+        reminders_opt_in: p.reminders_opt_in ?? null,
+        unsubscribed_at: p.unsubscribed_at ?? null,
         lastTreatment: last
           ? { name: last.name, performed_at: last.performed_at, next_due_at: last.next_due_at }
           : null,
@@ -829,6 +837,7 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
           : null,
         outstandingDocuments: outstanding,
         practitioners: practitionerNames,
+        practitionerIds,
         openTasks,
         dueState: state,
       };
@@ -5164,6 +5173,16 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
     const hasUpcoming = new Set(
       appointments.filter((a) => a.status === "booked" && a.starts_at >= nowISO).map((a) => a.patient_id),
     );
+    // Earliest live booking per patient, for the card's "Booked 28 Sep" label.
+    const nextBookingByPatient = new Map<string, string>();
+    for (const a of sortAsc(
+      appointments.filter((a) => a.status === "booked" && a.starts_at >= nowISO),
+      "starts_at",
+    )) {
+      if (!nextBookingByPatient.has(a.patient_id)) {
+        nextBookingByPatient.set(a.patient_id, a.starts_at);
+      }
+    }
     const needle = (data.query ?? "").trim().toLowerCase();
 
     let rows = treatmentPlans
@@ -5201,6 +5220,7 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
             : !hasUpcoming.has(p.patient_id)
               ? "No upcoming booking"
               : null,
+          nextBookingAt: nextBookingByPatient.get(p.patient_id) ?? null,
         };
       });
 
@@ -5821,9 +5841,24 @@ function demoOfferCohortInput() {
   };
 }
 
-function demoOfferStore(origin?: string | null): OfferStore {
+function demoOfferStore(origin?: string | null, opts: { closeTasks?: boolean } = {}): OfferStore {
   const resolvedOrigin = (origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(/\/$/, "");
   return {
+    // Manual sends close the patient's open recall tasks; the automation does not.
+    ...(opts.closeTasks
+      ? {
+          async closeRecallTasks(patientId: string) {
+            const now = new Date().toISOString();
+            for (const t of recallTasks) {
+              if (t.patient_id === patientId && (t.status === "open" || t.status === "contacted")) {
+                t.status = "completed";
+                t.completed_at = now;
+                t.updated_at = now;
+              }
+            }
+          },
+        }
+      : {}),
     clinicId: CLINIC_ID,
     clinicName: db.clinic["name"] ?? "Your clinic",
     origin: resolvedOrigin,
@@ -6074,7 +6109,8 @@ export const sendOffer = createServerFn({ method: "POST" })
     if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
     const tmpl = offerTemplates.find((t) => t.id === data.template_id);
     if (!tmpl) throw new Error("Template not found");
-    return sendOfferToPatients(demoOfferStore(data.app_origin), tmpl, data.patient_ids, {
+    const store = demoOfferStore(data.app_origin, { closeTasks: true });
+    return sendOfferToPatients(store, tmpl, data.patient_ids, {
       source: data.source,
       sentBy: me.userId,
       personalLine: data.message ?? null,

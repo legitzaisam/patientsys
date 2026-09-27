@@ -67,6 +67,12 @@ export type OfferStore = {
   linkCommunication(offerId: string, communicationId: string): Promise<void>;
   /** Throws with the PECR reason when the send is not allowed. */
   enqueue(input: EnqueueInput & { bodyHtml?: string | null }): Promise<{ id: string }>;
+  /**
+   * Optional: close the patient's open recall tasks once an offer has gone
+   * out, so the chase is not listed twice. Reached from the list and the
+   * record; the automation leaves tasks alone.
+   */
+  closeRecallTasks?(patientId: string): Promise<void>;
 };
 
 type Decision = { ok: true } | { ok: false; reason: string };
@@ -201,6 +207,7 @@ export async function sendOfferToPatients(
       channels,
       note: channels.length === 0 ? `Portal only — ${blockedReason ?? "no channel available."}` : null,
     });
+    if (store.closeRecallTasks) await store.closeRecallTasks(patientId);
   }
   return result;
 }

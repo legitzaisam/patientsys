@@ -217,6 +217,7 @@ export function QuickAddAppointment({
   date,
   defaultStart,
   defaultPractitionerId,
+  defaultPatientId,
   open,
   onOpenChange,
   align = "start",
@@ -230,6 +231,8 @@ export function QuickAddAppointment({
   date: Date;
   defaultStart?: Date | undefined;
   defaultPractitionerId?: string | undefined;
+  /** Pre-select a patient (the journey board's Book button). */
+  defaultPatientId?: string | undefined;
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
   align?: "start" | "center" | "end";
@@ -243,7 +246,7 @@ export function QuickAddAppointment({
   const isOpen = open ?? uncontrolled;
   const setOpen = onOpenChange ?? setUncontrolled;
 
-  const [patientId, setPatientId] = useState("");
+  const [patientId, setPatientId] = useState(defaultPatientId ?? "");
   const [newPatient, setNewPatient] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -273,7 +276,8 @@ export function QuickAddAppointment({
     setDay(toLocalDate(from));
     if (defaultStart) setTime(toLocalTime(defaultStart));
     if (defaultPractitionerId) setPractitionerId(defaultPractitionerId);
-  }, [isOpen, date, defaultStart, defaultPractitionerId]);
+    if (defaultPatientId) setPatientId(defaultPatientId);
+  }, [isOpen, date, defaultStart, defaultPractitionerId, defaultPatientId]);
 
   useEffect(() => {
     const item = catalogue.find((c) => c.id === catalogueId);

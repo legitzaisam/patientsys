@@ -138,8 +138,10 @@ test.describe("designer", () => {
     await expect(card).toContainText(new RegExp(`${count}\\s+sent`));
     await expect(card).toContainText(/Last run/);
 
+    // The list pages 25 at a time, so search for the patient rather than scanning page one.
     await page.goto("/patients");
     const [last, first] = firstName.split(" ").length === 2 ? [firstName.split(" ")[1], firstName.split(" ")[0]] : [firstName, ""];
+    await page.getByLabel("Search by name or reference").fill(last ?? firstName);
     await page.getByRole("link", { name: new RegExp(`${last}, .*${first}`) }).first().click();
     await page.getByRole("tab", { name: "Contact" }).click();
     const offers = page.locator('[data-qc="patient-offers"]');

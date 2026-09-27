@@ -779,7 +779,9 @@ export const listPatients = createServerFn({ method: "GET" })
     const supabase = (context as Ctx).supabase;
     const { data, error } = await supabase
       .from("patients")
-      .select("id, first_name, last_name, title, date_of_birth, status, reference, last_visit_at, allergies, avatar_url")
+      .select(
+        "id, first_name, last_name, title, date_of_birth, status, reference, last_visit_at, allergies, avatar_url, email, phone, marketing_opt_in, email_opt_in, sms_opt_in, reminders_opt_in, unsubscribed_at",
+      )
       // Archived records stay in the database for the retention window but drop
       // out of every clinical view; getPatient still resolves them by id.
       .is("deleted_at", null)
@@ -883,6 +885,7 @@ export const listPatients = createServerFn({ method: "GET" })
         nextAppointment: next ?? null,
         outstandingDocuments: outstanding,
         practitioners,
+        practitionerIds,
         openTasks,
         // Drives the "Treatments due" (overdue + due_soon) and "No upcoming
         // treatment" (anything but booked) filters on the list.
@@ -7153,6 +7156,12 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
 
     const todayISO = clinicDayKey(new Date());
     const hasUpcoming = new Set((upcomingAppts ?? []).map((a: any) => a.patient_id));
+    // Earliest live booking per patient, for the card's "Booked 28 Sep" label.
+    const nextBookingByPatient = new Map<string, string>();
+    for (const a of (upcomingAppts ?? []) as { patient_id: string; starts_at: string }[]) {
+      const cur = nextBookingByPatient.get(a.patient_id);
+      if (!cur || a.starts_at < cur) nextBookingByPatient.set(a.patient_id, a.starts_at);
+    }
     const needle = (data.query ?? "").trim().toLowerCase();
 
     let rows = (plans ?? []).map((p: any) => {
@@ -7182,6 +7191,7 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
           : !hasUpcoming.has(p.patient_id)
             ? "No upcoming booking"
             : null,
+        nextBookingAt: nextBookingByPatient.get(p.patient_id) ?? null,
       };
     });
 
@@ -7998,6 +8008,14 @@ async function offerStoreFor(ctx: Ctx, origin: string | null | undefined) {
       if (error) throw new Error(error.message);
     },
     enqueue: (input) => enqueue(ctx.supabase, input),
+    // A sent offer is the chase: the patient's open recall tasks close with it.
+    async closeRecallTasks(patientId) {
+      await ctx.supabase
+        .from("recall_tasks")
+        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .eq("patient_id", patientId)
+        .in("status", ["open", "contacted"]);
+    },
   };
   return store;
 }

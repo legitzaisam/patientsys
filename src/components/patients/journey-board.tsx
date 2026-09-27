@@ -3,9 +3,15 @@ import { JOURNEY_PHASES } from "@/lib/journey-phases";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, CalendarClock, ClipboardList, Search } from "lucide-react";
-import { listPractitioners, listTreatmentPlans } from "@/lib/clinic.functions";
+import { AlertTriangle, CalendarClock, CalendarPlus, ClipboardList, Search } from "lucide-react";
+import {
+  getCatalogue,
+  listPatients,
+  listPractitioners,
+  listTreatmentPlans,
+} from "@/lib/clinic.functions";
 import { PatientAvatar } from "@/components/patient-avatar";
+import { QuickAddAppointment } from "@/components/quick-add-appointment";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -31,21 +37,35 @@ type BoardPlan = {
   overdue: boolean;
   atRisk: boolean;
   riskReason: string | null;
+  /** Earliest live booking, when the patient has one in the diary. */
+  nextBookingAt?: string | null;
 };
 
 const COLUMNS: Array<{ phase: BoardPlan["phase"]; label: string; sub: string }> = JOURNEY_PHASES.map(
   ({ phase, label, sub }) => ({ phase, label, sub }),
 );
 
+/** "Due 28 Sep" when nothing is booked, "3d overdue" once the step has slipped. */
 function dueLabel(dueDate?: string | null) {
   if (!dueDate) return null;
   const due = new Date(`${dueDate}T12:00:00`);
   const today = new Date();
   const days = Math.round((due.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12).getTime()) / 86400000);
   if (days < 0) return `${Math.abs(days)}d overdue`;
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  return due.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  if (days === 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  return `Due ${due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+}
+
+/** "Booked 28 Sep": the date is in the diary. */
+function bookedLabel(iso: string) {
+  return `Booked ${new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+}
+
+/** At-risk cards first (overdue before no-booking), then by patient name. */
+function byRiskThenName(a: BoardPlan, b: BoardPlan) {
+  const rank = (p: BoardPlan) => (p.overdue ? 0 : p.atRisk ? 1 : 2);
+  return rank(a) - rank(b) || a.patientName.localeCompare(b.patientName);
 }
 
 /**
@@ -85,12 +105,24 @@ export function JourneyBoard({ identity }: { identity: Identity }) {
   const { data: practitioners } = useQuery({
     queryKey: ["practitioners"],
     queryFn: () => fetchPractitioners(),
-    enabled: !isPractitionerOnly,
   });
+  // Quick book from a card needs the patient list and the catalogue; both are
+  // cached under the same keys the Records tab and the diary use.
+  const fetchPatients = useServerFn(listPatients);
+  const { data: patients } = useQuery({ queryKey: ["patients"], queryFn: () => fetchPatients() });
+  const fetchCatalogue = useServerFn(getCatalogue);
+  const { data: catalogue } = useQuery({
+    queryKey: ["catalogue"],
+    queryFn: () => fetchCatalogue(),
+  });
+  const [booking, setBooking] = useState<BoardPlan | null>(null);
 
   const byPhase = useMemo(() => {
     const rows = (plans ?? []) as BoardPlan[];
-    return COLUMNS.map((col) => ({ ...col, plans: rows.filter((p) => p.phase === col.phase) }));
+    return COLUMNS.map((col) => ({
+      ...col,
+      plans: rows.filter((p) => p.phase === col.phase).sort(byRiskThenName),
+    }));
   }, [plans]);
   const atRiskCount = ((plans ?? []) as BoardPlan[]).filter((p) => p.atRisk).length;
 
@@ -172,12 +204,20 @@ export function JourneyBoard({ identity }: { identity: Identity }) {
             <ul className="space-y-2">
               {col.plans.map((plan) => {
                 const pct = plan.total ? Math.round((plan.done / plan.total) * 100) : 0;
+                const dateLabel = plan.nextBookingAt
+                  ? bookedLabel(plan.nextBookingAt)
+                  : dueLabel(plan.nextMilestone?.dueDate);
                 return (
-                  <li key={plan.id}>
+                  <li
+                    key={plan.id}
+                    className="glass-item p-3"
+                    data-qc="board-card"
+                    data-risk={plan.atRisk ? "at-risk" : "on-track"}
+                  >
                     <Link
                       to="/patients/$id"
                       params={{ id: plan.patientId }}
-                      className="glass-item block p-3"
+                      className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <div className="flex items-center gap-2.5">
                         <PatientAvatar patientId={plan.patientId} name={plan.patientName} photoUrl={plan.avatarUrl} size="sm" />
@@ -189,39 +229,64 @@ export function JourneyBoard({ identity }: { identity: Identity }) {
                           {plan.done}/{plan.total}
                         </span>
                       </div>
-                      {plan.nextMilestone ? (
+                      {plan.nextMilestone || dateLabel ? (
                         <p className="mt-2 flex items-center gap-1.5 text-2xs text-ink-2">
                           <ClipboardList className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
-                          <span className="truncate">{plan.nextMilestone.title}</span>
-                          {plan.nextMilestone.dueDate ? (
+                          <span className="truncate">
+                            {plan.nextMilestone?.title ?? "Next step"}
+                          </span>
+                          {dateLabel ? (
                             <span
+                              data-qc="board-date"
                               className={cn(
                                 "ml-auto flex shrink-0 items-center gap-1 tabular-nums",
-                                plan.overdue ? "font-semibold text-destructive-ink" : "text-muted-foreground",
+                                plan.overdue && !plan.nextBookingAt
+                                  ? "font-semibold text-destructive-ink"
+                                  : "text-muted-foreground",
                               )}
                             >
                               <CalendarClock className="h-3 w-3" aria-hidden />
-                              {dueLabel(plan.nextMilestone.dueDate)}
+                              {dateLabel}
                             </span>
                           ) : null}
                         </p>
                       ) : null}
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-glass-2 shadow-inset-hi">
-                          <div className="h-full rounded-full bg-accent-line" style={{ width: `${pct}%` }} />
-                        </div>
-                        <span
-                          className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-semibold shadow-inset-hi ${
-                            plan.atRisk ? "bg-destructive-bg text-destructive-ink" : "bg-success-bg text-success-ink"
-                          }`}
-                        >
-                          {plan.atRisk ? (plan.riskReason ?? "At risk") : "On track"}
-                        </span>
+                      {/* Same bar rule as the dashboard: pink once the next step is late. */}
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-glass-2 shadow-inset-hi">
+                        <div
+                          className={cn(
+                            "h-full rounded-full",
+                            plan.overdue ? "bg-destructive-ink/60" : "bg-accent-line",
+                          )}
+                          style={{ width: `${pct}%` }}
+                        />
                       </div>
-                      {plan.practitionerName ? (
-                        <p className="mt-1.5 truncate text-2xs text-muted-foreground">⚕ {plan.practitionerName}</p>
-                      ) : null}
                     </Link>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-semibold shadow-inset-hi ${
+                          plan.atRisk ? "bg-destructive-bg text-destructive-ink" : "bg-success-bg text-success-ink"
+                        }`}
+                      >
+                        {plan.atRisk ? (plan.riskReason ?? "At risk") : "On track"}
+                      </span>
+                      {plan.practitionerName ? (
+                        <span className="min-w-0 truncate text-2xs text-muted-foreground">
+                          ⚕ {plan.practitionerName}
+                        </span>
+                      ) : null}
+                      {plan.atRisk && !plan.nextBookingAt ? (
+                        <button
+                          type="button"
+                          data-qc="board-book"
+                          onClick={() => setBooking(plan)}
+                          className="ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-accent px-2.5 text-2xs font-semibold text-accent-foreground shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
+                        >
+                          <CalendarPlus className="h-3 w-3" aria-hidden />
+                          Book
+                        </button>
+                      ) : null}
+                    </div>
                   </li>
                 );
               })}
@@ -234,6 +299,24 @@ export function JourneyBoard({ identity }: { identity: Identity }) {
           </Card>
         ))}
       </div>
+      {booking ? (
+        <QuickAddAppointment
+          patients={(patients ?? []) as any[]}
+          practitioners={(practitioners ?? []) as any[]}
+          catalogue={(catalogue ?? []) as any[]}
+          date={new Date()}
+          defaultPatientId={booking.patientId}
+          defaultPractitionerId={booking.practitionerId ?? undefined}
+          open
+          onOpenChange={(v) => {
+            if (!v) setBooking(null);
+          }}
+          title={`Book ${booking.patientName}`}
+          centered
+        >
+          <span className="sr-only">Quick book</span>
+        </QuickAddAppointment>
+      ) : null}
     </div>
   );
 }

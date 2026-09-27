@@ -1,5 +1,6 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { displayName } from "@/lib/format";
+import { PaginationBar } from "@/components/pagination-bar";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -42,8 +43,10 @@ import { Textarea } from "@/components/ui/textarea";
 
 type SortColumn = "status";
 type SortDirection = "asc" | "desc";
-type PatientView = "all" | "active" | "inactive" | "due";
+type PatientView = "all" | "mine" | "active" | "inactive" | "due" | "nobooking";
 type PatientsTab = "records" | "board";
+const PATIENT_VIEWS: PatientView[] = ["all", "mine", "active", "inactive", "due", "nobooking"];
+const PAGE_SIZE = 25;
 
 /**
  * Derived from the schema the savePatient server function validates against, so
@@ -75,12 +78,16 @@ const EMPTY_PATIENT: NewPatientValues = {
 const TITLES = ["Mr", "Mrs", "Ms", "Miss", "Mx", "Dr", "Prof"];
 
 export const Route = createFileRoute("/_authenticated/patients/")({
-  validateSearch: (search: Record<string, unknown>): { view?: PatientView; q?: string; tab?: PatientsTab } => {
-    const v = String(search?.["view"] ?? "all");
-    const parsed: { view?: PatientView; q?: string; tab?: PatientsTab } = {
-      view: (["all", "active", "inactive", "due"].includes(v) ? v : "all") as PatientView,
-    };
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { view?: PatientView; q?: string; tab?: PatientsTab; page?: number } => {
+    // No view in the URL means "the role's default" (practitioners land on My patients).
+    const v = String(search?.["view"] ?? "");
+    const parsed: { view?: PatientView; q?: string; tab?: PatientsTab; page?: number } = {};
+    if ((PATIENT_VIEWS as string[]).includes(v)) parsed.view = v as PatientView;
     if (typeof search?.["q"] === "string" && search["q"]) parsed.q = search["q"];
+    const page = Number(search?.["page"]);
+    if (Number.isInteger(page) && page > 1) parsed.page = page;
     const tab = String(search?.["tab"] ?? "records");
     if (tab === "board") parsed.tab = "board";
     if (tab === "metrics") (parsed as { tab?: string }).tab = "metrics";
@@ -104,7 +111,13 @@ export const Route = createFileRoute("/_authenticated/patients/")({
 
 function PatientsPage() {
   const { data: identity } = useIdentity();
-  const { view = "all", q, tab = "records" } = Route.useSearch();
+  const { view: viewParam, q, tab = "records", page: pageParam = 1 } = Route.useSearch();
+  const navigate = useNavigate();
+  // A practitioner's list opens on their own patients; everyone else on All.
+  const ownBook = Boolean(
+    identity && !identity.isManager && identity.roles.includes("practitioner"),
+  );
+  const view: PatientView = viewParam ?? (ownBook ? "mine" : "all");
   const fetchPatients = useServerFn(listPatients);
   const queryClient = useQueryClient();
   const [search, setSearch] = useState(q ?? "");
@@ -156,19 +169,34 @@ function PatientsPage() {
   const canSendOffers = can(identity, "comms.send");
   const term = search.trim().toLowerCase();
   const dobTerm = dobSearch.trim();
-  const filtered = (patients ?? []).filter((p: any) => {
+  const searched = (patients ?? []).filter((p: any) => {
     const nameMatch = !term || `${p.first_name} ${p.last_name} ${p.reference ?? ""}`.toLowerCase().includes(term);
     const formattedDob = p.date_of_birth ? new Date(p.date_of_birth).toLocaleDateString("en-GB") : "";
-    const dobMatch = !dobTerm || formattedDob.includes(dobTerm);
-    const status = String(p.status ?? "").toLowerCase();
-    let viewMatch = true;
-    if (view === "active") viewMatch = status === "active";
-    else if (view === "inactive") viewMatch = status !== "active";
-    // Decided on the server by the shared definition, so this count is the
-    // dashboard's "Treatments due" (overdue + due soon, nothing booked).
-    else if (view === "due") viewMatch = p.dueState === "overdue" || p.dueState === "due_soon";
-    return nameMatch && dobMatch && viewMatch;
+    return nameMatch && (!dobTerm || formattedDob.includes(dobTerm));
   });
+  // The view filters read the server-decided dueState (shared definitions), so
+  // "Treatments due" is the dashboard's number and "No upcoming treatment" is
+  // everyone without a live booking.
+  const inView = (p: any, v: PatientView) => {
+    const status = String(p.status ?? "").toLowerCase();
+    if (v === "active") return status === "active";
+    if (v === "inactive") return status !== "active";
+    if (v === "due") return p.dueState === "overdue" || p.dueState === "due_soon";
+    if (v === "nobooking") return p.dueState !== "booked";
+    if (v === "mine") return (p.practitionerIds ?? []).includes(identity.userId);
+    return true;
+  };
+  const filtered = searched.filter((p: any) => inView(p, view));
+  const viewFilters = (
+    [
+      ...(ownBook ? [{ key: "mine" as const, label: "My patients" }] : []),
+      { key: "all" as const, label: "All" },
+      { key: "active" as const, label: "Active" },
+      { key: "inactive" as const, label: "Inactive" },
+      { key: "due" as const, label: "Treatments due" },
+      { key: "nobooking" as const, label: "No upcoming treatment" },
+    ] as { key: PatientView; label: string }[]
+  ).map((f) => ({ ...f, count: searched.filter((p: any) => inView(p, f.key)).length }));
 
   const rows = [...filtered].sort((a: any, b: any) => {
     if (!sort.column) return 0;
@@ -184,6 +212,21 @@ function PatientsPage() {
 
     return 0;
   });
+
+  // 25 a page; the page lives in the URL so a refresh or a shared link keeps it.
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, pageParam), pageCount);
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const goToPage = (next: number) =>
+    navigate({
+      to: "/patients",
+      search: {
+        ...(viewParam ? { view: viewParam } : {}),
+        ...(q ? { q } : {}),
+        ...(next > 1 ? { page: next } : {}),
+      },
+    });
+  const allMatchingSelected = rows.length > 0 && rows.every((p: any) => selected.has(p.id));
 
   return (
     <AppShell identity={identity}>
@@ -225,39 +268,48 @@ function PatientsPage() {
       <>
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="scroll-x-plain -mx-1 flex min-w-0 flex-1 gap-2 px-1 py-0.5 md:flex-wrap">
-        {([
-          { key: "all", label: "All" },
-          { key: "active", label: "Active" },
-          { key: "inactive", label: "Inactive" },
-          { key: "due", label: "Treatments due" },
-        ] as { key: PatientView; label: string }[]).map((f) => (
+        {viewFilters.map((f) => (
           <Link
             key={f.key}
             to="/patients"
             search={{ view: f.key, ...(q ? { q } : {}) }}
-            className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
+            data-qc={`patients-filter-${f.key}`}
+            className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
               view === f.key
                 ? "border-transparent bg-accent-soft text-accent-ink shadow-inset-hi"
                 : "border-edge bg-glass-2 text-ink-2 shadow-inset-hi hover:border-accent-line hover:bg-accent-wash hover:text-foreground"
             }`}
           >
             {f.label}
+            <span className="tabular-nums opacity-70">{f.count}</span>
           </Link>
         ))}
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
           {canSendOffers && selected.size > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="h-[34px]"
-              onClick={() => setOfferOpen(true)}
-              aria-label={`Send an offer to ${selected.size} selected`}
-              data-qc="bulk-send-offer"
-            >
-              <Send className="h-4 w-4" />
-              Send offer · {selected.size}
-            </Button>
+            <>
+              {!allMatchingSelected ? (
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set(rows.map((p: any) => p.id as string)))}
+                  className="cursor-pointer text-xs text-ink-2 underline underline-offset-[3px] hover:text-foreground"
+                  data-qc="select-all-matching"
+                >
+                  Select all {rows.length} matching
+                </button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="h-[34px]"
+                onClick={() => setOfferOpen(true)}
+                aria-label={`Send an offer to ${selected.size} selected`}
+                data-qc="bulk-send-offer"
+              >
+                <Send className="h-4 w-4" />
+                Send offer · {selected.size}
+              </Button>
+            </>
           ) : null}
           <Input
             id="name-search"
@@ -411,6 +463,11 @@ function PatientsPage() {
             </DialogContent>
           </Dialog>
 
+      {canSendOffers && selected.size === 0 && rows.length > 0 ? (
+        <p className="mb-2 text-xs text-muted-foreground" data-qc="select-hint">
+          Select patients to send an offer.
+        </p>
+      ) : null}
       <Card className="overflow-hidden rounded-2xl p-0">
         <div className="scroll-x-shadows">
         <table className="glass-table w-full min-w-[720px] text-sm">
@@ -421,7 +478,7 @@ function PatientsPage() {
                   <Checkbox
                     aria-label={`Select all ${rows.length} matching patient${rows.length === 1 ? "" : "s"}`}
                     title={`Select all ${rows.length} matching`}
-                    checked={rows.length > 0 && rows.every((p: any) => selected.has(p.id))}
+                    checked={allMatchingSelected}
                     onCheckedChange={(checked) =>
                       setSelected(checked ? new Set(rows.map((p: any) => p.id as string)) : new Set())
                     }
@@ -438,7 +495,7 @@ function PatientsPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((p: any) => (
+            {pageRows.map((p: any) => (
               <tr key={p.id} data-selected={selected.has(p.id) ? "true" : undefined}>
                 {canSendOffers ? (
                   <td className="w-[1%] px-4 py-3">
@@ -477,21 +534,13 @@ function PatientsPage() {
                     : "—"}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  {p.nextAppointment
-                    ? `${p.nextAppointment.treatment_name}${
-                        p.nextAppointment.treatment_number ? ` #${p.nextAppointment.treatment_number}` : ""
-                      }${
-                        p.nextDue?.next_due_at
-                          ? ""
-                          : ` · ${new Date(p.nextAppointment.starts_at).toLocaleDateString("en-GB")}`
-                      }`
-                    : "No upcoming treatment"}
+                  <NextTreatmentCell patient={p} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                   <PractitionersCell names={p.practitioners ?? []} />
                 </td>
                 <td className="w-[1%] whitespace-nowrap px-4 py-3 text-muted-foreground">
-                  <TaskCell tasks={p.openTasks ?? []} />
+                  <TaskCell patientId={p.id} tasks={p.openTasks ?? []} />
                 </td>
                 <td className="w-[1%] whitespace-nowrap px-4 py-3 text-muted-foreground">
                   <StatusBadge status={p.status} />
@@ -508,6 +557,17 @@ function PatientsPage() {
           </tbody>
         </table>
         </div>
+        <PaginationBar
+          page={page}
+          pageCount={pageCount}
+          total={rows.length}
+          from={rows.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
+          to={Math.min(rows.length, page * PAGE_SIZE)}
+          onPage={goToPage}
+          noun="patients"
+          qc="patients-pagination"
+          className="border-t border-glass-line px-4 py-3"
+        />
       </Card>
       {canSendOffers ? (
         <SendOfferDialog
@@ -587,17 +647,70 @@ const TASK_KIND_LABEL: Record<string, string> = {
   treatment_due: "Treatment due",
 };
 
-function TaskCell({ tasks }: { tasks: { id: string; label: string; kind: string }[] }) {
+/** "Booked 28 Sep", "Due 12 Oct", "Overdue since 14 Nov 2025" or nothing, from the server's dueState. */
+function NextTreatmentCell({ patient: p }: { patient: any }) {
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const dayYear = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  if (p.nextAppointment) {
+    return (
+      <span data-qc="next-treatment" data-state="booked">
+        <span className="text-foreground">Booked {day(p.nextAppointment.starts_at)}</span>
+        {" · "}
+        {p.nextAppointment.treatment_name}
+        {p.nextAppointment.treatment_number ? ` #${p.nextAppointment.treatment_number}` : ""}
+      </span>
+    );
+  }
+  if (p.dueState === "overdue" && p.nextDue?.next_due_at) {
+    return (
+      <span data-qc="next-treatment" data-state="overdue">
+        <span className="font-medium text-destructive-ink">Overdue since {dayYear(p.nextDue.next_due_at)}</span>
+        {" · "}
+        {p.nextDue.name}
+      </span>
+    );
+  }
+  if (p.dueState === "due_soon" && p.nextDue?.next_due_at) {
+    return (
+      <span data-qc="next-treatment" data-state="due_soon">
+        <span className="font-medium text-accent-ink">Due {day(p.nextDue.next_due_at)}</span>
+        {" · "}
+        {p.nextDue.name}
+      </span>
+    );
+  }
+  if (p.nextDue?.next_due_at) {
+    return (
+      <span data-qc="next-treatment" data-state="current">
+        Due {dayYear(p.nextDue.next_due_at)} · {p.nextDue.name}
+      </span>
+    );
+  }
+  return (
+    <span data-qc="next-treatment" data-state="none">
+      No upcoming treatment
+    </span>
+  );
+}
+
+function TaskCell({ patientId, tasks }: { patientId: string; tasks: { id: string; label: string; kind: string }[] }) {
   if (tasks.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
     <HoverCard openDelay={150}>
       <HoverCardTrigger asChild>
-        <button
-          type="button"
+        {/* The pill opens the record's Recall tasks card, where the task is actioned. */}
+        <Link
+          to="/patients/$id"
+          params={{ id: patientId }}
+          search={{ tab: "treatments" }}
+          hash="recall"
+          data-qc="open-tasks-pill"
           className="inline-flex min-h-6 items-center gap-1 rounded-full bg-warning-bg px-2.5 py-1 text-[11px] font-semibold text-warning-ink shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
         >
           {tasks.length} open
-        </button>
+        </Link>
       </HoverCardTrigger>
       <HoverCardContent align="start" className="w-72 p-3">
         <ul className="space-y-2">

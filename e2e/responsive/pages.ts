@@ -401,6 +401,17 @@ const teamFormer: PageState = {
   close: async () => {},
 };
 
+/** Quick book opened from a journey-board card's Book button. */
+const boardBook: PageState = {
+  id: "board-book",
+  open: async (page) => {
+    if (!(await clickIfVisible(page, '[data-qc="board-book"]', 3_000))) return false;
+    await page.getByPlaceholder("Search patient…").waitFor({ state: "visible", timeout: 3_000 });
+    await wait(page, 300);
+    return true;
+  },
+};
+
 const bulkSelect: PageState = {
   id: "bulk-select",
   open: async (page) => {
@@ -500,7 +511,7 @@ export const PAGES: PageEntry[] = [
     path: "/patients?tab=board",
     roles: ["owner"],
     settle: ".page-title",
-    states: [sidebarClosed],
+    states: [sidebarClosed, boardBook],
   },
   {
     id: "patient-record",
