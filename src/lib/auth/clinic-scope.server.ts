@@ -17,6 +17,8 @@ export const CLINIC_SCOPED_TABLES = [
   "audit_log",
   "clinic_news",
   "clinic_offers",
+  "clinic_role_permissions",
+  "clinic_roles",
   "communications",
   "documents",
   "ex_team_members",

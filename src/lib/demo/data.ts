@@ -119,6 +119,8 @@ export const clinic: Row = {
   deposit_percent: 30,
   insights_ingest_key_hash: "5e32b7c1034fe10f127852c3b2b47b1ca9b4fff862a47440a2d79505de198682",
   insights_ingest_key_last4: "ghts",
+  has_separate_manager: true,
+  owner_setup_at: iso(-720),
   created_at: iso(-720),
   updated_at: iso(-14),
 };
@@ -5095,11 +5097,16 @@ export const patientOffers: Row[] = [];
   });
 }
 
+export const clinicRoles: Row[] = [];
+export const clinicRolePermissions: Row[] = [];
+
 export const db = {
   clinic,
   profiles,
   userRoles,
   rolePermissions,
+  clinicRoles,
+  clinicRolePermissions,
   auditLog,
   catalogue,
   patients,

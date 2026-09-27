@@ -3,17 +3,19 @@ import { dateTime } from "@/lib/format";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { ShieldCheck } from "lucide-react";
-import { listRolePermissions, setRolePermission } from "@/lib/clinic.functions";
+import { listRolePermissions, setClinicRolePermission, setRolePermission } from "@/lib/clinic.functions";
 import { PERMISSION_GROUPS, PERMISSION_META, type PermissionKey } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
 
-const ROLES = [
-  { key: "manager" as const, label: "Manager" },
-  { key: "front_desk" as const, label: "Receptionist" },
-  { key: "practitioner" as const, label: "Practitioner" },
+const SYSTEM_ROLES = [
+  { key: "manager" as const, label: "Manager", named: false },
+  { key: "front_desk" as const, label: "Receptionist", named: false },
+  { key: "practitioner" as const, label: "Practitioner", named: false },
 ];
+
+type GridRole = { key: string; label: string; named: boolean };
 
 /** Clinic owner customises what managers and other staff can reach. */
 export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
@@ -22,7 +24,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
   const fetchGrants = useServerFn(listRolePermissions);
   const { data } = useQuery({ queryKey: ["role-permissions"], queryFn: () => fetchGrants() });
 
-  const save = useMutation({
+  const saveSystem = useMutation({
     mutationFn: useServerFn(setRolePermission),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["role-permissions"] });
@@ -35,31 +37,49 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
     },
   });
 
-  const grants = data?.grants;
-  const changes = (data as { changes?: Record<string, Record<string, { by: string; at: string }>> } | undefined)
-    ?.changes;
-  /** The most recent hand change to a key across the roles, for the "changed by" line. */
+  const saveNamed = useMutation({
+    mutationFn: useServerFn(setClinicRolePermission),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["role-permissions"] });
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      queryClient.invalidateQueries();
+      toast.success("Access updated");
+    },
+    onError: (e: Error) => {
+      if (!isStepUpRequired(e)) toast.error(e.message);
+    },
+  });
+
+  const saving = saveSystem.isPending || saveNamed.isPending;
+  const roles: GridRole[] = [
+    ...SYSTEM_ROLES.filter((role) => role.key !== "manager" || data?.hasSeparateManager !== false),
+    ...(data?.clinicRoles ?? []).map((role) => ({ key: role.id, label: role.name, named: true })),
+  ];
+  const grantsFor = (role: GridRole) =>
+    role.named ? data?.clinicRoleGrants?.[role.key] : data?.grants?.[role.key];
+  const changesFor = (role: GridRole) =>
+    role.named ? data?.clinicRoleChanges?.[role.key] : data?.changes?.[role.key];
+
   const latestChange = (key: string) => {
     let best: { by: string; at: string; role: string } | null = null;
-    for (const role of ROLES) {
-      const c = changes?.[role.key]?.[key];
+    for (const role of roles) {
+      const c = changesFor(role)?.[key];
       if (c && (!best || c.at > best.at)) best = { ...c, role: role.label };
     }
     return best;
   };
-  /** Every hand change, newest first, for the log under the grid. */
-  const recentChanges = ROLES.flatMap((role) =>
-    Object.entries(changes?.[role.key] ?? {}).map(([key, c]) => ({
-      role: role.label,
-      key: key as PermissionKey,
-      enabled: grants?.[role.key]?.[key] ?? false,
-      ...c,
-    })),
-  )
+  const recentChanges = roles
+    .flatMap((role) =>
+      Object.entries(changesFor(role) ?? {}).map(([key, c]) => ({
+        role: role.label,
+        key: key as PermissionKey,
+        enabled: grantsFor(role)?.[key] ?? false,
+        ...c,
+      })),
+    )
     .filter((c) => PERMISSION_META[c.key] && !c.key.startsWith("view."))
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 6);
-  // Page and tab visibility stays on /access. This grid is the capability matrix.
   const groups = PERMISSION_GROUPS.map((group) => ({
     ...group,
     keys: group.keys.filter((key) => !key.startsWith("view.")),
@@ -74,7 +94,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
           <h2 className="text-sm font-semibold text-foreground">Staff access</h2>
           <p className="text-xs text-muted-foreground">
             {canEdit
-              ? "Choose what managers, receptionists and practitioners can reach. You always keep full access as clinic owner."
+              ? "Choose what each access level can reach. New named roles start with generic floor access. You always keep full access as clinic owner."
               : "Access levels set by the clinic owner."}
           </p>
         </div>
@@ -83,10 +103,10 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
       <div className="overflow-x-auto overflow-hidden rounded-2xl border border-edge">
         <div
           className="grid min-w-[32rem] items-center gap-4 border-b border-edge bg-glass-2 px-4 py-2.5"
-          style={{ gridTemplateColumns: `minmax(12rem,1fr) repeat(${ROLES.length}, 5.5rem)` }}
+          style={{ gridTemplateColumns: `minmax(12rem,1fr) repeat(${Math.max(roles.length, 1)}, 5.5rem)` }}
         >
           <span className="text-xs tracking-[0.02em] text-muted-foreground">Capability</span>
-          {ROLES.map((r) => (
+          {roles.map((r) => (
             <span key={r.key} className="text-center text-xs tracking-[0.02em] text-muted-foreground">
               {r.label}
             </span>
@@ -103,7 +123,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
               <div
                 key={key}
                 className="grid min-w-[32rem] items-center gap-4 border-b border-glass-line px-4 py-3"
-                style={{ gridTemplateColumns: `minmax(12rem,1fr) repeat(${ROLES.length}, 5.5rem)` }}
+                style={{ gridTemplateColumns: `minmax(12rem,1fr) repeat(${Math.max(roles.length, 1)}, 5.5rem)` }}
               >
                 <div>
                   <p className="text-sm text-foreground">{PERMISSION_META[key].label}</p>
@@ -117,23 +137,32 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
                     ) : null;
                   })()}
                 </div>
-                {ROLES.map((role) => (
+                {roles.map((role) => (
                   <div key={role.key} className="flex justify-center">
                     <Switch
                       aria-label={`${PERMISSION_META[key].label} for ${role.label}`}
                       title={
-                        changes?.[role.key]?.[key]
-                          ? `Changed by ${changes[role.key]![key]!.by} · ${dateTime(changes[role.key]![key]!.at)}`
+                        changesFor(role)?.[key]
+                          ? `Changed by ${changesFor(role)![key]!.by} · ${dateTime(changesFor(role)![key]!.at)}`
                           : undefined
                       }
-                      checked={grants?.[role.key]?.[key] ?? false}
-                      disabled={!canEdit || save.isPending || !grants}
+                      checked={grantsFor(role)?.[key] ?? false}
+                      disabled={!canEdit || saving || !data?.grants}
                       onCheckedChange={(enabled) =>
-                        void stepUp.run(
-                          () =>
-                            save.mutateAsync({ data: { role: role.key, permission: key, enabled } }),
-                          "permission",
-                        )
+                        void stepUp.run(() => {
+                          if (role.named) {
+                            return saveNamed.mutateAsync({
+                              data: { clinicRoleId: role.key, permission: key, enabled },
+                            });
+                          }
+                          return saveSystem.mutateAsync({
+                            data: {
+                              role: role.key as "manager" | "front_desk" | "practitioner",
+                              permission: key,
+                              enabled,
+                            },
+                          });
+                        }, "permission")
                       }
                     />
                   </div>
@@ -155,7 +184,8 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
               <li key={`${c.role}-${c.key}`} className="text-xs text-ink-2">
                 <span className="text-foreground">{c.by}</span> turned{" "}
                 <span className="text-foreground">{PERMISSION_META[c.key].label}</span>{" "}
-                {c.enabled ? "on" : "off"} for {c.role.toLowerCase()}s · {dateTime(c.at)}
+                {c.enabled ? "on" : "off"} for {c.role.toLowerCase()}
+                {c.role.endsWith("s") ? "" : "s"} · {dateTime(c.at)}
               </li>
             ))}
           </ul>

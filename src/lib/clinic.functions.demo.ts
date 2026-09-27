@@ -61,6 +61,8 @@ import {
 // Re-exported rather than redeclared: a second copy of the key list silently
 // drifted from the real one, so demo mode enforced a different set of
 // capabilities than production.
+import { GENERIC_STAFF_DEFAULTS, loginRoleForClinicPack } from "@/lib/access-catalogue";
+import { assertStaffInvite, canInviteStaff, normalizeClinicRoleName } from "@/lib/clinic-roles";
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { assertCanSend, nextUnsubscribedAt, prefsFromPatient } from "@/lib/comms/preferences";
 import { buildStageCohorts, previewStage, stageCounts } from "@/lib/offers/cohorts";
@@ -124,19 +126,29 @@ const retailProducts = db.retailProducts as any[];
 const productSales = db.productSales as any[];
 const offerTemplates = db.offerTemplates as any[];
 const patientOffers = db.patientOffers as any[];
+const clinicRoles = db.clinicRoles as any[];
+const clinicRolePermissions = db.clinicRolePermissions as any[];
+
+let ownerSetupCompletedThisProcess = false;
+
+function requestCookie() {
+  try {
+    return getRequest()?.headers.get("cookie") ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function ownerSetupPendingCookie() {
+  return /(?:^|;\s*)demo_owner_setup=pending(?:;|$)/.test(requestCookie());
+}
 
 /* ---------------------------------------------------------------- */
 /* identity — driven by the demo_role cookie                          */
 /* ---------------------------------------------------------------- */
 
 function currentRole(): DemoRole {
-  let cookie = "";
-  try {
-    cookie = getRequest()?.headers.get("cookie") ?? "";
-  } catch {
-    cookie = "";
-  }
-  const value = /(?:^|;\s*)demo_role=([^;]+)/.exec(cookie)?.[1];
+  const value = /(?:^|;\s*)demo_role=([^;]+)/.exec(requestCookie())?.[1];
   if (
     value === "practitioner" ||
     value === "front_desk" ||
@@ -256,6 +268,10 @@ type Identity = {
   mfaEnrolled: boolean;
   mfaRequired: boolean;
   emailMfaSatisfied: boolean;
+  hasSeparateManager: boolean;
+  ownerSetupAt: string | null;
+  needsOwnerSetup: boolean;
+  clinicRoleId: string | null;
 };
 
 function identity(): Identity {
@@ -265,13 +281,22 @@ function identity(): Identity {
   const isOwner = role === "owner";
   const isAdmin = role === "admin";
   const isManager = isOwner || isAdmin || role === "manager";
+  const profile = profiles.find((p) => p.id === account.userId) ?? null;
+  const clinicRoleId = (profile?.clinic_role_id as string | null | undefined) ?? null;
   const permissions = isOwner || isAdmin
     ? [...PERMISSION_KEYS]
-    : rolePermissions
-        .filter((p) => p.enabled && p.role === role)
-        .map((p) => p.permission as string);
-  const profile = profiles.find((p) => p.id === account.userId) ?? null;
+    : clinicRoleId
+      ? clinicRolePermissions
+          .filter((p) => p.enabled && p.clinic_role_id === clinicRoleId)
+          .map((p) => p.permission as string)
+      : rolePermissions
+          .filter((p) => p.enabled && p.role === role)
+          .map((p) => p.permission as string);
   const linked = patients.find((p) => p.user_id === account.userId);
+  const ownerSetupAt =
+    isOwner && ownerSetupPendingCookie() && !ownerSetupCompletedThisProcess
+      ? null
+      : ((db.clinic.owner_setup_at as string | null | undefined) ?? null);
   return {
     userId: account.userId,
     email: db.staffEmails[account.userId] ?? account.email,
@@ -299,6 +324,10 @@ function identity(): Identity {
     patient: linked
       ? { id: linked.id, first_name: linked.first_name, last_name: linked.last_name }
       : null,
+    hasSeparateManager: Boolean(db.clinic.has_separate_manager),
+    ownerSetupAt,
+    needsOwnerSetup: isOwner && !ownerSetupAt,
+    clinicRoleId,
   };
 }
 
@@ -325,6 +354,12 @@ function requireAccessAdmin() {
 function requireManager() {
   const me = identity();
   if (!me.isManager) throw new Error("Manager access required");
+  return me;
+}
+
+function requireOwner() {
+  const me = identity();
+  if (!me.isOwner) throw new Error("Clinic owner access required");
   return me;
 }
 
@@ -1154,9 +1189,17 @@ export const getCatalogue = createServerFn({ method: "GET" }).handler(async () =
 );
 
 export const listPractitioners = createServerFn({ method: "GET" }).handler(async () => {
-  const ids = userRoles.filter((r) => r.role === "practitioner").map((r) => r.user_id);
+  const ids = new Set(userRoles.filter((r) => r.role === "practitioner").map((r) => r.user_id as string));
+  const treatingPacks = new Set(
+    clinicRolePermissions
+      .filter((p) => p.permission === "treatments.record" && p.enabled)
+      .map((p) => p.clinic_role_id as string),
+  );
+  for (const profile of profiles) {
+    if (profile.clinic_role_id && treatingPacks.has(profile.clinic_role_id)) ids.add(profile.id);
+  }
   return profiles
-    .filter((p) => ids.includes(p.id))
+    .filter((p) => ids.has(p.id))
     .map((p) => ({ id: p.id, full_name: p.full_name, job_title: p.job_title }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 });
@@ -3543,9 +3586,14 @@ export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
           .filter((d) => d["user_id"] === r.user_id && essential.has(String(d["category"])))
           .map((d) => String(d["category"])),
       ).size;
+      const clinicRoleId = (profile?.clinic_role_id as string | null | undefined) ?? null;
       return {
         userId: r.user_id,
         role: r.role,
+        clinicRoleId,
+        clinicRoleName: clinicRoleId
+          ? (clinicRoles.find((role) => role.id === clinicRoleId)?.name as string | undefined) ?? null
+          : null,
         email: db.staffEmails[r.user_id] ?? "",
         fullName: profile?.full_name ?? "",
         jobTitle: profile?.job_title ?? "",
@@ -3624,6 +3672,12 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = identity();
     if (!me.isManager) throw new Error("Manager access required");
+    if (data.role === "manager" && !me.hasSeparateManager) {
+      throw new Error("This clinic does not have a separate manager role.");
+    }
+    if (data.role === "owner" && !me.isOwner) {
+      throw new Error("Only the clinic owner can assign that access level.");
+    }
     if (data.userId === me.userId && data.role !== "owner") {
       throw new Error("You cannot remove your own manager access");
     }
@@ -3638,6 +3692,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       profile.insurance_expiry = data.insuranceExpiry || null;
       profile.qualifications = data.qualifications?.trim() || null;
       profile.working_arrangement = data.workingArrangement?.trim() || null;
+      profile.clinic_role_id = null;
       if (data.commissionRate !== undefined) {
         profile.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
       }
@@ -3679,12 +3734,33 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       fullName: string;
       jobTitle?: string;
       role: "owner" | "manager" | "practitioner" | "front_desk";
+      clinicRoleId?: string;
       registrationBody?: string;
       registrationNumber?: string;
       app_origin?: string;
     }) => parseInput(schemas.InviteStaffMember, data),
   )
   .handler(async ({ data }) => {
+    const me = identity();
+    if (!canInviteStaff(me)) throw new Error("Manager access required");
+    assertStaffInvite({
+      actor: me,
+      role: data.role,
+      clinicRoleId: data.clinicRoleId,
+      hasSeparateManager: me.hasSeparateManager,
+    });
+    let assignedRole = data.role;
+    let clinicRoleId = data.clinicRoleId ?? null;
+    if (clinicRoleId) {
+      const pack = clinicRoles.find((role) => role.id === clinicRoleId);
+      if (!pack) throw new Error("That access level is not on this clinic.");
+      assignedRole = loginRoleForClinicPack(
+        clinicRolePermissions.some(
+          (row) =>
+            row.clinic_role_id === clinicRoleId && row.permission === "treatments.record" && row.enabled,
+        ),
+      );
+    }
     const email = assertEmail(data.email, "work email")!;
     const userId = newId("s8");
     profiles.push({
@@ -3694,6 +3770,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       job_title: data.jobTitle ?? null,
       registration_body: data.registrationBody ?? null,
       registration_number: data.registrationNumber ?? null,
+      clinic_role_id: clinicRoleId,
       avatar_url: null,
       commission_rate: 0,
       created_at: new Date().toISOString(),
@@ -3702,7 +3779,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
     userRoles.push({
       id: newId("a1"),
       user_id: userId,
-      role: data.role,
+      role: assignedRole,
       created_at: new Date().toISOString(),
     });
     db.staffEmails[userId] = email;
@@ -3711,7 +3788,8 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
     return {
       userId,
       email,
-      role: data.role,
+      role: assignedRole,
+      clinicRoleId,
       delivery: "emailed" as const,
       actionLink: null,
     };
@@ -5094,7 +5172,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
   });
 
 export const listRolePermissions = createServerFn({ method: "GET" }).handler(async () => {
-  const me = requireAccessAdmin();
+  const me = requireManager();
   const grants: Record<string, Record<string, boolean>> = {
     manager: {},
     front_desk: {},
@@ -5115,7 +5193,33 @@ export const listRolePermissions = createServerFn({ method: "GET" }).handler(asy
       }
     }
   }
-  return { grants, changes, canEdit: me.isOwner || me.isAdmin };
+  const clinicRoleGrants: Record<string, Record<string, boolean>> = {};
+  const clinicRoleChanges: Record<string, Record<string, { by: string; at: string }>> = {};
+  for (const role of clinicRoles) {
+    clinicRoleGrants[role.id] = {};
+    for (const key of PERMISSION_KEYS) {
+      const row = clinicRolePermissions.find(
+        (r) => r.clinic_role_id === role.id && r.permission === key,
+      );
+      clinicRoleGrants[role.id]![key] = row?.enabled ?? false;
+      if (row?.updated_by) {
+        const who = profiles.find((p) => p.id === row.updated_by);
+        (clinicRoleChanges[role.id] ??= {})[key] = {
+          by: (who?.full_name as string | undefined) ?? "A manager",
+          at: String(row.updated_at ?? ""),
+        };
+      }
+    }
+  }
+  return {
+    grants,
+    changes,
+    clinicRoles: clinicRoles.map((role) => ({ id: role.id as string, name: role.name as string })),
+    clinicRoleGrants,
+    clinicRoleChanges,
+    hasSeparateManager: Boolean(db.clinic.has_separate_manager),
+    canEdit: me.isOwner || me.isAdmin,
+  };
 });
 
 export const setRolePermission = createServerFn({ method: "POST" })
@@ -5156,6 +5260,94 @@ export const setRolePermission = createServerFn({ method: "POST" })
       meta: { role: data.role, permission: data.permission, enabled: data.enabled },
       created_at: now,
     });
+    return { ok: true };
+  });
+
+export const completeOwnerSetup = createServerFn({ method: "POST" })
+  .validator((data: { hasSeparateManager: boolean }) => parseInput(schemas.CompleteOwnerSetup, data))
+  .handler(async ({ data }) => {
+    requireOwner();
+    if (db.clinic.owner_setup_at && !ownerSetupPendingCookie()) {
+      throw new Error("Clinic setup is already complete.");
+    }
+    db.clinic.has_separate_manager = data.hasSeparateManager;
+    db.clinic.owner_setup_at = new Date().toISOString();
+    ownerSetupCompletedThisProcess = true;
+    return { ok: true, hasSeparateManager: data.hasSeparateManager };
+  });
+
+export const enableSeparateManager = createServerFn({ method: "POST" }).handler(async () => {
+  requireOwner();
+  db.clinic.has_separate_manager = true;
+  return { ok: true };
+});
+
+export const createClinicRole = createServerFn({ method: "POST" })
+  .validator((data: { name: string }) => parseInput(schemas.CreateClinicRole, data))
+  .handler(async ({ data }) => {
+    const me = requireManager();
+    const name = normalizeClinicRoleName(data.name);
+    if (clinicRoles.some((role) => String(role.name).toLowerCase() === name.toLowerCase())) {
+      throw new Error("A role with that name already exists.");
+    }
+    const id = newId("cr");
+    const now = new Date().toISOString();
+    clinicRoles.push({
+      id,
+      clinic_id: CLINIC_ID,
+      name,
+      created_by: me.userId,
+      created_at: now,
+    });
+    for (const permission of PERMISSION_KEYS) {
+      clinicRolePermissions.push({
+        clinic_id: CLINIC_ID,
+        clinic_role_id: id,
+        permission,
+        enabled: GENERIC_STAFF_DEFAULTS[permission],
+        updated_by: null,
+        updated_at: now,
+      });
+    }
+    return { id, name };
+  });
+
+export const setClinicRolePermission = createServerFn({ method: "POST" })
+  .validator((data: { clinicRoleId: string; permission: string; enabled: boolean }) =>
+    parseInput(schemas.SetClinicRolePermission, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireAccessAdmin();
+    if (!(PERMISSION_KEYS as readonly string[]).includes(data.permission))
+      throw new Error("Unknown permission");
+    const pack = clinicRoles.find((role) => role.id === data.clinicRoleId);
+    if (!pack) throw new Error("That access level is not on this clinic.");
+    const now = new Date().toISOString();
+    const row = clinicRolePermissions.find(
+      (r) => r.clinic_role_id === data.clinicRoleId && r.permission === data.permission,
+    );
+    if (row) {
+      row.enabled = data.enabled;
+      row.updated_by = me.userId;
+      row.updated_at = now;
+    } else {
+      clinicRolePermissions.push({
+        clinic_id: CLINIC_ID,
+        clinic_role_id: data.clinicRoleId,
+        permission: data.permission,
+        enabled: data.enabled,
+        updated_by: me.userId,
+        updated_at: now,
+      });
+    }
+    if (data.permission === "treatments.record") {
+      const nextRole = loginRoleForClinicPack(data.enabled);
+      for (const profile of profiles) {
+        if (profile.clinic_role_id !== data.clinicRoleId) continue;
+        const role = userRoles.find((r) => r.user_id === profile.id && r.role !== "patient");
+        if (role) role.role = nextRole;
+      }
+    }
     return { ok: true };
   });
 

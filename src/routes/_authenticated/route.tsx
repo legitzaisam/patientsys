@@ -7,6 +7,7 @@ import {
   StaffWelcomeDialog,
 } from "@/components/force-password-change-gate";
 import { MfaGate } from "@/components/mfa-gate";
+import { OwnerSetupGate } from "@/components/owner-setup-gate";
 import { IdleWatchdog } from "@/components/idle-watchdog";
 import {
   hasClearedPasswordGate,
@@ -292,6 +293,7 @@ function IdentityGate() {
     !needsPassword &&
     !needsMfa &&
     shouldShowWelcomeAfterGate(identity.userId);
+  const needsOwnerSetup = Boolean(identity.isOwner && identity.needsOwnerSetup);
 
   if (needsPassword) {
     return (
@@ -313,6 +315,10 @@ function IdentityGate() {
         }}
       />
     );
+  }
+
+  if (needsOwnerSetup) {
+    return <OwnerSetupGate />;
   }
 
   return (

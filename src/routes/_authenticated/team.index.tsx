@@ -13,7 +13,9 @@ import {
   listProfileChangeRequests,
   reviewProfileChange,
   setStaffPassword,
+  enableSeparateManager,
 } from "@/lib/clinic.functions";
+import { canInviteStaff } from "@/lib/clinic-roles";
 import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -253,14 +255,49 @@ function MemberMeta({
   );
 }
 
+function EnableManagerControl({ onEnabled }: { onEnabled: () => void }) {
+  const queryClient = useQueryClient();
+  const enable = useMutation({
+    mutationFn: useServerFn(enableSeparateManager),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+      void queryClient.invalidateQueries({ queryKey: ["role-permissions"] });
+      onEnabled();
+      toast.success("You can now invite a clinic manager");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="rounded-2xl border border-edge px-4 py-3" data-qc="enable-manager">
+      <p className="text-sm text-foreground">We now have a clinic manager</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Turn on the Manager access level so you can invite someone to run the clinic day to day.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-3"
+        disabled={enable.isPending}
+        onClick={() => enable.mutate(undefined as never)}
+      >
+        {enable.isPending ? "Turning on…" : "Enable manager access"}
+      </Button>
+    </div>
+  );
+}
+
 function RoleSelect({
   value,
   onChange,
   className,
+  hasSeparateManager = true,
 }: {
   value: string;
   onChange: (v: string) => void;
   className?: string;
+  hasSeparateManager?: boolean;
 }) {
   return (
     <select
@@ -271,7 +308,7 @@ function RoleSelect({
         "h-9 w-full rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-sm text-foreground"
       }
     >
-      {ROLES.map((r) => (
+      {ROLES.filter((r) => r.value !== "manager" || hasSeparateManager).map((r) => (
         <option key={r.value} value={r.value}>
           {r.label}
         </option>
@@ -419,6 +456,7 @@ function TeamPage() {
   const canViewTeam = can(identity, "team.view");
   const canApprove = can(identity, "team.approve_changes");
   const canAdmin = Boolean(identity.isOwner);
+  const canInvite = canInviteStaff(identity);
   const todayKey = clinicDayKey();
   const members = (team ?? []).filter((m: { isSelf?: boolean; fullName?: string; email?: string }) => {
     if (m.isSelf) return true;
@@ -464,7 +502,7 @@ function TeamPage() {
                 </TabsTrigger>
               )}
             </TabsList>
-            {canAdmin && <InviteStaffDialog onInvited={invalidate} />}
+            {canInvite && <InviteStaffDialog onInvited={invalidate} />}
           </div>
         </div>
 
@@ -498,6 +536,7 @@ function TeamPage() {
                       <p className="text-xs text-muted-foreground">
                         {m.email}
                         {m.jobTitle ? ` · ${m.jobTitle}` : ""}
+                        {m.clinicRoleName ? ` · ${m.clinicRoleName}` : ""}
                         {m.registrationNumber ? ` · ${m.registrationBody} ${m.registrationNumber}` : ""}
                       </p>
                       {canAdmin && !m.hasSignedIn && (
@@ -511,6 +550,7 @@ function TeamPage() {
                     <div className="w-32">
                       <RoleSelect
                         value={m.role}
+                        hasSeparateManager={Boolean(identity.hasSeparateManager)}
                         className="h-8 w-full rounded-xl border border-edge-2 bg-glass-2 px-2 text-xs text-foreground shadow-inset-hi"
                         onChange={(role) => {
                           if (role === m.role) return;
@@ -568,6 +608,7 @@ function TeamPage() {
                         </Button>
                         <EditStaffDialog
                           member={m}
+                          hasSeparateManager={Boolean(identity.hasSeparateManager)}
                           onSave={(data) => update.mutate({ data })}
                           saving={update.isPending}
                           onSetPassword={(password) =>
@@ -628,6 +669,9 @@ function TeamPage() {
             )}
           </div>
 
+          {identity.isOwner && !identity.hasSeparateManager && (
+            <EnableManagerControl onEnabled={invalidate} />
+          )}
           {identity.isOwner && <AccessControlSettings canEdit />}
         </TabsContent>
 
@@ -707,12 +751,14 @@ function TeamPage() {
 
 function EditStaffDialog({
   member,
+  hasSeparateManager,
   onSave,
   saving,
   onSetPassword,
   passwordSaving,
 }: {
   member: any;
+  hasSeparateManager: boolean;
   onSave: (data: any) => void;
   saving: boolean;
   onSetPassword: (password: string) => void;
@@ -779,7 +825,11 @@ function EditStaffDialog({
             </div>
             <div className="field-stack">
               <Label>Access level</Label>
-              <RoleSelect value={form.role} onChange={(role) => setForm({ ...form, role })} />
+              <RoleSelect
+                value={form.role}
+                hasSeparateManager={hasSeparateManager}
+                onChange={(role) => setForm({ ...form, role })}
+              />
             </div>
             <div className="field-stack">
               <Label htmlFor={`e-body-${member.userId}`}>Registration body</Label>

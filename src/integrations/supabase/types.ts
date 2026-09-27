@@ -324,6 +324,80 @@ export type Database = {
           },
         ];
       };
+      clinic_role_permissions: {
+        Row: {
+          clinic_id: string;
+          clinic_role_id: string;
+          enabled: boolean;
+          permission: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          clinic_id: string;
+          clinic_role_id: string;
+          enabled?: boolean;
+          permission: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          clinic_id?: string;
+          clinic_role_id?: string;
+          enabled?: boolean;
+          permission?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinic_role_permissions_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinic_role_permissions_clinic_role_id_fkey";
+            columns: ["clinic_role_id"];
+            isOneToOne: false;
+            referencedRelation: "clinic_roles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      clinic_roles: {
+        Row: {
+          clinic_id: string;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          name: string;
+        };
+        Insert: {
+          clinic_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          name: string;
+        };
+        Update: {
+          clinic_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          name?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinic_roles_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       clinics: {
         Row: {
           address: string | null;
@@ -332,9 +406,11 @@ export type Database = {
           deposit_percent: number;
           email: string | null;
           id: string;
+          has_separate_manager: boolean;
           insights_ingest_key_hash: string | null;
           insights_ingest_key_last4: string | null;
           name: string;
+          owner_setup_at: string | null;
           phone: string | null;
           reminder_offsets: number[];
           updated_at: string;
@@ -345,10 +421,12 @@ export type Database = {
           deposit_lead_days?: number;
           deposit_percent?: number;
           email?: string | null;
+          has_separate_manager?: boolean;
           id?: string;
           insights_ingest_key_hash?: string | null;
           insights_ingest_key_last4?: string | null;
           name: string;
+          owner_setup_at?: string | null;
           phone?: string | null;
           reminder_offsets?: number[];
           updated_at?: string;
@@ -359,10 +437,12 @@ export type Database = {
           deposit_lead_days?: number;
           deposit_percent?: number;
           email?: string | null;
+          has_separate_manager?: boolean;
           id?: string;
           insights_ingest_key_hash?: string | null;
           insights_ingest_key_last4?: string | null;
           name?: string;
+          owner_setup_at?: string | null;
           phone?: string | null;
           reminder_offsets?: number[];
           updated_at?: string;
@@ -1523,6 +1603,7 @@ export type Database = {
         Row: {
           avatar_url: string | null;
           clinic_id: string;
+          clinic_role_id: string | null;
           commission_rate: number;
           created_at: string;
           full_name: string;
@@ -1540,6 +1621,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null;
           clinic_id: string;
+          clinic_role_id?: string | null;
           commission_rate?: number;
           created_at?: string;
           full_name?: string;
@@ -1557,6 +1639,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null;
           clinic_id?: string;
+          clinic_role_id?: string | null;
           commission_rate?: number;
           created_at?: string;
           full_name?: string;
@@ -1577,6 +1660,13 @@ export type Database = {
             columns: ["clinic_id"];
             isOneToOne: false;
             referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "profiles_clinic_role_id_fkey";
+            columns: ["clinic_role_id"];
+            isOneToOne: false;
+            referencedRelation: "clinic_roles";
             referencedColumns: ["id"];
           },
         ];

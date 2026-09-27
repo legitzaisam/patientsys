@@ -1,4 +1,4 @@
-import { can, type PermissionKey } from "@/lib/permissions";
+import { can, PERMISSION_KEYS, type PermissionKey } from "@/lib/permissions";
 
 export type GrantRole = "manager" | "practitioner" | "front_desk" | "patient";
 export type CatalogueKind = "page" | "tab" | "component";
@@ -387,6 +387,51 @@ export function firstVisibleStaffPath(identity: SeeIdentity) {
       canSee(identity, node.id),
   );
   return page?.route ?? "/profile";
+}
+
+/**
+ * Least-privilege pack for a newly created named role. Stricter than Receptionist:
+ * floor work only, so a forgotten invite cannot see clinical notes, photos, money
+ * or marketing. Owner customises the pack afterwards on Team.
+ */
+const GENERIC_STAFF_ON = new Set<PermissionKey>([
+  "view.shell",
+  "view.shell.search",
+  "view.shell.alerts",
+  "view.shell.dock",
+  "view.dashboard",
+  "view.dashboard.diary",
+  "view.dashboard.attention",
+  "view.dashboard.followups",
+  "view.dashboard.pauses",
+  "view.schedule",
+  "appointments.edit",
+  "view.patients",
+  "view.patients.records",
+  "view.patients.record",
+  "view.patients.contact",
+  "view.patients.documents",
+  "patients.edit",
+  "documents.send",
+  "comms.send",
+  "team.view",
+  "view.team.current",
+  "view.profile",
+  "view.settings",
+]);
+
+export function genericStaffDefaults(): Record<PermissionKey, boolean> {
+  return Object.fromEntries(PERMISSION_KEYS.map((key) => [key, GENERIC_STAFF_ON.has(key)])) as Record<
+    PermissionKey,
+    boolean
+  >;
+}
+
+export const GENERIC_STAFF_DEFAULTS = genericStaffDefaults();
+
+/** Named packs stay operational until they are granted clinical write. */
+export function loginRoleForClinicPack(hasTreatmentsRecord: boolean): "practitioner" | "front_desk" {
+  return hasTreatmentsRecord ? "practitioner" : "front_desk";
 }
 
 export function firstVisiblePortalPath(identity: SeeIdentity) {

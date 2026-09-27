@@ -276,9 +276,24 @@ export const InviteStaffMember = z.object({
   fullName: requiredText(200),
   jobTitle: optionalText(200),
   role: staffRole,
+  clinicRoleId: optionalId,
   registrationBody: optionalText(200),
   registrationNumber: optionalText(100),
   app_origin: optionalText(500),
+});
+
+export const CompleteOwnerSetup = z.object({
+  hasSeparateManager: z.boolean(),
+});
+
+export const CreateClinicRole = z.object({
+  name: requiredText(80),
+});
+
+export const SetClinicRolePermission = z.object({
+  clinicRoleId: id,
+  permission: requiredText(100),
+  enabled: z.boolean(),
 });
 
 export const RevokeStaffAccess = z.object({ userId: id });

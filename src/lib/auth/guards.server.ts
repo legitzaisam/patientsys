@@ -36,12 +36,12 @@ async function resolveAppMetaFlag(context: Ctx, flag: AppMetaFlag): Promise<bool
 }
 
 async function readIdentity(context: Ctx) {
-  const [rolesRes, profileRes, patientRes, permsRes] = await Promise.all([
+  const [rolesRes, profileRes, patientRes, permsRes, clinicRes, clinicPermsRes] = await Promise.all([
     context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
     context.supabase
       .from("profiles")
       .select(
-        "id, clinic_id, full_name, job_title, registration_body, registration_number, registration_expiry, insurance_provider, insurance_expiry, qualifications, working_arrangement, avatar_url",
+        "id, clinic_id, clinic_role_id, full_name, job_title, registration_body, registration_number, registration_expiry, insurance_provider, insurance_expiry, qualifications, working_arrangement, avatar_url",
       )
       .eq("id", context.userId)
       .maybeSingle(),
@@ -51,6 +51,14 @@ async function readIdentity(context: Ctx) {
       .eq("user_id", context.userId)
       .maybeSingle(),
     context.supabase.from("role_permissions").select("role, permission, enabled"),
+    context.clinicId
+      ? context.supabase
+          .from("clinics")
+          .select("has_separate_manager, owner_setup_at")
+          .eq("id", context.clinicId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    context.supabase.from("clinic_role_permissions").select("clinic_role_id, permission, enabled"),
   ]);
 
   // A failed read here is indistinguishable from "no rows", which would silently
@@ -62,6 +70,8 @@ async function readIdentity(context: Ctx) {
       ["profile", profileRes],
       ["patient record", patientRes],
       ["permissions", permsRes],
+      ["clinic setup", clinicRes],
+      ["named-role permissions", clinicPermsRes],
     ] as const
   ).find(([, res]) => res.error);
   if (failed) {
@@ -73,6 +83,12 @@ async function readIdentity(context: Ctx) {
   const { data: profile } = profileRes;
   const { data: patient } = patientRes;
   const { data: perms } = permsRes;
+  const clinic = clinicRes.data as { has_separate_manager?: boolean; owner_setup_at?: string | null } | null;
+  const clinicPerms = (clinicPermsRes.data ?? []) as {
+    clinic_role_id: string;
+    permission: string;
+    enabled: boolean;
+  }[];
   const roleList: string[] = (roles ?? []).map((r: { role: string }) => r.role);
   const isOwner = roleList.includes("owner");
   const isAdmin = roleList.includes("admin");
@@ -81,16 +97,24 @@ async function readIdentity(context: Ctx) {
   );
   /** Management tier (clinic owner or manager) — used for overview UI, not full access. */
   const isManager = isOwner || isAdmin || roleList.includes("manager");
-  // Only clinic owners get every capability automatically; managers use role_permissions.
+  const clinicRoleId = (profile?.clinic_role_id as string | null | undefined) ?? null;
+  // Only clinic owners get every capability automatically; named packs beat the
+  // built-in role so a "Plastic surgeon" invite stays on generic until raised.
   const permissions: string[] = isOwner || isAdmin
     ? [...PERMISSION_KEYS]
-    : Array.from(
-        new Set(
-          ((perms ?? []) as { role: string; permission: string; enabled: boolean }[])
-            .filter((p) => p.enabled && roleList.includes(p.role))
-            .map((p) => p.permission),
-        ),
-      );
+    : clinicRoleId
+      ? Array.from(
+          new Set(
+            clinicPerms.filter((p) => p.enabled && p.clinic_role_id === clinicRoleId).map((p) => p.permission),
+          ),
+        )
+      : Array.from(
+          new Set(
+            ((perms ?? []) as { role: string; permission: string; enabled: boolean }[])
+              .filter((p) => p.enabled && roleList.includes(p.role))
+              .map((p) => p.permission),
+          ),
+        );
   // Which clinic this caller belongs to: their staff profile, or the patient
   // record their login is attached to. Every clinic-scoped query filters on it,
   // because the service-role client makes the database's isolation policies
@@ -140,6 +164,14 @@ async function readIdentity(context: Ctx) {
     mustChangePassword: await resolveAppMetaFlag(context, "must_change_password"),
     /** True for newly invited staff until they dismiss the welcome dialog. */
     welcomePending: await resolveAppMetaFlag(context, "welcome_pending"),
+    /** Clinic intends to have a Manager login, distinct from the owner. */
+    hasSeparateManager: Boolean(clinic?.has_separate_manager),
+    /** When the owner finished first-login setup. Null until they do. */
+    ownerSetupAt: clinic?.owner_setup_at ?? null,
+    /** Owner still needs the first-login questions. */
+    needsOwnerSetup: isOwner && !clinic?.owner_setup_at,
+    /** Named permission pack, when this person was invited onto one. */
+    clinicRoleId,
   };
 }
 
@@ -361,18 +393,27 @@ export function scopeFor(identity: Identity, name: HandlerName): string | null {
  * with what the server enforces. Deriving it here means it cannot.
  */
 export async function effectiveCapabilities(context: Ctx, userId: string) {
-  const [rolesRes, permsRes] = await Promise.all([
+  const [rolesRes, permsRes, profileRes, clinicPermsRes] = await Promise.all([
     context.supabase.from("user_roles").select("role").eq("user_id", userId),
     context.supabase.from("role_permissions").select("role, permission, enabled"),
+    context.supabase.from("profiles").select("clinic_role_id").eq("id", userId).maybeSingle(),
+    context.supabase.from("clinic_role_permissions").select("clinic_role_id, permission, enabled"),
   ]);
   if (rolesRes.error) throw new Error(`Could not load roles: ${rolesRes.error.message}`);
   if (permsRes.error) throw new Error(`Could not load permissions: ${permsRes.error.message}`);
+  if (profileRes.error) throw new Error(`Could not load profile: ${profileRes.error.message}`);
+  if (clinicPermsRes.error) throw new Error(`Could not load named-role permissions: ${clinicPermsRes.error.message}`);
 
   const roles: string[] = (rolesRes.data ?? []).map((r: { role: string }) => r.role);
   const isOwner = roles.includes("owner");
-  const permissions = ((permsRes.data ?? []) as { role: string; permission: string; enabled: boolean }[])
-    .filter((p) => p.enabled && roles.includes(p.role))
-    .map((p) => p.permission);
+  const clinicRoleId = (profileRes.data?.clinic_role_id as string | null | undefined) ?? null;
+  const permissions = clinicRoleId
+    ? ((clinicPermsRes.data ?? []) as { clinic_role_id: string; permission: string; enabled: boolean }[])
+        .filter((p) => p.enabled && p.clinic_role_id === clinicRoleId)
+        .map((p) => p.permission)
+    : ((permsRes.data ?? []) as { role: string; permission: string; enabled: boolean }[])
+        .filter((p) => p.enabled && roles.includes(p.role))
+        .map((p) => p.permission);
 
   const subject = { isOwner, permissions };
   return {

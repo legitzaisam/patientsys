@@ -29,6 +29,8 @@ import {
 } from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
 import { assertPhone } from "@/lib/phone";
+import { GENERIC_STAFF_DEFAULTS, loginRoleForClinicPack } from "@/lib/access-catalogue";
+import { assertStaffInvite, normalizeClinicRoleName } from "@/lib/clinic-roles";
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { parseInput } from "@/lib/validation/parse";
@@ -73,6 +75,29 @@ function clinicIdOf(context: unknown): string {
   const id = (context as Ctx).clinicId;
   if (!id) throw new Error("Your account is not linked to a clinic.");
   return id;
+}
+
+async function clinicSetupOf(ctx: Ctx) {
+  const { data, error } = await ctx.supabase
+    .from("clinics")
+    .select("has_separate_manager, owner_setup_at")
+    .eq("id", clinicIdOf(ctx))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return {
+    hasSeparateManager: Boolean(data?.has_separate_manager),
+    ownerSetupAt: (data?.owner_setup_at as string | null) ?? null,
+  };
+}
+
+async function treatingNamedRoleIds(ctx: Ctx) {
+  const { data, error } = await ctx.supabase
+    .from("clinic_role_permissions")
+    .select("clinic_role_id")
+    .eq("permission", "treatments.record")
+    .eq("enabled", true);
+  if (error) throw new Error(error.message);
+  return [...new Set((data ?? []).map((row: { clinic_role_id: string }) => row.clinic_role_id))];
 }
 
 /**
@@ -1254,16 +1279,23 @@ export const listPractitioners = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await authorize(context as Ctx, "listPractitioners");
     const ctx = context as Ctx;
-    const { data: roles } = await ctx.supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "practitioner");
-    const ids = (roles ?? []).map((r: { user_id: string }) => r.user_id);
-    if (ids.length === 0) return [];
+    const [{ data: roles }, packIds] = await Promise.all([
+      ctx.supabase.from("user_roles").select("user_id").eq("role", "practitioner"),
+      treatingNamedRoleIds(ctx),
+    ]);
+    const ids = new Set((roles ?? []).map((r: { user_id: string }) => r.user_id));
+    if (packIds.length > 0) {
+      const { data: named } = await ctx.supabase
+        .from("profiles")
+        .select("id")
+        .in("clinic_role_id", packIds);
+      for (const row of named ?? []) ids.add(row.id);
+    }
+    if (ids.size === 0) return [];
     const { data } = await ctx.supabase
       .from("profiles")
       .select("id, full_name, job_title")
-      .in("id", ids)
+      .in("id", [...ids])
       .order("full_name", { ascending: true });
     return data ?? [];
   });
@@ -4389,12 +4421,17 @@ export const listTeam = createServerFn({ method: "GET" })
       });
     }
     const staffRoles = (roles ?? []).filter((r) => r.role !== "patient" && r.role !== "admin");
+    const { data: namedRoles } = await supabaseAdmin.from("clinic_roles").select("id, name");
+    const namedName = new Map((namedRoles ?? []).map((row: { id: string; name: string }) => [row.id, row.name]));
     return staffRoles
       .map((r) => {
         const profile = (profiles ?? []).find((p) => p.id === r.user_id);
+        const clinicRoleId = (profile?.clinic_role_id as string | null | undefined) ?? null;
         return {
           userId: r.user_id,
           role: r.role as string,
+          clinicRoleId,
+          clinicRoleName: clinicRoleId ? (namedName.get(clinicRoleId) ?? null) : null,
           email: emailFor.get(r.user_id) ?? "",
           fullName: profile?.full_name ?? "",
           jobTitle: profile?.job_title ?? "",
@@ -4476,7 +4513,14 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "updateStaffMember");
+    const identity = await authorize(ctx, "updateStaffMember");
+    const setup = await clinicSetupOf(ctx);
+    if (data.role === "manager" && !setup.hasSeparateManager) {
+      throw new Error("This clinic does not have a separate manager role.");
+    }
+    if (data.role === "owner" && !identity.isOwner) {
+      throw new Error("Only the clinic owner can assign that access level.");
+    }
     const supabaseAdmin = await adminClient(context);
     const patch: Record<string, unknown> = {
       full_name: data.fullName,
@@ -4488,6 +4532,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       insurance_expiry: data.insuranceExpiry || null,
       qualifications: data.qualifications?.trim() || null,
       working_arrangement: data.workingArrangement?.trim() || null,
+      clinic_role_id: null,
     };
     if (data.commissionRate !== undefined) {
       patch.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
@@ -4532,6 +4577,7 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       fullName: string;
       jobTitle?: string;
       role: "owner" | "manager" | "practitioner" | "front_desk";
+      clinicRoleId?: string;
       registrationBody?: string;
       registrationNumber?: string;
       app_origin?: string;
@@ -4540,7 +4586,32 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "inviteStaffMember");
+    const identity = await authorize(ctx, "inviteStaffMember");
+    const setup = await clinicSetupOf(ctx);
+    assertStaffInvite({
+      actor: identity,
+      role: data.role,
+      clinicRoleId: data.clinicRoleId,
+      hasSeparateManager: setup.hasSeparateManager,
+    });
+    let assignedRole = data.role;
+    let clinicRoleId = data.clinicRoleId ?? null;
+    if (clinicRoleId) {
+      const { data: pack, error: packError } = await ctx.supabase
+        .from("clinic_roles")
+        .select("id")
+        .eq("id", clinicRoleId)
+        .maybeSingle();
+      if (packError) throw new Error(packError.message);
+      if (!pack) throw new Error("That access level is not on this clinic.");
+      const { data: packPerms } = await ctx.supabase
+        .from("clinic_role_permissions")
+        .select("permission, enabled")
+        .eq("clinic_role_id", clinicRoleId);
+      assignedRole = loginRoleForClinicPack(
+        Boolean((packPerms ?? []).some((row: { permission: string; enabled: boolean }) => row.permission === "treatments.record" && row.enabled)),
+      );
+    }
     const email = assertEmail(data.email, "work email")!;
     const supabaseAdmin = await adminClient(context);
     const origin = (data.app_origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(/\/$/, "");
@@ -4597,17 +4668,24 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       job_title: data.jobTitle ?? null,
       registration_body: data.registrationBody ?? null,
       registration_number: data.registrationNumber ?? null,
+      clinic_role_id: clinicRoleId,
     });
     await supabaseAdmin.from("user_roles").delete().eq("user_id", uid).neq("role", "patient");
-    await supabaseAdmin.from("user_roles").insert({ user_id: uid, role: data.role });
+    await supabaseAdmin.from("user_roles").insert({ user_id: uid, role: assignedRole });
     await clearExTeamArchive(clinicIdOf(context), uid);
     await unbanAuthUser(uid);
-    await audit(ctx, "staff.invite", "user_roles", uid, null, { email, role: data.role, delivery });
+    await audit(ctx, "staff.invite", "user_roles", uid, null, {
+      email,
+      role: assignedRole,
+      clinic_role_id: clinicRoleId,
+      delivery,
+    });
 
     return {
       userId: uid,
       email,
-      role: data.role,
+      role: assignedRole,
+      clinicRoleId,
       delivery,
       actionLink,
     };
@@ -6903,10 +6981,18 @@ export const listRolePermissions = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "listRolePermissions");
-    const { data, error } = await ctx.supabase
-      .from("role_permissions")
-      .select("role, permission, enabled, updated_by, updated_at");
+    const [{ data, error }, { data: namedRoles, error: namedError }, { data: namedPerms, error: namedPermsError }, setup] =
+      await Promise.all([
+        ctx.supabase.from("role_permissions").select("role, permission, enabled, updated_by, updated_at"),
+        ctx.supabase.from("clinic_roles").select("id, name, created_at").order("created_at", { ascending: true }),
+        ctx.supabase
+          .from("clinic_role_permissions")
+          .select("clinic_role_id, permission, enabled, updated_by, updated_at"),
+        clinicSetupOf(ctx),
+      ]);
     if (error) throw new Error(error.message);
+    if (namedError) throw new Error(namedError.message);
+    if (namedPermsError) throw new Error(namedPermsError.message);
     const rows = (data ?? []) as {
       role: string;
       permission: string;
@@ -6914,8 +7000,18 @@ export const listRolePermissions = createServerFn({ method: "GET" })
       updated_by: string | null;
       updated_at: string;
     }[];
-    // Names for "changed by": one lookup for everyone who touched a grant.
-    const changerIds = [...new Set(rows.map((r) => r.updated_by).filter((v): v is string => Boolean(v)))];
+    const packRows = (namedPerms ?? []) as {
+      clinic_role_id: string;
+      permission: string;
+      enabled: boolean;
+      updated_by: string | null;
+      updated_at: string;
+    }[];
+    const changerIds = [
+      ...new Set(
+        [...rows, ...packRows].map((r) => r.updated_by).filter((v): v is string => Boolean(v)),
+      ),
+    ];
     const changers: { id: string; full_name: string }[] = changerIds.length
       ? ((await ctx.supabase.from("profiles").select("id, full_name").in("id", changerIds)).data ?? [])
       : [];
@@ -6937,7 +7033,34 @@ export const listRolePermissions = createServerFn({ method: "GET" })
         }
       }
     }
-    return { grants, changes, canEdit: identity.isOwner || identity.isAdmin };
+    const clinicRoles = (namedRoles ?? []).map((role: { id: string; name: string }) => ({
+      id: role.id,
+      name: role.name,
+    }));
+    const clinicRoleGrants: Record<string, Record<string, boolean>> = {};
+    const clinicRoleChanges: Record<string, Record<string, { by: string; at: string }>> = {};
+    for (const role of clinicRoles) {
+      clinicRoleGrants[role.id] = {};
+      for (const key of PERMISSION_KEYS) {
+        const row = packRows.find((r) => r.clinic_role_id === role.id && r.permission === key);
+        clinicRoleGrants[role.id]![key] = row?.enabled ?? false;
+        if (row?.updated_by) {
+          (clinicRoleChanges[role.id] ??= {})[key] = {
+            by: nameOf.get(row.updated_by) ?? "A manager",
+            at: row.updated_at,
+          };
+        }
+      }
+    }
+    return {
+      grants,
+      changes,
+      clinicRoles,
+      clinicRoleGrants,
+      clinicRoleChanges,
+      hasSeparateManager: setup.hasSeparateManager,
+      canEdit: identity.isOwner || identity.isAdmin,
+    };
   });
 
 /** Clinic owner: turn a single capability on or off for a staff role. */
@@ -6971,6 +7094,124 @@ export const setRolePermission = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     await audit(ctx, "access.update", "role_permissions", null, null, {
       role: data.role,
+      permission: data.permission,
+      enabled: data.enabled,
+    });
+    return { ok: true };
+  });
+
+export const completeOwnerSetup = createServerFn({ method: "POST" })
+  .validator((data: { hasSeparateManager: boolean }) => parseInput(schemas.CompleteOwnerSetup, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "completeOwnerSetup");
+    const setup = await clinicSetupOf(ctx);
+    if (setup.ownerSetupAt) throw new Error("Clinic setup is already complete.");
+    const { error } = await ctx.supabase
+      .from("clinics")
+      .update({
+        has_separate_manager: data.hasSeparateManager,
+        owner_setup_at: new Date().toISOString(),
+      })
+      .eq("id", clinicIdOf(context));
+    if (error) throw new Error(error.message);
+    await audit(ctx, "clinic.setup", "clinic", clinicIdOf(context), null, {
+      has_separate_manager: data.hasSeparateManager,
+    });
+    return { ok: true, hasSeparateManager: data.hasSeparateManager };
+  });
+
+export const enableSeparateManager = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "enableSeparateManager");
+    const { error } = await ctx.supabase
+      .from("clinics")
+      .update({ has_separate_manager: true })
+      .eq("id", clinicIdOf(context));
+    if (error) throw new Error(error.message);
+    await audit(ctx, "clinic.enable_manager", "clinic", clinicIdOf(context), null);
+    return { ok: true };
+  });
+
+export const createClinicRole = createServerFn({ method: "POST" })
+  .validator((data: { name: string }) => parseInput(schemas.CreateClinicRole, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "createClinicRole");
+    const name = normalizeClinicRoleName(data.name);
+    const clinicId = clinicIdOf(context);
+    const { data: created, error } = await ctx.supabase
+      .from("clinic_roles")
+      .insert({ clinic_id: clinicId, name, created_by: ctx.userId })
+      .select("id, name")
+      .single();
+    if (error) {
+      if (error.code === "23505") throw new Error("A role with that name already exists.");
+      throw new Error(error.message);
+    }
+    const rows = PERMISSION_KEYS.map((permission) => ({
+      clinic_id: clinicId,
+      clinic_role_id: created.id,
+      permission,
+      enabled: GENERIC_STAFF_DEFAULTS[permission],
+      updated_by: null,
+      updated_at: new Date().toISOString(),
+    }));
+    const { error: grantError } = await ctx.supabase.from("clinic_role_permissions").insert(rows);
+    if (grantError) throw new Error(grantError.message);
+    await audit(ctx, "clinic_role.create", "clinic_roles", created.id, null, {
+      name,
+      created_by_role: identity.roles[0] ?? null,
+    });
+    return { id: created.id as string, name: created.name as string };
+  });
+
+export const setClinicRolePermission = createServerFn({ method: "POST" })
+  .validator((data: { clinicRoleId: string; permission: string; enabled: boolean }) =>
+    parseInput(schemas.SetClinicRolePermission, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "setClinicRolePermission");
+    await requireStepUp(ctx);
+    if (!(PERMISSION_KEYS as readonly string[]).includes(data.permission))
+      throw new Error("Unknown permission");
+    const { data: pack, error: packError } = await ctx.supabase
+      .from("clinic_roles")
+      .select("id")
+      .eq("id", data.clinicRoleId)
+      .maybeSingle();
+    if (packError) throw new Error(packError.message);
+    if (!pack) throw new Error("That access level is not on this clinic.");
+    const { error } = await ctx.supabase.from("clinic_role_permissions").upsert(
+      {
+        clinic_id: clinicIdOf(context),
+        clinic_role_id: data.clinicRoleId,
+        permission: data.permission,
+        enabled: data.enabled,
+        updated_by: ctx.userId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "clinic_role_id,permission" },
+    );
+    if (error) throw new Error(error.message);
+    if (data.permission === "treatments.record") {
+      const nextRole = loginRoleForClinicPack(data.enabled);
+      const { data: members } = await ctx.supabase
+        .from("profiles")
+        .select("id")
+        .eq("clinic_role_id", data.clinicRoleId);
+      for (const member of members ?? []) {
+        await ctx.supabase.from("user_roles").delete().eq("user_id", member.id).neq("role", "patient");
+        await ctx.supabase.from("user_roles").insert({ user_id: member.id, role: nextRole });
+      }
+    }
+    await audit(ctx, "access.update", "clinic_role_permissions", data.clinicRoleId, null, {
       permission: data.permission,
       enabled: data.enabled,
     });
