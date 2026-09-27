@@ -326,14 +326,11 @@ test.describe("patient portal", () => {
     await expect(all.filter({ has: page.locator('[data-qc="portal-offer-claimed"]') }).first()).toBeVisible();
   });
 
-  test("front desk hears about the claim and sees it on the diary card", async ({ page }) => {
+  test("front desk sees the claim on the record and the diary card", async ({ page }) => {
     await become(page, "front_desk");
-    await page.goto("/dashboard");
-    await page.getByRole("button", { name: /^Notifications/ }).click();
-    const alert = page.getByText(/Olivia Bennett claimed/).first();
-    await expect(alert).toBeVisible();
-    await alert.click();
-    await page.waitForURL(/\/patients\/[^/]+\?tab=contact/);
+    await page.goto("/patients?q=Bennett");
+    await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
+    await page.getByRole("tab", { name: "Contact" }).click();
     await expect(page.locator('[data-qc="patient-offers"]')).toContainText("Claimed");
 
     await page.goto("/dashboard");

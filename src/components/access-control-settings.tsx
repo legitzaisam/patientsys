@@ -21,7 +21,35 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
+
+const RECENT_CHANGE_PREVIEW = 5;
+
+type AccessChange = {
+  role: string;
+  key: PermissionKey;
+  enabled: boolean;
+  by: string;
+  at: string;
+};
+
+function accessChangeLine(c: AccessChange) {
+  return (
+    <li key={`${c.role}-${c.key}-${c.at}`} className="text-xs text-ink-2">
+      <span className="text-foreground">{c.by}</span> turned{" "}
+      <span className="text-foreground">{PERMISSION_META[c.key].label}</span>{" "}
+      {c.enabled ? "on" : "off"} for {c.role.toLowerCase()}
+      {c.role.endsWith("s") ? "" : "s"} · {dateTime(c.at)}
+    </li>
+  );
+}
 
 const SYSTEM_ROLES = [
   { key: "manager" as const, label: "Manager", named: false },
@@ -100,8 +128,8 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
       })),
     )
     .filter((c) => PERMISSION_META[c.key] && !c.key.startsWith("view."))
-    .sort((a, b) => b.at.localeCompare(a.at))
-    .slice(0, 12);
+    .sort((a, b) => b.at.localeCompare(a.at));
+  const previewChanges = recentChanges.slice(0, RECENT_CHANGE_PREVIEW);
   const groups = PERMISSION_GROUPS.map((group) => ({
     ...group,
     keys: group.keys.filter((key) => !key.startsWith("view.")),
@@ -110,7 +138,9 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
   const columns = `minmax(13rem,1fr) repeat(${Math.max(roles.length, 1)}, 6rem)`;
   const [openGroups, setOpenGroups] = useState(() => new Set(groups.map((group) => group.label)));
   const anyOpen = groups.some((group) => openGroups.has(group.label));
+  const [historyOpen, setHistoryOpen] = useState(false);
   const headRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [headPinned, setHeadPinned] = useState(false);
 
   // The header pins under the page toolbar (3.5rem). Watching it against a line
@@ -131,6 +161,47 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
     return () => observer.disconnect();
   }, []);
 
+  // A row that sits halfway under the pin would show a sliced title or
+  // description. Hide that row and extend the header fill over the gap.
+  useEffect(() => {
+    const main = document.getElementById("app-main-scroll");
+    const head = headRef.current;
+    const body = bodyRef.current;
+    if (!main || !head || !body) return;
+
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const edge = head.getBoundingClientRect().bottom;
+      let leftover = 0;
+      for (const row of body.querySelectorAll<HTMLElement>("[data-access-row]")) {
+        const box = row.getBoundingClientRect();
+        const straddles = box.top < edge - 1 && box.bottom > edge + 1;
+        row.style.visibility = straddles ? "hidden" : "";
+        if (straddles) leftover = Math.max(leftover, Math.ceil(box.bottom - edge));
+      }
+      head.style.setProperty("--access-leftover", `${leftover}px`);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+
+    main.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(onScroll);
+    ro.observe(head);
+    ro.observe(body);
+    update();
+    return () => {
+      main.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+      head.style.removeProperty("--access-leftover");
+      for (const row of body.querySelectorAll<HTMLElement>("[data-access-row]")) {
+        row.style.visibility = "";
+      }
+    };
+  }, []);
+
   const setGroupOpen = (label: string, open: boolean) => {
     setOpenGroups((prev) => {
       const next = new Set(prev);
@@ -143,6 +214,20 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
   return (
     <Card className="space-y-4 p-5">
       {stepUp.dialog}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="max-w-md rounded-[22px] sm:rounded-[22px]">
+          <DialogHeader className="pr-8 text-left">
+            <DialogTitle>Access history</DialogTitle>
+            <DialogDescription>The latest change to each capability, newest first.</DialogDescription>
+          </DialogHeader>
+          <ul
+            data-qc="access-history"
+            className="max-h-[20rem] space-y-2 overflow-y-auto overscroll-contain pr-1"
+          >
+            {recentChanges.map(accessChangeLine)}
+          </ul>
+        </DialogContent>
+      </Dialog>
       <div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="section-title flex min-w-0 items-center gap-2">
@@ -171,22 +256,26 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
                   <div className="border-b border-edge px-3.5 py-3">
                     <p className="text-sm font-semibold text-foreground">Recent changes</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Who last changed staff access. The full history stays in the audit log.
+                      {recentChanges.length > RECENT_CHANGE_PREVIEW
+                        ? "The last five changes. Older ones are in Access history."
+                        : "Who last changed staff access."}
                     </p>
                   </div>
-                  <ul
-                    data-qc="access-changes"
-                    className="max-h-56 space-y-2 overflow-y-auto px-3.5 py-3"
-                  >
-                    {recentChanges.map((c) => (
-                      <li key={`${c.role}-${c.key}-${c.at}`} className="text-xs text-ink-2">
-                        <span className="text-foreground">{c.by}</span> turned{" "}
-                        <span className="text-foreground">{PERMISSION_META[c.key].label}</span>{" "}
-                        {c.enabled ? "on" : "off"} for {c.role.toLowerCase()}
-                        {c.role.endsWith("s") ? "" : "s"} · {dateTime(c.at)}
-                      </li>
-                    ))}
+                  <ul data-qc="access-changes" className="space-y-2 px-3.5 py-3">
+                    {previewChanges.map(accessChangeLine)}
                   </ul>
+                  {recentChanges.length > RECENT_CHANGE_PREVIEW && (
+                    <div className="border-t border-edge px-3.5 py-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setHistoryOpen(true)}
+                      >
+                        Access history
+                      </Button>
+                    </div>
+                  )}
                 </PopoverContent>
               </Popover>
             )}
@@ -200,17 +289,17 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
       </div>
 
       <div
-        className="rounded-2xl border border-edge-2 bg-glass shadow-inset-hi max-sm:overflow-x-auto"
+        className="rounded-2xl border border-edge-2 bg-background shadow-inset-hi max-sm:overflow-x-auto"
         aria-busy={!data?.grants}
       >
-        <div className="min-w-[34rem]">
+        <div className="min-w-0">
           <div
             ref={headRef}
             data-pinned={headPinned || undefined}
-            className="access-grid-head sticky top-[3.5rem] z-10 grid items-end gap-3 rounded-t-[15px] border-b border-edge-2 px-4 pb-3 pt-3.5"
+            className="access-grid-head sticky top-[3.5rem] z-10 grid items-end gap-3 border-b border-edge-2 bg-background px-4 pb-3 pt-3.5"
             style={{ gridTemplateColumns: columns }}
           >
-            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-3">
+            <span className="min-w-0 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-3">
               Capability
             </span>
             {roles.map((role) => {
@@ -231,6 +320,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
             })}
           </div>
 
+          <div ref={bodyRef}>
           {groups.map((group, groupIndex) => {
             const open = openGroups.has(group.label);
             const lastGroup = groupIndex === groups.length - 1;
@@ -241,6 +331,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
                 onOpenChange={(next) => setGroupOpen(group.label, next)}
               >
                 <CollapsibleTrigger
+                  data-access-row
                   aria-expanded={open}
                   className={cn(
                     "grid w-full cursor-pointer items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[rgba(47,63,102,0.09)] focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--ring)]",
@@ -289,6 +380,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
                   {group.keys.map((key: PermissionKey, keyIndex) => (
                     <div
                       key={key}
+                      data-access-row
                       className={cn(
                         "grid items-center gap-3 px-4 py-3 transition-colors hover:bg-[rgba(47,63,102,0.04)]",
                         !(lastGroup && keyIndex === group.keys.length - 1) &&
@@ -352,6 +444,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
               </Collapsible>
             );
           })}
+          </div>
         </div>
       </div>
     </Card>

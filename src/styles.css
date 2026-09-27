@@ -1110,7 +1110,12 @@ input:-webkit-autofill {
  * toolbar strip, which is transparent and would otherwise show those rows.
  */
 .access-grid-head {
-  background: color-mix(in srgb, var(--foreground) 3%, #fdfdfd);
+  /* Sticky must live here so a later `position: relative` cannot override it.
+     Sticky is already a containing block for the toolbar-cover ::before. */
+  position: sticky;
+  top: 3.5rem;
+  z-index: 10;
+  background-color: var(--background);
 }
 
 .access-grid-head[data-pinned] {
@@ -1120,10 +1125,23 @@ input:-webkit-autofill {
 .access-grid-head[data-pinned]::before {
   content: "";
   position: absolute;
-  inset-inline: 0;
+  left: 0;
+  right: 0;
   bottom: 100%;
   height: 3.5rem;
-  background: #fdfdfd;
+  background-color: var(--background);
+  pointer-events: none;
+}
+
+.access-grid-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--access-leftover, 0px);
+  background-color: var(--background);
+  pointer-events: none;
 }
 
 /* Collapsible panels (Staff access categories) slide on the height Radix measures. */

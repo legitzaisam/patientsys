@@ -65,7 +65,17 @@ test.describe("as owner", () => {
     await expect(changes.locator("li").first()).toContainText(
       /turned .+ (on|off) for (managers|receptionists|practitioners)/,
     );
-    await page.keyboard.press("Escape");
+    expect(await changes.locator("li").count()).toBeLessThanOrEqual(5);
+    const historyLink = page.getByRole("button", { name: "Access history" });
+    if (await historyLink.isVisible()) {
+      await historyLink.click();
+      const history = page.locator('[data-qc="access-history"]');
+      await expect(history).toBeVisible();
+      expect(await history.locator("li").count()).toBeGreaterThan(5);
+      await page.keyboard.press("Escape");
+    } else {
+      await page.keyboard.press("Escape");
+    }
 
     await page.getByRole("button", { name: "Collapse all" }).click();
     await expect(page.getByRole("switch", { name: "Patient records for Manager" })).toBeHidden();

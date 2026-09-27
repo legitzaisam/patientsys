@@ -59,7 +59,7 @@ function showTeamAlertToast(opts: {
   toast.message(copy.title, { description: copy.description });
 }
 
-/** Unread-message alerts: live badge, dropdown and toast for new incoming messages. */
+/** Staff bell: new bookings only. Patient messages live in the chat bubble. */
 export function NotificationBell({
   isStaff,
   chipClassName,
@@ -79,7 +79,8 @@ export function NotificationBell({
     queryKey: ["unread-messages"],
     queryFn: () => fetchUnread(),
     refetchInterval: 60_000,
-    enabled: sessionReady,
+    // Staff read patient threads in the chat bubble, not this bell.
+    enabled: sessionReady && !isStaff,
   });
   const { data: alerts } = useQuery({
     queryKey: ["staff-notifications"],
@@ -102,17 +103,16 @@ export function NotificationBell({
         const incoming = isStaff ? row.author === "patient" : row.author === "staff";
         if (!incoming || seen.current.has(row.id)) return;
         seen.current.add(row.id);
-        toast.message(isStaff ? "New patient message" : "New message from your clinic", {
+        queryClient.invalidateQueries({ queryKey: ["unread-messages"] });
+        // Staff already have the chat bubble for this. Patients still get a toast.
+        if (isStaff) return;
+        toast.message("New message from your clinic", {
           description: row.body.slice(0, 120),
           action: {
             label: "Open",
-            onClick: () =>
-              isStaff
-                ? navigate({ to: "/patients/$id", params: { id: row.patient_id } })
-                : navigate({ to: "/my-record" }),
+            onClick: () => navigate({ to: "/my-record" }),
           },
         });
-        queryClient.invalidateQueries({ queryKey: ["unread-messages"] });
       })
       .subscribe();
     return () => {
@@ -167,9 +167,12 @@ export function NotificationBell({
   }, [identity?.userId, isStaff, navigate, queryClient]);
 
   const alertList = isStaff
-    ? (alerts ?? []).filter((a) => !pressedNonUrgent.has(a.id) && !TEAM_KINDS.has(a.kind))
+    ? (alerts ?? []).filter(
+        (a) => !pressedNonUrgent.has(a.id) && a.kind === "appointment" && a.title === "New booking",
+      )
     : [];
-  const total = (data?.total ?? 0) + alertList.length;
+  const messageItems = isStaff ? [] : (data?.items ?? []);
+  const total = (isStaff ? 0 : (data?.total ?? 0)) + alertList.length;
 
   // Demo: no realtime — toast when a new staff/chat alert appears in the polled list.
   useEffect(() => {
@@ -227,7 +230,9 @@ export function NotificationBell({
       <PopoverContent align="end" className="w-80 overflow-hidden rounded-2xl p-0">
         <div className="rounded-t-2xl bg-glass-2 px-4 py-3">
           <p className="text-sm font-medium text-foreground">Notifications</p>
-          <p className="text-xs text-muted-foreground">Bookings and patient messages</p>
+          <p className="text-xs text-muted-foreground">
+            {isStaff ? "New bookings" : "Messages from your clinic"}
+          </p>
         </div>
         <ul className="max-h-80 divide-y divide-glass-line overflow-y-auto">
           {alertList.map((alert) => {
@@ -353,7 +358,7 @@ export function NotificationBell({
             </li>
             );
           })}
-          {(data?.items ?? []).map((item) => (
+          {messageItems.map((item) => (
             <li key={item.patient_id}>
               <button
                 type="button"

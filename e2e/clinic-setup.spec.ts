@@ -95,6 +95,9 @@ test.describe("owner can hand profile-change approval to a manager", () => {
     ).toBeChecked();
 
     const inbox = page.locator("#profile-change-requests");
+    await page.locator("#app-main-scroll").evaluate((el) => {
+      el.scrollTop = 0;
+    });
     const tom = inbox.locator('[data-qc="profile-request"]').filter({ hasText: "Dr Tom Whitfield" });
     await expect(tom.locator('[data-qc="request-reviewed-by"]')).toHaveText(
       "Approved by Dr Amara Osei",

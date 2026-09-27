@@ -72,7 +72,7 @@ test("a message the patient sends appears on the staff record", async ({ page })
   await expect(chat.getByText(probe)).toBeVisible();
 });
 
-test("a patient's message also reaches their clinician's bell", async ({ page, context, baseURL }) => {
+test("a patient's message reaches their clinician in the chat box, not the bell", async ({ page, context, baseURL }) => {
   const probe = `For my clinician ${Date.now()}`;
 
   await becomePatient(page);
@@ -85,9 +85,15 @@ test("a patient's message also reaches their clinician's bell", async ({ page, c
   // Olivia's plan is run by Dr Nadia Rahman, the demo practitioner.
   await context.addCookies([{ name: "demo_role", value: "practitioner", url: baseURL ?? "http://localhost:8091" }]);
   await page.goto("/dashboard");
+  await page.locator('[data-qc="chat-bubble"]').click();
+  const chat = page.locator('[data-qc="chat-window"]');
+  await chat.getByRole("button", { name: /Olivia Bennett/ }).click();
+  await expect(chat.getByText(probe)).toBeVisible();
+
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /^Notifications/ }).click();
-  await expect(page.getByText("Message from Olivia Bennett").first()).toBeVisible();
-  await expect(page.getByText(probe).first()).toBeVisible();
+  await expect(page.getByText(probe)).toHaveCount(0);
+  await expect(page.getByText("New bookings")).toBeVisible();
 });
 
 test("a journal entry the patient writes is visible to the clinic", async ({ page }) => {

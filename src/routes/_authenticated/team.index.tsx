@@ -944,20 +944,7 @@ function RequestCard({
 
   return (
     <Card className="relative p-3.5" data-qc="profile-request" data-status={r.status}>
-      {!pending && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute right-2 top-2 h-7 w-7"
-          aria-label="Clear from inbox"
-          disabled={busy}
-          onClick={onDismiss}
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      )}
-      <div className={cn("space-y-3", !pending && "pr-7")}>
+      <div className={cn("space-y-3", !pending && "pr-8")}>
         <div>
           <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
             {r.current?.full_name || r.full_name}
@@ -966,7 +953,7 @@ function RequestCard({
                 <Clock className="h-3 w-3" />{" "}
                 {r.requires_owner ? "Needs clinic owner" : "Pending"}
               </Badge>
-            ) : (
+            ) : r.show_reviewer && r.reviewed_by_name ? null : (
               <Badge variant="outline" className="capitalize">
                 {r.status}
               </Badge>
@@ -1017,6 +1004,19 @@ function RequestCard({
           </div>
         )}
       </div>
+      {!pending && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-2 top-2 z-10 h-7 w-7"
+          aria-label="Clear from inbox"
+          disabled={busy}
+          onClick={onDismiss}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      )}
     </Card>
   );
 }

@@ -47,12 +47,9 @@ test("arrived with signed consent goes straight to waiting, and the practitioner
   await page.locator('[data-stage-option="arrived"]').first().click();
   await expect(stageOf(page, "Freya Sundqvist")).toHaveText(/Waiting/, { timeout: 10_000 });
 
-  // Her practitioner sees it in the bell and the dock.
+  // Her practitioner sees it on the arrival dock. The bell only lists new bookings.
   await become(page, "practitioner");
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: /^Notifications/ }).click();
-  await expect(page.getByText("Freya Sundqvist is waiting").first()).toBeVisible();
-  await page.keyboard.press("Escape");
   // The dock shows one waiting card at a time (Nadia Petrova was already
   // waiting in the fixtures), with a 1/2 counter over both.
   await expect(page.locator('[data-qc="dock-card-waiting"]')).toHaveCount(1);
@@ -137,9 +134,15 @@ test("signing through the public link moves an arrived patient to waiting", asyn
 test("the three-page form drives the stage and fans out into the record", async ({ page }) => {
   await become(page, "practitioner");
   await page.goto("/dashboard");
-  // Start from the bell's nudge for Freya: it opens the form directly.
-  await page.getByRole("button", { name: /^Notifications/ }).click();
-  await page.getByText("Freya Sundqvist is waiting").first().click();
+  // Start from the dock's waiting card for Freya. Nadia Petrova is already
+  // waiting and sorts first, so step forward when she is the card on screen.
+  const waitingCard = page.locator('[data-qc="dock-card-waiting"]');
+  await expect(waitingCard).toBeVisible();
+  if (!(await waitingCard.getByRole("link", { name: "Freya Sundqvist" }).isVisible())) {
+    await page.getByRole("button", { name: "Next arrival" }).click();
+  }
+  await expect(waitingCard.getByRole("link", { name: "Freya Sundqvist" })).toBeVisible();
+  await page.locator('[data-qc="dock-start-treatment"]').click();
   await page.waitForURL(/\/patients\/[^/]+\?treat=/);
   const form = page.locator('[data-qc="treatment-form"]');
   await expect(form).toBeVisible();
