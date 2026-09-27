@@ -54,7 +54,14 @@ export type CohortInput = {
     total_sessions: number | null;
   }[];
   milestones: { plan_id: string; kind: string | null; status: string | null }[];
-  offers: { patient_id: string; stage: string; status: string; source: string }[];
+  offers: {
+    patient_id: string;
+    stage: string;
+    status: string;
+    source: string;
+    template_id?: string | null;
+    expires_at?: string | null;
+  }[];
   now?: Date;
 };
 
@@ -139,19 +146,40 @@ export type PreviewRow = { patient_id: string; name: string; email: string | nul
 export type SkipReason =
   | "no_marketing_consent"
   | "already_offered"
+  | "has_live_offer"
   | "no_email"
   | "waiting_for_delay";
 
 export type StagePreview = {
   stage: OfferStage;
   willSend: PreviewRow[];
+  /** Due now but without marketing consent: they get the portal card only. */
+  portalOnly: PreviewRow[];
   skipped: (PreviewRow & { reason: SkipReason; detail: string })[];
 };
 
+/** The template's rules, as `sendOfferToPatients` enforces them. */
+export type PreviewRules = {
+  templateId?: string | null;
+  onePerPatient?: boolean | null;
+  noStacking?: boolean | null;
+  /** When the template shows a portal card, no-consent patients are "portal only" rather than skipped. */
+  showInPortal?: boolean | null;
+};
+
+/** Sent, viewed or claimed and not past its expiry. */
+export function isLiveOffer(offer: { status: string; expires_at?: string | null }, now: Date) {
+  if (offer.status !== "sent" && offer.status !== "viewed" && offer.status !== "claimed") {
+    return false;
+  }
+  return !offer.expires_at || new Date(offer.expires_at) >= now;
+}
+
 /**
- * Split one stage's cohort into who receives the offer on the next run and
- * who is skipped, with the reason. Used for the designer's preview and by the
- * automation itself, so what staff see is what will happen.
+ * Split one stage's cohort into who receives the offer on the next run, who
+ * gets the portal card only, and who is skipped, with the reason. Used for the
+ * designer's preview and by the automation itself, so what staff see is what
+ * will happen.
  */
 export function previewStage(
   members: CohortMember[],
@@ -160,10 +188,19 @@ export function previewStage(
   stage: OfferStage,
   delayDays: number,
   now = new Date(),
+  rules: PreviewRules = {},
 ): StagePreview {
   const patientById = new Map(patients.map((p) => [p.id, p]));
   const offered = new Set(offers.filter((o) => o.stage === stage).map((o) => o.patient_id));
-  const preview: StagePreview = { stage, willSend: [], skipped: [] };
+  const hadTemplate = new Set(
+    rules.onePerPatient && rules.templateId
+      ? offers.filter((o) => o.template_id === rules.templateId).map((o) => o.patient_id)
+      : [],
+  );
+  const hasLive = new Set(
+    rules.noStacking ? offers.filter((o) => isLiveOffer(o, now)).map((o) => o.patient_id) : [],
+  );
+  const preview: StagePreview = { stage, willSend: [], portalOnly: [], skipped: [] };
   for (const m of members.filter((m) => m.stage === stage)) {
     const row: PreviewRow = { patient_id: m.patient_id, name: m.name, email: m.email, since: m.since };
     const patient = patientById.get(m.patient_id);
@@ -172,8 +209,24 @@ export function previewStage(
       preview.skipped.push({ ...row, reason: "already_offered", detail: "Already offered this stage." });
       continue;
     }
+    if (hadTemplate.has(m.patient_id)) {
+      preview.skipped.push({
+        ...row,
+        reason: "already_offered",
+        detail: "Already had this offer (one per patient).",
+      });
+      continue;
+    }
+    if (hasLive.has(m.patient_id)) {
+      preview.skipped.push({
+        ...row,
+        reason: "has_live_offer",
+        detail: "Has a live offer already (no stacking).",
+      });
+      continue;
+    }
     const decision = assertCanSend(prefsFromPatient(patient as Partial<CommsPrefs>), "marketing", "email", m.email ?? "");
-    if (!decision.ok) {
+    if (!decision.ok && !rules.showInPortal) {
       preview.skipped.push({
         ...row,
         reason: m.email ? "no_marketing_consent" : "no_email",
@@ -190,7 +243,8 @@ export function previewStage(
       });
       continue;
     }
-    preview.willSend.push(row);
+    if (decision.ok) preview.willSend.push(row);
+    else preview.portalOnly.push(row);
   }
   return preview;
 }

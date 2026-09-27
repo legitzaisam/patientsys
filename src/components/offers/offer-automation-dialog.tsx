@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 const REASON_LABEL: Record<string, string> = {
   no_marketing_consent: "No marketing consent",
   already_offered: "Already offered",
+  has_live_offer: "Has a live offer",
   no_email: "No email address",
   waiting_for_delay: "Waiting out the delay",
 };
@@ -76,7 +77,16 @@ export function OfferAutomationDialog({
   if (!template) return null;
   const enabled = template.automation_enabled;
   const willSend = data?.willSend ?? [];
+  const portalOnly = data?.portalOnly ?? [];
   const skipped = data?.skipped ?? [];
+  const recipients = [
+    ...willSend.map((row) => ({ ...row, portalOnly: false })),
+    ...portalOnly.map((row) => ({ ...row, portalOnly: true })),
+  ];
+  const plural = (n: number) => (n === 1 ? "patient" : "patients");
+  const summary = enabled
+    ? `${willSend.length} ${plural(willSend.length)} would receive this today${portalOnly.length > 0 ? `, ${portalOnly.length} by portal only` : ""}`
+    : `${willSend.length} ${plural(willSend.length)} will get this now, ${portalOnly.length} by portal only`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -87,13 +97,14 @@ export function OfferAutomationDialog({
           </DialogTitle>
           <DialogDescription>
             {STAGE_META[stage].meaning} Each patient is offered this once, on the daily outbox run, after the delay below.
+            Patients with marketing email on get the email; the rest see the card in their portal only.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
           <div>
             <p className="text-sm font-semibold text-foreground" data-qc="offer-preview-count">
-              {isLoading ? "Working out who is in this stage…" : `${willSend.length} ${willSend.length === 1 ? "patient" : "patients"} would receive this today`}
+              {isLoading ? "Working out who is in this stage…" : summary}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {data ? `${data.counts[stage]} in the stage; ${skipped.length} skipped.` : ""}
@@ -113,14 +124,24 @@ export function OfferAutomationDialog({
         </div>
 
         <div className="max-h-[300px] overflow-y-auto rounded-2xl border border-edge bg-glass-2 shadow-inset-hi">
-          {willSend.length === 0 && !isLoading ? (
+          {recipients.length === 0 && !isLoading ? (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">Nobody is due this offer today.</p>
           ) : (
             <ul className="divide-y divide-edge">
-              {willSend.map((row) => (
-                <li key={row.patient_id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+              {recipients.map((row) => (
+                <li
+                  key={row.patient_id}
+                  className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+                  data-qc={row.portalOnly ? "offer-preview-portal-only" : "offer-preview-now"}
+                >
                   <span className="min-w-0 truncate font-medium text-foreground">{row.name}</span>
-                  <span className="shrink-0 truncate text-xs text-muted-foreground">{row.email}</span>
+                  {row.portalOnly ? (
+                    <span className="shrink-0 rounded-full bg-glass-2 px-2 py-0.5 text-[11px] text-muted-foreground shadow-inset-hi">
+                      Portal only
+                    </span>
+                  ) : (
+                    <span className="shrink-0 truncate text-xs text-muted-foreground">{row.email}</span>
+                  )}
                 </li>
               ))}
             </ul>

@@ -114,7 +114,7 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
   "team.view": {
     label: "Team & staff details",
     description:
-      "Open the Team page, read colleagues' profiles and message them. Staff documents and profile edits stay with managers.",
+      "Open the Team page and read colleagues' profiles and compliance status. Staff documents, profile edits and access changes stay with managers and the owner.",
   },
   "team.approve_changes": {
     label: "Approve profile changes",

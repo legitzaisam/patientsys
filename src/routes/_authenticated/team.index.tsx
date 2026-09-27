@@ -17,6 +17,9 @@ import {
 import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
+import { dateTime, daysAgoLabel } from "@/lib/format";
+import { complianceStatus } from "@/lib/staff-doc-compliance";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
@@ -179,6 +182,73 @@ function StaffSearch({
       >
         <X className="h-3.5 w-3.5" />
       </button>
+    </div>
+  );
+}
+
+/** Last active, compliance and (for the owner) commission, under the email line. */
+function MemberMeta({
+  member,
+  todayKey,
+}: {
+  member: {
+    lastActiveAt?: string | null;
+    commissionRate?: number | null;
+    role: string;
+    compliance?: {
+      docsOnFile: number;
+      docsTotal: number;
+      registrationExpiry: string | null;
+      insuranceExpiry: string | null;
+    } | null;
+    accessChanged?: { by: string; at: string } | null;
+  };
+  todayKey: string;
+}) {
+  const lastActive = member.lastActiveAt
+    ? daysAgoLabel(clinicDayDiff(clinicDayKey(new Date(member.lastActiveAt)), todayKey))
+    : null;
+  const status = member.compliance
+    ? complianceStatus(
+        {
+          docsMissing: member.compliance.docsTotal - member.compliance.docsOnFile,
+          registrationExpiry: member.compliance.registrationExpiry,
+          insuranceExpiry: member.compliance.insuranceExpiry,
+        },
+        todayKey,
+      )
+    : null;
+  const showCommission =
+    member.commissionRate !== null &&
+    member.commissionRate !== undefined &&
+    member.role !== "front_desk";
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span data-qc="member-last-active">
+        {lastActive ? `Last active ${lastActive}` : "Not signed in yet"}
+      </span>
+      {status && (
+        <span
+          data-qc="member-compliance"
+          data-tone={status.tone}
+          className={cn(
+            "inline-flex h-5 items-center rounded-full px-2 text-2xs font-medium",
+            status.tone === "ok" && "bg-success-bg text-success-ink",
+            status.tone === "warn" && "bg-warning-bg text-warning-ink",
+            status.tone === "bad" && "bg-destructive-bg text-destructive-ink",
+          )}
+        >
+          {status.label}
+        </span>
+      )}
+      {showCommission && (
+        <span data-qc="member-commission">{member.commissionRate}% commission</span>
+      )}
+      {member.accessChanged && (
+        <span data-qc="member-changed-by" className="text-ink-3">
+          Access set by {member.accessChanged.by} · {dateTime(member.accessChanged.at)}
+        </span>
+      )}
     </div>
   );
 }
@@ -349,6 +419,7 @@ function TeamPage() {
   const canViewTeam = can(identity, "team.view");
   const canApprove = can(identity, "team.approve_changes");
   const canAdmin = Boolean(identity.isOwner);
+  const todayKey = clinicDayKey();
   const members = (team ?? []).filter((m: { isSelf?: boolean; fullName?: string; email?: string }) => {
     if (m.isSelf) return true;
     return Boolean(String(m.fullName ?? "").trim() || String(m.email ?? "").trim());
@@ -412,7 +483,7 @@ function TeamPage() {
                 </Card>
               ) : (
                 visibleMembers.map((m: any) => (
-                <Card key={m.userId} className="p-4">
+                  <Card key={m.userId} className="p-4" data-qc="team-member">
                   <div className="flex flex-wrap items-center gap-4">
                     <div className="min-w-56 flex-1 space-y-0.5">
                       <Link
@@ -434,6 +505,7 @@ function TeamPage() {
                           Never signed in — set a password
                         </p>
                       )}
+                        <MemberMeta member={m} todayKey={todayKey} />
                     </div>
                     {canAdmin && (
                     <div className="w-32">

@@ -79,6 +79,65 @@ test.describe("designer", () => {
     );
     await expect(page.locator('[data-qc="offer-stage-pre_consultation"] [data-qc="offer-stage-count"]')).toContainText(/\d+ in stage/);
     await expect(page.locator('[data-qc="offer-customs"] [data-qc="offer-template"]', { hasText: "Autumn skin reset" })).toBeVisible();
+
+    // Each stage card says exactly which subset its count is, so it reconciles with Insights and Retention.
+    const subset = (stage: string) =>
+      page.locator(`[data-qc="offer-stage-${stage}"] [data-qc="offer-stage-subset"]`);
+    await expect(subset("single_treatment")).toHaveText("One treatment, not booked, no plan");
+    await expect(subset("post_consultation")).toHaveText("Consulted, nothing booked, no plan");
+    // Results per offer: sent → claimed → booked → £ revenue.
+    const autumn = page.locator('[data-qc="offer-customs"] [data-qc="offer-template"]', {
+      hasText: "Autumn skin reset",
+    });
+    await expect(autumn.locator('[data-qc="offer-results"]')).toContainText(
+      /\d+ sent.*\d+ claimed.*\d+ booked.*£[\d,]+ revenue/s,
+    );
+    // A single one-off template spans the full width; a second one brings the two-column grid back.
+    await expect(page.locator('[data-qc="offer-customs"]')).toHaveAttribute("data-cols", "1");
+  });
+
+  test("the wait before a stage sends is edited on the card", async ({ page }) => {
+    await page.goto("/offers");
+    const card = page.locator('[data-qc="offer-stage-pre_consultation"]');
+    const delay = card.locator('[data-qc="offer-stage-delay"]');
+    await expect(delay).toHaveValue("0");
+    await delay.fill("2");
+    await card.locator('[data-qc="offer-stage-delay-save"]').click();
+    await expect(page.getByText("Wait updated").first()).toBeVisible();
+    await page.reload();
+    await expect(card.locator('[data-qc="offer-stage-delay"]')).toHaveValue("2");
+    await expect(card).toContainText("days wait");
+    // Back to sending straight away so later runs are unchanged.
+    await card.locator('[data-qc="offer-stage-delay"]').fill("0");
+    await card.locator('[data-qc="offer-stage-delay-save"]').click();
+    await expect(card.locator('[data-qc="offer-stage-delay-save"]')).toHaveCount(0);
+  });
+
+  test("the editor carries the rules: one per patient, no stacking, applies to", async ({
+    page,
+  }) => {
+    await page.goto("/offers");
+    const autumn = page.locator('[data-qc="offer-customs"] [data-qc="offer-template"]', {
+      hasText: "Autumn skin reset",
+    });
+    await autumn.locator('[data-qc="offer-edit"]').click();
+    const editor = page.locator('[data-qc="offer-editor"]');
+    const rules = editor.locator('[data-qc="offer-rules"]');
+    await expect(rules).toBeVisible();
+    await expect(rules).toContainText(/Expires 21 days after it is sent/);
+    const onePer = rules.locator('[data-qc="offer-rule-one-per-patient"]');
+    const noStack = rules.locator('[data-qc="offer-rule-no-stacking"]');
+    await expect(onePer).toHaveAttribute("aria-checked", "false");
+    await expect(noStack).toHaveAttribute("aria-checked", "false");
+    const boxes = rules.locator('[data-qc="offer-rule-applies-to"] [role="checkbox"]');
+    expect(await boxes.count()).toBeGreaterThan(3);
+    await expect(rules).toContainText("Any treatment.");
+    await boxes.first().click();
+    await expect(boxes.first()).toHaveAttribute("aria-checked", "true");
+    await expect(rules).toContainText("1 treatment — the offer names them.");
+    await boxes.first().click();
+    await editor.getByRole("button", { name: "Cancel" }).click();
+    await expect(editor).toBeHidden();
   });
 
   test("Draft with AI fills the fields and the live preview follows; saving creates a one-off template", async ({ page }) => {
@@ -106,6 +165,7 @@ test.describe("designer", () => {
     await editor.locator('[data-qc="offer-save"]').click();
     await expect(editor).toBeHidden();
     await expect(page.locator('[data-qc="offer-customs"] [data-qc="offer-template"]', { hasText: "October peel add-on" })).toBeVisible();
+    await expect(page.locator('[data-qc="offer-customs"]')).toHaveAttribute("data-cols", "2");
   });
 
   test("the automation dialog previews the cohort; switching on sends on the next Process queue", async ({ page }) => {
@@ -114,9 +174,17 @@ test.describe("designer", () => {
     await card.locator('[data-qc="offer-automation-switch"]').click();
     const dialog = page.locator('[data-qc="offer-automation"]');
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator('[data-qc="offer-preview-count"]')).toContainText(/\d+ patients? would receive this today/);
-    const count = Number((await dialog.locator('[data-qc="offer-preview-count"]').innerText()).match(/^(\d+)/)?.[1] ?? "0");
-    expect(count).toBeGreaterThan(0);
+    // Switching on confirms with the split: who gets the email now and who sees the portal card only.
+    await expect(dialog.locator('[data-qc="offer-preview-count"]')).toContainText(
+      /\d+ patients? will get this now, \d+ by portal only/,
+    );
+    const summary = await dialog.locator('[data-qc="offer-preview-count"]').innerText();
+    const now = Number(summary.match(/^(\d+)/)?.[1] ?? "0");
+    const portalOnly = Number(summary.match(/, (\d+) by portal only/)?.[1] ?? "0");
+    expect(now).toBeGreaterThan(0);
+    await expect(dialog.locator('[data-qc="offer-preview-now"]')).toHaveCount(now);
+    await expect(dialog.locator('[data-qc="offer-preview-portal-only"]')).toHaveCount(portalOnly);
+    const count = now + portalOnly;
     // The first name in the will-send list is who we check afterwards.
     const firstName = (await dialog.locator("ul li").first().innerText()).split("\n")[0]!.trim();
 
@@ -131,11 +199,17 @@ test.describe("designer", () => {
     await page.getByRole("tab", { name: "Contact" }).click();
     await page.getByRole("button", { name: "Process queue" }).click();
     await expect(page.getByText(/sent/).first()).toBeVisible();
+    // The drain delivers 20 at a time (COMMS_CLAIM_LIMIT); the automation's
+    // sends on top of what was already due can need a second pass.
+    await page.getByRole("button", { name: "Process queue" }).click();
+    await expect(page.getByText(/sent/).first()).toBeVisible();
     await become(page, "owner");
 
     // The stage card now shows the sends, and the patient's record carries the offer and the email.
     await page.goto("/offers");
-    await expect(card).toContainText(new RegExp(`${count}\\s+sent`));
+    await expect(card.locator('[data-qc="offer-results"]')).toContainText(
+      new RegExp(`${count}\\s+sent`),
+    );
     await expect(card).toContainText(/Last run/);
 
     // The list pages 25 at a time, so search for the patient rather than scanning page one.

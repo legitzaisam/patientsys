@@ -8,6 +8,7 @@ import {
   clinicMinutesOfDay,
 } from "@/lib/clinic-time";
 import { complianceReminders } from "@/lib/metrics/compliance";
+import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import {
   dueState,
   nextDueFor,
@@ -498,20 +499,64 @@ export const getDashboard = createServerFn({ method: "GET" })
     }
 
     // Claimed offers for today's patients, so the diary card can flag them.
-    const claimedOfferByPatient = new Map<string, { id: string; headline: string; code: string | null }>();
+    // An offer limited to certain treatments only flags a booking for one of them.
+    const claimedOfferByPatient = new Map<
+      string,
+      { id: string; headline: string; code: string | null; appliesTo: string[] }
+    >();
     const todayPatientIds = [...new Set(todayAppts.map((a: any) => a.patient_id as string).filter(Boolean))];
     if (todayPatientIds.length > 0) {
       const { data: claimedRows } = await supabase
         .from("patient_offers")
-        .select("id, patient_id, headline, code, status, expires_at, claimed_at")
+        .select("id, patient_id, template_id, headline, code, status, expires_at, claimed_at")
         .in("patient_id", todayPatientIds)
         .eq("status", "claimed");
+      type ClaimedRow = { template_id: string | null };
+      type TemplateRule = { id: string; applies_to_catalogue_ids: string[] | null };
+      const templateIds = [
+        ...new Set(
+          ((claimedRows ?? []) as ClaimedRow[])
+            .map((r) => r.template_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      const { data: templateRows } = templateIds.length
+        ? await supabase
+            .from("offer_templates")
+            .select("id, applies_to_catalogue_ids")
+            .in("id", templateIds)
+        : { data: [] as TemplateRule[] };
+      const appliesByTemplate = new Map<string, string[]>(
+        ((templateRows ?? []) as TemplateRule[]).map((t) => [
+          t.id,
+          (t.applies_to_catalogue_ids ?? []) as string[],
+        ]),
+      );
       const { liveClaimedOffer } = await import("./offers/shape");
       for (const pid of todayPatientIds) {
         const live = liveClaimedOffer(((claimedRows ?? []) as any[]).filter((r) => r.patient_id === pid));
-        if (live) claimedOfferByPatient.set(pid, { id: live.id, headline: live.headline, code: live.code });
+        if (live) {
+          claimedOfferByPatient.set(pid, {
+            id: live.id,
+            headline: live.headline,
+            code: live.code,
+            appliesTo: appliesByTemplate.get(live.template_id) ?? [],
+          });
+        }
       }
     }
+    const claimedOfferFor = (a: { patient_id: string; catalogue_id?: string | null }) => {
+      const offer = claimedOfferByPatient.get(a.patient_id);
+      if (!offer) return null;
+      if (
+        offer.appliesTo.length > 0 &&
+        a.catalogue_id &&
+        !offer.appliesTo.includes(a.catalogue_id)
+      ) {
+        return null;
+      }
+      return { id: offer.id, headline: offer.headline, code: offer.code };
+    };
 
     const active = all.filter((p: { status: string }) => p.status === "active").length;
     const inactive = all.filter((p: { status: string }) => p.status !== "active").length;
@@ -768,7 +813,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       todayAppointments: todayAppts.map((a: any) => ({
         ...a,
         consentState: consentStateOf(a),
-        claimedOffer: claimedOfferByPatient.get(a.patient_id) ?? null,
+        claimedOffer: claimedOfferFor(a),
       })),
       attentionItems,
       journeys,
@@ -4298,19 +4343,45 @@ export const listTeam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "listTeam");
+    const identity = await authorize(ctx, "listTeam");
+    const showCommission = identity.isOwner || identity.permissions.includes("reports.commission");
     const supabaseAdmin = await adminClient(context);
-    const [{ data: profiles }, { data: roles }, users] = await Promise.all([
-      supabaseAdmin.from("profiles").select("*"),
-      supabaseAdmin.from("user_roles").select("user_id, role"),
-      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
-    ]);
+    const [{ data: profiles }, { data: roles }, users, { data: docs }, { data: changes }] =
+      await Promise.all([
+        supabaseAdmin.from("profiles").select("*"),
+        supabaseAdmin.from("user_roles").select("user_id, role"),
+        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
+        supabaseAdmin.from("staff_documents").select("user_id, category"),
+        // The latest role or commission change per person, for the "changed by" line.
+        supabaseAdmin
+          .from("audit_log")
+          .select("entity_id, actor_id, actor_label, created_at")
+          .eq("action", "staff.update")
+          .order("created_at", { ascending: false })
+          .limit(200),
+      ]);
     const emailFor = new Map<string, string>(
       (users.data?.users ?? []).map((u) => [u.id, u.email ?? ""]),
     );
     const signedInAt = new Map<string, string | null>(
       (users.data?.users ?? []).map((u) => [u.id, u.last_sign_in_at ?? null]),
     );
+    const essential = new Set<string>(ESSENTIAL_DOC_CATEGORIES.map((c) => c.value));
+    const docsFor = new Map<string, Set<string>>();
+    for (const d of docs ?? []) {
+      if (!essential.has(d.category)) continue;
+      (docsFor.get(d.user_id) ?? docsFor.set(d.user_id, new Set()).get(d.user_id)!).add(d.category);
+    }
+    const nameOf = (userId: string | null) =>
+      (profiles ?? []).find((p) => p.id === userId)?.full_name ?? null;
+    const changedFor = new Map<string, { by: string; at: string }>();
+    for (const c of changes ?? []) {
+      if (!c.entity_id || changedFor.has(c.entity_id)) continue;
+      changedFor.set(c.entity_id, {
+        by: nameOf(c.actor_id) ?? c.actor_label ?? "A manager",
+        at: c.created_at,
+      });
+    }
     const staffRoles = (roles ?? []).filter((r) => r.role !== "patient" && r.role !== "admin");
     return staffRoles
       .map((r) => {
@@ -4325,6 +4396,15 @@ export const listTeam = createServerFn({ method: "GET" })
           registrationNumber: profile?.registration_number ?? "",
           isSelf: r.user_id === ctx.userId,
           hasSignedIn: Boolean(signedInAt.get(r.user_id)),
+          lastActiveAt: signedInAt.get(r.user_id) ?? null,
+          commissionRate: showCommission ? Number(profile?.commission_rate ?? 0) : null,
+          compliance: {
+            docsOnFile: docsFor.get(r.user_id)?.size ?? 0,
+            docsTotal: ESSENTIAL_DOC_CATEGORIES.length,
+            registrationExpiry: (profile?.registration_expiry as string | null) ?? null,
+            insuranceExpiry: (profile?.insurance_expiry as string | null) ?? null,
+          },
+          accessChanged: changedFor.get(r.user_id) ?? null,
         };
       })
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -8005,7 +8085,9 @@ async function offerCohortInput(ctx: Ctx) {
       .from("treatment_plans")
       .select("id, patient_id, status, started_at, duration_days, total_sessions")
       .eq("status", "active"),
-    supabase.from("patient_offers").select("patient_id, stage, status, source"),
+    supabase
+      .from("patient_offers")
+      .select("patient_id, stage, status, source, template_id, expires_at"),
   ]);
   for (const r of [patients, appointments, treatments, catalogue, plans, offers]) {
     if (r.error) throw new Error(r.error.message);
@@ -8056,6 +8138,22 @@ async function offerStoreFor(ctx: Ctx, origin: string | null | undefined) {
       if (error) throw new Error(error.message);
     },
     enqueue: (input) => enqueue(ctx.supabase, input),
+    async listOffers(ids) {
+      const { data, error } = await ctx.supabase
+        .from("patient_offers")
+        .select("patient_id, template_id, status, expires_at")
+        .in("patient_id", ids);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    async catalogueNames(ids) {
+      const { data, error } = await ctx.supabase
+        .from("treatment_catalogue")
+        .select("name")
+        .in("id", ids);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((c: { name: string }) => String(c.name));
+    },
     // A sent offer is the chase: the patient's open recall tasks close with it.
     async closeRecallTasks(patientId) {
       await ctx.supabase
@@ -8079,10 +8177,15 @@ export const listOfferTemplates = createServerFn({ method: "GET" })
       .is("archived_at", null)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    const { data: sends } = await ctx.supabase
-      .from("patient_offers")
-      .select("template_id, status, expires_at");
+    const [{ data: sends }, { data: bookings }, { data: performed }] = await Promise.all([
+      ctx.supabase
+        .from("patient_offers")
+        .select("template_id, patient_id, status, expires_at, claimed_at"),
+      ctx.supabase.from("appointments").select("patient_id, created_at, status"),
+      ctx.supabase.from("treatments").select("patient_id, performed_at, price"),
+    ]);
     const { effectiveOfferStatus } = await import("./offers/shape");
+    const { offerResults, EMPTY_RESULTS } = await import("./offers/results");
     const now = new Date();
     const counts = new Map<string, Record<string, number>>();
     for (const s of (sends ?? []) as any[]) {
@@ -8091,9 +8194,11 @@ export const listOfferTemplates = createServerFn({ method: "GET" })
       bucket[effectiveOfferStatus(s, now)] = (bucket[effectiveOfferStatus(s, now)] ?? 0) + 1;
       counts.set(s.template_id, bucket);
     }
+    const results = offerResults(sends ?? [], bookings ?? [], performed ?? []);
     return (data ?? []).map((t: any) => ({
       ...t,
       counts: counts.get(t.id) ?? { sent: 0, viewed: 0, claimed: 0, expired: 0, cancelled: 0 },
+      results: results.get(t.id) ?? EMPTY_RESULTS,
     }));
   });
 
@@ -8255,18 +8360,22 @@ export const previewOfferStage = createServerFn({ method: "GET" })
     const { STAGE_META } = await import("./offers/stages");
     const input = await offerCohortInput(ctx);
     const members = buildStageCohorts(input);
-    let delay: number | undefined = data.delay_days;
-    if (delay == null) {
-      const { data: tmpl } = await ctx.supabase
-        .from("offer_templates")
-        .select("automation_delay_days")
-        .eq("stage", data.stage)
-        .is("archived_at", null)
-        .maybeSingle();
-      delay = Number(tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays);
-    }
+    const { data: tmpl } = await ctx.supabase
+      .from("offer_templates")
+      .select("id, automation_delay_days, one_per_patient, no_stacking, show_in_portal")
+      .eq("stage", data.stage)
+      .is("archived_at", null)
+      .maybeSingle();
+    const delay = Number(
+      data.delay_days ?? tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays,
+    );
     return {
-      ...previewStage(members, input.patients, input.offers, data.stage, delay),
+      ...previewStage(members, input.patients, input.offers, data.stage, delay, new Date(), {
+        templateId: tmpl?.id ?? null,
+        onePerPatient: tmpl?.one_per_patient ?? true,
+        noStacking: tmpl?.no_stacking ?? true,
+        showInPortal: tmpl?.show_in_portal ?? true,
+      }),
       counts: stageCounts(members),
       delay_days: delay,
     };

@@ -2,10 +2,18 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Archive, Clock3, History, Megaphone, Pencil, Plus, Users } from "lucide-react";
-import { archiveOfferTemplate, getClinicDetails, listOfferTemplates, previewOfferStage } from "@/lib/clinic.functions";
+import { Archive, Check, Clock3, History, Megaphone, Pencil, Plus, Users } from "lucide-react";
+import {
+  archiveOfferTemplate,
+  getClinicDetails,
+  listOfferTemplates,
+  previewOfferStage,
+  setOfferAutomation,
+} from "@/lib/clinic.functions";
+import { moneyWhole } from "@/lib/format";
+import { Input } from "@/components/ui/input";
 import { useIdentity } from "@/lib/use-identity";
 import { can } from "@/lib/permissions";
 import { AppShell } from "@/components/app-shell";
@@ -138,16 +146,18 @@ function OffersPage() {
             No one-off templates yet. Use <span className="font-semibold text-foreground">New template</span> and pick the One-off stage.
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2" data-qc="offer-customs">
+          <div
+            className={cn("grid grid-cols-1 gap-4", customs.length > 1 && "md:grid-cols-2")}
+            data-qc="offer-customs"
+            data-cols={customs.length > 1 ? "2" : "1"}
+          >
             {customs.map((t) => (
               <Card key={t.id} className="flex flex-col gap-3 p-5" data-qc="offer-template">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{t.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{t.value_text ?? t.headline}</p>
-                  </div>
-                  <Counts template={t} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">{t.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{t.value_text ?? t.headline}</p>
                 </div>
+                <Results template={t} />
                 <TemplateActions
                   template={t}
                   onEdit={() => setEditor({ open: true, template: t, stage: "custom" })}
@@ -174,17 +184,117 @@ function OffersPage() {
   );
 }
 
-function Counts({ template }: { template: OfferTemplateRow }) {
-  const c = template.counts ?? {};
-  const total = (c["sent"] ?? 0) + (c["viewed"] ?? 0) + (c["claimed"] ?? 0) + (c["expired"] ?? 0);
+/** Results per offer: sent → claimed → booked → £ revenue, from `offerResults`. */
+function Results({ template }: { template: OfferTemplateRow }) {
+  const r = template.results ?? { sent: 0, claimed: 0, booked: 0, revenue: 0 };
+  const steps: { id: string; label: string; value: string }[] = [
+    { id: "sent", label: "sent", value: String(r.sent) },
+    { id: "claimed", label: "claimed", value: String(r.claimed) },
+    { id: "booked", label: "booked", value: String(r.booked) },
+    { id: "revenue", label: "revenue", value: moneyWhole(r.revenue) },
+  ];
   return (
-    <div className="shrink-0 text-right text-xs text-muted-foreground">
-      <p>
-        <span className="font-semibold text-foreground">{total}</span> sent
+    <div
+      className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-2xl border border-edge bg-glass-2 px-3 py-2 text-xs text-muted-foreground shadow-inset-hi"
+      data-qc="offer-results"
+      title="Booked: a booking made after claiming. Revenue: treatments performed after the claim, within the offer's validity plus 90 days."
+    >
+      {steps.map((s, i) => (
+        <span key={s.id} className="inline-flex items-center gap-1.5">
+          {i > 0 && <span aria-hidden>→</span>}
+          <span>
+            <span
+              className={cn(
+                "font-semibold",
+                s.id === "revenue" ? "text-accent-ink" : "text-foreground",
+              )}
+              data-qc={`metric:offers.${template.stage}.${s.id}`}
+            >
+              {s.value}
+            </span>{" "}
+            {s.label}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The wait before the automation sends, editable on the card. */
+function StageDelay({
+  template,
+  fallbackDays,
+}: {
+  template: OfferTemplateRow | null;
+  fallbackDays: number;
+}) {
+  const queryClient = useQueryClient();
+  const current = template?.automation_delay_days ?? fallbackDays;
+  const [value, setValue] = useState<number>(current);
+  useEffect(() => setValue(current), [current]);
+  const save = useMutation({
+    mutationFn: useServerFn(setOfferAutomation),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["offer-templates"] });
+      queryClient.invalidateQueries({ queryKey: ["offer-preview"] });
+      toast.success("Wait updated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const dirty = template !== null && value !== current;
+  // Blur and the tick both commit; one save per edit.
+  const inFlight = useRef(false);
+  const commit = () => {
+    if (!template || !dirty || inFlight.current) return;
+    inFlight.current = true;
+    save.mutate(
+      { data: { id: template.id, enabled: template.automation_enabled, delay_days: value } },
+      {
+        onSettled: () => {
+          inFlight.current = false;
+        },
+      },
+    );
+  };
+  if (!template) {
+    return (
+      <p className="text-sm font-semibold text-foreground">
+        {fallbackDays} {fallbackDays === 1 ? "day" : "days"}{" "}
+        <span className="font-normal text-muted-foreground">wait</span>
       </p>
-      <p>
-        <span className="font-semibold text-accent-ink">{c["claimed"] ?? 0}</span> claimed
-      </p>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input
+        type="number"
+        min={0}
+        max={365}
+        value={value}
+        onChange={(e) => setValue(Math.max(0, Math.min(365, Number(e.target.value) || 0)))}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+        }}
+        aria-label={`${template.name}: days to wait before sending`}
+        className="h-8 w-16 px-2 text-sm font-semibold"
+        data-qc="offer-stage-delay"
+      />
+      <span className="text-sm text-muted-foreground">{value === 1 ? "day" : "days"} wait</span>
+      {dirty && (
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          aria-label="Save wait"
+          disabled={save.isPending}
+          onClick={commit}
+          data-qc="offer-stage-delay-save"
+        >
+          <Check className="h-3.5 w-3.5" />
+        </Button>
+      )}
     </div>
   );
 }
@@ -295,24 +405,30 @@ function StageCard({
       <div className="grid grid-cols-2 gap-3 rounded-2xl border border-edge bg-glass-2 p-3 shadow-inset-hi">
         <div className="flex items-start gap-2">
           <Users className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" />
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground" data-qc="offer-stage-count">
-              {preview ? preview.counts[stage] : "—"} <span className="font-normal text-muted-foreground">in stage</span>
+              <span data-qc={`metric:offers.stage.${stage}`}>
+                {preview ? preview.counts[stage] : "—"}
+              </span>{" "}
+              <span className="font-normal text-muted-foreground">in stage</span>
             </p>
-            <p className="text-xs text-muted-foreground">
-              {preview ? `${preview.willSend.length} would receive it today` : "Counting…"}
+            <p className="text-xs text-muted-foreground" data-qc="offer-stage-subset">
+              {meta.subset}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {preview
+                ? `${preview.willSend.length} would receive it today${preview.portalOnly.length > 0 ? `, ${preview.portalOnly.length} by portal only` : ""}`
+                : "Counting…"}
             </p>
           </div>
         </div>
         <div className="flex items-start gap-2">
           <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" />
-          <div>
-            <p className="text-sm font-semibold text-foreground">
-              {template ? `${template.automation_delay_days} ${template.automation_delay_days === 1 ? "day" : "days"}` : `${meta.defaultDelayDays} days`}{" "}
-              <span className="font-normal text-muted-foreground">wait</span>
-            </p>
-            <p className="text-xs text-muted-foreground">
+          <div className="min-w-0">
+            <StageDelay template={template} fallbackDays={meta.defaultDelayDays} />
+            <p className="mt-1 text-xs text-muted-foreground">
               {template?.last_automation_at ? `Last run ${shortDate(template.last_automation_at)}` : "Not run yet"}
+              {template ? " · Sends once the patient has been in the stage this long." : ""}
             </p>
           </div>
         </div>
@@ -320,13 +436,11 @@ function StageCard({
 
       {template ? (
         <>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-foreground">{template.name}</p>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">{template.value_text ?? template.headline}</p>
-            </div>
-            <Counts template={template} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">{template.name}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{template.value_text ?? template.headline}</p>
           </div>
+          <Results template={template} />
           <TemplateActions
             template={template}
             onEdit={() => onEdit(template)}

@@ -688,7 +688,7 @@ export const SaveOfferTemplate = z.object({
   send_email: z.boolean(),
   send_sms: z.boolean(),
   show_in_portal: z.boolean(),
-  image_url: optionalText(1_500_000),
+  image_url: nullableText(1_500_000),
   image_placement: z.enum(["background", "top", "left", "right", "bottom"]).nullable().optional(),
   /** Catalogue items the offer can be redeemed against (empty = any). */
   applies_to_catalogue_ids: z.array(id).max(50).optional(),

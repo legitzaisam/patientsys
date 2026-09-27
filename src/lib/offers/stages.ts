@@ -23,28 +23,39 @@ export type OfferSource = (typeof OFFER_SOURCES)[number];
 
 export const STAGE_META: Record<
   OfferStage,
-  { label: string; meaning: string; defaultDelayDays: number; insightsList?: string }
+  {
+    label: string;
+    meaning: string;
+    /** The exact subset the count on the card is, so it reconciles with Insights and Retention. */
+    subset: string;
+    defaultDelayDays: number;
+    insightsList?: string;
+  }
 > = {
   pre_consultation: {
     label: "Pre-consultation",
     meaning: "Signed up but has not booked a consultation.",
+    subset: "Signed up, no consultation booked or held",
     defaultDelayDays: 0,
     insightsList: "Signed up, nothing booked",
   },
   post_consultation: {
     label: "Post-consultation",
     meaning: "Had a consultation, then booked nothing and has no plan.",
+    subset: "Consulted, nothing booked, no plan",
     defaultDelayDays: 7,
     insightsList: "Consulted, no treatment",
   },
   single_treatment: {
     label: "Single treatment",
     meaning: "Had one treatment with nothing booked since.",
+    subset: "One treatment, not booked, no plan",
     defaultDelayDays: 21,
   },
   plan_ending: {
     label: "Plan ending",
     meaning: "On a skin plan of three or more sessions that is nearly finished.",
+    subset: "Plan of three or more sessions, one session or less left",
     defaultDelayDays: 0,
   },
 };

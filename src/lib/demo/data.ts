@@ -239,6 +239,15 @@ export const staffEmails: Record<string, string> = {
   [USERS.admin]: "developer@aetheria.clinic",
 };
 
+/** Last sign-in per staff account, as Supabase Auth's last_sign_in_at. */
+export const staffLastActive: Record<string, string> = {
+  [USERS.owner]: iso(0, 8, 5),
+  [USERS.practitioner]: iso(0, 8, 40),
+  [USERS.practitioner2]: iso(-2, 17, 20),
+  [USERS.frontDesk]: iso(-1, 9, 0),
+  [USERS.admin]: iso(-10, 12, 0),
+};
+
 export const rolePermissions: Row[] = [
   { role: "manager", permission: "reports.insights", enabled: true },
   { role: "manager", permission: "reports.retention", enabled: true },
@@ -308,7 +317,20 @@ for (const [role, permission, daysAgo] of [
 }
 
 /** Who changed what: access grants, archives and settings, as production's audit_log. */
-export const auditLog: Row[] = [];
+export const auditLog: Row[] = [
+  {
+    id: id("g1"),
+    clinic_id: CLINIC_ID,
+    actor_id: USERS.owner,
+    actor_label: "Dr Amara Osei",
+    action: "staff.update",
+    entity: "user_roles",
+    entity_id: USERS.practitioner2,
+    patient_id: null,
+    meta: { role: "practitioner", previous_role: "practitioner", commission_rate: 42 },
+    created_at: iso(-20, 11, 30),
+  },
+];
 
 for (const row of viewGrantRows()) {
   rolePermissions.push({
@@ -4789,6 +4811,8 @@ export const patientOffers: Row[] = [];
       automation_enabled?: boolean;
       automation_delay_days?: number;
       last_automation_at?: string | null;
+      one_per_patient?: boolean;
+      no_stacking?: boolean;
     },
   ) => {
     const row: Row = {
@@ -4812,8 +4836,8 @@ export const patientOffers: Row[] = [];
       image_url: null,
       image_placement: null,
       applies_to_catalogue_ids: [],
-      one_per_patient: true,
-      no_stacking: true,
+      one_per_patient: fields.one_per_patient ?? true,
+      no_stacking: fields.no_stacking ?? true,
       created_by: USERS.owner,
       archived_at: null,
       created_at: iso(-30, 9, 0),
@@ -4876,6 +4900,9 @@ export const patientOffers: Row[] = [];
     code: "AUTUMNLED",
     cta_label: "Claim this offer",
     valid_days: 21,
+    // A seasonal one-off staff send by hand, to anyone, as often as they like.
+    one_per_patient: false,
+    no_stacking: false,
   });
 
   const offer = (
@@ -5039,6 +5066,7 @@ export const db = {
   staffDocuments,
   userNotes,
   staffEmails,
+  staffLastActive,
   websiteLeads,
   retailProducts,
   productSales,

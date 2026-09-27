@@ -32,6 +32,8 @@ export type OfferTemplateRow = {
   no_stacking?: boolean;
   /** From listOfferTemplates: sends by effective status. */
   counts?: Record<string, number>;
+  /** From listOfferTemplates: sent → claimed → booked → £ revenue. */
+  results?: { sent: number; claimed: number; booked: number; revenue: number };
 };
 
 export const OFFER_STATUS_LABEL: Record<OfferStatus, string> = {

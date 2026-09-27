@@ -28,6 +28,7 @@ import {
   visitsByPatient,
 } from "@/lib/metrics/definitions";
 import { complianceReminders } from "@/lib/metrics/compliance";
+import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
@@ -58,6 +59,7 @@ import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { assertCanSend, nextUnsubscribedAt, prefsFromPatient } from "@/lib/comms/preferences";
 import { buildStageCohorts, previewStage, stageCounts } from "@/lib/offers/cohorts";
 import { sendOfferToPatients, type OfferStore } from "@/lib/offers/send";
+import { EMPTY_RESULTS, offerResults } from "@/lib/offers/results";
 import { effectiveOfferStatus, liveClaimedOffer, patientOfferView } from "@/lib/offers/shape";
 import { STAGE_LABEL, STAGE_META } from "@/lib/offers/stages";
 import {
@@ -665,10 +667,20 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     const claimed = liveClaimedOffer(
       patientOffers.filter((o) => o.patient_id === a.patient_id && o.status === "claimed"),
     );
+    // An offer limited to certain treatments only flags a booking for one of them.
+    const appliesTo = claimed
+      ? ((offerTemplates.find((t) => t.id === claimed.template_id)?.applies_to_catalogue_ids ??
+          []) as string[])
+      : [];
+    const applies =
+      !claimed || appliesTo.length === 0 || !a.catalogue_id || appliesTo.includes(a.catalogue_id);
     return {
       ...a,
       plan: planByPatient.get(a.patient_id) ?? null,
-      claimedOffer: claimed ? { id: claimed.id, headline: claimed.headline, code: claimed.code } : null,
+      claimedOffer:
+        claimed && applies
+          ? { id: claimed.id, headline: claimed.headline, code: claimed.code }
+          : null,
     };
   });
 
@@ -3501,10 +3513,28 @@ function effectiveCapabilities(userId: string) {
 export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
   if (!me.isStaff) throw new Error("Staff access only");
+  const showCommission = me.isOwner || me.permissions.includes("reports.commission");
+  const essential = new Set<string>(ESSENTIAL_DOC_CATEGORIES.map((c) => c.value));
+  const latestChange = (userId: string) => {
+    const row = db.auditLog
+      .filter((a) => a["action"] === "staff.update" && a["entity_id"] === userId)
+      .sort((a, b) => String(b["created_at"]).localeCompare(String(a["created_at"])))[0];
+    if (!row) return null;
+    const who = profiles.find((p) => p.id === row["actor_id"]);
+    return {
+      by: (who?.full_name as string | undefined) ?? (row["actor_label"] as string) ?? "A manager",
+      at: String(row["created_at"]),
+    };
+  };
   return userRoles
     .filter((r) => r.role !== "patient" && r.role !== "admin")
     .map((r) => {
       const profile = profiles.find((p) => p.id === r.user_id);
+      const docsOnFile = new Set(
+        db.staffDocuments
+          .filter((d) => d["user_id"] === r.user_id && essential.has(String(d["category"])))
+          .map((d) => String(d["category"])),
+      ).size;
       return {
         userId: r.user_id,
         role: r.role,
@@ -3515,6 +3545,15 @@ export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
         registrationNumber: profile?.registration_number ?? "",
         isSelf: r.user_id === me.userId,
         hasSignedIn: true,
+        lastActiveAt: db.staffLastActive[r.user_id] ?? null,
+        commissionRate: showCommission ? Number(profile?.commission_rate ?? 0) : null,
+        compliance: {
+          docsOnFile,
+          docsTotal: ESSENTIAL_DOC_CATEGORIES.length,
+          registrationExpiry: (profile?.registration_expiry as string | null) ?? null,
+          insuranceExpiry: (profile?.insurance_expiry as string | null) ?? null,
+        },
+        accessChanged: latestChange(r.user_id),
       };
     })
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -3594,6 +3633,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       }
     }
     const role = userRoles.find((r) => r.user_id === data.userId && r.role !== "patient");
+    const previousRole = role?.role ?? null;
     if (role) role.role = data.role;
     else
       userRoles.push({
@@ -3603,6 +3643,22 @@ export const updateStaffMember = createServerFn({ method: "POST" })
         created_at: new Date().toISOString(),
       });
     clearExTeamArchiveDemo(data.userId);
+    db.auditLog.push({
+      id: newId("g9"),
+      clinic_id: CLINIC_ID,
+      actor_id: me.userId,
+      actor_label: me.profile?.full_name ?? me.email ?? null,
+      action: "staff.update",
+      entity: "user_roles",
+      entity_id: data.userId,
+      patient_id: null,
+      meta: {
+        role: data.role,
+        previous_role: previousRole,
+        ...(data.commissionRate !== undefined ? { commission_rate: data.commissionRate } : {}),
+      },
+      created_at: new Date().toISOString(),
+    });
     return { ok: true };
   });
 
@@ -5924,6 +5980,21 @@ function demoOfferStore(origin?: string | null, opts: { closeTasks?: boolean } =
       const row = patientOffers.find((o) => o.id === offerId);
       if (row) row.communication_id = communicationId;
     },
+    async listOffers(ids) {
+      const wanted = new Set(ids);
+      return patientOffers
+        .filter((o) => wanted.has(o.patient_id))
+        .map((o) => ({
+          patient_id: o.patient_id,
+          template_id: o.template_id ?? null,
+          status: o.status,
+          expires_at: o.expires_at ?? null,
+        }));
+    },
+    async catalogueNames(ids) {
+      const wanted = new Set(ids);
+      return catalogue.filter((c) => wanted.has(c.id)).map((c) => String(c.name));
+    },
     async enqueue(input) {
       return queueCommunication({
         patientId: input.patientId,
@@ -5954,13 +6025,27 @@ async function runDemoOfferAutomation() {
   const now = new Date();
   for (const tmpl of enabled) {
     summary.templates += 1;
-    const preview = previewStage(members, patients, patientOffers, tmpl.stage, Number(tmpl.automation_delay_days ?? 0), now);
+    const preview = previewStage(
+      members,
+      patients,
+      patientOffers,
+      tmpl.stage,
+      Number(tmpl.automation_delay_days ?? 0),
+      now,
+      {
+        templateId: tmpl.id,
+        onePerPatient: tmpl.one_per_patient,
+        noStacking: tmpl.no_stacking,
+        showInPortal: tmpl.show_in_portal,
+      },
+    );
     summary.skipped += preview.skipped.length;
-    if (preview.willSend.length > 0) {
-      const result = await sendOfferToPatients(store, tmpl, preview.willSend.map((r) => r.patient_id), {
+    const recipients = [...preview.willSend, ...preview.portalOnly].map((r) => r.patient_id);
+    if (recipients.length > 0) {
+      const result = await sendOfferToPatients(store, tmpl, recipients, {
         source: "automation",
         sentBy: null,
-        portalOnlyWhenNoConsent: false,
+        portalOnlyWhenNoConsent: Boolean(tmpl.show_in_portal),
         now,
       });
       summary.sent += result.sent.length;
@@ -5980,6 +6065,7 @@ function requireOffersManage() {
 export const listOfferTemplates = createServerFn({ method: "GET" }).handler(async () => {
   requireStaff();
   const now = new Date();
+  const results = offerResults(patientOffers, appointments, treatments);
   return sortAsc(
     offerTemplates.filter((t) => !t.archived_at),
     "created_at",
@@ -5989,7 +6075,7 @@ export const listOfferTemplates = createServerFn({ method: "GET" }).handler(asyn
       const status = effectiveOfferStatus(o, now);
       counts[status] = (counts[status] ?? 0) + 1;
     }
-    return { ...t, counts };
+    return { ...t, counts, results: results.get(t.id) ?? EMPTY_RESULTS };
   });
 });
 
@@ -6118,7 +6204,12 @@ export const previewOfferStage = createServerFn({ method: "GET" })
     const tmpl = offerTemplates.find((t) => t.stage === data.stage && !t.archived_at);
     const delay = Number(data.delay_days ?? tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays);
     return {
-      ...previewStage(members, patients, patientOffers, data.stage, delay),
+      ...previewStage(members, patients, patientOffers, data.stage, delay, new Date(), {
+        templateId: tmpl?.id ?? null,
+        onePerPatient: tmpl?.one_per_patient ?? true,
+        noStacking: tmpl?.no_stacking ?? true,
+        showInPortal: tmpl?.show_in_portal ?? true,
+      }),
       counts: stageCounts(members),
       delay_days: delay,
     };
