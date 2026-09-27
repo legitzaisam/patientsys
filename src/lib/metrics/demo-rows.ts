@@ -44,6 +44,7 @@ export function demoSnapshotRows(): SnapshotRows {
       price: num(a["price"]),
       treatment_name: str(a["treatment_name"]),
       catalogue_id: str(a["catalogue_id"]),
+      created_at: str(a["created_at"]),
     })),
     catalogue: (rows["catalogue"] as Row[]).map((c) => ({
       id: String(c["id"]),
@@ -54,6 +55,7 @@ export function demoSnapshotRows(): SnapshotRows {
       id: String(p["id"]),
       patient_id: String(p["patient_id"]),
       status: String(p["status"] ?? ""),
+      practitioner_id: str(p["practitioner_id"]),
       started_at: str(p["started_at"]),
       duration_days: num(p["duration_days"]),
       total_sessions: num(p["total_sessions"]),
@@ -74,5 +76,12 @@ export function demoSnapshotRows(): SnapshotRows {
           commissionRate: Number(profile?.["commission_rate"] ?? 0),
         };
       }),
+    offers: (rows["patientOffers"] as Row[]).map((o) => ({
+      template_id: str(o["template_id"]),
+      patient_id: String(o["patient_id"]),
+      status: String(o["status"] ?? "sent"),
+      claimed_at: str(o["claimed_at"]),
+      expires_at: str(o["expires_at"]),
+    })),
   };
 }

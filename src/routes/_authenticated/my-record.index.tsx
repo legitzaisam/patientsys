@@ -190,7 +190,8 @@ function PortalHome() {
                 <div className="flex items-baseline justify-between">
                   <p className="text-xs font-semibold">{plan.name}</p>
                   <p className="text-xs tabular-nums text-muted-foreground">
-                    {plan.milestonesDone} of {plan.milestonesTotal} milestones
+                    <span data-qc="metric:portal.planDone">{plan.milestonesDone}</span> of{" "}
+                    <span data-qc="metric:portal.planTotal">{plan.milestonesTotal}</span> milestones
                   </p>
                 </div>
                 <div className="mt-3.5 flex">

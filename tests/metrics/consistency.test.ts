@@ -250,10 +250,10 @@ describe("metrics snapshot (demo fixture)", () => {
     expect(stageCounts(members)).toEqual(snap.offers.stages);
   });
 
-  // getDashboard and listPatients are server functions; the rendered-number
-  // spec (Phase 12) compares what they show with /api/demo/metrics.
-  it.todo("getDashboard: treatmentsDue / overdue / dueSoon and patientsToChase equal the snapshot");
-  it.todo("listPatients: 'Treatments due' filter count equals dashboard treatmentsDue");
+  // getDashboard and listPatients are server functions; e2e/metrics/rendered.spec.ts
+  // (`npm run test:metrics`) compares what they render — the KPI cards and
+  // chips, the Patients list filter counts — with /api/demo/metrics, which
+  // serves this same snapshot at the server's clock.
 
   // ---- UI-wired: asserted against the rendered pages in e2e/patients.spec.ts
   // ("record: what the list promises, the record shows"): the list's open-items

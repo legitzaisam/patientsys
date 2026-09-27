@@ -303,7 +303,12 @@ function PatientsPage() {
             }`}
           >
             {f.label}
-            <span className="tabular-nums opacity-70">{f.count}</span>
+            <span
+              className="tabular-nums opacity-70"
+              data-qc={f.key === "mine" ? undefined : `metric:patients.${f.key}`}
+            >
+              {f.count}
+            </span>
           </Link>
         ))}
         </div>

@@ -22,6 +22,8 @@ type KpiChip = {
   /** Where the chip's number lives; the chip becomes a link. */
   to?: string;
   search?: Record<string, unknown>;
+  /** Snapshot id for the rendered-number check (the chip's first number). */
+  metric?: string;
 };
 
 function percentChip(id: string, change: number, suffix = ""): KpiChip {
@@ -58,11 +60,17 @@ function ChipRow({ chips }: { chips: KpiChip[] }) {
             search={chip.search ?? {}}
             className={className}
             data-qc={`kpi-chip-${chip.id}`}
+            data-metric={chip.metric}
           >
             {inner}
           </Link>
         ) : (
-          <span key={chip.id} className={className} data-qc={`kpi-chip-${chip.id}`}>
+          <span
+            key={chip.id}
+            className={className}
+            data-qc={`kpi-chip-${chip.id}`}
+            data-metric={chip.metric}
+          >
             {inner}
           </span>
         );
@@ -112,6 +120,7 @@ export function KpiGrid({
                 label: `${kpis?.patientsToChase ?? 0} to chase`,
                 tone: "peach" as const,
                 to: "/retention",
+                metric: "dashboard.toChase",
               },
             ],
           },
@@ -120,6 +129,7 @@ export function KpiGrid({
     {
       label: ownBook ? "Your clients" : "Total clients",
       value: (ownBook ? kpis?.ownClients : kpis?.totalClients) ?? "—",
+      metric: ownBook ? undefined : "dashboard.totalClients",
       hint: ownBook
         ? `Clinic total ${kpis?.totalClients ?? 0} · ${kpis?.activeClients ?? 0} active · ${kpis?.inactiveClients ?? 0} inactive`
         : `${kpis?.activeClients ?? 0} active · ${kpis?.inactiveClients ?? 0} inactive`,
@@ -131,6 +141,7 @@ export function KpiGrid({
     {
       label: "Active skin plans",
       value: kpis?.activePlans ?? 0,
+      metric: "dashboard.activePlans",
       hint: "Patients on a treatment journey",
       icon: Layers,
       to: "/patients",
@@ -149,6 +160,7 @@ export function KpiGrid({
     {
       label: "Treatments due",
       value: kpis?.treatmentsDue ?? "—",
+      metric: "dashboard.treatmentsDue",
       hint: ownBook
         ? "Your patients · overdue or due in 30 days, nothing booked"
         : "Whole clinic · overdue or due in 30 days, nothing booked",
@@ -162,6 +174,7 @@ export function KpiGrid({
           tone: "gold" as const,
           to: "/patients",
           search: { view: "due" },
+          metric: "dashboard.treatmentsDueSoon",
         },
         {
           id: "treatments-overdue",
@@ -169,6 +182,7 @@ export function KpiGrid({
           tone: "rose" as const,
           to: "/patients",
           search: { view: "due" },
+          metric: "dashboard.treatmentsOverdue",
         },
       ],
     },
@@ -223,6 +237,7 @@ export function KpiGrid({
               className={`mt-2.5 text-[27px] font-semibold leading-none tracking-[-0.02em] tabular-nums ${
                 item.accent ? "text-accent-ink" : "text-foreground"
               }`}
+              data-qc={item.metric ? `metric:${item.metric}` : undefined}
             >
               {item.value}
             </p>

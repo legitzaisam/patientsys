@@ -154,6 +154,7 @@ function EarningsPage() {
           value={moneyWhole(data?.collectedShare ?? 0)}
           hint="Your share of what patients have paid"
           icon={Coins}
+          qc="metric:earnings.collected"
         />
         <Stat
           label="Outstanding"
@@ -176,6 +177,7 @@ function EarningsPage() {
           value={String(data?.treatments ?? 0)}
           hint={`Performed ${phrase}`}
           icon={Stethoscope}
+          qc="metric:earnings.treatments"
         />
         <Stat
           label="Patients seen"

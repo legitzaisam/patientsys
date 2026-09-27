@@ -142,11 +142,20 @@ export function PatientMetrics({ period }: { period: PeriodSelection }) {
           and how many two or more, any treatment. Never treated counts the whole list.
         </p>
         <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <CompositionItem label="Never treated" value={data?.composition.neverTreated ?? 0} />
-          <CompositionItem label="Treated once" value={data?.composition.treatedOnce ?? 0} />
+          <CompositionItem
+            label="Never treated"
+            value={data?.composition.neverTreated ?? 0}
+            metric="insights.composition.never"
+          />
+          <CompositionItem
+            label="Treated once"
+            value={data?.composition.treatedOnce ?? 0}
+            metric="insights.composition.once"
+          />
           <CompositionItem
             label="Two or more visits"
             value={data?.composition.multiTreatment ?? 0}
+            metric="insights.composition.twoPlus"
           />
         </ul>
       </Card>
@@ -337,11 +346,25 @@ function Tile({
   );
 }
 
-function CompositionItem({ label, value }: { label: string; value: number }) {
+function CompositionItem({
+  label,
+  value,
+  metric,
+}: {
+  label: string;
+  value: number;
+  /** Snapshot id for the rendered-number check. */
+  metric?: string;
+}) {
   return (
     <li className="glass-item px-4 py-3">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-semibold tabular-nums text-foreground">{value}</p>
+      <p
+        className="mt-1 text-xl font-semibold tabular-nums text-foreground"
+        data-qc={metric ? `metric:${metric}` : undefined}
+      >
+        {value}
+      </p>
     </li>
   );
 }

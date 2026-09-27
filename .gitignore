@@ -24,6 +24,7 @@ dist-ssr
 test-results/
 test-results-responsive/
 test-results-metrics/
+test-results-review/
 playwright-report/
 
 # Local secrets - see .env.example for the keys this project expects

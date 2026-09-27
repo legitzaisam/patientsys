@@ -208,7 +208,7 @@ function Results({ template }: { template: OfferTemplateRow }) {
                 "font-semibold",
                 s.id === "revenue" ? "text-accent-ink" : "text-foreground",
               )}
-              data-qc={`metric:offers.${template.stage}.${s.id}`}
+              data-qc={`metric:offers.results.${template.id}.${s.id}`}
             >
               {s.value}
             </span>{" "}

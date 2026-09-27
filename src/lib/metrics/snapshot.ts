@@ -5,7 +5,9 @@
  * `/api/demo/metrics` route serves it.
  */
 import { isConsultation } from "@/lib/insights.server";
+import { offerResults, type OfferResultOffer } from "@/lib/offers/results";
 import { planNearingEnd } from "@/lib/offers/stages";
+import { planProgress } from "@/lib/portal/shape";
 import {
   composition,
   countDueStates,
@@ -39,25 +41,39 @@ export type SnapshotRows = {
       performed_at: string;
     })[];
   appointments: (AppointmentLike &
-    MoneyAppointment & { treatment_name?: string | null; catalogue_id?: string | null })[];
+    MoneyAppointment & {
+      treatment_name?: string | null;
+      catalogue_id?: string | null;
+      created_at?: string | null;
+    })[];
   catalogue: { id: string; category?: string | null; name?: string | null }[];
   plans: {
     id: string;
     patient_id: string;
     status: string;
+    practitioner_id?: string | null;
     started_at?: string | null;
     duration_days?: number | null;
     total_sessions?: number | null;
   }[];
   milestones: { plan_id: string; kind?: string | null; status?: string | null }[];
   staff: { userId: string; commissionRate: number }[];
+  /** Sent offers, for the results funnel per template (optional). */
+  offers?: OfferResultOffer[];
 };
 
 export type MetricsSnapshot = ReturnType<typeof metricsSnapshot>;
 
 export function metricsSnapshot(
   rows: SnapshotRows,
-  opts: { nowMs: number; window: Window; practitionerId?: string | null; todayKey?: string },
+  opts: {
+    nowMs: number;
+    window: Window;
+    practitionerId?: string | null;
+    todayKey?: string;
+    /** The patient portal's scope: their plan progress. */
+    patientId?: string | null;
+  },
 ) {
   const { nowMs, window } = opts;
   const scope = opts.practitionerId ?? null;
@@ -84,6 +100,8 @@ export function metricsSnapshot(
   });
   const due = countDueStates(states);
   const active = patients.filter((p) => p.status === "active").length;
+  // Patients list "No upcoming treatment": everyone whose state is not "booked".
+  const noUpcomingBooking = [...states.values()].filter((s) => s !== "booked").length;
 
   // ---- Visits
   const visits = visitsByPatient(scopedTreatments);
@@ -176,7 +194,41 @@ export function metricsSnapshot(
     stages.pre_consultation += 1;
   }
 
-  const activePlans = rows.plans.filter((p) => p.status === "active").length;
+  // A practitioner's dashboard counts the plans they lead (or that nobody leads).
+  const activePlans = rows.plans.filter(
+    (p) => p.status === "active" && (!scope || !p.practitioner_id || p.practitioner_id === scope),
+  ).length;
+
+  // ---- Offer results per template (sent → claimed → booked → £)
+  const results = Object.fromEntries(
+    offerResults(
+      rows.offers ?? [],
+      rows.appointments
+        .filter((a) => a.created_at)
+        .map((a) => ({ patient_id: a.patient_id, created_at: a.created_at!, status: a.status })),
+      rows.treatments.map((t) => ({
+        patient_id: t.patient_id,
+        performed_at: t.performed_at,
+        price: t.price ?? null,
+      })),
+    ),
+  );
+
+  // ---- Portal: the patient's active plan progress, as the record shows it.
+  let portal: { planDone: number; planTotal: number } | null = null;
+  if (opts.patientId) {
+    const plan = (plansBy.get(opts.patientId) ?? []).find((pl) => pl.status === "active");
+    if (plan) {
+      const progress = planProgress(
+        (milestonesBy.get(plan.id) ?? []).map((m, i) => ({
+          id: `${plan.id}-${i}`,
+          title: "",
+          status: String(m.status ?? ""),
+        })),
+      );
+      portal = { planDone: progress.done, planTotal: progress.total };
+    }
+  }
 
   return {
     nowMs,
@@ -191,6 +243,7 @@ export function metricsSnapshot(
       treatmentsDueSoon: due.due_soon,
       toChase: due.toChase,
       activePlans,
+      noUpcomingBooking,
     },
     retention: {
       overdue: due.overdue,
@@ -205,6 +258,8 @@ export function metricsSnapshot(
     },
     insights: {
       composition: mix,
+      /** The whole book's never-treated count (outside the window), as Insights shows it. */
+      neverTreated: rows.patients.filter((p) => (allVisits.get(p.id) ?? []).length === 0).length,
       firstToSecond: f2s,
     },
     performance: {
@@ -212,7 +267,8 @@ export function metricsSnapshot(
       bookedAhead: ahead,
       perPractitioner,
     },
-    offers: { stages },
+    offers: { stages, results },
+    portal,
     dueStates: states,
   };
 }

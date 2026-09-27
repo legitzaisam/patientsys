@@ -113,12 +113,14 @@ function PerformancePage() {
               value={totals?.earned}
               hint={`Treatments performed ${phrase}`}
               change={data?.changes?.earned}
+              metric="performance.earned"
             />
             <Total
               label="Collected"
               value={totals?.collected}
               hint="Paid so far"
               change={data?.changes?.collected}
+              metric="performance.collected"
             />
             <Total
               label="To practitioners"
@@ -135,9 +137,15 @@ function PerformancePage() {
           </div>
           <p className="mb-8 text-xs text-muted-foreground" data-qc="performance-booked-ahead">
             <span className="font-medium text-foreground">Outstanding</span>{" "}
-            {moneyWhole(totals?.outstanding ?? 0)} still to collect on treatments performed ·{" "}
+            <span data-qc="metric:performance.outstanding">
+              {moneyWhole(totals?.outstanding ?? 0)}
+            </span>{" "}
+            still to collect on treatments performed ·{" "}
             <span className="font-medium text-foreground">Booked ahead</span>{" "}
-            {moneyWhole(totals?.bookedAhead ?? 0)} in future bookings, not counted above
+            <span data-qc="metric:performance.bookedAhead">
+              {moneyWhole(totals?.bookedAhead ?? 0)}
+            </span>{" "}
+            in future bookings, not counted above
             {sold ? (
               <span data-qc="performance-retail-share">
                 {" · "}
@@ -201,11 +209,14 @@ function Total({
   value,
   hint,
   change,
+  metric,
 }: {
   label: string;
   value: number | undefined;
   hint: string;
   change: number | undefined;
+  /** Snapshot id for the rendered-number check. */
+  metric?: string;
 }) {
   const delta = change ?? 0;
   const TrendIcon = delta < 0 ? TrendingDown : TrendingUp;
@@ -215,7 +226,10 @@ function Total({
   return (
     <Card className="p-5">
       <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">
+      <p
+        className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground"
+        data-qc={metric ? `metric:${metric}` : undefined}
+      >
         {moneyWhole(value ?? 0)}
       </p>
       <p className="mt-1 text-xs text-muted-foreground">{hint}</p>

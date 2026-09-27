@@ -391,14 +391,29 @@ export function PerformanceTable({
                       </td>
                       {showMoney ? (
                         <td className="px-5 py-3">
-                          <p className="text-foreground">{moneyWhole(r.earned)}</p>
+                          <p
+                            className="text-foreground"
+                            data-qc={`metric:performance.practitioner.${r.userId}.earned`}
+                          >
+                            {moneyWhole(r.earned)}
+                          </p>
                           <p className="text-2xs text-muted-foreground">
-                            {moneyWhole(r.earnedShare)} to them
+                            <span
+                              data-qc={`metric:performance.practitioner.${r.userId}.earnedShare`}
+                            >
+                              {moneyWhole(r.earnedShare)}
+                            </span>{" "}
+                            to them
                           </p>
                         </td>
                       ) : null}
                       <td className="px-5 py-3">
-                        <p className="text-foreground">{r.treatments}</p>
+                        <p
+                          className="text-foreground"
+                          data-qc={`metric:performance.practitioner.${r.userId}.treatments`}
+                        >
+                          {r.treatments}
+                        </p>
                         {showMoney ? (
                           <p className="text-2xs text-muted-foreground">
                             {money(r.averageValue)} avg
@@ -478,7 +493,9 @@ export function PerformanceTable({
                   </td>
                   {showMoney ? (
                     <td className="px-5 py-3.5">
-                      <p className="tabular-nums">{moneyWhole(clinic.earned)}</p>
+                      <p className="tabular-nums" data-qc="metric:performance.earned">
+                        {moneyWhole(clinic.earned)}
+                      </p>
                       <p className="text-2xs font-normal text-muted-foreground">
                         {moneyWhole(clinic.toPractitioners)} paid out
                       </p>

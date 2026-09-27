@@ -45,11 +45,14 @@ function Stat({
   value,
   hint,
   change,
+  metric,
 }: {
   label: string;
   value: string;
   hint?: string;
   change?: number;
+  /** Snapshot id for the rendered-number check. */
+  metric?: string;
 }) {
   const trending = typeof change === "number" && change !== 0;
   const TrendIcon = change && change < 0 ? TrendingDown : TrendingUp;
@@ -58,7 +61,12 @@ function Stat({
     // wraps rather than truncating, so the window it names is always readable.
     <Card className="min-w-0 p-5">
       <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{value}</p>
+      <p
+        className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground"
+        data-qc={metric ? `metric:${metric}` : undefined}
+      >
+        {value}
+      </p>
       <p className="mt-1 flex items-start gap-1 text-xs text-muted-foreground">
         {trending && <TrendIcon className="mt-0.5 h-3 w-3 shrink-0" />}
         <span className="min-w-0 break-words">
@@ -148,6 +156,7 @@ function RetentionPage() {
           label="One visit only"
           value={`${s?.oneVisitPatients ?? 0}`}
           hint={`${s?.repeatPatients ?? 0} repeat patients seen ${phrase}`}
+          metric="retention.oneVisitOnly"
         />
         <Stat
           label="Average visits"
