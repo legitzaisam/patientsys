@@ -1370,6 +1370,8 @@ export const saveAppointment = createServerFn({ method: "POST" })
       app_origin?: string;
       /** Pay-link amount when status is unpaid (defaults to full). */
       pay_kind?: PaymentLinkKind;
+      /** Quick book marks the booking for reception to finish. */
+      details_incomplete?: boolean;
     }) => parseInput(schemas.SaveAppointment, data),
   )
   .middleware([requireSupabaseAuth])
@@ -1391,6 +1393,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       payment_status: (data.payment_status as "unpaid" | "deposit_paid" | "paid" | "refunded") ?? "unpaid",
       consent_document_id: data.consent_document_id || null,
       notes: data.notes || null,
+      details_incomplete: data.details_incomplete ?? false,
       created_by: context.userId,
     };
     await assertNoPractitionerOverlap(supabase, {
@@ -4286,6 +4289,10 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
       commissionRate?: number;
     }) => parseInput(schemas.UpdateStaffMember, data),
   )
@@ -4299,6 +4306,10 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       job_title: data.jobTitle ?? null,
       registration_body: data.registrationBody ?? null,
       registration_number: data.registrationNumber ?? null,
+      registration_expiry: data.registrationExpiry || null,
+      insurance_provider: data.insuranceProvider?.trim() || null,
+      insurance_expiry: data.insuranceExpiry || null,
+      qualifications: data.qualifications?.trim() || null,
     };
     if (data.commissionRate !== undefined) {
       patch.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
@@ -5327,6 +5338,10 @@ export const saveMyProfile = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
     }) => parseInput(schemas.SaveMyProfile, data),
   )
   .middleware([requireSupabaseAuth])
@@ -5342,6 +5357,10 @@ export const saveMyProfile = createServerFn({ method: "POST" })
         job_title: data.jobTitle?.trim() || null,
         registration_body: data.registrationBody?.trim() || null,
         registration_number: data.registrationNumber?.trim() || null,
+        registration_expiry: data.registrationExpiry || null,
+        insurance_provider: data.insuranceProvider?.trim() || null,
+        insurance_expiry: data.insuranceExpiry || null,
+        qualifications: data.qualifications?.trim() || null,
       })
       .eq("id", ctx.userId);
     if (error) throw new Error(error.message);
@@ -5750,12 +5769,15 @@ export const createRecallTask = createServerFn({ method: "POST" })
       patient_id: string;
       note?: string;
       recipients: { id: string; label: string }[];
+      /** When the chase should be done by (defaults to a week from now). */
+      due_at?: string;
     }) => parseInput(schemas.CreateRecallTask, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "createRecallTask");
+    const dueAt = data.due_at ?? new Date(Date.now() + 7 * 86400000).toISOString();
     const requested = data.recipients.length
       ? data.recipients
       : [{ id: ctx.userId, label: identity.profile?.full_name ?? "The team" }];
@@ -5799,6 +5821,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
         created_by: ctx.userId,
         note: data.note ?? null,
         status: "open" as const,
+        due_at: dueAt,
       })),
     );
     if (error) throw new Error(error.message);
@@ -6431,10 +6454,31 @@ export const getClinicDetails = createServerFn({ method: "GET" })
     await authorize(context as Ctx, "getClinicDetails");
     const { data } = await (context as Ctx).supabase
       .from("clinics")
-      .select("id, name, address, phone, email, reminder_offsets")
+      .select("id, name, address, phone, email, reminder_offsets, deposit_lead_days, deposit_percent")
       .eq("id", clinicIdOf(context))
       .maybeSingle();
     return data ?? null;
+  });
+
+/** Payments and deposits: how many days before the visit a deposit is due, and its share of the price. */
+export const updateDepositRules = createServerFn({ method: "POST" })
+  .validator((data: { deposit_lead_days: number; deposit_percent: number }) =>
+    parseInput(schemas.UpdateDepositRules, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "updateDepositRules");
+    const { error } = await ctx.supabase
+      .from("clinics")
+      .update({ deposit_lead_days: data.deposit_lead_days, deposit_percent: data.deposit_percent })
+      .eq("id", clinicIdOf(context));
+    if (error) throw new Error(error.message);
+    await audit(ctx, "update", "clinic", clinicIdOf(context), null, {
+      deposit_lead_days: data.deposit_lead_days,
+      deposit_percent: data.deposit_percent,
+    });
+    return { ok: true };
   });
 
 /** Manager-only: update the clinic's contact details. */
@@ -6477,9 +6521,21 @@ export const listRolePermissions = createServerFn({ method: "GET" })
     const identity = await authorize(ctx, "listRolePermissions");
     const { data, error } = await ctx.supabase
       .from("role_permissions")
-      .select("role, permission, enabled");
+      .select("role, permission, enabled, updated_by, updated_at");
     if (error) throw new Error(error.message);
-    const rows = (data ?? []) as { role: string; permission: string; enabled: boolean }[];
+    const rows = (data ?? []) as {
+      role: string;
+      permission: string;
+      enabled: boolean;
+      updated_by: string | null;
+      updated_at: string;
+    }[];
+    // Names for "changed by": one lookup for everyone who touched a grant.
+    const changerIds = [...new Set(rows.map((r) => r.updated_by).filter((v): v is string => Boolean(v)))];
+    const changers: { id: string; full_name: string }[] = changerIds.length
+      ? ((await ctx.supabase.from("profiles").select("id, full_name").in("id", changerIds)).data ?? [])
+      : [];
+    const nameOf = new Map<string, string>(changers.map((p) => [p.id, p.full_name]));
     const editableRoles = ["manager", "front_desk", "practitioner", "patient"] as const;
     const grants: Record<string, Record<string, boolean>> = {
       manager: {},
@@ -6487,13 +6543,17 @@ export const listRolePermissions = createServerFn({ method: "GET" })
       practitioner: {},
       patient: {},
     };
+    const changes: Record<string, Record<string, { by: string; at: string }>> = {};
     for (const role of editableRoles) {
       for (const key of PERMISSION_KEYS) {
-        grants[role]![key] =
-          rows.find((r) => r.role === role && r.permission === key)?.enabled ?? false;
+        const row = rows.find((r) => r.role === role && r.permission === key);
+        grants[role]![key] = row?.enabled ?? false;
+        if (row?.updated_by) {
+          (changes[role] ??= {})[key] = { by: nameOf.get(row.updated_by) ?? "A manager", at: row.updated_at };
+        }
       }
     }
-    return { grants, canEdit: identity.isOwner || identity.isAdmin };
+    return { grants, changes, canEdit: identity.isOwner || identity.isAdmin };
   });
 
 /** Clinic owner: turn a single capability on or off for a staff role. */
@@ -7878,6 +7938,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       show_in_portal: boolean;
       image_url?: string | null;
       image_placement?: "background" | "top" | "left" | "right" | "bottom" | null;
+      applies_to_catalogue_ids?: string[];
+      one_per_patient?: boolean;
+      no_stacking?: boolean;
     }) => parseInput(schemas.SaveOfferTemplate, data),
   )
   .middleware([requireSupabaseAuth])
@@ -7900,6 +7963,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       show_in_portal: data.show_in_portal,
       image_url: data.image_url?.trim() || null,
       image_placement: data.image_url?.trim() ? data.image_placement ?? "top" : null,
+      applies_to_catalogue_ids: data.applies_to_catalogue_ids ?? [],
+      one_per_patient: data.one_per_patient ?? true,
+      no_stacking: data.no_stacking ?? true,
     };
     if (data.stage !== "custom") {
       // One live template per stage: a second one for the same stage would

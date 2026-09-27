@@ -233,7 +233,7 @@ export function RetailProductSettings({ canEdit }: { canEdit: boolean }) {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
+                  size="sm"
                   aria-label={item.active ? "Archive product" : "Restore product"}
                   onClick={() =>
                     item.active
@@ -242,6 +242,7 @@ export function RetailProductSettings({ canEdit }: { canEdit: boolean }) {
                   }
                 >
                   {item.active ? <Archive className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                  {item.active ? "Archive" : "Restore"}
                 </Button>
               </div>
             )}

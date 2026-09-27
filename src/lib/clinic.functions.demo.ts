@@ -298,6 +298,13 @@ function requireAccessAdmin() {
   return me;
 }
 
+/** Owner or manager, as production's POLICY kind "manager". */
+function requireManager() {
+  const me = identity();
+  if (!me.isManager) throw new Error("Manager access required");
+  return me;
+}
+
 /* ---------------------------------------------------------------- */
 /* lookups and joins                                                  */
 /* ---------------------------------------------------------------- */
@@ -1012,6 +1019,7 @@ export const archivePatient = createServerFn({ method: "POST" })
     parseInput(schemas.ArchivePatient, data),
   )
   .handler(async ({ data }) => {
+    requireManager();
     const row = patientById(data.id) as Record<string, unknown> | undefined;
     if (row) {
       row["deleted_at"] = data.archived ? new Date().toISOString() : null;
@@ -1107,6 +1115,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       notes?: string;
       app_origin?: string;
       pay_kind?: PaymentLinkKind;
+      details_incomplete?: boolean;
     }) => parseInput(schemas.SaveAppointment, data),
   )
   .handler(async ({ data }) => {
@@ -1127,6 +1136,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       payment_status: data.payment_status ?? "unpaid",
       consent_document_id: data.consent_document_id || null,
       notes: data.notes || null,
+      details_incomplete: data.details_incomplete ?? false,
       created_by: me.userId,
       status: "booked",
       stage: "booked",
@@ -3497,6 +3507,10 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
       commissionRate?: number;
     }) => parseInput(schemas.UpdateStaffMember, data),
   )
@@ -3512,6 +3526,10 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       profile.job_title = data.jobTitle ?? null;
       profile.registration_body = data.registrationBody ?? null;
       profile.registration_number = data.registrationNumber ?? null;
+      profile.registration_expiry = data.registrationExpiry || null;
+      profile.insurance_provider = data.insuranceProvider?.trim() || null;
+      profile.insurance_expiry = data.insuranceExpiry || null;
+      profile.qualifications = data.qualifications?.trim() || null;
       if (data.commissionRate !== undefined) {
         profile.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
       }
@@ -3733,7 +3751,9 @@ export const revokeOtherSessions = createServerFn({ method: "POST" }).handler(as
   return { ok: true as const };
 });
 
-export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handler(async () => ({
+export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handler(async () => {
+  requireManager();
+  return {
   patients: patients
     .filter((p) => p.status !== "archived" && (!p.email || !p.phone || !p.date_of_birth))
     .map((p) => ({
@@ -3758,7 +3778,8 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handle
         jobTitle: profile?.job_title ?? "",
       };
     }),
-}));
+  };
+});
 
 export const setPatientEmail = createServerFn({ method: "POST" })
   .validator((data: { patientId: string; email: string }) => parseInput(schemas.SetPatientEmail, data))
@@ -4033,6 +4054,10 @@ export const saveMyProfile = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
     }) => parseInput(schemas.SaveMyProfile, data),
   )
   .handler(async ({ data }) => {
@@ -4044,6 +4069,10 @@ export const saveMyProfile = createServerFn({ method: "POST" })
     profile.job_title = data.jobTitle?.trim() || null;
     profile.registration_body = data.registrationBody?.trim() || null;
     profile.registration_number = data.registrationNumber?.trim() || null;
+    profile.registration_expiry = data.registrationExpiry || null;
+    profile.insurance_provider = data.insuranceProvider?.trim() || null;
+    profile.insurance_expiry = data.insuranceExpiry || null;
+    profile.qualifications = data.qualifications?.trim() || null;
     return { ok: true };
   });
 
@@ -4324,7 +4353,7 @@ export const sendRecall = createServerFn({ method: "POST" })
 
 export const createRecallTask = createServerFn({ method: "POST" })
   .validator(
-    (data: { patient_id: string; note?: string; recipients: { id: string; label: string }[] }) =>
+    (data: { patient_id: string; note?: string; recipients: { id: string; label: string }[]; due_at?: string }) =>
       parseInput(schemas.CreateRecallTask, data),
   )
   .handler(async ({ data }) => {
@@ -4370,6 +4399,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
         created_at: now,
         updated_at: now,
         reassigned_at: null,
+        due_at: data.due_at ?? new Date(Date.now() + 7 * 86400000).toISOString(),
       });
     }
     return { ok: true, group_id: groupId };
@@ -4748,7 +4778,20 @@ export const getClinicDetails = createServerFn({ method: "GET" }).handler(async 
   phone: db.clinic["phone"],
   email: db.clinic["email"],
   reminder_offsets: db.clinic["reminder_offsets"] ?? [168, 24],
+  deposit_lead_days: db.clinic["deposit_lead_days"] ?? 3,
+  deposit_percent: db.clinic["deposit_percent"] ?? 30,
 }));
+
+export const updateDepositRules = createServerFn({ method: "POST" })
+  .validator((data: { deposit_lead_days: number; deposit_percent: number }) =>
+    parseInput(schemas.UpdateDepositRules, data),
+  )
+  .handler(async ({ data }) => {
+    requireSettings();
+    db.clinic["deposit_lead_days"] = data.deposit_lead_days;
+    db.clinic["deposit_percent"] = data.deposit_percent;
+    return { ok: true };
+  });
 
 export const updateClinicDetails = createServerFn({ method: "POST" })
   .validator(
@@ -4780,13 +4823,21 @@ export const listRolePermissions = createServerFn({ method: "GET" }).handler(asy
     practitioner: {},
     patient: {},
   };
+  const changes: Record<string, Record<string, { by: string; at: string }>> = {};
   for (const role of ["manager", "front_desk", "practitioner", "patient"]) {
     for (const key of PERMISSION_KEYS) {
-      grants[role]![key] =
-        rolePermissions.find((r) => r.role === role && r.permission === key)?.enabled ?? false;
+      const row = rolePermissions.find((r) => r.role === role && r.permission === key);
+      grants[role]![key] = row?.enabled ?? false;
+      if (row?.updated_by) {
+        const who = profiles.find((p) => p.id === row.updated_by);
+        (changes[role] ??= {})[key] = {
+          by: (who?.full_name as string | undefined) ?? "A manager",
+          at: String(row.updated_at ?? ""),
+        };
+      }
     }
   }
-  return { grants, canEdit: me.isOwner || me.isAdmin };
+  return { grants, changes, canEdit: me.isOwner || me.isAdmin };
 });
 
 export const setRolePermission = createServerFn({ method: "POST" })
@@ -4801,16 +4852,32 @@ export const setRolePermission = createServerFn({ method: "POST" })
     const row = rolePermissions.find(
       (r) => r.role === data.role && r.permission === data.permission,
     );
-    if (row) row.enabled = data.enabled;
-    else
+    const now = new Date().toISOString();
+    if (row) {
+      row.enabled = data.enabled;
+      row.updated_by = me.userId;
+      row.updated_at = now;
+    } else
       rolePermissions.push({
         id: newId("b9"),
         role: data.role,
         permission: data.permission,
         enabled: data.enabled,
         updated_by: me.userId,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       });
+    db.auditLog.push({
+      id: newId("g9"),
+      clinic_id: CLINIC_ID,
+      actor_id: me.userId,
+      actor_label: me.profile?.full_name ?? me.email ?? null,
+      action: "access.update",
+      entity: "role_permissions",
+      entity_id: null,
+      patient_id: null,
+      meta: { role: data.role, permission: data.permission, enabled: data.enabled },
+      created_at: now,
+    });
     return { ok: true };
   });
 
@@ -5799,6 +5866,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       show_in_portal: boolean;
       image_url?: string | null;
       image_placement?: "background" | "top" | "left" | "right" | "bottom" | null;
+      applies_to_catalogue_ids?: string[];
+      one_per_patient?: boolean;
+      no_stacking?: boolean;
     }) => parseInput(schemas.SaveOfferTemplate, data),
   )
   .handler(async ({ data }) => {
@@ -5822,6 +5892,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       show_in_portal: data.show_in_portal,
       image_url: data.image_url?.trim() || null,
       image_placement: data.image_url?.trim() ? data.image_placement ?? "top" : null,
+      applies_to_catalogue_ids: data.applies_to_catalogue_ids ?? [],
+      one_per_patient: data.one_per_patient ?? true,
+      no_stacking: data.no_stacking ?? true,
       updated_at: new Date().toISOString(),
     };
     if (data.id) {

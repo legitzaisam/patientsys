@@ -26,6 +26,10 @@ export type OfferTemplateRow = {
   updated_at: string;
   image_url?: string | null;
   image_placement?: OfferImagePlacement | null;
+  /** Rules: catalogue items it applies to (empty = any), once per patient, no stacking with a live offer. */
+  applies_to_catalogue_ids?: string[];
+  one_per_patient?: boolean;
+  no_stacking?: boolean;
   /** From listOfferTemplates: sends by effective status. */
   counts?: Record<string, number>;
 };

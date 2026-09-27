@@ -23,13 +23,10 @@ const ROLE_PAGES: Record<DemoRole, { path: string; heading: string | RegExp }[]>
   practitioner: [
     ...STAFF_PAGES,
     { path: "/retention", heading: "Retention" },
+    { path: "/insights", heading: "Insights" },
     { path: "/earnings", heading: "My earnings" },
   ],
-  front_desk: [
-    ...STAFF_PAGES,
-    { path: "/retention", heading: "Retention" },
-    { path: "/insights", heading: "Insights" },
-  ],
+  front_desk: [...STAFF_PAGES, { path: "/retention", heading: "Retention" }],
   patient: [{ path: "/my-record", heading: /Good (morning|afternoon|evening), / }],
 };
 

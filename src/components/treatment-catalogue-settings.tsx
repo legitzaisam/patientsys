@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { PaginationBar, usePagination } from "@/components/pagination-bar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -96,6 +97,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
   const queryClient = useQueryClient();
   const fetchItems = useServerFn(listCatalogueItems);
   const [search, setSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   /** null closes the panel; `id` is null for a new treatment. */
   const [editing, setEditing] = useState<{ id: string | null } | null>(null);
   const [archiving, setArchiving] = useState<{ id: string; name: string } | null>(null);
@@ -148,15 +150,18 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const allItems = (data ?? []) as Item[];
+  const archivedCount = allItems.filter((i) => !i.active).length;
   const items = useMemo(() => {
-    const list = (data ?? []) as Item[];
+    const list = showArchived ? allItems : allItems.filter((i) => i.active);
     const q = search.trim().toLowerCase();
     return q
       ? list.filter(
           (i) => i.name.toLowerCase().includes(q) || (i.category ?? "").toLowerCase().includes(q),
         )
       : list;
-  }, [data, search]);
+  }, [allItems, search, showArchived]);
+  const paging = usePagination(items, 10);
 
   const commit = (values: Draft) => {
     save.mutate({
@@ -218,6 +223,17 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
               className="pl-8"
             />
           </div>
+          {archivedCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowArchived((v) => !v)}
+              aria-pressed={showArchived}
+              className="h-9 cursor-pointer rounded-full border border-edge bg-glass-2 px-3 text-xs text-ink-2 shadow-inset-hi transition-colors hover:text-foreground aria-pressed:bg-accent-soft aria-pressed:font-semibold aria-pressed:text-foreground"
+              data-qc="show-archived-treatments"
+            >
+              {showArchived ? "Hide archived" : `Show archived (${archivedCount})`}
+            </button>
+          ) : null}
           {canEdit && (
             <Button size="sm" onClick={() => openDraft(null, { ...blank })}>
               <Plus className="h-3.5 w-3.5" />
@@ -360,11 +376,11 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
         </Form>
       )}
 
-      <div className="divide-y divide-glass-line rounded-2xl border border-edge">
+      <div className="divide-y divide-glass-line rounded-2xl border border-edge" data-qc="treatment-list">
         {items.length === 0 && (
           <p className="p-4 text-xs text-muted-foreground">No treatments match that search.</p>
         )}
-        {items.map((item) => (
+        {paging.rows.map((item) => (
           <div key={item.id} className="flex flex-wrap items-center gap-3 p-3">
             <span
               className={`h-6 w-6 shrink-0 rounded-full ${toneForTreatment(item.name, overrides).dot}`}
@@ -441,6 +457,16 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
           </div>
         ))}
       </div>
+      <PaginationBar
+        page={paging.page}
+        pageCount={paging.pageCount}
+        total={paging.total}
+        from={paging.from}
+        to={paging.to}
+        onPage={paging.setPage}
+        noun="treatments"
+        qc="treatments-pagination"
+      />
     </Card>
   );
 }
@@ -518,16 +544,18 @@ function ColourPicker({
         disabled={disabled}
         onPick={(hex) => onPick(null, hex)}
       />
-      <button
-        type="button"
-        disabled={disabled || override === undefined}
-        title="Reset colour"
-        aria-label={`Reset colour for ${name}`}
-        onClick={() => onPick(null, null)}
-        className="-m-1 grid h-6 w-6 place-items-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-      </button>
+      {override !== undefined ? (
+        <button
+          type="button"
+          disabled={disabled}
+          title="Reset colour"
+          aria-label={`Reset colour for ${name}`}
+          onClick={() => onPick(null, null)}
+          className="-m-1 grid h-6 w-6 place-items-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
     </div>
   );
 }

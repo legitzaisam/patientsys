@@ -90,6 +90,7 @@ export type Database = {
         Row: {
           catalogue_id: string | null;
           clinic_id: string;
+          details_incomplete: boolean;
           consent_document_id: string | null;
           created_at: string;
           created_by: string | null;
@@ -111,6 +112,7 @@ export type Database = {
         Insert: {
           catalogue_id?: string | null;
           clinic_id: string;
+          details_incomplete?: boolean;
           consent_document_id?: string | null;
           created_at?: string;
           created_by?: string | null;
@@ -132,6 +134,7 @@ export type Database = {
         Update: {
           catalogue_id?: string | null;
           clinic_id?: string;
+          details_incomplete?: boolean;
           consent_document_id?: string | null;
           created_at?: string;
           created_by?: string | null;
@@ -325,6 +328,8 @@ export type Database = {
         Row: {
           address: string | null;
           created_at: string;
+          deposit_lead_days: number;
+          deposit_percent: number;
           email: string | null;
           id: string;
           insights_ingest_key_hash: string | null;
@@ -337,6 +342,8 @@ export type Database = {
         Insert: {
           address?: string | null;
           created_at?: string;
+          deposit_lead_days?: number;
+          deposit_percent?: number;
           email?: string | null;
           id?: string;
           insights_ingest_key_hash?: string | null;
@@ -349,6 +356,8 @@ export type Database = {
         Update: {
           address?: string | null;
           created_at?: string;
+          deposit_lead_days?: number;
+          deposit_percent?: number;
           email?: string | null;
           id?: string;
           insights_ingest_key_hash?: string | null;
@@ -946,12 +955,15 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           cta_label: string;
+          applies_to_catalogue_ids: string[];
           headline: string;
           id: string;
           image_placement: string | null;
           image_url: string | null;
           last_automation_at: string | null;
           name: string;
+          no_stacking: boolean;
+          one_per_patient: boolean;
           send_email: boolean;
           send_sms: boolean;
           show_in_portal: boolean;
@@ -971,12 +983,15 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           cta_label?: string;
+          applies_to_catalogue_ids?: string[];
           headline: string;
           id?: string;
           image_placement?: string | null;
           image_url?: string | null;
           last_automation_at?: string | null;
           name: string;
+          no_stacking?: boolean;
+          one_per_patient?: boolean;
           send_email?: boolean;
           send_sms?: boolean;
           show_in_portal?: boolean;
@@ -996,12 +1011,15 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           cta_label?: string;
+          applies_to_catalogue_ids?: string[];
           headline?: string;
           id?: string;
           image_placement?: string | null;
           image_url?: string | null;
           last_automation_at?: string | null;
           name?: string;
+          no_stacking?: boolean;
+          one_per_patient?: boolean;
           send_email?: boolean;
           send_sms?: boolean;
           show_in_portal?: boolean;
@@ -1497,8 +1515,12 @@ export type Database = {
           created_at: string;
           full_name: string;
           id: string;
+          insurance_expiry: string | null;
+          insurance_provider: string | null;
           job_title: string | null;
+          qualifications: string | null;
           registration_body: string | null;
+          registration_expiry: string | null;
           registration_number: string | null;
           updated_at: string;
         };
@@ -1509,8 +1531,12 @@ export type Database = {
           created_at?: string;
           full_name?: string;
           id: string;
+          insurance_expiry?: string | null;
+          insurance_provider?: string | null;
           job_title?: string | null;
+          qualifications?: string | null;
           registration_body?: string | null;
+          registration_expiry?: string | null;
           registration_number?: string | null;
           updated_at?: string;
         };
@@ -1521,8 +1547,12 @@ export type Database = {
           created_at?: string;
           full_name?: string;
           id?: string;
+          insurance_expiry?: string | null;
+          insurance_provider?: string | null;
           job_title?: string | null;
+          qualifications?: string | null;
           registration_body?: string | null;
+          registration_expiry?: string | null;
           registration_number?: string | null;
           updated_at?: string;
         };
@@ -1547,6 +1577,7 @@ export type Database = {
           contacted_by: string | null;
           created_at: string;
           created_by: string | null;
+          due_at: string | null;
           group_id: string | null;
           id: string;
           note: string | null;
@@ -1565,6 +1596,7 @@ export type Database = {
           contacted_at?: string | null;
           contacted_by?: string | null;
           created_at?: string;
+          due_at?: string | null;
           created_by?: string | null;
           group_id?: string | null;
           id?: string;
@@ -1584,6 +1616,7 @@ export type Database = {
           contacted_at?: string | null;
           contacted_by?: string | null;
           created_at?: string;
+          due_at?: string | null;
           created_by?: string | null;
           group_id?: string | null;
           id?: string;

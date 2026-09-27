@@ -73,7 +73,7 @@ export const POLICY = {
   savePatient: { kind: "capability", key: "patients.edit" },
   // Owner only: archiving starts an 8-year retention clock and hides the record
   // from every clinical view, which is not a capability worth delegating.
-  archivePatient: { kind: "owner" },
+  archivePatient: { kind: "manager" },
   addTreatment: { kind: "capability", key: "treatments.record" },
   reviewHistory: { kind: "capability", key: "treatments.record" },
 
@@ -177,7 +177,7 @@ export const POLICY = {
   setStaffEmail: { kind: "owner" },
   setPatientEmail: { kind: "owner" },
   setCommissionRate: { kind: "owner" },
-  listAccountsMissingEmail: { kind: "owner" },
+  listAccountsMissingEmail: { kind: "manager" },
 
   /* Own staff profile */
   getMyProfile: { kind: "capability", key: "view.profile" },
@@ -234,6 +234,7 @@ export const POLICY = {
   setCatalogueItemActive: { kind: "capability", key: "settings.treatments" },
   getClinicDetails: { kind: "staff" },
   updateClinicDetails: { kind: "capability", key: "settings.treatments" },
+  updateDepositRules: { kind: "capability", key: "settings.treatments" },
   listRolePermissions: { kind: "accessAdmin" },
   setRolePermission: { kind: "accessAdmin" },
   listRetailProducts: { kind: "staff" },

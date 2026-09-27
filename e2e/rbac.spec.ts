@@ -24,36 +24,13 @@ test.describe("owner", () => {
 test.describe("practitioner", () => {
   test.use({ role: "practitioner" });
 
-  test("sees earnings but not clinic performance", async ({ page }) => {
+  test("sees earnings and insights but not clinic performance", async ({ page }) => {
     await page.goto("/dashboard");
     const nav = page.getByRole("navigation").first();
     await expect(nav.getByRole("link", { name: "Earnings" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Retention" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Insights" })).toHaveCount(0);
-    await expect(nav.getByRole("link", { name: "Performance" })).toHaveCount(0);
-  });
-
-  test("a direct URL to /performance bounces to the dashboard", async ({ page }) => {
-    await page.goto("/performance");
-    await expect(page).toHaveURL(/\/dashboard/);
-  });
-
-  test("a direct URL to /insights bounces to the dashboard", async ({ page }) => {
-    await page.goto("/insights");
-    await expect(page).toHaveURL(/\/dashboard/);
-  });
-});
-
-test.describe("front desk", () => {
-  test.use({ role: "front_desk" });
-
-  test("sees no performance or earnings navigation", async ({ page }) => {
-    await page.goto("/dashboard");
-    const nav = page.getByRole("navigation").first();
-    await expect(nav.getByRole("link", { name: "Patients" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Insights" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Performance" })).toHaveCount(0);
-    await expect(nav.getByRole("link", { name: "Earnings" })).toHaveCount(0);
   });
 
   test("a direct URL to /performance bounces to the dashboard", async ({ page }) => {
@@ -64,6 +41,29 @@ test.describe("front desk", () => {
   test("can open Insights", async ({ page }) => {
     await page.goto("/insights");
     await expect(page.getByRole("heading", { level: 1, name: "Insights" })).toBeVisible();
+  });
+});
+
+test.describe("front desk", () => {
+  test.use({ role: "front_desk" });
+
+  test("sees no insights, performance or earnings navigation", async ({ page }) => {
+    await page.goto("/dashboard");
+    const nav = page.getByRole("navigation").first();
+    await expect(nav.getByRole("link", { name: "Patients" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Insights" })).toHaveCount(0);
+    await expect(nav.getByRole("link", { name: "Performance" })).toHaveCount(0);
+    await expect(nav.getByRole("link", { name: "Earnings" })).toHaveCount(0);
+  });
+
+  test("a direct URL to /performance bounces to the dashboard", async ({ page }) => {
+    await page.goto("/performance");
+    await expect(page).toHaveURL(/\/dashboard/);
+  });
+
+  test("a direct URL to /insights bounces to the dashboard", async ({ page }) => {
+    await page.goto("/insights");
+    await expect(page).toHaveURL(/\/dashboard/);
   });
 });
 

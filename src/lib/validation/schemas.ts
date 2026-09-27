@@ -41,6 +41,7 @@ import {
   requiredText,
   staffRole,
   text,
+  optionalDateOnly,
 } from "./primitives";
 
 const optionalCount = z.number().int().min(0).max(100_000).nullable().optional();
@@ -68,6 +69,8 @@ export const SaveAppointment = z.object({
   notes: optionalText(20_000),
   app_origin: optionalText(500),
   pay_kind: paymentLinkKind.optional(),
+  /** Set by Quick book and cleared by a save from the full booking dialog. */
+  details_incomplete: z.boolean().optional(),
 });
 
 export const UpdateAppointmentState = z.object({
@@ -253,6 +256,10 @@ export const UpdateStaffMember = z.object({
   jobTitle: optionalText(200),
   registrationBody: optionalText(200),
   registrationNumber: optionalText(100),
+  registrationExpiry: optionalDateOnly,
+  insuranceProvider: optionalText(200),
+  insuranceExpiry: optionalDateOnly,
+  qualifications: optionalText(2_000),
   commissionRate: percentage.optional(),
 });
 
@@ -338,6 +345,10 @@ export const SaveMyProfile = z.object({
   jobTitle: optionalText(200),
   registrationBody: optionalText(200),
   registrationNumber: optionalText(100),
+  registrationExpiry: optionalDateOnly,
+  insuranceProvider: optionalText(200),
+  insuranceExpiry: optionalDateOnly,
+  qualifications: optionalText(2_000),
 });
 
 export const ReviewProfileChange = z.object({
@@ -388,6 +399,8 @@ export const CreateRecallTask = z.object({
   patient_id: id,
   note: optionalText(4_000),
   recipients,
+  /** When the chase should be done by (defaults to a week from now). */
+  due_at: dateString.optional(),
 });
 
 export const UpdateRecallTask = z.object({
@@ -469,6 +482,12 @@ export const UpdateClinicDetails = z.object({
   email: nullableEmail,
   /** Hours before an appointment when reminders go out (max 90 days). */
   reminder_offsets: z.array(z.number().int().min(1).max(2160)).max(6).optional(),
+});
+
+/** Payments and deposits settings: lead days before the visit, deposit share of the price. */
+export const UpdateDepositRules = z.object({
+  deposit_lead_days: z.number().int().min(0).max(30),
+  deposit_percent: z.number().int().min(0).max(100),
 });
 
 export const SetRolePermission = z.object({
@@ -663,6 +682,10 @@ export const SaveOfferTemplate = z.object({
   show_in_portal: z.boolean(),
   image_url: optionalText(1_500_000),
   image_placement: z.enum(["background", "top", "left", "right", "bottom"]).nullable().optional(),
+  /** Catalogue items the offer can be redeemed against (empty = any). */
+  applies_to_catalogue_ids: z.array(id).max(50).optional(),
+  one_per_patient: z.boolean().optional(),
+  no_stacking: z.boolean().optional(),
 });
 
 export const ArchiveOfferTemplate = z.object({ id });

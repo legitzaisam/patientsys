@@ -51,6 +51,9 @@ type Form = {
   show_in_portal: boolean;
   image_url: string | null;
   image_placement: OfferImagePlacement;
+  applies_to_catalogue_ids: string[];
+  one_per_patient: boolean;
+  no_stacking: boolean;
 };
 
 function formFor(template: OfferTemplateRow | null, stage: TemplateStage): Form {
@@ -70,6 +73,9 @@ function formFor(template: OfferTemplateRow | null, stage: TemplateStage): Form 
       show_in_portal: template.show_in_portal,
       image_url: template.image_url ?? null,
       image_placement: template.image_placement ?? "top",
+      applies_to_catalogue_ids: template.applies_to_catalogue_ids ?? [],
+      one_per_patient: template.one_per_patient ?? true,
+      no_stacking: template.no_stacking ?? true,
     };
   }
   const d = STAGE_DEFAULT_DRAFT[stage];
@@ -88,6 +94,9 @@ function formFor(template: OfferTemplateRow | null, stage: TemplateStage): Form 
     show_in_portal: true,
     image_url: null,
     image_placement: "top",
+    applies_to_catalogue_ids: [],
+    one_per_patient: true,
+    no_stacking: true,
   };
 }
 
@@ -249,6 +258,9 @@ export function OfferTemplateEditor({
         show_in_portal: form.show_in_portal,
         image_url: imageUrl,
         image_placement: imageUrl ? form.image_placement : null,
+        applies_to_catalogue_ids: form.applies_to_catalogue_ids,
+        one_per_patient: form.one_per_patient,
+        no_stacking: form.no_stacking,
       },
     });
   }

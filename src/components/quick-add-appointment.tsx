@@ -413,6 +413,8 @@ export function QuickAddAppointment({
         payment_status: "unpaid",
         app_origin: typeof window !== "undefined" ? window.location.origin : "",
         pay_kind: "full",
+        // Quick book captures the minimum; reception finishes the booking later.
+        details_incomplete: true,
       },
     });
   };

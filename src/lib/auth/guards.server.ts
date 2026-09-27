@@ -41,7 +41,7 @@ async function readIdentity(context: Ctx) {
     context.supabase
       .from("profiles")
       .select(
-        "id, clinic_id, full_name, job_title, registration_body, registration_number, avatar_url",
+        "id, clinic_id, full_name, job_title, registration_body, registration_number, registration_expiry, insurance_provider, insurance_expiry, qualifications, avatar_url",
       )
       .eq("id", context.userId)
       .maybeSingle(),

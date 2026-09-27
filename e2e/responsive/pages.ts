@@ -503,7 +503,7 @@ export const PAGES: PageEntry[] = [
   {
     id: "insights",
     path: "/insights",
-    roles: ["owner", "front_desk", "admin"],
+    roles: ["owner", "practitioner", "admin"],
     settle: ".page-title",
     states: [sidebarClosed],
   },

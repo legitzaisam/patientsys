@@ -1,5 +1,6 @@
 export const PERMISSION_KEYS = [
   "patients.edit",
+  "patients.edit_clinical",
   "treatments.record",
   "documents.send",
   "photos.manage",
@@ -9,6 +10,7 @@ export const PERMISSION_KEYS = [
   "reports.insights",
   "reports.retention",
   "reports.performance",
+  "reports.commission",
   "team.view",
   "team.approve_changes",
   "settings.treatments",
@@ -62,7 +64,11 @@ export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 export const PERMISSION_META: Record<PermissionKey, { label: string; description: string }> = {
   "patients.edit": {
     label: "Patient records",
-    description: "Create patients and keep their contact details and clinical summary current.",
+    description: "Create patients and keep their contact details current.",
+  },
+  "patients.edit_clinical": {
+    label: "Edit clinical record",
+    description: "Change allergies, medication, conditions and medical history on a patient's record.",
   },
   "treatments.record": {
     label: "Record treatments & notes",
@@ -98,12 +104,17 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
   },
   "reports.performance": {
     label: "Performance & earnings",
-    description: "See practitioner KPIs, clinic earnings and the commission split.",
+    description: "See practitioner KPIs, attendance and retention on the Performance page.",
+  },
+  "reports.commission": {
+    label: "Commission and payouts",
+    description:
+      "See clinic earnings, commission rates and what is owed to each practitioner. Off for managers unless the owner grants it.",
   },
   "team.view": {
     label: "Team & staff details",
     description:
-      "Open the team page and staff profiles. Everyone can view profile details and chat; document files stay with managers. Only managers can edit profiles.",
+      "Open the Team page, read colleagues' profiles and message them. Staff documents and profile edits stay with managers.",
   },
   "team.approve_changes": {
     label: "Approve profile changes",
@@ -169,12 +180,12 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
 export const PERMISSION_GROUPS: { label: string; keys: PermissionKey[] }[] = [
   {
     label: "Clinical record",
-    keys: ["patients.edit", "treatments.record", "documents.send", "photos.manage"],
+    keys: ["patients.edit", "patients.edit_clinical", "treatments.record", "documents.send", "photos.manage"],
   },
   { label: "Diary", keys: ["appointments.edit"] },
   { label: "Communication", keys: ["comms.send", "notifications.delete"] },
   { label: "Marketing", keys: ["offers.manage"] },
-  { label: "Reports", keys: ["reports.insights", "reports.retention", "reports.performance"] },
+  { label: "Reports", keys: ["reports.insights", "reports.retention", "reports.performance", "reports.commission"] },
   { label: "Team", keys: ["team.view", "team.approve_changes"] },
   { label: "Clinic settings", keys: ["settings.treatments", "tasks.delete"] },
   {

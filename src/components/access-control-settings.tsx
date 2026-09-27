@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { dateTime } from "@/lib/format";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { ShieldCheck } from "lucide-react";
@@ -35,6 +36,17 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
   });
 
   const grants = data?.grants;
+  const changes = (data as { changes?: Record<string, Record<string, { by: string; at: string }>> } | undefined)
+    ?.changes;
+  /** The most recent hand change to a key across the roles, for the "changed by" line. */
+  const latestChange = (key: string) => {
+    let best: { by: string; at: string; role: string } | null = null;
+    for (const role of ROLES) {
+      const c = changes?.[role.key]?.[key];
+      if (c && (!best || c.at > best.at)) best = { ...c, role: role.label };
+    }
+    return best;
+  };
   // Page and tab visibility stays on /access. This grid is the capability matrix.
   const groups = PERMISSION_GROUPS.map((group) => ({
     ...group,
@@ -84,11 +96,24 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
                 <div>
                   <p className="text-sm text-foreground">{PERMISSION_META[key].label}</p>
                   <p className="text-xs text-muted-foreground">{PERMISSION_META[key].description}</p>
+                  {(() => {
+                    const c = latestChange(key);
+                    return c ? (
+                      <p className="mt-0.5 text-2xs text-ink-3" data-qc="grant-changed-by">
+                        {c.role} changed by {c.by} · {dateTime(c.at)}
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
                 {ROLES.map((role) => (
                   <div key={role.key} className="flex justify-center">
                     <Switch
                       aria-label={`${PERMISSION_META[key].label} for ${role.label}`}
+                      title={
+                        changes?.[role.key]?.[key]
+                          ? `Changed by ${changes[role.key]![key]!.by} · ${dateTime(changes[role.key]![key]!.at)}`
+                          : undefined
+                      }
                       checked={grants?.[role.key]?.[key] ?? false}
                       disabled={!canEdit || save.isPending || !grants}
                       onCheckedChange={(enabled) =>
