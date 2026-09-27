@@ -142,3 +142,81 @@ test.describe("journey board", () => {
     await page.keyboard.press("Escape");
   });
 });
+
+test.describe("record: what the list promises, the record shows", () => {
+  test("header actions, Open chat, the open-items pill and the Treatments badge agree with the record", async ({
+    page,
+  }) => {
+    await page.goto("/patients?view=all");
+    // A row with open items: the pill count must equal the record's Recall tasks card.
+    const pill = page.locator('[data-qc="open-tasks-pill"]').first();
+    const pillCount = Number((await pill.innerText()).replace(/\D/g, ""));
+    await pill.click();
+    await expect(page).toHaveURL(/tab=treatments#recall/);
+    const recall = page.locator('[data-qc="recall-tasks"]');
+    await expect(recall).toBeVisible();
+    await expect(recall).toHaveAttribute("data-open", String(pillCount));
+    await expect(recall).not.toContainText("Retention page");
+
+    // Record treatment and Open chat sit on the header; the rest live in ⋯.
+    await expect(page.getByRole("button", { name: "Record treatment" })).toBeVisible();
+    await expect(page.locator('[data-qc="open-chat"]')).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send form" })).toHaveCount(0);
+    await page.locator('[data-qc="record-more"]').click();
+    for (const item of ["Send form", "Send offer", "Archive"]) {
+      await expect(page.getByRole("menuitem", { name: item })).toBeVisible();
+    }
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    // Owners see lifetime spend on the header.
+    await expect(page.locator('[data-qc="record-lifetime-spend"]')).toContainText(
+      /£[\d,]+ lifetime spend/,
+    );
+
+    // The Treatments badge counts the bookings still to chase, listed below.
+    const badge = page.locator('[data-qc="treatments-badge"]');
+    if ((await badge.count()) > 0) {
+      const n = Number(await badge.innerText());
+      await expect(badge).toHaveAttribute("title", /still need/);
+      await expect(page.locator('[data-qc="booking-chase-item"]')).toHaveCount(n);
+    }
+
+    // Open chat opens the floating window on this patient; no docked panel remains.
+    // (The fixture hides the dock to keep corners clear; show it for this check.)
+    await expect(page.locator("#patient-chat")).toHaveCount(0);
+    await page.addStyleTag({ content: '[data-qc="floating-dock"] { display: flex !important; }' });
+    await page.locator('[data-qc="open-chat"]').click();
+    const chat = page.locator('[data-qc="chat-window"]');
+    await expect(chat).toBeVisible();
+    await expect(chat.locator("header")).toContainText("Private messages with this patient");
+  });
+
+  test("the plan card matches the journey board and the patient's portal", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await page.goto("/patients");
+    await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
+    const progress = page.locator('[data-qc="plan-progress"]').first();
+    await expect(progress).toBeVisible();
+    const [done, total] = (await progress.innerText()).match(/\d+/g)!.map(Number);
+
+    // Same figures on the journey board card for Olivia.
+    await page.goto("/patients?tab=board");
+    const card = page
+      .locator('[data-qc="board-card"]')
+      .filter({ hasText: "Olivia Bennett" })
+      .first();
+    await expect(card).toContainText(`${done}/${total}`);
+
+    // And in the patient's own portal.
+    await context.addCookies([
+      { name: "demo_role", value: "patient", url: baseURL ?? "http://localhost:8091" },
+    ]);
+    await page.goto("/my-record/plan");
+    await expect(page.locator('[data-qc="portal-plan-overview"]')).toContainText(
+      `${done} of ${total} milestones`,
+    );
+  });
+});

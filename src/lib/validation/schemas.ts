@@ -588,6 +588,7 @@ export const GetVoiceCallTarget = z.object({ patient_id: id });
 
 export const ListTreatmentPlans = z.object({
   practitioner_id: optionalId,
+  patient_id: optionalId,
   at_risk_only: z.boolean().optional(),
   query: optionalText(200),
 });

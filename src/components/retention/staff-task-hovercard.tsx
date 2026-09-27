@@ -27,6 +27,7 @@ export function StaffTaskHoverCard({
   practitionerId,
   practitionerName,
   treatment,
+  openOnClick = false,
 }: {
   children: React.ReactNode;
   patientId: string;
@@ -34,6 +35,8 @@ export function StaffTaskHoverCard({
   practitionerId?: string | null;
   practitionerName?: string | null;
   treatment?: string | null;
+  /** Also toggle on click, for a button trigger (the record's Assign task). */
+  openOnClick?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -126,7 +129,15 @@ export function StaffTaskHoverCard({
 
   return (
     <HoverCard open={open} onOpenChange={setOpen} openDelay={150} closeDelay={120}>
-      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
+      <HoverCardTrigger asChild>
+        {openOnClick ? (
+          <span className="inline-flex" onClick={() => setOpen((v) => !v)}>
+            {children}
+          </span>
+        ) : (
+          children
+        )}
+      </HoverCardTrigger>
       <HoverCardContent align="start" className="w-80 rounded-2xl p-4">
         <div className="mb-3">
           <p className="text-sm font-medium text-foreground">Ask the team to recall</p>

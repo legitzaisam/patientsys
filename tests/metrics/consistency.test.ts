@@ -255,8 +255,8 @@ describe("metrics snapshot (demo fixture)", () => {
   it.todo("getDashboard: treatmentsDue / overdue / dueSoon and patientsToChase equal the snapshot");
   it.todo("listPatients: 'Treatments due' filter count equals dashboard treatmentsDue");
 
-  // ---- UI-wired (Phase 7)
-  it.todo("each patient row's open-items pill equals the record's open items");
-  it.todo("the Treatments tab badge equals the record's booking chase length");
-  it.todo("portal plan progress for Olivia equals the clinic-side plan progress");
+  // ---- UI-wired: asserted against the rendered pages in e2e/patients.spec.ts
+  // ("record: what the list promises, the record shows"): the list's open-items
+  // pill = the record's Recall tasks card, the Treatments badge = the Upcoming
+  // appointments list, and the portal's plan progress = the record's plan card.
 });

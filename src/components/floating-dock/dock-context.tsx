@@ -5,17 +5,19 @@ import { createContext, useCallback, useContext, useMemo, useState } from "react
  *
  * The dock is global (mounted once in the app shell); pages that carry their
  * own chat context register it here. Today that is the patient record: it
- * tells the dock which patient the page is about, whether its docked chat
- * panel is open (the chat bubble hides then — the page already shows chat),
- * and how to restore the docked panel from the floating window.
+ * tells the dock which patient the page is about, so the bubble opens straight
+ * into their thread, and it can ask the dock to open that thread now (the
+ * record's "Open chat" button). The chat bubble shows on every page; the
+ * record no longer docks its own panel.
  */
 export type ChatPageContext = {
   patientId: string;
   patientName: string;
-  /** True while the page's own docked chat panel is visible. */
-  docked: boolean;
-  /** Re-open the page's docked panel (used by the window's dock-back action). */
-  restoreDock: () => void;
+};
+
+export type ChatRequest = ChatPageContext & {
+  /** Bumped on every request so the same patient can be re-opened. */
+  seq: number;
 };
 
 type DockApi = {
@@ -23,6 +25,9 @@ type DockApi = {
   setChatPage: (ctx: ChatPageContext | null) => void;
   chatOpen: boolean;
   setChatOpen: (open: boolean) => void;
+  /** Open the floating window on this patient's thread. */
+  requestChat: (thread: ChatPageContext) => void;
+  chatRequest: ChatRequest | null;
 };
 
 const DockContext = createContext<DockApi | null>(null);
@@ -30,9 +35,14 @@ const DockContext = createContext<DockApi | null>(null);
 export function FloatingDockProvider({ children }: { children: React.ReactNode }) {
   const [chatPage, setChatPage] = useState<ChatPageContext | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
+  const requestChat = useCallback((thread: ChatPageContext) => {
+    setChatRequest((prev) => ({ ...thread, seq: (prev?.seq ?? 0) + 1 }));
+    setChatOpen(true);
+  }, []);
   const value = useMemo(
-    () => ({ chatPage, setChatPage, chatOpen, setChatOpen }),
-    [chatPage, chatOpen],
+    () => ({ chatPage, setChatPage, chatOpen, setChatOpen, requestChat, chatRequest }),
+    [chatPage, chatOpen, requestChat, chatRequest],
   );
   return <DockContext.Provider value={value}>{children}</DockContext.Provider>;
 }
@@ -47,6 +57,8 @@ export function useFloatingDock(): DockApi {
       setChatPage: () => {},
       chatOpen: false,
       setChatOpen: () => {},
+      requestChat: () => {},
+      chatRequest: null,
     };
   }
   return ctx;

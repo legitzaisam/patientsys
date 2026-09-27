@@ -327,10 +327,35 @@ const recordTreatment: PageState = {
   },
 };
 
+/** The record header's ⋯ menu (Send form, Send offer, Archive). */
+const recordMenu: PageState = {
+  id: "record-menu",
+  open: async (page) => {
+    if (!(await clickIfVisible(page, '[data-qc="record-more"]'))) return false;
+    await page.getByRole("menu").waitFor({ state: "visible", timeout: 3_000 });
+    await wait(page, 300);
+    return true;
+  },
+};
+
+/** Opens an item from the record's ⋯ menu. */
+async function openRecordMenuItem(page: Page, qc: string) {
+  if (!(await clickIfVisible(page, '[data-qc="record-more"]'))) return false;
+  const item = page.locator(`[data-qc="${qc}"]`).first();
+  try {
+    await item.waitFor({ state: "visible", timeout: 3_000 });
+  } catch {
+    await page.keyboard.press("Escape");
+    return false;
+  }
+  await item.click();
+  return true;
+}
+
 const sendForm: PageState = {
   id: "send-form",
   open: async (page) => {
-    if (!(await clickRoleIfVisible(page, "button", "Send form"))) return false;
+    if (!(await openRecordMenuItem(page, "menu-send-form"))) return false;
     return waitDialog(page);
   },
 };
@@ -338,7 +363,7 @@ const sendForm: PageState = {
 const sendOffer: PageState = {
   id: "send-offer",
   open: async (page) => {
-    if (!(await clickIfVisible(page, '[data-qc="send-offer-open"]'))) return false;
+    if (!(await openRecordMenuItem(page, "send-offer-open"))) return false;
     return waitDialog(page, '[data-qc="send-offer"]');
   },
 };
@@ -526,11 +551,12 @@ export const PAGES: PageEntry[] = [
       recordTab("portal", "From the patient"),
       recordTab("contact", "Contact"),
       recordTreatment,
+      recordMenu,
       sendForm,
       sendOffer,
       treatmentForm,
     ],
-    coreStates: ["sidebar-closed", "tab-contact", "tab-documents"],
+    coreStates: ["sidebar-closed", "tab-contact", "tab-documents", "record-menu"],
   },
   {
     id: "insights",

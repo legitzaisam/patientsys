@@ -19,7 +19,9 @@ test("issuing a consent form queues the signing-link email", async ({ page, cont
   await page.goto("/patients");
   await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
 
-  await page.getByRole("button", { name: "Send form" }).click();
+  // Send form lives in the record header's ⋯ menu.
+  await page.locator('[data-qc="record-more"]').click();
+  await page.getByRole("menuitem", { name: "Send form" }).click();
   const dialog = page.getByRole("dialog", { name: "Send to patient" });
   await dialog.getByLabel("Title").fill("Chemical peel — consent form (magic link)");
   await dialog.getByRole("button", { name: "Send", exact: true }).click();

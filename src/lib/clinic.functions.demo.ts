@@ -5164,8 +5164,13 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
 /* ---------------------------------------------------------------- */
 
 export const listTreatmentPlans = createServerFn({ method: "GET" })
-  .validator((data: { practitioner_id?: string; at_risk_only?: boolean; query?: string }) =>
-    parseInput(schemas.ListTreatmentPlans, data),
+  .validator(
+    (data: {
+      practitioner_id?: string;
+      patient_id?: string;
+      at_risk_only?: boolean;
+      query?: string;
+    }) => parseInput(schemas.ListTreatmentPlans, data),
   )
   .handler(async ({ data }) => {
     const todayISO = clinicDayKey(new Date());
@@ -5188,6 +5193,7 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
     let rows = treatmentPlans
       .filter((p) => p.status === "active")
       .filter((p) => !data.practitioner_id || p.practitioner_id === data.practitioner_id)
+      .filter((p) => !data.patient_id || p.patient_id === data.patient_id)
       .map((p) => {
         const patient = patientById(p.patient_id);
         const mine = sortAsc(

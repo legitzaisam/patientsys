@@ -162,6 +162,8 @@ test.describe("send surfaces", () => {
 
   test("Send offer on the record states the PECR position and creates a portal-only offer", async ({ page }) => {
     await openOliviaRecord(page);
+    // Send offer lives in the header's ⋯ menu.
+    await page.locator('[data-qc="record-more"]').click();
     await page.locator('[data-qc="send-offer-open"]').click();
     const dialog = page.locator('[data-qc="send-offer"]');
     await expect(dialog).toBeVisible();

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, MessageCircle, Mic, MicOff, PanelRight, Phone, PhoneOff, X } from "lucide-react";
+import { ArrowLeft, MessageCircle, Mic, MicOff, Phone, PhoneOff, X } from "lucide-react";
 import {
   getPatientMessages,
   getUnreadMessages,
@@ -33,8 +33,15 @@ function timeAgo(iso: string) {
  * straight into the current patient's thread on their record.
  */
 export function ChatBubble() {
-  const { chatPage, chatOpen, setChatOpen } = useFloatingDock();
+  const { chatPage, chatOpen, setChatOpen, chatRequest } = useFloatingDock();
   const [active, setActive] = useState<ActiveThread | null>(null);
+
+  // A page asked for a thread (the record's "Open chat", or ?chat=1).
+  useEffect(() => {
+    if (!chatRequest) return;
+    setActive({ patientId: chatRequest.patientId, patientName: chatRequest.patientName });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatRequest?.seq]);
 
   const fetchUnread = useServerFn(getUnreadMessages);
   const { data: unread } = useQuery({
@@ -43,13 +50,6 @@ export function ChatBubble() {
     refetchInterval: 60_000,
   });
   const unreadTotal = unread?.total ?? 0;
-
-  // The record page's docked panel already shows this conversation.
-  const hidden = Boolean(chatPage?.docked);
-
-  useEffect(() => {
-    if (hidden && chatOpen) setChatOpen(false);
-  }, [hidden, chatOpen, setChatOpen]);
 
   function open() {
     setActive(chatPage ? { patientId: chatPage.patientId, patientName: chatPage.patientName } : null);
@@ -72,8 +72,6 @@ export function ChatBubble() {
       document.removeEventListener("pointerdown", onPointerDown);
     };
   }, [chatOpen, setChatOpen]);
-
-  if (hidden) return null;
 
   return (
     // The window floats above the launcher row (absolute, anchored to the
@@ -123,8 +121,6 @@ function ChatWindow({
   onPick: (thread: ActiveThread) => void;
   onClose: () => void;
 }) {
-  const { chatPage, setChatOpen } = useFloatingDock();
-
   const fetchVoiceConfig = useServerFn(getVoiceCallConfig);
   const fetchVoiceTarget = useServerFn(getVoiceCallTarget);
   const logCall = useServerFn(logCallAttempt);
@@ -188,20 +184,6 @@ function ChatWindow({
             >
               <Phone className="h-4 w-4" aria-hidden />
             </button>
-            {chatPage && chatPage.patientId === active.patientId ? (
-              <button
-                type="button"
-                aria-label="Dock chat to the page"
-                title="Dock chat to the page"
-                onClick={() => {
-                  chatPage.restoreDock();
-                  setChatOpen(false);
-                }}
-                className="rounded-full p-1.5 text-muted-foreground hover:bg-glass-2 hover:text-foreground"
-              >
-                <PanelRight className="h-4 w-4" aria-hidden />
-              </button>
-            ) : null}
           </>
         ) : (
           <div className="min-w-0 flex-1">
