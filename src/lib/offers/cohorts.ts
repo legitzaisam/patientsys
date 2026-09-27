@@ -4,6 +4,7 @@
  * offers) and hand them here, the same way `buildInsights` works.
  */
 import { isConsultation } from "@/lib/insights.server";
+import { upcomingBookingSet, visitsByPatient } from "@/lib/metrics/definitions";
 import { assertCanSend, prefsFromPatient, type CommsPrefs } from "@/lib/comms/preferences";
 import {
   delayElapsed,
@@ -78,7 +79,9 @@ export function buildStageCohorts(input: CohortInput): CohortMember[] {
     });
 
   const apptsBy = groupBy(input.appointments, (a) => a.patient_id);
-  const txBy = groupBy(input.treatments, (t) => t.patient_id);
+  // Shared definitions: visits per patient (oldest first) and who has a live booking ahead.
+  const txBy = visitsByPatient(input.treatments);
+  const upcoming = upcomingBookingSet(input.appointments, now.getTime());
   const plansBy = groupBy(input.plans, (p) => p.patient_id);
   const milestonesBy = groupBy(input.milestones, (m) => m.plan_id);
 
@@ -98,9 +101,7 @@ export function buildStageCohorts(input: CohortInput): CohortMember[] {
       .filter((t) => !consult(t.name, t.catalogue_id))
       .map((t) => t.performed_at)
       .sort();
-    const hasUpcomingBooking = appts.some(
-      (a) => a.status !== "cancelled" && a.status !== "no_show" && new Date(a.starts_at) >= now,
-    );
+    const hasUpcomingBooking = upcoming.has(patient.id);
     const active = (plansBy.get(patient.id) ?? []).find((p) => p.status === "active");
     const activePlan = active
       ? {

@@ -21,6 +21,12 @@ import {
 } from "@/lib/demo/data";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
+import {
+  dueState,
+  nextDueFor,
+  upcomingBookingSet,
+  visitsByPatient,
+} from "@/lib/metrics/definitions";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
@@ -373,7 +379,6 @@ export const getMe = createServerFn({ method: "GET" }).handler(async () => ident
 export const getDashboard = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireCapability("view.dashboard");
   const today = new Date();
-  const in30 = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
   const weekAhead = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
   const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString();
@@ -390,15 +395,24 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   const isFrontDesk = me.roles.includes("front_desk");
 
   const all = patients;
-  // Mirrors production: one due date per patient, from their most recent
-  // treatment that carries one.
-  const latestDueByPatient = new Map<string, (typeof treatments)[number]>();
-  for (const t of treatments) {
-    if (!t.next_due_at) continue;
-    const cur = latestDueByPatient.get(t.patient_id);
-    if (!cur || t.performed_at > cur.performed_at) latestDueByPatient.set(t.patient_id, t);
+  // Shared definition (metrics/definitions), same as production: next due is
+  // the most recent treatment carrying a date, and only an active patient with
+  // no upcoming booking can be overdue or due soon.
+  const todayISO = clinicDayKey(today);
+  const statusById = new Map(all.map((p) => [p.id, p.status ?? "active"]));
+  const upcomingSet = upcomingBookingSet(appointments, today.getTime());
+  let dueAll: ((typeof treatments)[number] & { state: "overdue" | "due_soon" })[] = [];
+  for (const [pid, visits] of visitsByPatient(treatments)) {
+    const state = dueState({
+      patient: { id: pid, status: statusById.get(pid) ?? "archived" },
+      visits,
+      hasUpcoming: upcomingSet.has(pid),
+      nowMs: today.getTime(),
+      todayKey: todayISO,
+    });
+    if (state !== "overdue" && state !== "due_soon") continue;
+    dueAll.push({ ...nextDueFor(visits)!, state });
   }
-  let dueAll = [...latestDueByPatient.values()].filter((t) => t.next_due_at <= in30);
   let monthTreats = treatments.filter((t) => t.performed_at >= monthStart);
   let prevMonthTreats = treatments.filter(
     (t) => t.performed_at >= prevMonthStart && t.performed_at < prevMonthEnd,
@@ -415,9 +429,8 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     todayAppts = todayAppts.filter((a) => a.practitioner_id === me.userId);
   }
 
-  const todayISO = clinicDayKey(today);
-  const treatmentsOverdue = dueAll.filter((t) => t.next_due_at && t.next_due_at < todayISO).length;
-  const treatmentsDueSoon = dueAll.filter((t) => t.next_due_at && t.next_due_at >= todayISO).length;
+  const treatmentsOverdue = dueAll.filter((t) => t.state === "overdue").length;
+  const treatmentsDueSoon = dueAll.filter((t) => t.state === "due_soon").length;
   let due = sortAsc(dueAll, "next_due_at")
     .slice(0, 12)
     .map((t) => ({ ...t, patients: patientJoin(t.patient_id) }));
@@ -529,7 +542,8 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     }
   }
 
-  const DEPOSIT_LEAD_DAYS = 3;
+  // Settings → Payments and deposits.
+  const DEPOSIT_LEAD_DAYS = Number(db.clinic["deposit_lead_days"] ?? 3);
   let unpaidDeposits = sortAsc(
     appointments.filter(
       (a) =>
@@ -709,6 +723,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     safeToProceed,
     safeReadyCount,
     due,
+    depositLeadDays: DEPOSIT_LEAD_DAYS,
     pendingDocuments: pendingDocs,
     historyFlags,
     role: { isManager, isPractitioner, isFrontDesk },
@@ -720,19 +735,29 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
 /* ---------------------------------------------------------------- */
 
 export const listPatients = createServerFn({ method: "GET" }).handler(async () => {
-  const nowIso = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const todayKey = clinicDayKey(now);
+  // Shared definitions (metrics/definitions), same as production.
+  const visits = visitsByPatient(treatments);
+  const upcomingSet = upcomingBookingSet(appointments, now.getTime());
   return [...patients]
     .sort(
       (a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name),
     )
     .map((p) => {
-      const mine = treatments.filter((t) => t.patient_id === p.id);
-      const last = sortDesc(mine, "performed_at")[0] ?? null;
-      const dueRow =
-        sortAsc(
-          mine.filter((t) => t.next_due_at),
-          "next_due_at",
-        )[0] ?? null;
+      const mine = visits.get(p.id) ?? [];
+      const last = mine[mine.length - 1] ?? null;
+      // Next due is the most recent treatment carrying a date, not the
+      // earliest date on file (which showed Finn Thornhurst a 2025 date).
+      const dueRow = nextDueFor(mine);
+      const state = dueState({
+        patient: { id: p.id, status: p.status ?? "active" },
+        visits: mine,
+        hasUpcoming: upcomingSet.has(p.id),
+        nowMs: now.getTime(),
+        todayKey,
+      });
       const next =
         sortAsc(
           appointments.filter(
@@ -755,7 +780,6 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
       const practitionerNames = practitionerIds.map((pid) => profileName(pid)).filter(Boolean);
 
       // Open items: assigned recall tasks plus derived chase items.
-      const todayKey = clinicDayKey(new Date());
       const openTasks: { id: string; label: string; kind: string }[] = recallTasks
         .filter((t) => t.patient_id === p.id && (t.status === "open" || t.status === "contacted"))
         .map((t) => ({
@@ -770,7 +794,7 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
           kind: "paperwork",
         });
       }
-      if (dueRow?.next_due_at && dueRow.next_due_at < todayKey) {
+      if (state === "overdue" && dueRow) {
         openTasks.push({ id: `due-${p.id}`, label: `${dueRow.name} overdue`, kind: "treatment_due" });
       }
 
@@ -806,6 +830,7 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
         outstandingDocuments: outstanding,
         practitioners: practitionerNames,
         openTasks,
+        dueState: state,
       };
     });
 });
@@ -3803,7 +3828,10 @@ export const setStaffEmail = createServerFn({ method: "POST" })
 /* ---------------------------------------------------------------- */
 
 function earningsInputs(from: string, to: string) {
+  const nowIso = new Date().toISOString();
   return {
+    // The clinic's deposit share and the clock, for the shared money model.
+    money: { depositPercent: Number(db.clinic["deposit_percent"] ?? 30), nowMs: Date.now() },
     treatments: treatments
       .filter((t) => t.performed_at >= from && t.performed_at <= to)
       .map((t) => ({
@@ -3814,10 +3842,17 @@ function earningsInputs(from: string, to: string) {
         price: t.price,
         performed_at: t.performed_at,
         commission_rate_snapshot: t.commission_rate_snapshot,
+        appointment_id: t.appointment_id ?? null,
       })),
+    // Period bookings plus every live future booking (booked ahead).
     appointments: appointments
-      .filter((a) => a.starts_at >= from && a.starts_at <= to)
+      .filter(
+        (a) =>
+          (a.starts_at >= from && a.starts_at <= to) ||
+          (a.starts_at >= nowIso && a.status !== "cancelled"),
+      )
       .map((a) => ({
+        id: a.id,
         practitioner_id: a.practitioner_id,
         price: a.price,
         payment_status: a.payment_status,
@@ -3870,6 +3905,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       inputs.yearTreatments as never,
       inputs.firstSeen,
       { from: data.from, to: data.to },
+      inputs.money,
     ).sort((a, b) => b.earned - a.earned);
 
     const prevRows = buildStats(
@@ -3879,6 +3915,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       prevInputs.yearTreatments as never,
       prevInputs.firstSeen,
       { from: data.previousFrom, to: data.previousTo },
+      inputs.money,
     );
 
     const totals = rows.reduce(
@@ -3895,6 +3932,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         noShows: acc.noShows + r.noShows,
         cancelled: acc.cancelled + r.cancelled,
         outstanding: acc.outstanding + r.outstanding,
+        bookedAhead: acc.bookedAhead + r.bookedAhead,
       }),
       {
         earned: 0,
@@ -3909,6 +3947,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         noShows: 0,
         cancelled: 0,
         outstanding: 0,
+        bookedAhead: 0,
       },
     );
 
@@ -3927,15 +3966,36 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         : 0,
     };
 
-    const trend = buildTrend(staff, inputs.treatments as never, inputs.appointments as never, {
-      from: data.from,
-      to: data.to,
-    });
+    const trend = buildTrend(
+      staff,
+      inputs.treatments as never,
+      inputs.appointments as never,
+      { from: data.from, to: data.to },
+      inputs.money,
+    );
 
     const trendViews = {
-      month: buildTrend(staff, yearInputs.treatments as never, yearInputs.appointments as never, windows.month),
-      six: buildTrend(staff, yearInputs.treatments as never, yearInputs.appointments as never, windows.six),
-      year: buildTrend(staff, yearInputs.treatments as never, yearInputs.appointments as never, windows.year),
+      month: buildTrend(
+        staff,
+        yearInputs.treatments as never,
+        yearInputs.appointments as never,
+        windows.month,
+        inputs.money,
+      ),
+      six: buildTrend(
+        staff,
+        yearInputs.treatments as never,
+        yearInputs.appointments as never,
+        windows.six,
+        inputs.money,
+      ),
+      year: buildTrend(
+        staff,
+        yearInputs.treatments as never,
+        yearInputs.appointments as never,
+        windows.year,
+        inputs.money,
+      ),
     };
 
     return {
@@ -3973,11 +4033,19 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       inputs.yearTreatments.filter((t) => t.practitioner_id === me.userId) as never,
       inputs.firstSeen,
       { from: data.from, to: data.to },
+      inputs.money,
     )[0]!;
 
+    // Every money figure is the practitioner's share so the cards reconcile.
     return {
       earnedShare: stats.earnedShare,
       collectedShare: stats.collectedShare,
+      outstandingShare: Math.round((stats.earnedShare - stats.collectedShare) * 100) / 100,
+      bookedAheadShare: Math.round(((stats.bookedAhead * rate) / 100) * 100) / 100,
+      commissionRate: rate,
+      averageShareValue: stats.treatments
+        ? Math.round((stats.earnedShare / stats.treatments) * 100) / 100
+        : 0,
       outstanding: stats.outstanding,
       treatments: stats.treatments,
       patients: stats.patients,

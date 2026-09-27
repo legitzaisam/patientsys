@@ -5,6 +5,9 @@
  * Consultation = catalogue category `Consultation` or a name matching /consult/i.
  */
 
+import { firstToSecond as sharedFirstToSecond, visitsByPatient } from "./metrics/definitions";
+import { trailingMonthsWindow } from "./metrics/windows";
+
 export const INSIGHTS_SOURCES = ["website", "instagram", "referral", "walk_in", "other"] as const;
 export type InsightsSource = (typeof INSIGHTS_SOURCES)[number];
 
@@ -356,7 +359,9 @@ export function buildInsights(input: {
     const booked = hasAnyAppointment(person.patientId);
     const consultAt = firstConsultAt(person.patientId);
     const convertedPerson = hasNonConsultTreatment(person.patientId);
-    if (!booked) {
+    // A consultation on record (even without a booking row) means they are past
+    // "waiting for a first booking"; they belong on the consulted list only.
+    if (!booked && !consultAt) {
       notBooked += 1;
       waiting.push({
         ...person,
@@ -375,7 +380,11 @@ export function buildInsights(input: {
 
   const signUps = cohort.length;
   const bookedCount = signUps - notBooked;
-  const buckets = seriesBuckets(input.from, input.to);
+  // Nothing is known about the future: the chart stops at now.
+  const buckets = seriesBuckets(
+    input.from,
+    new Date(input.to) > now ? now.toISOString() : input.to,
+  );
   const monthly = buckets.map((bucket) => {
     let signUpCount = 0;
     let firstBookings = 0;
@@ -514,6 +523,8 @@ export type BookAppointmentRow = {
 };
 
 export type BookMetrics = {
+  /** The window the visit-based figures cover (ISO). */
+  window: { from: string; to: string };
   totals: {
     total: number;
     active: number;
@@ -536,22 +547,43 @@ export type BookMetrics = {
   monthlyNew: { key: string; label: string; count: number }[];
   treatedMix: { firstTimers: number; returning: number };
   sources: { source: InsightsSource; label: string; count: number }[];
-  composition: { neverTreated: number; treatedOnce: number; multiTreatment: number };
+  /**
+   * Visit-count mix of the patients seen in the window: exactly one visit, two
+   * or more visits (any treatment). `neverTreated` is the whole book's
+   * never-treated count and sits outside the window.
+   */
+  composition: { neverTreated: number; treatedOnce: number; multiTreatment: number; seen: number };
+  /** Shared first-to-second on the 180-day horizon. */
+  secondVisit: {
+    cohort: number;
+    returned: number;
+    rate: number | null;
+    pending: number;
+    horizonDays: number;
+  };
 };
 
 /** List-quality and growth metrics for Insights → Book. Shared by live and demo. */
 export function buildBookMetrics(input: {
   now?: Date;
+  /** Reporting window (ISO). Defaults to the last 12 months ending now. */
+  from?: string;
+  to?: string;
   patients: BookPatientRow[];
   treatments: BookTreatmentRow[];
   appointments: BookAppointmentRow[];
 }): BookMetrics {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
+  const defaultWindow = trailingMonthsWindow(now.getTime(), 12);
+  const windowFromMs = input.from ? new Date(input.from).getTime() : defaultWindow.fromMs;
+  const windowToMs = Math.min(
+    input.to ? new Date(input.to).getTime() : defaultWindow.toMs,
+    now.getTime(),
+  );
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString();
   const ninetyDaysAgo = new Date(now.getTime() - 90 * MS_DAY).toISOString();
-  const yearAgo = new Date(now.getTime() - 365 * MS_DAY).toISOString();
 
   const all = input.patients;
   const active = all.filter((p) => p.status === "active").length;
@@ -577,8 +609,6 @@ export function buildBookMetrics(input: {
   let neverTreated = 0;
   let treatedOnce = 0;
   let multiTreatment = 0;
-  let firstToSecondCohort = 0;
-  let firstToSecondReturned = 0;
   let rebookedCohort = 0;
   let rebooked = 0;
   let firstTimers = 0;
@@ -594,20 +624,24 @@ export function buildBookMetrics(input: {
       dormant++;
       continue;
     }
-    if (visits.length === 1) treatedOnce++;
-    if (new Set(visits.map((visit) => visit.name)).size >= 2) multiTreatment++;
+    // Composition over the patients seen in the window, counting visits (any
+    // treatment), so once + two or more = seen.
+    const seenInWindow = visits.some((visit) => {
+      const ms = new Date(visit.performed_at).getTime();
+      return ms >= windowFromMs && ms <= windowToMs;
+    });
+    if (seenInWindow) {
+      const upToWindowEnd = visits.filter(
+        (visit) => new Date(visit.performed_at).getTime() <= windowToMs,
+      ).length;
+      if (upToWindowEnd === 1) treatedOnce++;
+      else multiTreatment++;
+    }
 
     const last = visits[visits.length - 1]!;
     if (last.performed_at < twelveMonthsAgo) dormant++;
 
     const first = visits[0]!;
-    if (first.performed_at >= yearAgo && first.performed_at <= ninetyDaysAgo) {
-      firstToSecondCohort++;
-      const windowEnd = new Date(new Date(first.performed_at).getTime() + 90 * MS_DAY).toISOString();
-      if (visits.some((visit) => visit.performed_at > first.performed_at && visit.performed_at <= windowEnd)) {
-        firstToSecondReturned++;
-      }
-    }
 
     if (visits.some((visit) => visit.performed_at >= ninetyDaysAgo)) {
       rebookedCohort++;
@@ -652,7 +686,13 @@ export function buildBookMetrics(input: {
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
   const treatedCount = treatedLast12m.size;
+  const secondVisit = sharedFirstToSecond(
+    visitsByPatient(input.treatments),
+    { fromMs: windowFromMs, toMs: windowToMs },
+    now.getTime(),
+  );
   return {
+    window: { from: new Date(windowFromMs).toISOString(), to: new Date(windowToMs).toISOString() },
     totals: {
       total: all.length,
       active,
@@ -662,8 +702,8 @@ export function buildBookMetrics(input: {
       dormantShare: all.length ? dormant / all.length : 0,
     },
     quality: {
-      firstToSecond: firstToSecondCohort ? firstToSecondReturned / firstToSecondCohort : null,
-      firstToSecondCohort,
+      firstToSecond: secondVisit.rate === null ? null : secondVisit.rate / 100,
+      firstToSecondCohort: secondVisit.cohort,
       rebooked: rebookedCohort ? rebooked / rebookedCohort : null,
       rebookedCohort,
       spendPerPatient: treatedCount ? revenueLast12m / treatedCount : null,
@@ -675,6 +715,7 @@ export function buildBookMetrics(input: {
     monthlyNew,
     treatedMix: { firstTimers, returning },
     sources,
-    composition: { neverTreated, treatedOnce, multiTreatment },
+    composition: { neverTreated, treatedOnce, multiTreatment, seen: treatedOnce + multiTreatment },
+    secondVisit,
   };
 }

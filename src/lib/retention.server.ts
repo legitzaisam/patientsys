@@ -1,6 +1,15 @@
 /** Retention maths. Server-only: never import from a component. */
 
 import { deriveRetentionInsights } from "./retention-insights.server";
+import {
+  SECOND_VISIT_HORIZON_DAYS,
+  composition,
+  dueState,
+  firstToSecond,
+  nextDueFor,
+  upcomingBookingSet,
+  type DueState,
+} from "./metrics/definitions";
 
 export type RetentionPatient = {
   id: string;
@@ -29,7 +38,20 @@ export type RetentionAppointment = {
   status: string;
 };
 
-export type RiskLevel = "overdue" | "lapsing" | "lost";
+/**
+ * The chase bands, from the shared due-state definitions: overdue (next due
+ * date passed), due soon (within 30 days), lapsing (no due date, 90–180 days
+ * since last visit), lost (no due date, over 180 days). Booked patients are
+ * never at risk.
+ */
+export type RiskLevel = "overdue" | "due_soon" | "lapsing" | "lost";
+
+const RISK_OF: Partial<Record<DueState, RiskLevel>> = {
+  overdue: "overdue",
+  due_soon: "due_soon",
+  lapsing: "lapsing",
+  lost: "lost",
+};
 
 export type AtRiskRow = {
   patientId: string;
@@ -58,6 +80,8 @@ export type CohortRow = {
   third: number;
   secondRate: number;
   thirdRate: number;
+  /** The cohort is younger than the 180-day horizon: its rate is "so far", not final. */
+  tooEarly: boolean;
 };
 
 export type TreatmentRetentionRow = {
@@ -214,11 +238,16 @@ export function buildRetention(input: {
     windowHistory.set(id, list.filter((t) => new Date(t.performed_at).getTime() <= now));
   }
 
+  // One visit only / repeat: the shared composition (exactly one visit, any
+  // treatment) over the patients seen in the window, up to its end.
+  const mix = composition(seenInWindow, byPatient, now);
+  const everSeen = mix.total;
+  const repeat = mix.twoPlus;
+  const oneVisit = mix.once;
   const visitCounts = [...windowHistory.values()].map((l) => l.length);
-  const everSeen = visitCounts.length;
-  const repeat = visitCounts.filter((n) => n > 1).length;
-  const oneVisit = everSeen - repeat;
   const avgVisits = everSeen ? Math.round((visitCounts.reduce((a, b) => a + b, 0) / everSeen) * 10) / 10 : 0;
+  // First-to-second on the shared 180-day horizon, for the headline and Insights alike.
+  const secondVisit = firstToSecond(byPatient, { fromMs: win.from, toMs: now }, realNow);
 
   const gaps: number[] = [];
   for (const list of windowHistory.values()) {
@@ -267,14 +296,13 @@ export function buildRetention(input: {
   }
 
   // ---- at risk: who needs chasing today, regardless of the period shown.
-  const futureByPatient = new Map<string, string>();
-  for (const a of input.appointments) {
-    if (a.status === "cancelled" || a.status === "no_show") continue;
-    if (new Date(a.starts_at).getTime() < realNow) continue;
-    if (input.practitionerId && a.practitioner_id !== input.practitionerId) continue;
-    const existing = futureByPatient.get(a.patient_id);
-    if (!existing || new Date(a.starts_at) < new Date(existing)) futureByPatient.set(a.patient_id, a.starts_at);
-  }
+  // Booked patients are never at risk; the bands come from the shared dueState.
+  const upcoming = upcomingBookingSet(
+    input.practitionerId
+      ? input.appointments.filter((a) => a.practitioner_id === input.practitionerId)
+      : input.appointments,
+    realNow,
+  );
 
   const contacted = new Map<string, string>();
   for (const o of input.outreach) {
@@ -284,23 +312,21 @@ export function buildRetention(input: {
 
   const atRisk: AtRiskRow[] = [];
   for (const p of patients) {
-    if (p.status === "archived") continue;
     const list = byPatient.get(p.id) ?? [];
     const last = list[list.length - 1];
     if (!last) continue;
-    if (futureByPatient.has(p.id)) continue;
+    const state = dueState({
+      patient: { id: p.id, status: p.status },
+      visits: list,
+      hasUpcoming: upcoming.has(p.id),
+      nowMs: realNow,
+    });
+    const risk = RISK_OF[state];
+    if (!risk) continue;
 
     const lastMs = new Date(last.performed_at).getTime();
     const daysSince = Math.floor((realNow - lastMs) / DAY);
-    const dueRow = [...list].reverse().find((t) => t.next_due_at);
-    const nextDue = dueRow?.next_due_at ?? null;
-    const overdue = !!nextDue && new Date(nextDue).getTime() < realNow;
-
-    let risk: RiskLevel | null = null;
-    if (daysSince > 180) risk = "lost";
-    else if (overdue) risk = "overdue";
-    else if (daysSince >= 90) risk = "lapsing";
-    if (!risk) continue;
+    const nextDue = nextDueFor(list)?.next_due_at ?? null;
 
     atRisk.push({
       patientId: p.id,
@@ -329,26 +355,41 @@ export function buildRetention(input: {
     })
     .reduce((sum, r) => sum + r.lifetimeValue, 0);
 
-  const order: Record<RiskLevel, number> = { overdue: 0, lapsing: 1, lost: 2 };
+  const order: Record<RiskLevel, number> = { overdue: 0, due_soon: 1, lapsing: 2, lost: 3 };
   atRisk.sort((a, b) => order[a.risk] - order[b.risk] || (b.daysSince ?? 0) - (a.daysSince ?? 0));
 
   const counts = {
     overdue: atRisk.filter((r) => r.risk === "overdue").length,
+    dueSoon: atRisk.filter((r) => r.risk === "due_soon").length,
     lapsing: atRisk.filter((r) => r.risk === "lapsing").length,
     lost: atRisk.filter((r) => r.risk === "lost").length,
   };
 
   // ---- cohorts by first visit month, for patients whose first visit fell in
   // the window (a year gives up to 12 cohorts; a month gives one).
-  const cohortMap = new Map<string, { label: string; total: number; second: number; third: number }>();
+  // A second visit counts when it falls within the shared 180-day horizon of
+  // the first; a cohort younger than that horizon is "too early" to judge.
+  const horizonMs = SECOND_VISIT_HORIZON_DAYS * DAY;
+  const cohortMap = new Map<
+    string,
+    { label: string; total: number; second: number; third: number; monthEnd: number }
+  >();
   for (const list of windowHistory.values()) {
     const first = list[0]!;
     const d = new Date(first.performed_at);
     if (d.getTime() < win.from) continue;
     const key = monthKey(d);
-    const row = cohortMap.get(key) ?? { label: monthLabel(d), total: 0, second: 0, third: 0 };
+    const row = cohortMap.get(key) ?? {
+      label: monthLabel(d),
+      total: 0,
+      second: 0,
+      third: 0,
+      monthEnd: new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).getTime(),
+    };
+    const firstMs = d.getTime();
     row.total += 1;
-    if (list.length > 1) row.second += 1;
+    const second = list[1];
+    if (second && new Date(second.performed_at).getTime() - firstMs <= horizonMs) row.second += 1;
     if (list.length > 2) row.third += 1;
     cohortMap.set(key, row);
   }
@@ -362,6 +403,7 @@ export function buildRetention(input: {
       third: r.third,
       secondRate: pct(r.second, r.total),
       thirdRate: pct(r.third, r.total),
+      tooEarly: realNow - r.monthEnd < horizonMs,
     }));
 
   // ---- per treatment / per practitioner repeat rate, for patients seen in
@@ -390,7 +432,12 @@ export function buildRetention(input: {
   // ---- suggested actions: delegated to the insights engine so a smarter
   // (API/model-driven) recommender can slot in without touching this report.
   // Last 12 months only — "dipped this month" compares the current month to the last.
-  const suggestions = deriveRetentionInsights({ counts, monthly: monthly.slice(-12), cohorts });
+  const suggestions = deriveRetentionInsights({
+    counts,
+    monthly: monthly.slice(-12),
+    cohorts,
+    firstToSecondRate: secondVisit.rate,
+  });
 
   return {
     summary: {
@@ -403,7 +450,11 @@ export function buildRetention(input: {
       oneVisitPatients: oneVisit,
       averageVisits: avgVisits,
       averageGapDays: avgGap,
+      /** Shared first-to-second: cohort, returned, rate (null when empty), pending ("too early"). */
+      firstToSecond: secondVisit,
       counts,
+      /** At-risk total: everyone to chase. */
+      atRiskCount: atRisk.length,
       revenueAtRisk,
     },
     monthly,
@@ -429,13 +480,15 @@ export function patientRetention(
   );
   const last = sorted[sorted.length - 1]!;
   const daysSince = Math.floor((now - new Date(last.performed_at).getTime()) / DAY);
-  const dueRow = [...sorted].reverse().find((t) => t.next_due_at);
-  const overdue = !!dueRow?.next_due_at && new Date(dueRow.next_due_at).getTime() < now;
-  let risk: RiskLevel | null = null;
-  if (!hasFutureAppointment) {
-    if (daysSince > 180) risk = "lost";
-    else if (overdue) risk = "overdue";
-    else if (daysSince >= 90) risk = "lapsing";
-  }
-  return { visits: sorted.length, daysSince, risk };
+  const state = dueState({
+    patient: { id: "self", status: "active" },
+    visits: sorted.map((t) => ({
+      patient_id: "self",
+      performed_at: t.performed_at,
+      next_due_at: t.next_due_at,
+    })),
+    hasUpcoming: hasFutureAppointment,
+    nowMs: now,
+  });
+  return { visits: sorted.length, daysSince, risk: RISK_OF[state] ?? null };
 }

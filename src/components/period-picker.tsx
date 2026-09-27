@@ -224,6 +224,21 @@ export function periodHeading(period: PeriodKey | PeriodSelection, now: Date = n
   return periodWindowLabel(current, now);
 }
 
+/**
+ * Sentence fragment naming the window, for card hints and subtitles:
+ * "in the last 12 months", "this month", "in Aug 2026", "on 5 Sep".
+ */
+export function periodPhrase(period: PeriodKey | PeriodSelection, now: Date = new Date()) {
+  const selection = asPeriod(period);
+  const heading = periodHeading(selection, now);
+  if (selection.preset && selection.preset !== "custom") return `in the ${heading.toLowerCase()}`;
+  if (selection.preset === "custom" && selection.from && selection.to) {
+    return selection.from === selection.to ? `on ${heading}` : `over ${heading}`;
+  }
+  if (selection.offset <= 1) return heading.toLowerCase();
+  return selection.key === "day" ? `on ${heading}` : `in ${heading}`;
+}
+
 export function money(value: number) {
   return new Intl.NumberFormat("en-GB", {
     style: "currency",

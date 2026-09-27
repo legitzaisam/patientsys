@@ -135,14 +135,16 @@ export function TreatmentJourneys({
                           />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-semibold text-foreground">{plan.patientName}</p>
-                            <p className="flex items-start gap-1.5 text-2xs text-muted-foreground">
-                              <span className="line-clamp-2 min-w-0 break-words">{plan.name}</span>
-                              {KIND_CHIP[plan.kind ?? ""] ? (
-                                <span className="shrink-0 rounded-full bg-sky-bg px-1.5 py-px text-[10px] font-semibold text-sky-ink shadow-inset-hi">
-                                  {KIND_CHIP[plan.kind ?? ""]}
-                                </span>
-                              ) : null}
+                            {/* Name over up to two lines, kind chip beneath so a narrow
+                                column never squeezes the name into a sliver. */}
+                            <p className="line-clamp-2 break-words text-2xs text-muted-foreground">
+                              {plan.name}
                             </p>
+                            {KIND_CHIP[plan.kind ?? ""] ? (
+                              <span className="mt-0.5 inline-block rounded-full bg-sky-bg px-1.5 py-px text-[10px] font-semibold text-sky-ink shadow-inset-hi">
+                                {KIND_CHIP[plan.kind ?? ""]}
+                              </span>
+                            ) : null}
                             {plan.nextStep ? (
                               <p className="mt-0.5 min-w-0 truncate text-2xs text-ink-2">
                                 Next: {plan.nextStep}

@@ -110,12 +110,28 @@ describe("buildBookMetrics", () => {
     expect(result.totals.dormant).toBe(2);
     expect(result.totals.dormantShare).toBeCloseTo(2 / 3);
     expect(result.composition.neverTreated).toBe(1);
-    expect(result.composition.treatedOnce).toBe(2);
+    // Composition covers the patients seen in the window (last 12 months): "old"
+    // was last seen 13 months ago and sits outside it.
+    expect(result.composition.treatedOnce).toBe(1);
     expect(result.composition.multiTreatment).toBe(0);
+    expect(result.composition.seen).toBe(1);
     expect(result.sources.map((row) => row.source).sort()).toEqual(["referral", "walk_in", "website"]);
   });
 
-  it("measures first-to-second within 90 days for a 90–365 day first-visit cohort", () => {
+  it("counts two visits of the same treatment as 'two or more' (visits, not treatment types)", () => {
+    const result = buildBookMetrics({
+      now,
+      patients: [{ id: "twice", status: "active", created_at: "2025-01-01T00:00:00.000Z" }],
+      treatments: [
+        { patient_id: "twice", name: "Peel", price: 100, performed_at: "2026-06-01T10:00:00.000Z" },
+        { patient_id: "twice", name: "Peel", price: 100, performed_at: "2026-08-01T10:00:00.000Z" },
+      ],
+      appointments: [],
+    });
+    expect(result.composition).toEqual({ neverTreated: 0, treatedOnce: 0, multiTreatment: 1, seen: 1 });
+  });
+
+  it("measures first-to-second within 180 days for first visits in the window that are at least 180 days old", () => {
     const result = buildBookMetrics({
       now,
       patients: [
@@ -125,10 +141,13 @@ describe("buildBookMetrics", () => {
         { id: "too-old", status: "active", created_at: "2024-01-01T00:00:00.000Z" },
       ],
       treatments: [
-        { patient_id: "returned", name: "Consult", price: 50, performed_at: "2026-04-01T10:00:00.000Z" },
-        { patient_id: "returned", name: "Botox", price: 250, performed_at: "2026-05-01T10:00:00.000Z" },
-        { patient_id: "stayed", name: "Consult", price: 50, performed_at: "2026-04-01T10:00:00.000Z" },
+        // First visits in Jan 2026 are more than 180 days before 20 Sep 2026: judged.
+        { patient_id: "returned", name: "Consult", price: 50, performed_at: "2026-01-10T10:00:00.000Z" },
+        { patient_id: "returned", name: "Botox", price: 250, performed_at: "2026-03-01T10:00:00.000Z" },
+        { patient_id: "stayed", name: "Consult", price: 50, performed_at: "2026-01-10T10:00:00.000Z" },
+        // Too recent to judge: counted as pending, not in the cohort.
         { patient_id: "too-recent", name: "Consult", price: 50, performed_at: "2026-08-01T10:00:00.000Z" },
+        // First visit before the 12-month window: not in the cohort.
         { patient_id: "too-old", name: "Consult", price: 50, performed_at: "2025-08-01T10:00:00.000Z" },
       ],
       appointments: [],
@@ -136,6 +155,8 @@ describe("buildBookMetrics", () => {
 
     expect(result.quality.firstToSecondCohort).toBe(2);
     expect(result.quality.firstToSecond).toBe(0.5);
+    expect(result.secondVisit.pending).toBe(1);
+    expect(result.secondVisit.horizonDays).toBe(180);
     expect(result.composition.multiTreatment).toBe(1);
   });
 

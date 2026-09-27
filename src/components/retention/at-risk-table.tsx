@@ -31,6 +31,7 @@ export type AtRiskRow = {
 const FILTERS: { key: RiskLevel | "all"; label: string }[] = [
   { key: "all", label: "All" },
   { key: "overdue", label: "Overdue" },
+  { key: "due_soon", label: "Due soon" },
   { key: "lapsing", label: "Lapsing" },
   { key: "lost", label: "Lost" },
 ];
@@ -47,7 +48,7 @@ type SortColumn =
   | "action";
 type SortDirection = "asc" | "desc";
 
-const RISK_ORDER: Record<RiskLevel, number> = { overdue: 0, lapsing: 1, lost: 2 };
+const RISK_ORDER: Record<RiskLevel, number> = { overdue: 0, due_soon: 1, lapsing: 2, lost: 3 };
 const LIST_UNLOCK_MS = 1800;
 const LIST_MAX_H = "max-h-[calc(45px+7*65px)]";
 
@@ -249,7 +250,7 @@ export function AtRiskTable({
       <div className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="min-w-0 section-title">Patients at risk</h2>
-          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
             <div
               className={cn(
                 "relative h-9 overflow-hidden rounded-full border border-edge bg-glass-2 shadow-inset-hi transition-[width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -274,7 +275,10 @@ export function AtRiskTable({
                 }}
                 placeholder={searching ? "Search by name" : ""}
                 tabIndex={searching ? 0 : -1}
-                className="h-9 w-[180px] rounded-full border-0 bg-transparent pl-[34px] pr-8 shadow-none focus-visible:border-transparent focus-visible:ring-0"
+                className={cn(
+                  "h-9 rounded-full border-0 bg-transparent pl-[34px] pr-8 shadow-none focus-visible:border-transparent focus-visible:ring-0",
+                  searching ? "w-[180px]" : "w-9",
+                )}
                 aria-label="Search patients at risk"
                 aria-expanded={searching}
               />
@@ -300,9 +304,10 @@ export function AtRiskTable({
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
+            {/* Five bands no longer fit a phone: the track scrolls sideways instead of overflowing. */}
             <div
               role="tablist"
-              className="inline-flex h-9 items-center justify-center gap-0.5 rounded-full border border-edge bg-glass-2 p-1 text-ink-2 shadow-inset-hi"
+              className="scroll-x-plain inline-flex h-9 max-w-full items-center justify-start gap-0.5 rounded-full border border-edge bg-glass-2 p-1 text-ink-2 shadow-inset-hi"
             >
               {FILTERS.map((f) => (
                 <button

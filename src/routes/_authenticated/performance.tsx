@@ -9,7 +9,14 @@ import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { CURRENT_YEAR, PeriodPicker, periodRange, previousPeriodRange, type PeriodSelection } from "@/components/period-picker";
+import {
+  CURRENT_YEAR,
+  PeriodPicker,
+  periodPhrase,
+  periodRange,
+  previousPeriodRange,
+  type PeriodSelection,
+} from "@/components/period-picker";
 import { PerformanceTrends } from "@/components/performance-trends";
 import { PerformanceTable } from "@/components/performance/performance-table";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
@@ -60,6 +67,7 @@ function PerformancePage() {
   if (!can(identity, "reports.performance")) return null;
 
   const totals = data?.totals;
+  const phrase = periodPhrase(period);
 
   return (
     <AppShell identity={identity}>
@@ -68,11 +76,15 @@ function PerformancePage() {
           <div className="flex items-center gap-1.5">
             <h1 className="page-title">Performance</h1>
             <InfoHint label="How to read these figures">
-              <span className="font-medium text-foreground">Earned</span> is treatment value delivered.{" "}
-              <span className="font-medium text-foreground">Collected</span> is booking revenue marked paid.{" "}
-              <span className="font-medium text-foreground">Outstanding</span> covers unpaid and deposit-only
-              bookings. <span className="font-medium text-foreground">Retention</span> is repeat patients over the
-              last 12 months.
+              <span className="font-medium text-foreground">Earned</span> is the value of treatments
+              performed in the period.{" "}
+              <span className="font-medium text-foreground">Collected</span> is the part of that
+              already paid; a deposit counts as its share.{" "}
+              <span className="font-medium text-foreground">Outstanding</span> is Earned minus
+              Collected. <span className="font-medium text-foreground">Booked ahead</span> is the
+              value of future bookings and is not counted in any of these.{" "}
+              <span className="font-medium text-foreground">Retention</span> is repeat patients over
+              the last 12 months. Changes compare with the period before this one.
             </InfoHint>
           </div>
           <p className="page-subtitle">
@@ -82,12 +94,38 @@ function PerformancePage() {
         <PeriodPicker value={period} onChange={setPeriod} />
       </div>
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Total label="Earned" value={totals?.earned} hint="Treatments performed" change={data?.changes?.earned} />
-          <Total label="Collected" value={totals?.collected} hint="Bookings marked paid" change={data?.changes?.collected} />
-          <Total label="To practitioners" value={totals?.toPractitioners} hint="Commission payable" change={data?.changes?.toPractitioners} />
-          <Total label="Retained by clinic" value={totals?.toClinic} hint="After commission" change={data?.changes?.toClinic} />
+      <div className="mb-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Total
+          label="Earned"
+          value={totals?.earned}
+          hint={`Treatments performed ${phrase}`}
+          change={data?.changes?.earned}
+        />
+        <Total
+          label="Collected"
+          value={totals?.collected}
+          hint="Paid so far"
+          change={data?.changes?.collected}
+        />
+        <Total
+          label="To practitioners"
+          value={totals?.toPractitioners}
+          hint="Their share of Earned"
+          change={data?.changes?.toPractitioners}
+        />
+        <Total
+          label="Retained by clinic"
+          value={totals?.toClinic}
+          hint="Earned after their share"
+          change={data?.changes?.toClinic}
+        />
       </div>
+      <p className="mb-8 text-xs text-muted-foreground" data-qc="performance-booked-ahead">
+        <span className="font-medium text-foreground">Outstanding</span>{" "}
+        {moneyWhole(totals?.outstanding ?? 0)} still to collect on treatments performed ·{" "}
+        <span className="font-medium text-foreground">Booked ahead</span>{" "}
+        {moneyWhole(totals?.bookedAhead ?? 0)} in future bookings, not counted above.
+      </p>
 
       <PerformanceTrends
         trend={data?.trend}
@@ -100,9 +138,9 @@ function PerformancePage() {
           <div className="flex items-center gap-1.5">
             <h2 className="section-title">Practitioner KPIs</h2>
             <InfoHint label="How to read the practitioner rows">
-              Each row is one practitioner over the selected period. Expand it for cash collected, outstanding
-              balances and activity. Retention is repeat patients over the last 12 months. Commission rates are
-              edited under Team.
+              Each row is one practitioner over the selected period. Expand it for cash collected,
+              outstanding balances and activity. Retention is repeat patients over the last 12
+              months. Commission rates are edited under Team.
             </InfoHint>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -116,7 +154,6 @@ function PerformancePage() {
         {...(data?.clinic ? { clinic: data.clinic } : {})}
         trend={data?.trend}
       />
-
     </AppShell>
   );
 }
@@ -140,11 +177,17 @@ function Total({
   return (
     <Card className="p-5">
       <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{moneyWhole(value ?? 0)}</p>
-      <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-        {delta !== 0 ? <TrendIcon className={`h-3 w-3 ${trendClass}`} /> : null}
-        {hint}
+      <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">
+        {moneyWhole(value ?? 0)}
       </p>
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+      {/* `change` is a £ difference against the period before this one, so it is shown as money. */}
+      {delta !== 0 ? (
+        <p className={`mt-1 flex items-center gap-1 text-xs tabular-nums ${trendClass}`}>
+          <TrendIcon className="h-3 w-3 shrink-0" />
+          {moneyWhole(Math.abs(delta))} {delta > 0 ? "more" : "less"} than the previous period
+        </p>
+      ) : null}
     </Card>
   );
 }

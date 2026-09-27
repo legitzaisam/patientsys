@@ -30,7 +30,7 @@ export type TreatmentLike = {
   patient_id: string;
   performed_at: string;
   next_due_at?: string | null;
-  name?: string;
+  name?: string | null;
   price?: number | null;
   practitioner_id?: string | null;
 };
@@ -38,7 +38,7 @@ export type TreatmentLike = {
 export type AppointmentLike = {
   patient_id: string;
   starts_at: string;
-  status: string;
+  status: string | null;
   practitioner_id?: string | null;
 };
 

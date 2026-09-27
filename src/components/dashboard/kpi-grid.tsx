@@ -75,12 +75,13 @@ export function KpiGrid({
           {
             label: "Retention rate",
             value: `${kpis?.retention ?? 0}%`,
-            hint: `${kpis?.returningInWindow ?? 0} of ${kpis?.activeInWindow ?? 0} seen in 12 months`,
+            hint: `${kpis?.returningInWindow ?? 0} of ${kpis?.activeInWindow ?? 0} seen in the last 12 months`,
             icon: Repeat,
             accent: true,
             to: "/retention",
+            // No change chip: a rolling 12-month rate has no "last month" to
+            // compare with, so the chip read as a swing that was not there.
             chips: [
-              percentChip("retention-change", kpis?.retentionChange ?? 0),
               {
                 id: "revenue-at-risk",
                 label: `£${Number(kpis?.revenueAtRisk ?? 0).toLocaleString()} at risk`,
@@ -124,7 +125,9 @@ export function KpiGrid({
     {
       label: "Treatments due",
       value: kpis?.treatmentsDue ?? "—",
-      hint: ownBook ? "Your patients · next 30 days" : "Whole clinic · next 30 days",
+      hint: ownBook
+        ? "Your patients · overdue or due in 30 days, nothing booked"
+        : "Whole clinic · overdue or due in 30 days, nothing booked",
       icon: Calendar,
       to: "/patients",
       search: { view: "due" },
@@ -149,7 +152,7 @@ export function KpiGrid({
             hint: `${kpis?.treatmentsMonth ?? 0} treatment${(kpis?.treatmentsMonth ?? 0) === 1 ? "" : "s"} delivered`,
             icon: PoundSterling,
             to: "/performance",
-            chips: [percentChip("revenue-change", kpis?.revenueChange ?? 0)],
+            chips: [percentChip("revenue-change", kpis?.revenueChange ?? 0, " vs last month")],
           },
         ]
       : []),

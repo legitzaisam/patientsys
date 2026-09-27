@@ -156,7 +156,6 @@ function PatientsPage() {
   const canSendOffers = can(identity, "comms.send");
   const term = search.trim().toLowerCase();
   const dobTerm = dobSearch.trim();
-  const dueCutoff = Date.now() + 30 * 24 * 60 * 60 * 1000;
   const filtered = (patients ?? []).filter((p: any) => {
     const nameMatch = !term || `${p.first_name} ${p.last_name} ${p.reference ?? ""}`.toLowerCase().includes(term);
     const formattedDob = p.date_of_birth ? new Date(p.date_of_birth).toLocaleDateString("en-GB") : "";
@@ -165,10 +164,9 @@ function PatientsPage() {
     let viewMatch = true;
     if (view === "active") viewMatch = status === "active";
     else if (view === "inactive") viewMatch = status !== "active";
-    else if (view === "due") {
-      const due = p.nextDue?.next_due_at ? new Date(p.nextDue.next_due_at).getTime() : null;
-      viewMatch = due !== null && due <= dueCutoff;
-    }
+    // Decided on the server by the shared definition, so this count is the
+    // dashboard's "Treatments due" (overdue + due soon, nothing booked).
+    else if (view === "due") viewMatch = p.dueState === "overdue" || p.dueState === "due_soon";
     return nameMatch && dobMatch && viewMatch;
   });
 

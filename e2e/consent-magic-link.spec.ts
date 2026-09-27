@@ -25,11 +25,13 @@ test("issuing a consent form queues the signing-link email", async ({ page, cont
   await dialog.getByRole("button", { name: "Send", exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  // The outbox on the record's Contact tab now holds a queued transactional consent email.
+  // The outbox on the record's Contact tab now holds a queued consent email.
+  // The purpose ("transactional") and provider are software-admin diagnostics
+  // and are hidden from clinic staff (see comms.spec.ts for the admin view).
   await page.getByRole("tab", { name: "Contact" }).click();
   const row = page.locator("li", { hasText: "please review and sign" }).first();
   await expect(row.getByText("queued", { exact: true })).toBeVisible();
-  await expect(row.getByText(/transactional/)).toBeVisible();
+  await expect(row.getByText(/transactional/)).toHaveCount(0);
 });
 
 test("the emailed link renders the form and takes a signature", async ({ page }) => {

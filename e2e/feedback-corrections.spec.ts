@@ -45,25 +45,29 @@ test.describe("as the owner", () => {
   test("KPI cards name the clinic and agree with the retention page", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(page.getByText("Total clients")).toBeVisible();
-    await expect(page.getByText("Whole clinic · next 30 days")).toBeVisible();
-    await expect(page.getByText(/% vs last month/)).toBeVisible();
+    await expect(page.getByText("Whole clinic · overdue or due in 30 days, nothing booked")).toBeVisible();
+    await expect(page.getByText(/% vs last month/).first()).toBeVisible();
 
     // The retention KPI and the retention page read from the same source.
-    const kpiHint = (await page.getByText(/of \d+ seen in 12 months/).first().textContent())?.trim();
+    const seen = /\d+ of \d+ seen in the last 12 months/;
+    const kpiHint = (await page.getByText(seen).first().textContent())?.match(seen)?.[0];
+    expect(kpiHint).toBeTruthy();
     await page.goto("/retention");
-    await expect(page.getByText(/of \d+ seen in 12 months/).first()).toHaveText(kpiHint ?? "");
+    await expect(page.getByText(seen).first()).toContainText(kpiHint ?? "");
   });
 
   test("retention: the period picker drives every card and the trend", async ({ page }) => {
     await page.goto("/retention");
-    await expect(page.getByRole("tab", { name: "This year", selected: true })).toBeVisible();
-    await expect(page.getByText("Monthly return rate, this year.")).toBeVisible();
-    await expect(page.getByText(/repeat patients seen this year/)).toBeVisible();
+    // Presets are rolling windows and every card names its window.
+    await expect(page.getByRole("tab", { name: "12 months", selected: true })).toBeVisible();
+    await expect(page.getByText("Monthly return rate in the last 12 months.")).toBeVisible();
+    await expect(page.getByText(/repeat patients seen in the last 12 months/)).toBeVisible();
 
-    await page.getByRole("tab", { name: "This month" }).click();
-    await expect(page.getByText("Weekly return rate, this month.")).toBeVisible();
-    await expect(page.getByText(/repeat patients seen this month/)).toBeVisible();
-    await expect(page.getByText(/Patients who lapsed this month/)).toBeVisible();
+    await page.getByRole("tab", { name: "1 month" }).click();
+    await expect(page.getByRole("tab", { name: "1 month", selected: true })).toBeVisible();
+    await expect(page.getByText("Weekly return rate in the last month.")).toBeVisible();
+    await expect(page.getByText(/repeat patients seen in the last month/)).toBeVisible();
+    await expect(page.getByText(/whose last visit was in the last month/)).toBeVisible();
 
     // The trend card carries no picker of its own any more.
     await expect(page.getByRole("tab", { name: "5 years" })).toHaveCount(0);
@@ -138,12 +142,14 @@ test.describe("as a practitioner", () => {
     await page.goto("/dashboard");
     await expect(page.getByText("Your clients")).toBeVisible();
     await expect(page.getByText(/Clinic total \d+/)).toBeVisible();
-    await expect(page.getByText("Your patients · next 30 days")).toBeVisible();
+    await expect(page.getByText("Your patients · overdue or due in 30 days, nothing booked")).toBeVisible();
 
     // Their retention numbers match their own retention page.
-    const kpiHint = (await page.getByText(/of \d+ seen in 12 months/).first().textContent())?.trim();
+    const seen = /\d+ of \d+ seen in the last 12 months/;
+    const kpiHint = (await page.getByText(seen).first().textContent())?.match(seen)?.[0];
+    expect(kpiHint).toBeTruthy();
     await page.goto("/retention");
-    await expect(page.getByText(/of \d+ seen in 12 months/).first()).toHaveText(kpiHint ?? "");
+    await expect(page.getByText(seen).first()).toContainText(kpiHint ?? "");
   });
 });
 

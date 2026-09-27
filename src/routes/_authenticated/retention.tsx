@@ -17,7 +17,7 @@ import { RouteErrorBoundary } from "@/components/route-error-boundary";
 import {
   CURRENT_YEAR,
   PeriodPicker,
-  periodHeading,
+  periodPhrase,
   periodRange,
   type PeriodSelection,
 } from "@/components/period-picker";
@@ -54,13 +54,21 @@ function Stat({
   const trending = typeof change === "number" && change !== 0;
   const TrendIcon = change && change < 0 ? TrendingDown : TrendingUp;
   return (
-    <Card className="p-5">
+    // min-w-0: a long hint must not widen the grid column on phones; the hint
+    // wraps rather than truncating, so the window it names is always readable.
+    <Card className="min-w-0 p-5">
       <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{value}</p>
-      <p className="mt-1 flex items-center gap-1 overflow-hidden text-xs text-muted-foreground">
-        {trending && <TrendIcon className="h-3 w-3 shrink-0" />}
-        <span className="min-w-0 truncate">{hint}</span>
-        {trending && <span className="shrink-0 tabular-nums">{Math.abs(change)}%</span>}
+      <p className="mt-1 flex items-start gap-1 text-xs text-muted-foreground">
+        {trending && <TrendIcon className="mt-0.5 h-3 w-3 shrink-0" />}
+        <span className="min-w-0 break-words">
+          {hint}
+          {trending && (
+            <span className="ml-1 whitespace-nowrap tabular-nums">
+              · {change > 0 ? "up" : "down"} {Math.abs(change)} pts since the period began
+            </span>
+          )}
+        </span>
       </p>
     </Card>
   );
@@ -110,12 +118,10 @@ function RetentionPage() {
   /** Matches the server: only practitioners see a book scoped to themselves. */
   const ownBookOnly = !identity.isManager && identity.roles.includes("practitioner");
   const s = data?.summary;
-  const heading = periodHeading(period);
-  const periodPhrase = period.offset === 0 && period.key !== "day" ? heading.toLowerCase() : heading;
+  // Every card names its window, so "last 12 months" and "this month" are never mixed up.
+  const phrase = periodPhrase(period);
   const trendSubtitle =
-    period.key === "year"
-      ? `Monthly return rate, ${periodPhrase}.`
-      : `Weekly return rate, ${periodPhrase}.`;
+    period.key === "year" ? `Monthly return rate ${phrase}.` : `Weekly return rate ${phrase}.`;
 
   return (
     <AppShell identity={identity}>
@@ -135,19 +141,23 @@ function RetentionPage() {
         <Stat
           label="Retention rate"
           value={`${s?.rate ?? 0}%`}
-          hint={`${s?.returningInWindow ?? 0} of ${s?.activeInWindow ?? 0} seen in 12 months`}
+          hint={`${s?.returningInWindow ?? 0} of ${s?.activeInWindow ?? 0} seen in the last 12 months`}
           change={s?.change ?? 0}
         />
         <Stat
           label="One visit only"
           value={`${s?.oneVisitPatients ?? 0}`}
-          hint={`${s?.repeatPatients ?? 0} repeat patients seen ${periodPhrase}`}
+          hint={`${s?.repeatPatients ?? 0} repeat patients seen ${phrase}`}
         />
-        <Stat label="Average visits" value={`${s?.averageVisits ?? 0}`} hint={`Per patient seen ${periodPhrase}`} />
+        <Stat
+          label="Average visits"
+          value={`${s?.averageVisits ?? 0}`}
+          hint={`Per patient seen ${phrase}`}
+        />
         <Stat
           label="Revenue at risk"
           value={moneyWhole(s?.revenueAtRisk ?? 0)}
-          hint={`Lifetime spend of the at-risk patients whose last visit was ${periodPhrase}`}
+          hint={`Lifetime spend of the at-risk patients whose last visit was ${phrase}`}
         />
       </div>
 
@@ -163,7 +173,9 @@ function RetentionPage() {
           onFilterChange={setFilter}
           canAssign={!!identity.isManager}
           pendingId={contact.isPending ? (contact.variables as any)?.data?.patient_id : null}
-          onContacted={(patientId) => contact.mutate({ data: { patient_id: patientId, channel: "manual" } })}
+          onContacted={(patientId) =>
+            contact.mutate({ data: { patient_id: patientId, channel: "manual" } })
+          }
         />
       </div>
 

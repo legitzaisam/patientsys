@@ -68,7 +68,11 @@ export function PatientMetrics() {
     {
       label: "First-to-second",
       value: pct(data?.quality.firstToSecond),
-      hint: "Second visit within 90 days of the first",
+      // Shared definition: first visits in the window that are at least six
+      // months old, and whether a second visit followed within six months.
+      hint: data?.secondVisit
+        ? `${data.secondVisit.returned} of ${data.secondVisit.cohort} first visits, last 12 months · second within 6 months`
+        : "Second visit within 6 months of the first, last 12 months",
       icon: Repeat2,
       target: "book-mix",
     },
@@ -123,22 +127,32 @@ export function PatientMetrics() {
       <Card id="book-composition" className="scroll-mt-20 p-5">
         <h2 className="section-title">Composition</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Names with no visit, one visit, or two or more treatment types.
+          Of the {data?.composition.seen ?? 0} patients seen in the last 12 months, how many have
+          had one visit and how many two or more, any treatment. Never treated counts the whole
+          list.
         </p>
         <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <CompositionItem label="Never treated" value={data?.composition.neverTreated ?? 0} />
           <CompositionItem label="Treated once" value={data?.composition.treatedOnce ?? 0} />
-          <CompositionItem label="Two or more treatments" value={data?.composition.multiTreatment ?? 0} />
+          <CompositionItem
+            label="Two or more visits"
+            value={data?.composition.multiTreatment ?? 0}
+          />
         </ul>
       </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card id="book-new-patients" className="scroll-mt-20 p-5">
           <h2 className="section-title">New patients</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Records created per month, last 12 months.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Records created per month, last 12 months.
+          </p>
           <div className="mt-4 h-56">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data?.monthlyNew ?? []} margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
+              <BarChart
+                data={data?.monthlyNew ?? []}
+                margin={{ top: 4, right: 4, bottom: 0, left: -22 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--edge-2)" vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
                 <YAxis tickLine={false} axisLine={false} fontSize={11} allowDecimals={false} />
@@ -151,7 +165,9 @@ export function PatientMetrics() {
 
         <Card id="book-status" className="scroll-mt-20 p-5">
           <h2 className="section-title">Active vs inactive</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Current status split across the whole book.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Current status split across the whole book.
+          </p>
           <div className="mt-4 flex h-56 items-center gap-6">
             <div className="h-full flex-1">
               <ResponsiveContainer width="100%" height="100%">
@@ -175,11 +191,13 @@ export function PatientMetrics() {
             <ul className="shrink-0 space-y-2 pr-2 text-sm">
               <li className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: ACCENT }} />
-                Active · <span className="font-semibold tabular-nums">{data?.totals.active ?? 0}</span>
+                Active ·{" "}
+                <span className="font-semibold tabular-nums">{data?.totals.active ?? 0}</span>
               </li>
               <li className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: MUTED }} />
-                Inactive · <span className="font-semibold tabular-nums">{data?.totals.inactive ?? 0}</span>
+                Inactive ·{" "}
+                <span className="font-semibold tabular-nums">{data?.totals.inactive ?? 0}</span>
               </li>
             </ul>
           </div>
@@ -215,14 +233,18 @@ export function PatientMetrics() {
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: ACCENT }} />
                 New · <span className="font-semibold tabular-nums">{mixData[0]!.value}</span>
                 {mixTotal > 0 && (
-                  <span className="text-muted-foreground">({Math.round((mixData[0]!.value / mixTotal) * 100)}%)</span>
+                  <span className="text-muted-foreground">
+                    ({Math.round((mixData[0]!.value / mixTotal) * 100)}%)
+                  </span>
                 )}
               </li>
               <li className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: MUTED }} />
                 Returning · <span className="font-semibold tabular-nums">{mixData[1]!.value}</span>
                 {mixTotal > 0 && (
-                  <span className="text-muted-foreground">({Math.round((mixData[1]!.value / mixTotal) * 100)}%)</span>
+                  <span className="text-muted-foreground">
+                    ({Math.round((mixData[1]!.value / mixTotal) * 100)}%)
+                  </span>
                 )}
               </li>
             </ul>
@@ -246,11 +268,15 @@ export function PatientMetrics() {
                     />
                   </div>
                 </div>
-                <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{row.count}</span>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                  {row.count}
+                </span>
               </li>
             ))}
             {(!data || data.sources.length === 0) && (
-              <li className="py-6 text-center text-sm text-muted-foreground">No source recorded on the list yet.</li>
+              <li className="py-6 text-center text-sm text-muted-foreground">
+                No source recorded on the list yet.
+              </li>
             )}
           </ul>
         </Card>

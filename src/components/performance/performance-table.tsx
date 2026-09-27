@@ -22,6 +22,7 @@ export type PerformanceRow = {
   attendance: number;
   noShows: number;
   outstanding: number;
+  bookedAhead?: number;
   patients: number;
   newPatients: number;
   retention: number;
@@ -152,7 +153,8 @@ function ExpandRow({
               </p>
             </div>
             <Link
-              to="/team/$id" search={{}}
+              to="/team/$id"
+              search={{}}
               params={{ id: row.userId }}
               onClick={(e) => e.stopPropagation()}
               className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-edge bg-background/70 px-3 py-1.5 text-2xs font-semibold text-foreground shadow-inset-hi transition-colors hover:bg-[rgba(47,63,102,0.08)]"
@@ -162,14 +164,23 @@ function ExpandRow({
             </Link>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <MetricTile label="Collected" value={moneyWhole(row.collected)} hint="Marked paid" />
-            <MetricTile label="Clinic keeps" value={moneyWhole(row.clinicEarnedShare)} hint="After their share" />
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <MetricTile label="Collected" value={moneyWhole(row.collected)} hint="Paid so far" />
+            <MetricTile
+              label="Clinic keeps"
+              value={moneyWhole(row.clinicEarnedShare)}
+              hint="After their share"
+            />
             <MetricTile
               label="Outstanding"
               value={hasOutstanding ? moneyWhole(row.outstanding) : "—"}
-              hint={hasOutstanding ? "Unpaid or deposit only" : "All settled"}
+              hint={hasOutstanding ? "Earned, not yet paid" : "All settled"}
               tone={hasOutstanding ? "danger" : "default"}
+            />
+            <MetricTile
+              label="Booked ahead"
+              value={moneyWhole(row.bookedAhead ?? 0)}
+              hint="Future bookings"
             />
             <MetricTile label="Appointments" value={String(row.appointments)} />
             <MetricTile label="New patients" value={String(row.newPatients)} />

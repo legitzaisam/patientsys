@@ -1,6 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/lib/auth/session-middleware.server";
 import { clinicDayDiff, clinicDayKey, clinicDayRange } from "@/lib/clinic-time";
+import {
+  dueState,
+  nextDueFor,
+  upcomingBookingSet,
+  visitsByPatient,
+} from "@/lib/metrics/definitions";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import {
@@ -326,7 +332,6 @@ export const getDashboard = createServerFn({ method: "GET" })
     const identity = await authorize(context as Ctx, "getDashboard");
     const supabase = (context as Ctx).supabase;
     const today = new Date();
-    const in30 = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
     const weekAhead = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
     const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString();
@@ -342,7 +347,6 @@ export const getDashboard = createServerFn({ method: "GET" })
 
     const [
       patients,
-      dueRows,
       monthTreatments,
       pendingDocs,
       historyFlags,
@@ -352,15 +356,10 @@ export const getDashboard = createServerFn({ method: "GET" })
       prevMonthPatients,
       unreadMessages,
       dueDatesRaw,
+      upcomingApptsRaw,
+      clinicRow,
     ] = await Promise.all([
       supabase.from("patients").select("id, status, created_at"),
-      supabase
-        .from("treatments")
-        .select("id, name, next_due_at, patient_id, practitioner_id, patients(first_name, last_name)")
-        .not("next_due_at", "is", null)
-        .lte("next_due_at", in30)
-        .order("next_due_at", { ascending: true })
-        .limit(12),
       supabase.from("treatments").select("id, price, patient_id, practitioner_id, performed_at").gte("performed_at", monthStart),
       supabase
         .from("documents")
@@ -405,8 +404,21 @@ export const getDashboard = createServerFn({ method: "GET" })
         .limit(10),
       supabase
         .from("treatments")
-        .select("patient_id, performed_at, next_due_at, practitioner_id")
+        .select(
+          "id, name, patient_id, performed_at, next_due_at, practitioner_id, patients(first_name, last_name)",
+        )
         .not("next_due_at", "is", null),
+      // Live bookings from now on: a booked patient is never due or to chase.
+      supabase
+        .from("appointments")
+        .select("patient_id, starts_at, status")
+        .gte("starts_at", today.toISOString())
+        .neq("status", "cancelled"),
+      supabase
+        .from("clinics")
+        .select("deposit_lead_days")
+        .eq("id", clinicIdOf(context))
+        .maybeSingle(),
     ]);
 
     // Journeys + Safe-to-proceed. Fetched after the main fan-out so the three
@@ -431,26 +443,46 @@ export const getDashboard = createServerFn({ method: "GET" })
     ]);
 
     let all = patients.data ?? [];
-    let due = (dueRows.data ?? []) as any[];
     let monthTreats = (monthTreatments.data ?? []) as any[];
     let prevMonthTreats = (prevMonthTreatments.data ?? []) as any[];
     let todayAppts = (todayAppointmentsRaw.data ?? []) as any[];
     await holdArrivedUntilConsent(supabase, todayAppts);
     let unpaidDeposits = (unpaidDepositRaw.data ?? []) as any[];
-    // A patient's next due date is the one on their most recent treatment that
-    // carries one — the same rule the retention page and the patient list use.
-    // Counting every historical row with a stale next_due_at inflated this
-    // card into the thousands while retention reported a few dozen.
-    const latestDueByPatient = new Map<string, { next_due_at: string; performed_at: string; practitioner_id: string | null }>();
-    for (const t of (dueDatesRaw.data ?? []) as any[]) {
-      const cur = latestDueByPatient.get(t.patient_id);
-      if (!cur || t.performed_at > cur.performed_at) latestDueByPatient.set(t.patient_id, t);
+    // Shared definition (metrics/definitions): a patient's next due date is
+    // the one on their most recent treatment carrying one, and only an active
+    // patient with no upcoming booking can be overdue or due soon. The same
+    // rule drives the retention page, the patient list and check:metrics.
+    const todayISO = clinicDayKey(today);
+    type DueRow = {
+      id: string;
+      name: string;
+      patient_id: string;
+      performed_at: string;
+      next_due_at: string;
+      practitioner_id: string | null;
+      patients: { first_name: string | null; last_name: string | null } | null;
+    };
+    const statusById = new Map(all.map((p: { id: string; status: string }) => [p.id, p.status]));
+    const upcomingSet = upcomingBookingSet(
+      (upcomingApptsRaw.data ?? []) as { patient_id: string; starts_at: string; status: string }[],
+      today.getTime(),
+    );
+    let dueDates: (DueRow & { state: "overdue" | "due_soon" })[] = [];
+    for (const [pid, visits] of visitsByPatient((dueDatesRaw.data ?? []) as DueRow[])) {
+      const state = dueState({
+        patient: { id: pid, status: String(statusById.get(pid) ?? "archived") },
+        visits,
+        hasUpcoming: upcomingSet.has(pid),
+        nowMs: today.getTime(),
+        todayKey: todayISO,
+      });
+      if (state !== "overdue" && state !== "due_soon") continue;
+      dueDates.push({ ...nextDueFor(visits)!, state });
     }
-    let dueDates = [...latestDueByPatient.values()].filter((t) => t.next_due_at <= in30);
+    dueDates.sort((a, b) => String(a.next_due_at).localeCompare(String(b.next_due_at)));
 
     const scoped = scopeFor(identity, "getDashboard");
     if (scoped) {
-      due = due.filter((t: any) => t.practitioner_id === scoped || !t.practitioner_id);
       dueDates = dueDates.filter((t) => t.practitioner_id === scoped || !t.practitioner_id);
       monthTreats = monthTreats.filter((t: any) => t.practitioner_id === scoped);
       prevMonthTreats = prevMonthTreats.filter((t: any) => t.practitioner_id === scoped);
@@ -507,9 +539,10 @@ export const getDashboard = createServerFn({ method: "GET" })
     const clientsPrev = ownClients === null ? clinicClientsPrev : ownClientsPrev;
     const clientsChange = clientsPrev ? Math.round(((clientsNow - clientsPrev) / clientsPrev) * 100) : 0;
 
-    const todayISO = clinicDayKey(today);
-    const treatmentsOverdue = dueDates.filter((t) => t.next_due_at < todayISO).length;
-    const treatmentsDueSoon = dueDates.filter((t) => t.next_due_at >= todayISO).length;
+    const treatmentsOverdue = dueDates.filter((t) => t.state === "overdue").length;
+    const treatmentsDueSoon = dueDates.filter((t) => t.state === "due_soon").length;
+    // The attention list shows the soonest dozen of the same population.
+    const due = dueDates.slice(0, 12);
 
     const revenue = monthTreats.reduce((sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0), 0);
     const prevRevenue = prevMonthTreats.reduce((sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0), 0);
@@ -563,9 +596,10 @@ export const getDashboard = createServerFn({ method: "GET" })
       }
     }
 
-    // Deposits must be paid at least 3 clinic days before the appointment.
-    // Inside that window (≤3 days) → urgent chase; further out → this week.
-    const DEPOSIT_LEAD_DAYS = 3;
+    // Deposits must be paid at least `deposit_lead_days` clinic days before the
+    // appointment (Settings → Payments and deposits). Inside that window →
+    // urgent chase; further out → this week.
+    const DEPOSIT_LEAD_DAYS = Number(clinicRow.data?.deposit_lead_days ?? 3);
     for (const a of unpaidDeposits) {
       const apptDay = clinicDayKey(new Date(a.starts_at));
       const daysUntil = clinicDayDiff(todayISO, apptDay);
@@ -721,6 +755,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       safeToProceed,
       safeReadyCount,
       due,
+      depositLeadDays: DEPOSIT_LEAD_DAYS,
       pendingDocuments: pendingDocs.data ?? [],
       historyFlags: historyFlags.data ?? [],
       role: {
@@ -772,13 +807,36 @@ export const listPatients = createServerFn({ method: "GET" })
       ]);
 
     const nameOf = new Map((staffProfiles ?? []).map((s: any) => [s.id, s.full_name as string]));
-    const todayKey = clinicDayKey(new Date());
+    const now = new Date();
+    const todayKey = clinicDayKey(now);
+    // Shared definitions (metrics/definitions): visits oldest first, next due
+    // from the most recent treatment carrying a date, and one due state per
+    // patient so the list, the dashboard and retention agree.
+    type VisitRow = {
+      patient_id: string;
+      name: string;
+      performed_at: string;
+      next_due_at: string | null;
+      practitioner_id: string | null;
+    };
+    const visits = visitsByPatient((treatments ?? []) as VisitRow[]);
+    const upcomingSet = upcomingBookingSet(
+      (upcoming ?? []) as { patient_id: string; starts_at: string; status: string }[],
+      now.getTime(),
+    );
 
     return (data ?? []).map((p: Record<string, unknown>) => {
-      const mine = (treatments ?? []).filter((t: { patient_id: string }) => t.patient_id === p["id"]);
-      const last = mine.sort((a: any, b: any) => (a.performed_at < b.performed_at ? 1 : -1))[0];
-      // Most recent treatment carrying a due date (mine is sorted newest first).
-      const due = mine.find((t: any) => t.next_due_at);
+      const id = p["id"] as string;
+      const mine = [...(visits.get(id) ?? [])].reverse();
+      const last = mine[0];
+      const due = nextDueFor(mine);
+      const state = dueState({
+        patient: { id, status: String(p["status"] ?? "active") },
+        visits: visits.get(id),
+        hasUpcoming: upcomingSet.has(id),
+        nowMs: now.getTime(),
+        todayKey,
+      });
       const outstanding = (docs ?? []).filter(
         (d: any) => d.patient_id === p["id"] && (d.status === "sent" || d.status === "viewed"),
       ).length;
@@ -808,8 +866,8 @@ export const listPatients = createServerFn({ method: "GET" })
           kind: "paperwork",
         });
       }
-      if (due?.next_due_at && due.next_due_at < todayKey) {
-        openTasks.push({ id: `due-${p["id"]}`, label: `${due.name} overdue`, kind: "treatment_due" });
+      if (state === "overdue" && due) {
+        openTasks.push({ id: `due-${id}`, label: `${due.name} overdue`, kind: "treatment_due" });
       }
 
       return {
@@ -820,6 +878,9 @@ export const listPatients = createServerFn({ method: "GET" })
         outstandingDocuments: outstanding,
         practitioners,
         openTasks,
+        // Drives the "Treatments due" (overdue + due_soon) and "No upcoming
+        // treatment" (anything but booked) filters on the list.
+        dueState: state,
       };
     });
   });
@@ -5051,43 +5112,64 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       { data: firstSeen },
       { data: yearTrendTreatments },
       { data: yearTrendAppointments },
+      { data: futureAppointments },
+      { data: clinicRow },
     ] =
       await Promise.all([
         supabaseAdmin.from("profiles").select("id, full_name, job_title, commission_rate"),
         supabaseAdmin.from("user_roles").select("user_id, role"),
         supabaseAdmin
           .from("treatments")
-          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot")
+          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id")
           .gte("performed_at", data.from)
           .lte("performed_at", data.to),
         supabaseAdmin
           .from("appointments")
-          .select("practitioner_id, price, payment_status, status, starts_at")
+          .select("id, practitioner_id, price, payment_status, status, starts_at")
           .gte("starts_at", data.from)
           .lte("starts_at", data.to),
         supabaseAdmin
           .from("treatments")
-          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot")
+          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id")
           .gte("performed_at", previous.from)
           .lte("performed_at", previous.to),
         supabaseAdmin
           .from("appointments")
-          .select("practitioner_id, price, payment_status, status, starts_at")
+          .select("id, practitioner_id, price, payment_status, status, starts_at")
           .gte("starts_at", previous.from)
           .lte("starts_at", previous.to),
         supabaseAdmin.from("treatments").select("practitioner_id, patient_id").gte("performed_at", yearAgo),
         supabaseAdmin.from("patients").select("id, created_at"),
         supabaseAdmin
           .from("treatments")
-          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot")
+          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id")
           .gte("performed_at", windows.year.from)
           .lte("performed_at", windows.year.to),
         supabaseAdmin
           .from("appointments")
-          .select("practitioner_id, price, payment_status, status, starts_at")
+          .select("id, practitioner_id, price, payment_status, status, starts_at")
           .gte("starts_at", windows.year.from)
           .lte("starts_at", windows.year.to),
+        // Booked ahead: live bookings from now on, whatever the period.
+        supabaseAdmin
+          .from("appointments")
+          .select("id, practitioner_id, price, payment_status, status, starts_at")
+          .gte("starts_at", new Date().toISOString())
+          .neq("status", "cancelled"),
+        supabaseAdmin.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
       ]);
+    const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
+    // Period bookings plus the live future ones, once each.
+    const withFuture = (rows: unknown[] | null) => {
+      const seen = new Set<string>();
+      const out: unknown[] = [];
+      for (const a of [...(rows ?? []), ...(futureAppointments ?? [])] as { id: string }[]) {
+        if (seen.has(a.id)) continue;
+        seen.add(a.id);
+        out.push(a);
+      }
+      return out;
+    };
 
     const staffIds = (roles ?? [])
       .filter((r) => r.role === "owner" || r.role === "practitioner")
@@ -5109,10 +5191,11 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
     const rows = buildStats(
       staff,
       (treatments ?? []) as never,
-      (appointments ?? []) as never,
+      withFuture(appointments) as never,
       (yearTreatments ?? []) as never,
       patientFirstSeen,
       { from: data.from, to: data.to },
+      money,
     ).sort((a, b) => b.earned - a.earned);
 
     const prevRows = buildStats(
@@ -5122,6 +5205,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       (yearTreatments ?? []) as never,
       patientFirstSeen,
       previous,
+      money,
     );
 
     const totals = rows.reduce(
@@ -5138,6 +5222,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         noShows: acc.noShows + r.noShows,
         cancelled: acc.cancelled + r.cancelled,
         outstanding: acc.outstanding + r.outstanding,
+        bookedAhead: acc.bookedAhead + r.bookedAhead,
       }),
       {
         earned: 0,
@@ -5152,6 +5237,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         noShows: 0,
         cancelled: 0,
         outstanding: 0,
+        bookedAhead: 0,
       },
     );
 
@@ -5171,14 +5257,21 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       (treatments ?? []) as never,
       (appointments ?? []) as never,
       { from: data.from, to: data.to },
+      money,
     );
 
     const trendSourceTreatments = (yearTrendTreatments ?? []) as never;
     const trendSourceAppointments = (yearTrendAppointments ?? []) as never;
     const trendViews = {
-      month: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.month),
-      six: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.six),
-      year: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.year),
+      month: buildTrend(
+        staff,
+        trendSourceTreatments,
+        trendSourceAppointments,
+        windows.month,
+        money,
+      ),
+      six: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.six, money),
+      year: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.year, money),
     };
 
     return {
@@ -5203,7 +5296,14 @@ export const getMyEarnings = createServerFn({ method: "POST" })
     const { buildStats } = await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
 
-    const [{ data: profile }, { data: treatments }, { data: appointments }, { data: yearTreatments }, { data: firstSeen }] =
+    const [
+      { data: profile },
+      { data: treatments },
+      { data: appointments },
+      { data: yearTreatments },
+      { data: firstSeen },
+      { data: clinicRow },
+    ] =
       await Promise.all([
         supabaseAdmin
           .from("profiles")
@@ -5213,7 +5313,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         supabaseAdmin
           .from("treatments")
           .select(
-            "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, patients(first_name, last_name)",
+            "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id, patients(first_name, last_name)",
           )
           .eq("practitioner_id", ctx.userId)
           .gte("performed_at", data.from)
@@ -5221,19 +5321,20 @@ export const getMyEarnings = createServerFn({ method: "POST" })
           .order("performed_at", { ascending: false }),
         supabaseAdmin
           .from("appointments")
-          .select("practitioner_id, price, payment_status, status, starts_at")
+          .select("id, practitioner_id, price, payment_status, status, starts_at")
           .eq("practitioner_id", ctx.userId)
-          .gte("starts_at", data.from)
-          .lte("starts_at", data.to),
+          .gte("starts_at", data.from),
         supabaseAdmin
           .from("treatments")
           .select("practitioner_id, patient_id")
           .eq("practitioner_id", ctx.userId)
           .gte("performed_at", yearAgo),
         supabaseAdmin.from("patients").select("id, created_at"),
+        supabaseAdmin.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
       ]);
 
     const rate = Number(profile?.commission_rate ?? 0);
+    const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
     const stats = buildStats(
       [
         {
@@ -5250,12 +5351,20 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         (firstSeen ?? []).map((p: { id: string; created_at: string }) => [p.id, p.created_at]),
       ),
       { from: data.from, to: data.to },
+      money,
     )[0]!;
 
     // Only the caller's own figures leave the server — no clinic revenue, no rate.
+    // Every money figure is the practitioner's share so the cards reconcile.
     return {
       earnedShare: stats.earnedShare,
       collectedShare: stats.collectedShare,
+      outstandingShare: Math.round((stats.earnedShare - stats.collectedShare) * 100) / 100,
+      bookedAheadShare: Math.round(((stats.bookedAhead * rate) / 100) * 100) / 100,
+      commissionRate: rate,
+      averageShareValue: stats.treatments
+        ? Math.round((stats.earnedShare / stats.treatments) * 100) / 100
+        : 0,
       outstanding: stats.outstanding,
       treatments: stats.treatments,
       patients: stats.patients,
