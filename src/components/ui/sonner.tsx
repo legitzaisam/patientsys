@@ -131,7 +131,7 @@ function useToastPinning() {
       if (!target) return;
 
       // Our in-toast close control handles dismiss itself.
-      if (target.closest("[data-aetheria-quick-reply-close], [data-aetheria-quick-reply-minimize]")) return;
+      if (target.closest("[data-aetheria-quick-reply-close]")) return;
 
       const toastEl = target.closest("[data-sonner-toast]") as HTMLElement | null;
       if (!toastEl || toastEl.getAttribute("data-removed") === "true") return;

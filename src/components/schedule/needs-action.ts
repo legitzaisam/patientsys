@@ -1,12 +1,11 @@
 /**
  * Pure helpers behind the diary's "Needs action" control: which menu type an
- * appointment falls under, counts for the rows in view, hint copy and card
- * classes. Kept apart from the component so fast refresh stays happy.
+ * appointment falls under, counts for the rows in view, and card classes.
+ * Kept apart from the component so fast refresh stays happy.
  */
 import { useMemo } from "react";
 import {
   appointmentFlags,
-  FLAG_LABEL,
   type AppointmentFlagInput,
   type FlagKey,
   type NeedsActionType,
@@ -79,22 +78,6 @@ export function useNeedsAction(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, opts.nowMs, opts.depositLeadDays],
   );
-}
-
-/** The one-line hint under the planner header. */
-export function needsActionHint(
-  value: NeedsActionSelection,
-  counts: NeedsActionSummary["counts"],
-  scope: "today" | "this week",
-): string {
-  if (!value) {
-    return counts.any === 0
-      ? `Nothing ${scope} needs action.`
-      : `${counts.any} appointment${counts.any === 1 ? "" : "s"} ${scope} need${counts.any === 1 ? "s" : ""} something. Click to highlight ${counts.any === 1 ? "it" : "them"}.`;
-  }
-  const n = value === "any" ? counts.any : counts[value];
-  const what = value === "any" ? "appointments that need action" : FLAG_LABEL[value].toLowerCase();
-  return `Highlighting ${n} ${what}. Everything else is faded but still in place.`;
 }
 
 /** Card classes while a filter is on: matches ring, the rest fade in place. */

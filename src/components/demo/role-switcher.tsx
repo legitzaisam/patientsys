@@ -1,5 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -17,25 +15,30 @@ function readCookie() {
   return ROLES.some((r) => r.value === value) ? value! : "owner";
 }
 
+/** Where a full reload should land so the new persona is not left on a page they cannot open. */
+function destinationFor(next: string) {
+  const path = window.location.pathname;
+  const here = `${path}${window.location.search}${window.location.hash}`;
+  if (next === "patient" && !path.startsWith("/my-record")) return "/my-record";
+  const leavingPortal = path === "/my-record" || path.startsWith("/my-record/");
+  const leavingAccess = path === "/access" && next !== "owner" && next !== "admin";
+  if (next !== "patient" && (leavingPortal || leavingAccess)) return "/dashboard";
+  return here;
+}
+
 /** Demo-only persona switcher so every role's view can be captured without signing in. */
 export function DemoRoleSwitcher() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const [role, setRole] = useState("owner");
   const [open, setOpen] = useState(false);
 
   useEffect(() => setRole(readCookie()), []);
 
-  async function choose(next: string) {
+  function choose(next: string) {
     document.cookie = `demo_role=${next}; path=/; max-age=86400; samesite=lax`;
-    setRole(next);
-    setOpen(false);
-    queryClient.clear();
-    await router.invalidate();
-    if (next === "patient") router.navigate({ to: "/my-record" });
-    else if (window.location.pathname === "/my-record" || (window.location.pathname === "/access" && next !== "admin")) {
-      router.navigate({ to: "/dashboard" });
-    }
+    const destination = destinationFor(next);
+    const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (destination === here) window.location.reload();
+    else window.location.assign(destination);
   }
 
   const current = ROLES.find((r) => r.value === role) ?? ROLES[0];

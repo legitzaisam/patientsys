@@ -996,14 +996,6 @@
       0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent) !important;
   }
 
-  [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast:has([data-expanded="true"]) {
-    width: 23rem !important;
-    padding-bottom: 0.625rem !important;
-    background: rgba(255, 255, 255, 0.95) !important;
-    backdrop-filter: blur(var(--blur-glass)) saturate(1.5) !important;
-    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.5) !important;
-  }
-
   [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast [data-content],
   [data-sonner-toast].aetheria-toast.aetheria-quick-reply-toast [data-title] {
     display: contents;
@@ -1018,11 +1010,6 @@
     box-shadow:
       var(--shadow-popover),
       0 0 0 1px color-mix(in srgb, var(--accent-line) 55%, transparent) !important;
-  }
-
-  .quick-reply-thread {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--ink-3) 35%, transparent) transparent;
   }
 
   [data-sonner-toast][data-type="success"].aetheria-toast {

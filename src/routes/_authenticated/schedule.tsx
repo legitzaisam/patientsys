@@ -41,7 +41,6 @@ import { AppShell } from "@/components/app-shell";
 import { ColourKey } from "@/components/schedule/colour-key";
 import {
   needsActionCardClass,
-  needsActionHint,
   useNeedsAction,
   type NeedsActionSelection,
   type NeedsActionType,
@@ -1439,7 +1438,10 @@ function PractitionerFilter({
   selected: string[];
   onSelect: (v: string[]) => void;
 }) {
+  const { data: identity } = useIdentity();
+  const selfId = identity?.userId;
   const allSelected = selected.includes("all");
+  const viewingOwn = Boolean(selfId && selected.length === 1 && selected[0] === selfId);
 
   const toggle = (id: string) => {
     if (id === "all") {
@@ -1457,9 +1459,11 @@ function PractitionerFilter({
 
   const label = allSelected
     ? "All practitioners"
-    : selected.length === 1
-      ? (practitioners.find((p) => p.id === selected[0])?.full_name ?? "Practitioner")
-      : `${selected.length} selected`;
+    : viewingOwn
+      ? "My appointments"
+      : selected.length === 1
+        ? (practitioners.find((p) => p.id === selected[0])?.full_name ?? "Practitioner")
+        : `${selected.length} selected`;
 
   return (
     <DropdownMenu>
@@ -1491,7 +1495,7 @@ function PractitionerFilter({
             }}
           >
             <Checkbox checked={selected.includes(p.id)} />
-            <span className="truncate">{p.full_name}</span>
+            <span className="truncate">{p.id === selfId ? "My appointments" : p.full_name}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -1614,6 +1618,9 @@ function DayPlanner({
     }
   }
   const columns = [...columnMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const viewingOwn = Boolean(
+    identity?.userId && selected.length === 1 && selected[0] === identity.userId,
+  );
 
   // ---- Planner window.
   let startMin = 9 * 60;
@@ -1795,15 +1802,6 @@ function DayPlanner({
           </div>
         </div>
       </div>
-      {(filtering || needs.counts.any > 0) && (
-        <p
-          data-qc="needs-action-hint"
-          className="shrink-0 border-b border-glass-line px-5 py-1.5 text-2xs text-muted-foreground"
-        >
-          {needsActionHint(needsAction, needs.counts, "today")}
-        </p>
-      )}
-
       {/* Now / next strip */}
       {(current || next) && (
         <div className="flex flex-wrap gap-3 border-b border-glass-line px-5 py-3">
@@ -1823,7 +1821,8 @@ function DayPlanner({
             className={cn(!slideCols && "min-w-[680px]")}
             style={boardMinWidth ? { minWidth: boardMinWidth } : undefined}
           >
-            {/* Practitioner header */}
+            {/* Practitioner header — skip when this is already "My appointments". */}
+            {viewingOwn ? null : (
             <div className="sticky top-0 z-20 flex border-b border-glass-line bg-glass shadow-inset-hi backdrop-blur-glass">
               <div className="sticky left-0 z-30 w-20 shrink-0 bg-[var(--glass-hi)] shadow-[1px_0_0_0_var(--glass-line)] backdrop-blur-glass" />
               {columns.map((col) => {
@@ -1865,6 +1864,7 @@ function DayPlanner({
                 );
               })}
             </div>
+            )}
 
             {/* Time grid */}
             <div ref={gridRef} className="relative flex" style={{ height: gridHeight }}>
@@ -2307,14 +2307,6 @@ function WeekView({
           </div>
         </div>
       </div>
-      {(filtering || needs.counts.any > 0) && (
-        <p
-          data-qc="needs-action-hint"
-          className="shrink-0 border-b border-glass-line px-5 py-1.5 text-2xs text-muted-foreground"
-        >
-          {needsActionHint(needsAction, needs.counts, "this week")}
-        </p>
-      )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col p-5">
         <div className="scroll-x-shadows min-h-0 min-w-0 flex-1 overflow-auto" data-qc="week-planner-scroll">
           <div className="grid min-h-0 min-w-0 auto-rows-auto grid-cols-1 divide-y divide-glass-line md:h-full md:min-w-[1820px] md:auto-rows-fr md:grid-cols-7 md:divide-y-0">

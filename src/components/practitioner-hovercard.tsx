@@ -7,7 +7,6 @@ import { useOpenTeamChat } from "@/components/floating-dock/dock-context";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { StaffAlertDialog } from "@/components/staff-alert-dialog";
 import { getPractitionerDay } from "@/lib/clinic.functions";
 import { initialsOf, laneFor } from "@/lib/practitioner-colours";
 import { cn } from "@/lib/utils";
@@ -27,47 +26,38 @@ type CardProps = {
 /** Hover a practitioner's name/avatar to see today's availability, urgent notes and a message action. */
 export function PractitionerHoverCard({ practitionerId, name, date, children }: CardProps) {
   const [open, setOpen] = useState(false);
-  const [messageOpen, setMessageOpen] = useState(false);
   const openTeamChat = useOpenTeamChat();
   const lane = laneFor(practitionerId);
 
   return (
-    <>
-      <HoverCard open={open} onOpenChange={setOpen} openDelay={120} closeDelay={140}>
-        <HoverCardTrigger asChild>{children}</HoverCardTrigger>
-        <HoverCardContent
-          side="bottom"
-          align="start"
-          sideOffset={10}
-          avoidCollisions={false}
-          sticky="always"
-          hideWhenDetached={false}
-          style={lane.style}
-          className={CARD_CLASS}
-        >
-          <PractitionerDayCard
-            practitionerId={practitionerId}
-            name={name}
-            date={date}
-            enabled={open}
-            onMessage={() => {
-              setOpen(false);
-              setMessageOpen(true);
-            }}
-            onOpenAlert={(alertId) => {
-              setOpen(false);
-              openTeamChat({ userId: practitionerId, name, focusAlertId: alertId });
-            }}
-          />
-        </HoverCardContent>
-      </HoverCard>
-      <StaffAlertDialog
-        open={messageOpen}
-        onOpenChange={setMessageOpen}
-        recipientId={practitionerId}
-        recipientName={name}
-      />
-    </>
+    <HoverCard open={open} onOpenChange={setOpen} openDelay={120} closeDelay={140}>
+      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
+      <HoverCardContent
+        side="bottom"
+        align="start"
+        sideOffset={10}
+        avoidCollisions={false}
+        sticky="always"
+        hideWhenDetached={false}
+        style={lane.style}
+        className={CARD_CLASS}
+      >
+        <PractitionerDayCard
+          practitionerId={practitionerId}
+          name={name}
+          date={date}
+          enabled={open}
+          onMessage={() => {
+            setOpen(false);
+            openTeamChat({ userId: practitionerId, name });
+          }}
+          onOpenAlert={(alertId) => {
+            setOpen(false);
+            openTeamChat({ userId: practitionerId, name, focusAlertId: alertId });
+          }}
+        />
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
@@ -86,46 +76,37 @@ export function PractitionerPressCard({
   side = "right",
 }: CardProps & { side?: "top" | "right" | "bottom" | "left" }) {
   const [open, setOpen] = useState(false);
-  const [messageOpen, setMessageOpen] = useState(false);
   const openTeamChat = useOpenTeamChat();
   const lane = laneFor(practitionerId);
 
   return (
-    <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverAnchor asChild>{children}</PopoverAnchor>
-        <PopoverContent
-          side={side}
-          align="start"
-          sideOffset={20}
-          collisionPadding={12}
-          style={lane.style}
-          className={CARD_CLASS}
-          data-qc="team-member-card"
-        >
-          <PractitionerDayCard
-            practitionerId={practitionerId}
-            name={name}
-            date={date}
-            enabled={open}
-            onMessage={() => {
-              setOpen(false);
-              setMessageOpen(true);
-            }}
-            onOpenAlert={(alertId) => {
-              setOpen(false);
-              openTeamChat({ userId: practitionerId, name, focusAlertId: alertId });
-            }}
-          />
-        </PopoverContent>
-      </Popover>
-      <StaffAlertDialog
-        open={messageOpen}
-        onOpenChange={setMessageOpen}
-        recipientId={practitionerId}
-        recipientName={name}
-      />
-    </>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>{children}</PopoverAnchor>
+      <PopoverContent
+        side={side}
+        align="start"
+        sideOffset={20}
+        collisionPadding={12}
+        style={lane.style}
+        className={CARD_CLASS}
+        data-qc="team-member-card"
+      >
+        <PractitionerDayCard
+          practitionerId={practitionerId}
+          name={name}
+          date={date}
+          enabled={open}
+          onMessage={() => {
+            setOpen(false);
+            openTeamChat({ userId: practitionerId, name });
+          }}
+          onOpenAlert={(alertId) => {
+            setOpen(false);
+            openTeamChat({ userId: practitionerId, name, focusAlertId: alertId });
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 

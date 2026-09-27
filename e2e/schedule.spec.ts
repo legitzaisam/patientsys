@@ -55,7 +55,6 @@ test.describe("needs action", () => {
 
     const total = Number(await page.locator('[data-qc="needs-action-count"]').textContent());
     expect(total).toBeGreaterThan(0);
-    await expect(page.locator('[data-qc="needs-action-hint"]')).toContainText("need something");
 
     // Main button: everything outstanding rings, the rest fade but stay in place.
     await page.locator('[data-qc="needs-action-main"]').click();
@@ -63,9 +62,6 @@ test.describe("needs action", () => {
     await expect(page.locator('[data-needs-action="match"]')).toHaveCount(total);
     expect(await page.locator('[data-needs-action="faded"]').count()).toBeGreaterThan(0);
     await expect(page.locator('[data-qc="needs-action-tags"]').first()).toBeVisible();
-    await expect(page.locator('[data-qc="needs-action-hint"]')).toContainText(
-      "faded but still in place",
-    );
 
     // The caret menu lists each type with its count and the dashboard pointer.
     await page.locator('[data-qc="needs-action-caret"]').click();
@@ -131,9 +127,9 @@ test.describe("as a practitioner", () => {
   }) => {
     await page.goto("/schedule");
     await page.locator('[data-qc="day-planner-scroll"], .page-title').first().waitFor();
-    // The View by pill names them rather than "All practitioners".
+    // The View by pill is "My appointments", not "All practitioners".
     await expect(page.getByText("All practitioners")).toHaveCount(0);
-    await expect(page.getByText("Dr Nadia Rahman").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "My appointments" })).toBeVisible();
   });
 });
 
