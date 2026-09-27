@@ -247,10 +247,9 @@ export function NotificationBell({
                       queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
                       queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
                       if (alert.sender_id) {
-                        navigate({
-                          to: "/team/$id",
-                          params: { id: alert.sender_id },
-                          search: { chat: true },
+                        openTeamChat({
+                          userId: alert.sender_id,
+                          name: alert.sender_name || "Teammate",
                         });
                       } else if (alert.patient_id) {
                         navigate({
@@ -304,10 +303,9 @@ export function NotificationBell({
                           queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
                           queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
                           queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
-                          navigate({
-                            to: "/team/$id",
-                            params: { id: alert.sender_id! },
-                            search: { chat: true },
+                          openTeamChat({
+                            userId: alert.sender_id!,
+                            name: alert.sender_name || "Teammate",
                           });
                         }}
                       >

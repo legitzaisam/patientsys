@@ -29,6 +29,7 @@ import {
 } from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
 import { assertPhone } from "@/lib/phone";
+import { practitionerDayAlerts, type PractitionerDayAlertRow } from "@/lib/practitioner-day-alerts";
 import { GENERIC_STAFF_DEFAULTS, loginRoleForClinicPack } from "@/lib/access-catalogue";
 import { assertStaffInvite, normalizeClinicRoleName } from "@/lib/clinic-roles";
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
@@ -2788,11 +2789,11 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
         .order("starts_at", { ascending: true }),
       ctx.supabase
         .from("staff_notifications")
-        .select("id, title, body, created_at, urgent")
+        .select("id, title, body, created_at, urgent, recipient_id, read_at, recipient_dismissed_at")
         .eq("sender_id", data.practitionerId)
         .eq("urgent", true)
         .order("created_at", { ascending: false })
-        .limit(3),
+        .limit(60),
     ]);
 
     const booked = (appts ?? []).filter((a: { status: string }) => a.status !== "cancelled");
@@ -2816,7 +2817,7 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
         0,
       ),
       free: free.filter((f) => f.to - f.from >= 15).slice(0, 4),
-      alerts: (alerts ?? []) as { id: string; title: string; body: string | null; created_at: string }[],
+      alerts: practitionerDayAlerts((alerts ?? []) as PractitionerDayAlertRow[], ctx.userId),
     };
   });
 
@@ -7495,7 +7496,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
       // Direct alerts + alert-replies between these two people (not chat pings).
       ctx.supabase
         .from("staff_notifications")
-        .select("id, sender_id, recipient_id, title, body, urgent, kind, read_at, created_at")
+        .select("id, sender_id, recipient_id, title, body, urgent, kind, read_at, recipient_dismissed_at, created_at")
         .in("kind", ["urgent", "staff_message"])
         .or(
           `and(sender_id.eq.${ctx.userId},recipient_id.eq.${peer}),and(sender_id.eq.${peer},recipient_id.eq.${ctx.userId})`,
@@ -7566,6 +7567,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
           urgent: boolean | null;
           kind: string;
           read_at: string | null;
+          recipient_dismissed_at: string | null;
           created_at: string;
         }[]
       )
@@ -7579,6 +7581,7 @@ export const getStaffChat = createServerFn({ method: "GET" })
           urgent: !!a.urgent || a.kind === "urgent",
           kind: a.kind,
           read_at: a.read_at,
+          dismissed: a.recipient_id === ctx.userId && Boolean(a.recipient_dismissed_at),
           created_at: a.created_at,
           mine: a.sender_id === ctx.userId,
         })),

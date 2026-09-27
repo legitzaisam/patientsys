@@ -2,7 +2,7 @@ import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type TouchEvent } from "react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -15,10 +15,8 @@ import { UpdateStaffMember } from "@/lib/validation/schemas";
 import { numericText } from "@/lib/validation/primitives";
 import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
-import { usePanelWidth } from "@/hooks/use-panel-width";
 import { AppShell } from "@/components/app-shell";
 import { StaffAvatar } from "@/components/staff-files";
-import { StaffChatPanel } from "@/components/staff-chat-panel";
 import { StaffRecordTabs } from "@/components/staff-record-tabs";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -54,11 +52,6 @@ const StaffProfileSchema = z.object({
 type StaffProfileValues = z.infer<typeof StaffProfileSchema>;
 
 export const Route = createFileRoute("/_authenticated/team/$id")({
-  validateSearch: (search: Record<string, unknown>): { chat?: boolean } => {
-    const raw = search["chat"];
-    if (raw === true || raw === "1" || raw === 1) return { chat: true };
-    return {};
-  },
   head: () => ({
     meta: [
       { title: "Staff profile — Aetheria" },
@@ -86,7 +79,6 @@ function roleLabel(role: string) {
 
 function StaffProfilePage() {
   const { id } = Route.useParams();
-  const { chat: openChat } = Route.useSearch();
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
   const fetchProfile = useServerFn(getStaffProfile);
@@ -141,39 +133,6 @@ function StaffProfilePage() {
   });
   const watched = profileForm.watch();
 
-  const [chatWidth, setChatWidth] = usePanelWidth("staff-messages", 360);
-  const [resizing, setResizing] = useState(false);
-  const resizeStart = useRef({ x: 0, width: 360 });
-
-  function startResize(e: MouseEvent | TouchEvent) {
-    const clientX = "touches" in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
-    resizeStart.current = { x: clientX, width: chatWidth };
-    setResizing(true);
-  }
-
-  useEffect(() => {
-    if (!resizing) return;
-    function onMove(e: globalThis.MouseEvent | globalThis.TouchEvent) {
-      const clientX = "touches" in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
-      const delta = resizeStart.current.x - clientX;
-      const next = Math.max(280, Math.min(520, resizeStart.current.width + delta));
-      setChatWidth(next);
-    }
-    function onUp() {
-      setResizing(false);
-    }
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    window.addEventListener("touchmove", onMove);
-    window.addEventListener("touchend", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("touchend", onUp);
-    };
-  }, [resizing, setChatWidth]);
-
   useEffect(() => {
     if (!data?.profile) return;
     const split = splitStaffName(data.profile.full_name ?? "");
@@ -214,7 +173,6 @@ function StaffProfilePage() {
   const revoked = Boolean(data?.revoked);
   const canEdit = identity.isManager && !revoked;
   const canViewTeam = can(identity, "team.view");
-  const showChat = !revoked;
   const canViewDocuments = Boolean(data?.canViewDocuments) && !revoked;
   const displayName =
     joinStaffName(watched.title, watched.fullName) ||
@@ -237,15 +195,7 @@ function StaffProfilePage() {
         </Link>
       ) : null}
 
-      <div
-        className={
-          showChat
-            ? "relative grid items-start gap-5 md:grid-cols-[minmax(0,1fr)_var(--chat-width)] md:gap-[26px]"
-            : "relative space-y-5"
-        }
-        style={showChat ? ({ "--chat-width": `${chatWidth}px` } as CSSProperties) : undefined}
-      >
-        <div className={showChat ? "min-w-0 space-y-5" : undefined}>
+      <div className="space-y-5">
           <div>
             <h1 className="page-title">Staff profile</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -280,7 +230,7 @@ function StaffProfilePage() {
           ) : null}
 
           <Card className="@container overflow-hidden p-0">
-            {/* Container queries, not viewport ones: beside the chat column this card can be ~340px wide on an iPad. */}
+            {/* Container queries, not viewport ones: this card can be narrow on an iPad. */}
             <div className="grid @xl:grid-cols-[13.5rem_minmax(0,1fr)]">
               <aside className="flex flex-col items-center border-b border-edge bg-glass-2/70 px-5 pt-5 pb-6 @xl:border-b-0 @xl:border-r @xl:px-6 @xl:pt-6 @xl:pb-7">
                 <div className="flex w-full max-w-[8.5rem] flex-col items-center gap-3">
@@ -604,16 +554,6 @@ function StaffProfilePage() {
             identity={identity}
             role={data?.role ?? ""}
           />
-        </div>
-
-        {showChat ? (
-          <StaffChatPanel
-            peerUserId={id}
-            {...(displayName !== "Team member" ? { peerName: displayName } : {})}
-            autoFocus={Boolean(openChat)}
-            onResizeStart={startResize}
-          />
-        ) : null}
       </div>
     </AppShell>
   );

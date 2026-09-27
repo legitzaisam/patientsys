@@ -23,7 +23,12 @@ import { useVoiceCall, type VoiceCallState } from "./use-voice-call";
 type ChatTab = "team" | "patients";
 
 type PatientThread = { kind: "patient"; patientId: string; patientName: string; avatarUrl?: string | null };
-type TeamThread = { kind: "team"; userId: string; name: string };
+type TeamThread = {
+  kind: "team";
+  userId: string;
+  name: string;
+  focus?: { alertId: string; seq: number } | undefined;
+};
 type ActiveThread = PatientThread | TeamThread;
 
 function initials(name: string) {
@@ -77,7 +82,12 @@ export function ChatBubble() {
     if (!chatRequest) return;
     if (chatRequest.kind === "team") {
       setTab("team");
-      setActive({ kind: "team", userId: chatRequest.userId, name: chatRequest.name });
+      setActive({
+        kind: "team",
+        userId: chatRequest.userId,
+        name: chatRequest.name,
+        focus: chatRequest.focusAlertId ? { alertId: chatRequest.focusAlertId, seq: chatRequest.seq } : undefined,
+      });
     } else {
       setTab("patients");
       setActive({ kind: "patient", patientId: chatRequest.patientId, patientName: chatRequest.patientName });
@@ -227,7 +237,12 @@ function ChatWindow({
       data-qc="chat-window"
       className="pointer-events-auto absolute bottom-[calc(100%+0.75rem)] right-0 flex h-[560px] max-h-[70vh] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-edge bg-popover shadow-[var(--shadow-popover)] backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:h-auto max-sm:max-h-[min(70dvh,32rem)] max-sm:w-auto max-sm:max-w-none"
     >
-      <header className="flex shrink-0 items-center gap-2.5 border-b border-edge px-3.5 py-3">
+      <header
+        className={cn(
+          "flex shrink-0 items-center gap-2.5 px-3.5 py-3",
+          active ? "border-b border-edge" : "pb-2.5",
+        )}
+      >
         {active ? (
           <button
             type="button"
@@ -270,44 +285,12 @@ function ChatWindow({
             </div>
           </>
         ) : (
-          <>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground">Messages</p>
-              <p className="truncate text-2xs text-muted-foreground">
-                {tab === "team" ? "Your clinic team" : "Patient conversations"}
-              </p>
-            </div>
-            <div
-              role="tablist"
-              aria-label="Conversations"
-              className="flex h-[34px] shrink-0 items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi"
-            >
-              {(
-                [
-                  { key: "team", label: "Team", count: teamUnread },
-                  { key: "patients", label: "Patients", count: patientUnread },
-                ] as const
-              ).map((o) => (
-                <button
-                  key={o.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === o.key}
-                  data-qc={`chat-tab-${o.key}`}
-                  onClick={() => onTab(o.key)}
-                  className={cn(
-                    "inline-flex h-7 cursor-pointer items-center whitespace-nowrap rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors",
-                    tab === o.key
-                      ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
-                      : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]",
-                  )}
-                >
-                  {o.label}
-                  <CountChip count={o.count} />
-                </button>
-              ))}
-            </div>
-          </>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">Messages</p>
+            <p className="text-2xs leading-snug text-muted-foreground">
+              {tab === "team" ? "Your clinic team" : "Patient conversations"}
+            </p>
+          </div>
         )}
         <button
           type="button"
@@ -318,6 +301,41 @@ function ChatWindow({
           <X className="h-4 w-4" aria-hidden />
         </button>
       </header>
+
+      {active ? null : (
+        <div className="shrink-0 border-b border-edge px-3.5 pb-3">
+          <div
+            role="tablist"
+            aria-label="Conversations"
+            className="flex h-[34px] w-full items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi"
+          >
+            {(
+              [
+                { key: "team", label: "Team", count: teamUnread },
+                { key: "patients", label: "Patients", count: patientUnread },
+              ] as const
+            ).map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === o.key}
+                data-qc={`chat-tab-${o.key}`}
+                onClick={() => onTab(o.key)}
+                className={cn(
+                  "inline-flex h-7 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors",
+                  tab === o.key
+                    ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
+                    : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]",
+                )}
+              >
+                {o.label}
+                <CountChip count={o.count} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {call.state !== "idle" && (
         <CallStrip
@@ -336,7 +354,13 @@ function ChatWindow({
       {patient ? (
         <ThreadView key={patient.patientId} thread={patient} />
       ) : active?.kind === "team" ? (
-        <StaffChatPanel key={active.userId} peerUserId={active.userId} peerName={active.name} autoFocus embedded />
+        <StaffChatPanel
+          key={active.userId}
+          peerUserId={active.userId}
+          peerName={active.name}
+          autoFocus={!active.focus}
+          focusAlert={active.focus}
+        />
       ) : tab === "team" ? (
         <TeamInboxView onPick={onPick} />
       ) : (

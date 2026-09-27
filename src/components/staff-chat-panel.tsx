@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useRef, type MouseEvent, type TouchEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, CheckCheck } from "lucide-react";
+import { Check, CheckCheck, CornerUpLeft, X } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
-import { getStaffChat, markStaffChatRead } from "@/lib/clinic.functions";
+import {
+  dismissStaffInboxItem,
+  getStaffChat,
+  markStaffChatRead,
+  markStaffNotificationRead,
+} from "@/lib/clinic.functions";
+import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
-import { useStaffPresence } from "@/lib/use-staff-presence";
 import { usePanelWidth } from "@/hooks/use-panel-width";
 import { MessageAttachments, type Attachment } from "@/components/message-attachments";
 import { MessageComposer } from "@/components/message-composer";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type ChatMessage = {
@@ -33,6 +37,7 @@ type ChatAlert = {
   urgent: boolean;
   kind: string;
   read_at: string | null;
+  dismissed?: boolean;
   created_at: string;
   mine: boolean;
 };
@@ -74,39 +79,33 @@ function isMine(item: TimelineItem) {
   return item.type === "message" ? item.message.mine : item.alert.mine;
 }
 
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
-/** Live 1:1 staff thread — soft glass bubbles for chat + alerts. */
+/** Live 1:1 staff thread inside the chat bubble. */
 export function StaffChatPanel({
   peerUserId,
   peerName,
   autoFocus = false,
-  onResizeStart,
-  embedded = false,
+  focusAlert,
 }: {
   peerUserId: string;
   peerName?: string;
   autoFocus?: boolean;
-  onResizeStart?: (e: MouseEvent | TouchEvent) => void;
-  /** Inside the floating chat window: no card, header or resize handle of its own. */
-  embedded?: boolean;
+  /** Scroll to and highlight this alert; `seq` changes when the same alert is asked for again. */
+  focusAlert?: { alertId: string; seq: number } | undefined;
 }) {
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
   const fetchChat = useServerFn(getStaffChat);
   const markRead = useServerFn(markStaffChatRead);
-  const [fontSize, setFontSize] = usePanelWidth("staff-chat-font", 13);
+  const markAlertRead = useServerFn(markStaffNotificationRead);
+  const dismissAlert = useServerFn(dismissStaffInboxItem);
+  const [fontSize] = usePanelWidth("staff-chat-font", 13);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const focusedSeq = useRef<number | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [replyToId, setReplyToId] = useState<string | null>(null);
   const selfId = identity?.userId;
-  const onlineIds = useStaffPresence(Boolean(selfId), selfId);
-  const peerOnline = onlineIds.has(peerUserId);
+  const canDismiss = can(identity, "notifications.delete");
 
   const enabled = Boolean(selfId && peerUserId && selfId !== peerUserId);
 
@@ -226,20 +225,78 @@ export function StaffChatPanel({
     const thread = threadRef.current;
     if (!thread) return;
     // Scroll the thread itself — scrollIntoView would also scroll the page shell.
+    if (focusAlert && focusedSeq.current !== focusAlert.seq) {
+      const target = thread.querySelector<HTMLElement>(`[data-alert-id="${focusAlert.alertId}"]`);
+      if (target) {
+        focusedSeq.current = focusAlert.seq;
+        const top = target.offsetTop - thread.offsetTop - thread.clientHeight / 2 + target.offsetHeight / 2;
+        thread.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        setHighlightId(focusAlert.alertId);
+        return;
+      }
+      if (isLoading) return;
+    }
     thread.scrollTo({ top: thread.scrollHeight, behavior: "smooth" });
-  }, [renderItems.length]);
+  }, [renderItems.length, focusAlert, isLoading]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = window.setTimeout(() => setHighlightId(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [highlightId]);
+
+  function invalidateAlerts() {
+    void queryClient.invalidateQueries({ queryKey: ["staff-chat", peerUserId] });
+    void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+    void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
+    void queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
+    void queryClient.invalidateQueries({ queryKey: ["practitioner-day"] });
+  }
+
+  const acknowledge = useMutation({
+    mutationFn: (id: string) => markAlertRead({ data: { id } }),
+    onSuccess: () => {
+      invalidateAlerts();
+      toast.success("Alert acknowledged");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const dismiss = useMutation({
+    mutationFn: (id: string) => dismissAlert({ data: { id } }),
+    onSuccess: (_res, id) => {
+      if (replyToId === id) setReplyToId(null);
+      invalidateAlerts();
+      toast.success("Alert dismissed");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   if (!enabled) return null;
 
   const title = peerName || data?.peer?.full_name || "Teammate";
   const firstName = title.trim().split(/\s+/)[0] || title;
-  const avatar = initials(title) || "?";
 
   function invalidateChat() {
     void queryClient.invalidateQueries({ queryKey: ["staff-chat", peerUserId] });
     void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
     void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
     void queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
+  }
+
+  function onSent() {
+    // Replying to an alert answers it, so it no longer waits on the sender's side.
+    if (replyToId) {
+      const id = replyToId;
+      setReplyToId(null);
+      void markAlertRead({ data: { id } }).then(invalidateAlerts);
+    }
+    invalidateChat();
+  }
+
+  function startReply(id: string) {
+    setReplyToId(id);
+    rootRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
   }
 
   const thread = (
@@ -252,7 +309,7 @@ export function StaffChatPanel({
       {!isLoading && timeline.length === 0 && (
         <div className="flex h-full min-h-40 items-center justify-center px-4">
           <p className="staff-chat-day max-w-[16rem] text-center">
-            No messages yet. Say hello, or send an alert from their profile.
+            No messages yet. Say hello, or send an alert from the chat window.
           </p>
         </div>
       )}
@@ -293,24 +350,79 @@ export function StaffChatPanel({
           }
 
           const a = item.alert;
+          const actionable = !a.mine && a.recipient_id === selfId && !a.dismissed;
+          const busy =
+            (acknowledge.isPending && acknowledge.variables === a.id) ||
+            (dismiss.isPending && dismiss.variables === a.id);
           return (
             <div
               key={item.key}
               className={cn("staff-chat-item", item.stacked ? "staff-chat-item--stack" : "staff-chat-item--break")}
             >
               <div
+                data-alert-id={a.id}
+                data-qc="staff-chat-alert"
                 className={cn(
-                  "staff-chat-alert",
+                  "staff-chat-alert transition-shadow duration-500",
                   a.mine ? "staff-chat-alert--out" : "staff-chat-alert--in",
                   a.urgent && "staff-chat-alert--urgent",
+                  highlightId === a.id && "shadow-[0_0_0_3px_var(--accent-line)]",
                 )}
               >
-                <p className={cn("staff-chat-alert__label", a.urgent ? "text-destructive-ink" : "text-sky-ink")}>
-                  {a.urgent ? "Urgent" : "Alert"}
-                  <span className="staff-chat-alert__label-name">{a.mine ? " · You" : ` · ${firstName}`}</span>
-                </p>
+                <div className="flex items-start gap-2">
+                  <p
+                    className={cn(
+                      "staff-chat-alert__label min-w-0 flex-1",
+                      a.urgent ? "text-destructive-ink" : "text-sky-ink",
+                    )}
+                  >
+                    {a.urgent ? "Urgent" : "Alert"}
+                    <span className="staff-chat-alert__label-name">{a.mine ? " · You" : ` · ${firstName}`}</span>
+                  </p>
+                  {actionable && canDismiss ? (
+                    <button
+                      type="button"
+                      aria-label="Dismiss alert"
+                      title="Dismiss alert"
+                      disabled={busy}
+                      onClick={() => dismiss.mutate(a.id)}
+                      className="-mr-[0.2em] -mt-[0.1em] shrink-0 cursor-pointer rounded-full p-[0.2em] text-ink-3 transition-colors hover:bg-[rgba(47,63,102,0.1)] hover:text-foreground disabled:opacity-40"
+                    >
+                      <X className="h-[1em] w-[1em]" aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
                 {a.body ? (
                   <p className="whitespace-pre-wrap break-words text-foreground/90">{a.body}</p>
+                ) : null}
+                {actionable ? (
+                  <div className="mt-[0.55em] flex flex-wrap items-center gap-[0.4em]">
+                    {a.read_at ? null : (
+                      <button
+                        type="button"
+                        data-qc="staff-chat-alert-ack"
+                        disabled={busy}
+                        onClick={() => acknowledge.mutate(a.id)}
+                        className="inline-flex cursor-pointer items-center gap-[0.3em] rounded-full border border-accent-line bg-accent-soft px-[0.7em] py-[0.25em] text-[0.85em] font-semibold text-accent-ink shadow-inset-hi transition-[filter] hover:brightness-[0.97] disabled:opacity-50"
+                      >
+                        <Check className="h-[1em] w-[1em]" aria-hidden />
+                        Acknowledge
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      data-qc="staff-chat-alert-reply"
+                      disabled={busy}
+                      onClick={() => startReply(a.id)}
+                      className={cn(
+                        "inline-flex cursor-pointer items-center gap-[0.3em] rounded-full border border-edge px-[0.7em] py-[0.25em] text-[0.85em] font-medium text-foreground shadow-inset-hi transition-colors disabled:opacity-50",
+                        replyToId === a.id ? "bg-accent-soft" : "bg-glass-2 hover:bg-[rgba(47,63,102,0.08)]",
+                      )}
+                    >
+                      <CornerUpLeft className="h-[1em] w-[1em]" aria-hidden />
+                      {replyToId === a.id ? "Replying…" : "Reply"}
+                    </button>
+                  </div>
                 ) : null}
                 <div className="staff-chat-meta">
                   <span>{timeLabel(a.created_at)}</span>
@@ -320,6 +432,10 @@ export function StaffChatPanel({
                     ) : (
                       <Check aria-label="Waiting" className="text-ink-3/70" />
                     )
+                  ) : a.recipient_id === selfId && a.read_at ? (
+                    <span className="inline-flex items-center gap-[0.2em]">
+                      · {a.dismissed ? "Dismissed" : "Acknowledged"}
+                    </span>
                   ) : null}
                 </div>
               </div>
@@ -339,81 +455,14 @@ export function StaffChatPanel({
       placeholder={`Message ${firstName}…`}
       variant="chat"
       autoFocus={autoFocus}
-      onSent={invalidateChat}
+      onSent={onSent}
     />
   );
 
-  if (embedded) {
-    return (
-      <div data-qc="staff-chat-embedded" className="flex min-h-0 flex-1 flex-col">
-        {thread}
-        {composer}
-      </div>
-    );
-  }
-
   return (
-    <Card
-      id="staff-chat"
-      className="relative flex h-[calc(100dvh-6rem-1.25rem)] max-h-[calc(100dvh-6rem-1.25rem)] min-h-0 flex-col self-start overflow-hidden rounded-2xl p-0 sm:h-[calc(100dvh-6rem-26px)] sm:max-h-[calc(100dvh-6rem-26px)] md:sticky md:top-24 md:h-[calc(100dvh-6rem-max(26px,var(--dock-h,0px)+0.75rem))] md:max-h-[calc(100dvh-6rem-max(26px,var(--dock-h,0px)+0.75rem))]"
-    >
-      {onResizeStart ? (
-        <div
-          className="group absolute -left-3 top-0 bottom-0 z-10 hidden w-6 cursor-col-resize items-center justify-center md:flex"
-          onMouseDown={onResizeStart}
-          onTouchStart={onResizeStart}
-          aria-label="Resize messages panel"
-          role="separator"
-        >
-          <div className="h-10 w-1 rounded-full bg-foreground/20 transition-colors group-hover:bg-foreground/40" />
-        </div>
-      ) : null}
-
-      <header className="flex shrink-0 items-center gap-3 border-b border-edge px-4 py-3">
-        <div
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent-line bg-accent-wash text-2xs font-semibold tracking-wide text-accent-ink",
-            peerOnline && "ring-2 ring-[#4a9d75] ring-offset-2 ring-offset-[var(--card)]",
-          )}
-          title={peerOnline ? "Online" : undefined}
-          aria-label={peerOnline ? `${title}, online` : title}
-        >
-          {avatar}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="section-title truncate">{title}</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {peerOnline ? "Online · Messages and alerts" : "Messages and alerts"}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center rounded-lg border border-edge bg-glass-2 p-0.5">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
-            aria-label="Decrease message text size"
-            disabled={fontSize <= 11}
-            onClick={() => setFontSize(Math.max(11, fontSize - 1))}
-          >
-            <span className="text-2xs font-medium leading-none">A−</span>
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30"
-            aria-label="Increase message text size"
-            disabled={fontSize >= 18}
-            onClick={() => setFontSize(Math.min(18, fontSize + 1))}
-          >
-            <span className="text-2xs font-medium leading-none">A+</span>
-          </Button>
-        </div>
-      </header>
-
+    <div ref={rootRef} data-qc="staff-chat-embedded" className="flex min-h-0 flex-1 flex-col">
       {thread}
       {composer}
-    </Card>
+    </div>
   );
 }

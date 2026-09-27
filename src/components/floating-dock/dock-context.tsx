@@ -1,7 +1,4 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { canSee } from "@/lib/access-catalogue";
-import { useIdentity } from "@/lib/use-identity";
 
 /**
  * Page → floating-dock channel.
@@ -21,6 +18,8 @@ export type ChatPageContext = {
 export type TeamChatContext = {
   userId: string;
   name: string;
+  /** Scroll the thread to this alert so the recipient can acknowledge, reply or dismiss it. */
+  focusAlertId?: string | undefined;
 };
 
 export type ChatRequest =
@@ -79,25 +78,10 @@ export function useFloatingDock(): DockApi {
   return ctx;
 }
 
-/**
- * Open a 1:1 team thread: in the chat window's Team tab when this person has
- * the dock, otherwise on the teammate's profile.
- */
+/** Open a 1:1 team thread in the chat bubble. */
 export function useOpenTeamChat() {
   const { requestTeamChat } = useFloatingDock();
-  const { data: identity } = useIdentity();
-  const navigate = useNavigate();
-  const hasDock = Boolean(identity?.isStaff && canSee(identity, "shell-dock"));
-  return useCallback(
-    (peer: TeamChatContext) => {
-      if (hasDock) {
-        requestTeamChat(peer);
-        return;
-      }
-      void navigate({ to: "/team/$id", params: { id: peer.userId }, search: { chat: true } });
-    },
-    [hasDock, navigate, requestTeamChat],
-  );
+  return useCallback((peer: TeamChatContext) => requestTeamChat(peer), [requestTeamChat]);
 }
 
 /** Convenience for pages: register/refresh their chat context. */

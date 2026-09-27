@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/notification-bell";
 import { StaffAlertDialog } from "@/components/staff-alert-dialog";
+import { PractitionerPressCard, PractitionerPressTrigger } from "@/components/practitioner-hovercard";
 import { FloatingNotes } from "@/components/dashboard/floating-notes";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
@@ -328,6 +329,9 @@ function SidebarChrome({
   onNavigate?: (() => void) | undefined;
   onCollapse: () => void;
 }) {
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-5 px-4 py-5">
       <div className="flex items-center gap-1">
@@ -416,28 +420,54 @@ function SidebarChrome({
                   ? "bg-[linear-gradient(96deg,var(--accent-soft),transparent_96%)] font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge),inset_0_1px_0_var(--edge-hi)]"
                   : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.12)]",
               );
+              const avatarClass = cn(
+                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-accent-foreground",
+                tone.edge,
+                online && "ring-2 ring-[#4a9d75] ring-offset-2 ring-offset-[var(--sidebar)]",
+              );
+              if (isSelf) {
+                return (
+                  <Link key={member.id} to="/profile" onClick={onNavigate} className={className}>
+                    <span
+                      className={avatarClass}
+                      title={online ? "Online" : undefined}
+                      aria-label={online ? `${name}, online` : name}
+                    >
+                      {initialsOf(name)}
+                    </span>
+                    <span className="truncate">{name}</span>
+                  </Link>
+                );
+              }
               return (
-                <Link
-                  key={member.id}
-                  {...(isSelf
-                    ? { to: "/profile" as const }
-                    : { to: "/team/$id" as const, search: {}, params: { id: member.id } })}
-                  onClick={onNavigate}
-                  className={className}
-                >
-                  <span
-                    className={cn(
-                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-accent-foreground",
-                      tone.edge,
-                      online && "ring-2 ring-[#4a9d75] ring-offset-2 ring-offset-[var(--sidebar)]",
-                    )}
-                    title={online ? "Online" : undefined}
-                    aria-label={online ? `${name}, online` : name}
-                  >
-                    {initialsOf(name)}
-                  </span>
-                  <span className="truncate">{name}</span>
-                </Link>
+                <PractitionerPressCard key={member.id} practitionerId={member.id} name={name} date={todayKey}>
+                  <div className={cn("relative", className)}>
+                    <PractitionerPressTrigger asChild>
+                      <button
+                        type="button"
+                        data-qc="team-member-avatar"
+                        className={cn(
+                          avatarClass,
+                          "relative z-[1] cursor-pointer transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        )}
+                        title={online ? `${name} is online · today’s availability` : `${name} · today’s availability`}
+                        aria-label={`${name}${online ? ", online" : ""}. Show today’s availability`}
+                      >
+                        {initialsOf(name)}
+                      </button>
+                    </PractitionerPressTrigger>
+                    {/* The link covers the whole row; the avatar sits above it and opens the card instead. */}
+                    <Link
+                      to="/team/$id"
+                      search={{}}
+                      params={{ id: member.id }}
+                      onClick={onNavigate}
+                      className="min-w-0 truncate outline-none after:absolute after:inset-0 after:rounded-[11px] focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                    >
+                      {name}
+                    </Link>
+                  </div>
+                </PractitionerPressCard>
               );
             })}
             </div>

@@ -53,6 +53,7 @@ import {
 } from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
 import { assertPhone } from "@/lib/phone";
+import { practitionerDayAlerts, type PractitionerDayAlertRow } from "@/lib/practitioner-day-alerts";
 import {
   canSelfApplyIdentityChanges,
   clinicHasSeparateManager,
@@ -2812,10 +2813,13 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
         0,
       ),
       free: free.filter((f) => f.to - f.from >= 15).slice(0, 4),
-      alerts: sortDesc(
-        staffNotifications.filter((n) => n.sender_id === data.practitionerId && n.urgent),
-        "created_at",
-      ).slice(0, 3),
+      alerts: practitionerDayAlerts(
+        sortDesc(
+          staffNotifications.filter((n) => n.sender_id === data.practitionerId && n.urgent),
+          "created_at",
+        ) as PractitionerDayAlertRow[],
+        identity().userId,
+      ),
     };
   });
 
@@ -5488,6 +5492,9 @@ export const getStaffChat = createServerFn({ method: "GET" })
         urgent: !!n.urgent || n.kind === "urgent",
         kind: n.kind as string,
         read_at: (n.read_at as string | null) ?? null,
+        dismissed:
+          n.recipient_id === me.userId &&
+          Boolean((n as { recipient_dismissed_at?: string | null }).recipient_dismissed_at),
         created_at: n.created_at as string,
         mine: n.sender_id === me.userId,
       }));
