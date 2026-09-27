@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { profileChangeApproverIds } from "@/lib/profile-change-policy";
+import { profileChangeApproverIds, profileChangeShowsReviewer } from "@/lib/profile-change-policy";
 
 const owner = { user_id: "owner-1", role: "owner" };
 const manager = { user_id: "manager-1", role: "manager" };
@@ -37,5 +37,40 @@ describe("profileChangeApproverIds", () => {
         roleGrants: [{ role: "manager", permission: "team.approve_changes", enabled: true }],
       }),
     ).toEqual(["owner-1"]);
+  });
+});
+
+describe("profileChangeShowsReviewer", () => {
+  it("is off when only the owner can approve", () => {
+    expect(
+      profileChangeShowsReviewer({
+        requesterId: "prac-1",
+        requiresOwner: false,
+        roleRows: [owner, manager, practitioner],
+        roleGrants: [{ role: "manager", permission: "team.approve_changes", enabled: false }],
+      }),
+    ).toBe(false);
+  });
+
+  it("is on when a manager has been granted the capability", () => {
+    expect(
+      profileChangeShowsReviewer({
+        requesterId: "prac-1",
+        requiresOwner: false,
+        roleRows: [owner, manager, practitioner],
+        roleGrants: [{ role: "manager", permission: "team.approve_changes", enabled: true }],
+      }),
+    ).toBe(true);
+  });
+
+  it("stays off for a manager's own request, which only the owner can approve", () => {
+    expect(
+      profileChangeShowsReviewer({
+        requesterId: "manager-1",
+        requiresOwner: true,
+        roleRows: [owner, manager],
+        roleGrants: [{ role: "manager", permission: "team.approve_changes", enabled: true }],
+      }),
+    ).toBe(false);
   });
 });

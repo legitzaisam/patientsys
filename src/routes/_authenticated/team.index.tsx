@@ -12,6 +12,7 @@ import {
   restoreExTeamMember,
   listProfileChangeRequests,
   reviewProfileChange,
+  dismissProfileChangeRequest,
   setStaffPassword,
   enableSeparateManager,
 } from "@/lib/clinic.functions";
@@ -449,6 +450,18 @@ function TeamPage() {
       queryClient.invalidateQueries({ queryKey: ["profile-change-requests"] });
       invalidate();
     },
+    onError: (e: Error) => {
+      if (!isStepUpRequired(e)) toast.error(e.message);
+    },
+  });
+
+  const dismiss = useMutation({
+    mutationFn: useServerFn(dismissProfileChangeRequest),
+    onSuccess: () => {
+      toast.success("Cleared from inbox");
+      queryClient.invalidateQueries({ queryKey: ["profile-change-requests"] });
+      invalidate();
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -655,7 +668,8 @@ function TeamPage() {
                         key={r.id}
                         r={r}
                         onReview={(v) => review.mutate({ data: v })}
-                        busy={review.isPending}
+                        onDismiss={() => dismiss.mutate({ data: { id: r.id } })}
+                        busy={review.isPending || dismiss.isPending}
                         canReview={
                           r.status === "pending" &&
                           r.user_id !== identity.userId &&
@@ -909,11 +923,13 @@ function EditStaffDialog({
 function RequestCard({
   r,
   onReview,
+  onDismiss,
   busy,
   canReview,
 }: {
   r: any;
   onReview: (v: any) => void;
+  onDismiss: () => void;
   busy: boolean;
   canReview: boolean;
 }) {
@@ -927,8 +943,21 @@ function RequestCard({
     );
 
   return (
-    <Card className="p-3.5">
-      <div className="space-y-3">
+    <Card className="relative p-3.5" data-qc="profile-request" data-status={r.status}>
+      {!pending && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-2 top-2 h-7 w-7"
+          aria-label="Clear from inbox"
+          disabled={busy}
+          onClick={onDismiss}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      <div className={cn("space-y-3", !pending && "pr-7")}>
         <div>
           <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
             {r.current?.full_name || r.full_name}
@@ -953,6 +982,11 @@ function RequestCard({
             {line("Working arrangement", r.current?.working_arrangement ?? "", r.working_arrangement ?? "")}
           </div>
           {r.note && <p className="mt-2 text-xs italic text-muted-foreground">“{r.note}”</p>}
+          {r.show_reviewer && r.reviewed_by_name && (
+            <p className="mt-2 text-xs text-ink-3" data-qc="request-reviewed-by">
+              {r.status === "approved" ? "Approved by" : "Declined by"} {r.reviewed_by_name}
+            </p>
+          )}
         </div>
         {pending && canReview && (
           <div className="space-y-2">

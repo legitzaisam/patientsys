@@ -58,6 +58,7 @@ import {
   clinicHasSeparateManager,
   profileChangeApproverIds,
   profileChangeRequiresOwner,
+  profileChangeShowsReviewer,
 } from "@/lib/profile-change-policy";
 // Re-exported rather than redeclared: a second copy of the key list silently
 // drifted from the real one, so demo mode enforced a different set of
@@ -4318,6 +4319,7 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       reviewed_by: null,
       reviewed_at: null,
       reviewer_note: null,
+      inbox_cleared_at: null,
       created_at: now,
       updated_at: now,
     });
@@ -4451,13 +4453,40 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" }).handl
   if (!me.isOwner && !me.permissions.includes("team.approve_changes")) {
     throw new Error("You do not have access to this area");
   }
+  const approverInput = {
+    roleRows: userRoles.map((r) => ({ user_id: r.user_id as string, role: r.role as string })),
+    profiles: profiles.map((p) => ({
+      id: p.id as string,
+      clinic_role_id: (p.clinic_role_id as string | null | undefined) ?? null,
+    })),
+    roleGrants: rolePermissions.map((r) => ({
+      role: r.role as string,
+      permission: r.permission as string,
+      enabled: Boolean(r.enabled),
+    })),
+    namedGrants: clinicRolePermissions.map((r) => ({
+      clinic_role_id: r.clinic_role_id as string,
+      permission: r.permission as string,
+      enabled: Boolean(r.enabled),
+    })),
+  };
   return sortDesc(profileChangeRequests, "created_at")
     .slice(0, 50)
-    .filter((r) => me.isOwner || me.isAdmin || !r.requires_owner)
+    .filter((r) => !r.inbox_cleared_at && (me.isOwner || me.isAdmin || !r.requires_owner))
     .map((r) => {
       const current = profiles.find((p) => p.id === r.user_id) ?? null;
       return {
         ...r,
+        reviewed_by_name: profileName(r.reviewed_by),
+        show_reviewer: Boolean(
+          r.reviewed_by &&
+            r.status !== "pending" &&
+            profileChangeShowsReviewer({
+              requesterId: r.user_id,
+              requiresOwner: Boolean(r.requires_owner),
+              ...approverInput,
+            }),
+        ),
         current: current
           ? { ...current, email: db.staffEmails[r.user_id] ?? "" }
           : { email: db.staffEmails[r.user_id] ?? "" },
@@ -4494,6 +4523,17 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
     req.reviewed_by = me.userId;
     req.reviewed_at = new Date().toISOString();
     req.reviewer_note = data.reviewerNote?.trim() || null;
+    return { ok: true };
+  });
+
+export const dismissProfileChangeRequest = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.DismissProfileChange, data))
+  .handler(async ({ data }) => {
+    requireCapability("team.approve_changes");
+    const req = profileChangeRequests.find((r) => r.id === data.id);
+    if (!req) throw new Error("Request not found");
+    if (req.status === "pending") throw new Error("Approve or decline this request first");
+    req.inbox_cleared_at = new Date().toISOString();
     return { ok: true };
   });
 

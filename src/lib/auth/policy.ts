@@ -191,6 +191,7 @@ export const POLICY = {
   submitProfileChange: { kind: "staff" },
   listProfileChangeRequests: { kind: "capability", key: "team.approve_changes" },
   reviewProfileChange: { kind: "capability", key: "team.approve_changes" },
+  dismissProfileChangeRequest: { kind: "capability", key: "team.approve_changes" },
   listMyDocuments: { kind: "staff" },
   addMyDocument: { kind: "staff" },
   deleteMyDocument: { kind: "staff" },

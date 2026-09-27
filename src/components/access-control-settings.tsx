@@ -1,9 +1,18 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { dateTime } from "@/lib/format";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ChevronDown, History, ShieldCheck } from "lucide-react";
+import {
+  BadgeCheck,
+  ChevronDown,
+  ConciergeBell,
+  History,
+  ShieldCheck,
+  Stethoscope,
+  UserCog,
+  type LucideIcon,
+} from "lucide-react";
 import { listRolePermissions, setClinicRolePermission, setRolePermission } from "@/lib/clinic.functions";
 import { PERMISSION_GROUPS, PERMISSION_META, type PermissionKey } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -19,6 +28,12 @@ const SYSTEM_ROLES = [
   { key: "front_desk" as const, label: "Receptionist", named: false },
   { key: "practitioner" as const, label: "Practitioner", named: false },
 ];
+
+const ROLE_ICONS: Record<string, LucideIcon> = {
+  manager: UserCog,
+  front_desk: ConciergeBell,
+  practitioner: Stethoscope,
+};
 
 type GridRole = { key: string; label: string; named: boolean };
 
@@ -64,6 +79,8 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
     role.named ? data?.clinicRoleGrants?.[role.key] : data?.grants?.[role.key];
   const changesFor = (role: GridRole) =>
     role.named ? data?.clinicRoleChanges?.[role.key] : data?.changes?.[role.key];
+  const grantedCount = (role: GridRole, keys: PermissionKey[]) =>
+    keys.filter((key) => grantsFor(role)?.[key]).length;
 
   const latestChange = (key: string) => {
     let best: { by: string; at: string; role: string } | null = null;
@@ -89,9 +106,30 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
     ...group,
     keys: group.keys.filter((key) => !key.startsWith("view.")),
   })).filter((group) => group.keys.length > 0);
-  const columns = `minmax(12rem,1fr) repeat(${Math.max(roles.length, 1)}, 5.5rem)`;
+  const allKeys = groups.flatMap((group) => group.keys);
+  const columns = `minmax(13rem,1fr) repeat(${Math.max(roles.length, 1)}, 6rem)`;
   const [openGroups, setOpenGroups] = useState(() => new Set(groups.map((group) => group.label)));
   const anyOpen = groups.some((group) => openGroups.has(group.label));
+  const headRef = useRef<HTMLDivElement>(null);
+  const [headPinned, setHeadPinned] = useState(false);
+
+  // The header pins under the page toolbar (3.5rem). Watching it against a line
+  // just below that tells us when it is stuck and needs its opaque backdrop.
+  // The bottom margin keeps a header that is still below the fold from counting.
+  useEffect(() => {
+    const node = headRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setHeadPinned(!entry.isIntersecting),
+      {
+        root: document.getElementById("app-main-scroll"),
+        rootMargin: "-57px 0px 100% 0px",
+        threshold: 1,
+      },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const setGroupOpen = (label: string, open: boolean) => {
     setOpenGroups((prev) => {
@@ -103,156 +141,218 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
   };
 
   return (
-    <Card className="space-y-5 p-5">
+    <Card className="space-y-4 p-5">
       {stepUp.dialog}
-      <div className="mb-0 flex items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-start gap-2">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" />
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground">Staff access</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {canEdit
-                ? "Choose what each access level can reach. New named roles start with generic floor access. You always keep full access as clinic owner."
-                : "Access levels set by the clinic owner."}
-            </p>
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="section-title flex min-w-0 items-center gap-2">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-ink-3" aria-hidden />
+            <span className="truncate">Staff access</span>
+          </h2>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setOpenGroups(anyOpen ? new Set() : new Set(groups.map((group) => group.label)))
+              }
+            >
+              {anyOpen ? "Collapse all" : "Expand all"}
+            </Button>
+            {recentChanges.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <History className="h-3.5 w-3.5" aria-hidden />
+                    Recent changes
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 rounded-2xl p-0">
+                  <div className="border-b border-edge px-3.5 py-3">
+                    <p className="text-sm font-semibold text-foreground">Recent changes</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Who last changed staff access. The full history stays in the audit log.
+                    </p>
+                  </div>
+                  <ul
+                    data-qc="access-changes"
+                    className="max-h-56 space-y-2 overflow-y-auto px-3.5 py-3"
+                  >
+                    {recentChanges.map((c) => (
+                      <li key={`${c.role}-${c.key}-${c.at}`} className="text-xs text-ink-2">
+                        <span className="text-foreground">{c.by}</span> turned{" "}
+                        <span className="text-foreground">{PERMISSION_META[c.key].label}</span>{" "}
+                        {c.enabled ? "on" : "off"} for {c.role.toLowerCase()}
+                        {c.role.endsWith("s") ? "" : "s"} · {dateTime(c.at)}
+                      </li>
+                    ))}
+                  </ul>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setOpenGroups(anyOpen ? new Set() : new Set(groups.map((group) => group.label)))
-            }
-          >
-            {anyOpen ? "Collapse all" : "Expand all"}
-          </Button>
-          {recentChanges.length > 0 && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <History className="h-3.5 w-3.5" aria-hidden />
-                  Recent changes
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-80 rounded-2xl p-0">
-                <div className="border-b border-edge px-3.5 py-3">
-                  <p className="text-sm font-semibold text-foreground">Recent changes</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Who last changed staff access. The full history stays in the audit log.
-                  </p>
-                </div>
-                <ul
-                  data-qc="access-changes"
-                  className="max-h-56 space-y-2 overflow-y-auto px-3.5 py-3"
-                >
-                  {recentChanges.map((c) => (
-                    <li key={`${c.role}-${c.key}-${c.at}`} className="text-xs text-ink-2">
-                      <span className="text-foreground">{c.by}</span> turned{" "}
-                      <span className="text-foreground">{PERMISSION_META[c.key].label}</span>{" "}
-                      {c.enabled ? "on" : "off"} for {c.role.toLowerCase()}
-                      {c.role.endsWith("s") ? "" : "s"} · {dateTime(c.at)}
-                    </li>
-                  ))}
-                </ul>
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {canEdit
+            ? "Choose what each access level can reach. New named roles start with generic floor access. You always keep full access as clinic owner."
+            : "Access levels set by the clinic owner."}
+        </p>
       </div>
 
-      <div className="rounded-2xl border border-edge">
-        <div className="min-w-[32rem] border-b border-edge bg-background">
+      <div
+        className="rounded-2xl border border-edge-2 bg-glass shadow-inset-hi max-sm:overflow-x-auto"
+        aria-busy={!data?.grants}
+      >
+        <div className="min-w-[34rem]">
           <div
-            className="grid items-center gap-4 bg-background px-4 py-2.5"
+            ref={headRef}
+            data-pinned={headPinned || undefined}
+            className="access-grid-head sticky top-[3.5rem] z-10 grid items-end gap-3 rounded-t-[15px] border-b border-edge-2 px-4 pb-3 pt-3.5"
             style={{ gridTemplateColumns: columns }}
           >
-            <span className="text-xs tracking-[0.02em] text-muted-foreground">Capability</span>
-            {roles.map((r) => (
-              <span key={r.key} className="text-center text-xs tracking-[0.02em] text-muted-foreground">
-                {r.label}
-              </span>
-            ))}
+            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-3">
+              Capability
+            </span>
+            {roles.map((role) => {
+              const Icon = role.named ? BadgeCheck : (ROLE_ICONS[role.key] ?? BadgeCheck);
+              return (
+                <div key={role.key} className="flex flex-col items-center gap-1 text-center">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-edge bg-glass shadow-inset-hi">
+                    <Icon className="h-3.5 w-3.5 text-ink-3" aria-hidden />
+                  </span>
+                  <span className="text-xs font-semibold leading-tight text-foreground">
+                    {role.label}
+                  </span>
+                  <span className="text-2xs leading-none tabular-nums text-ink-3">
+                    {grantedCount(role, allKeys)} of {allKeys.length} on
+                  </span>
+                </div>
+              );
+            })}
           </div>
-        </div>
-        {groups.map((group) => {
-          const open = openGroups.has(group.label);
-          return (
-            <Collapsible
-              key={group.label}
-              open={open}
-              onOpenChange={(next) => setGroupOpen(group.label, next)}
-            >
-              <CollapsibleTrigger
-                aria-expanded={open}
-                className="flex w-full min-w-[32rem] items-center gap-1.5 border-b border-glass-line bg-background px-4 py-1.5 text-left"
+
+          {groups.map((group, groupIndex) => {
+            const open = openGroups.has(group.label);
+            const lastGroup = groupIndex === groups.length - 1;
+            return (
+              <Collapsible
+                key={group.label}
+                open={open}
+                onOpenChange={(next) => setGroupOpen(group.label, next)}
               >
-                <ChevronDown
+                <CollapsibleTrigger
+                  aria-expanded={open}
                   className={cn(
-                    "h-3.5 w-3.5 shrink-0 text-ink-3 transition-transform",
-                    open && "rotate-180",
+                    "grid w-full cursor-pointer items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[rgba(47,63,102,0.09)] focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--ring)]",
+                    open ? "bg-[rgba(47,63,102,0.065)]" : "bg-[rgba(47,63,102,0.035)]",
+                    (open || !lastGroup) && "border-b border-edge-2",
                   )}
-                  aria-hidden
-                />
-                <span className="text-2xs font-medium uppercase tracking-[0.08em] text-ink-3">
-                  {group.label}
-                </span>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                {group.keys.map((key: PermissionKey) => (
-                  <div
-                    key={key}
-                    className="grid min-w-[32rem] items-center gap-4 border-b border-glass-line px-4 py-3"
-                    style={{ gridTemplateColumns: columns }}
-                  >
-                    <div>
-                      <p className="text-sm text-foreground">{PERMISSION_META[key].label}</p>
-                      <p className="text-xs text-muted-foreground">{PERMISSION_META[key].description}</p>
-                      {(() => {
-                        const c = latestChange(key);
-                        return c ? (
-                          <p className="mt-0.5 text-2xs text-ink-3" data-qc="grant-changed-by">
-                            {c.role} changed by {c.by} · {dateTime(c.at)}
-                          </p>
-                        ) : null;
-                      })()}
-                    </div>
-                    {roles.map((role) => (
-                      <div key={role.key} className="flex justify-center">
-                        <Switch
-                          aria-label={`${PERMISSION_META[key].label} for ${role.label}`}
-                          title={
-                            changesFor(role)?.[key]
-                              ? `Changed by ${changesFor(role)![key]!.by} · ${dateTime(changesFor(role)![key]!.at)}`
-                              : undefined
-                          }
-                          checked={grantsFor(role)?.[key] ?? false}
-                          disabled={!canEdit || saving || !data?.grants}
-                          onCheckedChange={(enabled) =>
-                            void stepUp.run(() => {
-                              if (role.named) {
-                                return saveNamed.mutateAsync({
-                                  data: { clinicRoleId: role.key, permission: key, enabled },
-                                });
-                              }
-                              return saveSystem.mutateAsync({
-                                data: {
-                                  role: role.key as "manager" | "front_desk" | "practitioner",
-                                  permission: key,
-                                  enabled,
-                                },
-                              });
-                            }, "permission")
-                          }
-                        />
+                  style={{ gridTemplateColumns: columns }}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <ChevronDown
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0 text-ink-3 transition-transform duration-200",
+                        !open && "-rotate-90",
+                      )}
+                      aria-hidden
+                    />
+                    <span
+                      className={cn(
+                        "truncate text-2xs font-semibold uppercase tracking-[0.08em]",
+                        open ? "text-foreground" : "text-ink-2",
+                      )}
+                    >
+                      {group.label}
+                    </span>
+                  </span>
+                  {roles.map((role) => {
+                    const on = grantedCount(role, group.keys);
+                    return (
+                      <span key={role.key} className="flex justify-center" aria-hidden>
+                        <span
+                          className={cn(
+                            "rounded-full border px-1.5 py-px text-2xs tabular-nums",
+                            on === 0 && "border-transparent text-ink-3",
+                            on > 0 && on < group.keys.length && "border-edge bg-glass text-ink-2",
+                            on === group.keys.length &&
+                              "border-accent-line bg-accent-soft text-accent-ink",
+                          )}
+                        >
+                          {on}/{group.keys.length}
+                        </span>
+                      </span>
+                    );
+                  })}
+                </CollapsibleTrigger>
+                <CollapsibleContent className="collapsible-panel">
+                  {group.keys.map((key: PermissionKey, keyIndex) => (
+                    <div
+                      key={key}
+                      className={cn(
+                        "grid items-center gap-3 px-4 py-3 transition-colors hover:bg-[rgba(47,63,102,0.04)]",
+                        !(lastGroup && keyIndex === group.keys.length - 1) &&
+                          "border-b border-edge-2",
+                      )}
+                      style={{ gridTemplateColumns: columns }}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium leading-snug text-foreground">
+                          {PERMISSION_META[key].label}
+                        </p>
+                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                          {PERMISSION_META[key].description}
+                        </p>
+                        {(() => {
+                          const c = latestChange(key);
+                          return c ? (
+                            <p
+                              className="mt-1 flex items-center gap-1 text-2xs text-ink-3"
+                              data-qc="grant-changed-by"
+                            >
+                              <History className="h-3 w-3 shrink-0" aria-hidden />
+                              {c.role} changed by {c.by} · {dateTime(c.at)}
+                            </p>
+                          ) : null;
+                        })()}
                       </div>
-                    ))}
-                  </div>
-                ))}
-              </CollapsibleContent>
-            </Collapsible>
-          );
-        })}
+                      {roles.map((role) => (
+                        <div key={role.key} className="flex justify-center">
+                          <Switch
+                            aria-label={`${PERMISSION_META[key].label} for ${role.label}`}
+                            title={
+                              changesFor(role)?.[key]
+                                ? `Changed by ${changesFor(role)![key]!.by} · ${dateTime(changesFor(role)![key]!.at)}`
+                                : undefined
+                            }
+                            checked={grantsFor(role)?.[key] ?? false}
+                            disabled={!canEdit || saving || !data?.grants}
+                            onCheckedChange={(enabled) =>
+                              void stepUp.run(() => {
+                                if (role.named) {
+                                  return saveNamed.mutateAsync({
+                                    data: { clinicRoleId: role.key, permission: key, enabled },
+                                  });
+                                }
+                                return saveSystem.mutateAsync({
+                                  data: {
+                                    role: role.key as "manager" | "front_desk" | "practitioner",
+                                    permission: key,
+                                    enabled,
+                                  },
+                                });
+                              }, "permission")
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          })}
+        </div>
       </div>
     </Card>
   );

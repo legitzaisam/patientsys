@@ -393,6 +393,8 @@ export const ReviewProfileChange = z.object({
   reviewerNote: optionalText(4_000),
 });
 
+export const DismissProfileChange = z.object({ id });
+
 export const SetMyAvatar = z.object({
   path: text(500).nullable(),
   targetUserId: optionalId,

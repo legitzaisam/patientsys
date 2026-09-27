@@ -79,3 +79,8 @@ export function profileChangeApproverIds(input: {
   ids.delete(input.requesterId);
   return [...ids];
 }
+
+/** Name the reviewer when owner and a granted manager can both act on this request. */
+export function profileChangeShowsReviewer(input: Parameters<typeof profileChangeApproverIds>[0]) {
+  return profileChangeApproverIds(input).length > 1;
+}

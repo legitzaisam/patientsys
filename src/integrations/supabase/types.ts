@@ -1534,6 +1534,7 @@ export type Database = {
           created_at: string;
           full_name: string | null;
           id: string;
+          inbox_cleared_at: string | null;
           job_title: string | null;
           note: string | null;
           registration_body: string | null;
@@ -1554,6 +1555,7 @@ export type Database = {
           created_at?: string;
           full_name?: string | null;
           id?: string;
+          inbox_cleared_at?: string | null;
           job_title?: string | null;
           note?: string | null;
           registration_body?: string | null;
@@ -1574,6 +1576,7 @@ export type Database = {
           created_at?: string;
           full_name?: string | null;
           id?: string;
+          inbox_cleared_at?: string | null;
           job_title?: string | null;
           note?: string | null;
           registration_body?: string | null;

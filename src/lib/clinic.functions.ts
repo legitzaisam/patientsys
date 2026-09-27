@@ -63,6 +63,7 @@ import {
   clinicHasSeparateManager,
   profileChangeApproverIds,
   profileChangeRequiresOwner,
+  profileChangeShowsReviewer,
 } from "@/lib/profile-change-policy";
 
 export { PERMISSION_KEYS, type PermissionKey };
@@ -5844,29 +5845,61 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "listProfileChangeRequests");
     const supabaseAdmin = await adminClient(context);
-    const [{ data: requests }, { data: profiles }, users] = await Promise.all([
-      supabaseAdmin
-        .from("profile_change_requests")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(50),
-      supabaseAdmin
-        .from("profiles")
-        .select(
-          "id, full_name, job_title, registration_body, registration_number, registration_expiry, working_arrangement",
-        ),
-      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
-    ]);
+    const [{ data: requests }, { data: profiles }, users, { data: roles }, { data: grants }, { data: namedGrants }] =
+      await Promise.all([
+        supabaseAdmin
+          .from("profile_change_requests")
+          .select("*")
+          .is("inbox_cleared_at", null)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabaseAdmin
+          .from("profiles")
+          .select(
+            "id, full_name, job_title, registration_body, registration_number, registration_expiry, working_arrangement, clinic_role_id",
+          ),
+        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
+        supabaseAdmin.from("user_roles").select("user_id, role"),
+        supabaseAdmin
+          .from("role_permissions")
+          .select("role, permission, enabled")
+          .eq("permission", "team.approve_changes"),
+        supabaseAdmin
+          .from("clinic_role_permissions")
+          .select("clinic_role_id, permission, enabled")
+          .eq("permission", "team.approve_changes"),
+      ]);
     const emailFor = new Map<string, string>(
       (users.data?.users ?? []).map((u) => [u.id, u.email ?? ""]),
     );
-    const visible = ((requests ?? []) as { requires_owner?: boolean }[]).filter(
+    const approverInput = {
+      roleRows: (roles ?? []) as { user_id: string; role: string }[],
+      profiles: (profiles ?? []) as { id: string; clinic_role_id?: string | null }[],
+      roleGrants: (grants ?? []) as { role: string; permission: string; enabled: boolean }[],
+      namedGrants: (namedGrants ?? []) as {
+        clinic_role_id: string;
+        permission: string;
+        enabled: boolean;
+      }[],
+    };
+    const visible = ((requests ?? []) as { requires_owner?: boolean; user_id: string }[]).filter(
       (r) => identity.isOwner || identity.isAdmin || !r.requires_owner,
     );
     return visible.map((r: any) => {
       const current = (profiles ?? []).find((p: any) => p.id === r.user_id) ?? null;
+      const reviewer = (profiles ?? []).find((p: any) => p.id === r.reviewed_by);
       return {
         ...r,
+        reviewed_by_name: reviewer?.full_name ?? null,
+        show_reviewer: Boolean(
+          r.reviewed_by &&
+            r.status !== "pending" &&
+            profileChangeShowsReviewer({
+              requesterId: r.user_id,
+              requiresOwner: Boolean(r.requires_owner),
+              ...approverInput,
+            }),
+        ),
         current: current
           ? { ...current, email: emailFor.get(r.user_id) ?? "" }
           : { email: emailFor.get(r.user_id) ?? "" },
@@ -5937,6 +5970,30 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
       data.id,
       null,
     );
+    return { ok: true };
+  });
+
+/** Owner, or staff granted Approve profile change requests, can clear a finished card. */
+export const dismissProfileChangeRequest = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.DismissProfileChange, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "dismissProfileChangeRequest");
+    const supabaseAdmin = await adminClient(context);
+    const { data: req, error: reqError } = await supabaseAdmin
+      .from("profile_change_requests")
+      .select("id, status")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (reqError) throw new Error(reqError.message);
+    if (!req) throw new Error("Request not found");
+    if (req.status === "pending") throw new Error("Approve or decline this request first");
+    const { error } = await supabaseAdmin
+      .from("profile_change_requests")
+      .update({ inbox_cleared_at: new Date().toISOString() })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
     return { ok: true };
   });
 

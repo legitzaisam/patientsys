@@ -1104,6 +1104,66 @@ input:-webkit-autofill {
   }
 }
 
+/*
+ * Staff access column header. It pins under the page toolbar, so it needs an
+ * opaque fill (capability rows pass behind it) plus a backdrop over the
+ * toolbar strip, which is transparent and would otherwise show those rows.
+ */
+.access-grid-head {
+  background: color-mix(in srgb, var(--foreground) 3%, #fdfdfd);
+}
+
+.access-grid-head[data-pinned] {
+  box-shadow: 0 10px 18px -14px rgba(47, 63, 102, 0.4);
+}
+
+.access-grid-head[data-pinned]::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: 3.5rem;
+  background: #fdfdfd;
+}
+
+/* Collapsible panels (Staff access categories) slide on the height Radix measures. */
+@keyframes collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+.collapsible-panel {
+  overflow: hidden;
+}
+
+.collapsible-panel[data-state="open"] {
+  animation: collapsible-down 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.collapsible-panel[data-state="closed"] {
+  animation: collapsible-up 170ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapsible-panel[data-state="open"],
+  .collapsible-panel[data-state="closed"] {
+    animation-duration: 0.01ms;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Small screens                                                        */
 /* ------------------------------------------------------------------ */
