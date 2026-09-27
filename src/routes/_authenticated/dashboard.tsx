@@ -13,6 +13,8 @@ import { QuickAddAppointment } from "@/components/quick-add-appointment";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TodaySnapshot } from "@/components/dashboard/today-snapshot";
 import { AttentionList } from "@/components/dashboard/attention-list";
+import { AttentionSummary } from "@/components/dashboard/attention-summary";
+import { WeekSummaryStrip } from "@/components/dashboard/week-summary-strip";
 import { FollowUpTasks } from "@/components/dashboard/follow-up-tasks";
 import { PauseRequests } from "@/components/dashboard/pause-requests";
 import { TreatmentJourneys } from "@/components/dashboard/treatment-journeys";
@@ -100,9 +102,21 @@ function DashboardPage() {
     enabled: staffEnabled,
   });
   const fetchWeek = useServerFn(listAppointments);
+  // A practitioner's week is filtered on the server, like their day.
+  const weekPractitioner =
+    identity && !identity.isManager && identity.roles.includes("practitioner")
+      ? identity.userId
+      : undefined;
   const { data: weekAppointments } = useQuery({
-    queryKey: ["dashboard-week", weekRange.startISO, weekRange.endISO],
-    queryFn: () => fetchWeek({ data: { from: weekRange.startISO, to: weekRange.endISO } }),
+    queryKey: ["dashboard-week", weekRange.startISO, weekRange.endISO, weekPractitioner ?? "all"],
+    queryFn: () =>
+      fetchWeek({
+        data: {
+          from: weekRange.startISO,
+          to: weekRange.endISO,
+          ...(weekPractitioner ? { practitioner_id: weekPractitioner } : {}),
+        },
+      }),
     enabled: staffEnabled && diarySpan === "week",
   });
 
@@ -146,13 +160,10 @@ function DashboardPage() {
     diarySpan === "week"
       ? `${formatDiaryDay(weekRange.startKey)} – ${formatDiaryDay(weekRange.endKey)}`
       : new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
-  const isPractitioner = identity.roles.includes("practitioner");
   const diaryAppointments =
-    diarySpan === "week"
-      ? ((weekAppointments ?? []) as any[]).filter(
-          (a) => isManager || !isPractitioner || a.practitioner_id === identity.userId,
-        )
-      : (data?.todayAppointments ?? []);
+    diarySpan === "week" ? ((weekAppointments ?? []) as any[]) : (data?.todayAppointments ?? []);
+  const attentionItems = [...(data?.attentionItems ?? []), ...incompleteItems];
+  const depositLeadDays = Number((data as any)?.depositLeadDays ?? 3);
 
   function chooseDiarySpan(next: "day" | "week") {
     setDiarySpan(next);
@@ -168,7 +179,7 @@ function DashboardPage() {
         </div>
       </div>
 
-      <section className="mb-8">
+      <section className={isManager ? "mb-4" : "mb-8"}>
             <KpiGrid
               kpis={{
                 ...data?.kpis,
@@ -188,6 +199,13 @@ function DashboardPage() {
               onRetry={retryAll}
             />
       </section>
+
+      {/* Owners and managers: numbers, then a short Attention summary, then the diary. */}
+      {isManager && canSee(identity, "dashboard-attention") ? (
+        <section className="mb-8">
+          <AttentionSummary items={attentionItems} status={dashboardStatus} />
+        </section>
+      ) : null}
 
       {canSee(identity, "dashboard-diary") && <section className="mb-2">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -223,6 +241,12 @@ function DashboardPage() {
             </QuickAddAppointment>}
           </div>
         </div>
+        {diarySpan === "week" && isManager && weekAppointments ? (
+          <WeekSummaryStrip
+            rows={weekAppointments as any[]}
+            weekStartISO={weekRange.startISO}
+          />
+        ) : null}
         <TodaySnapshot
           appointments={diaryAppointments}
           isManager={isManager}
@@ -232,29 +256,41 @@ function DashboardPage() {
         />
       </section>}
 
-      <section className="flex flex-1 flex-col gap-6">
-        {canSee(identity, "dashboard-attention") && <div>
-          <div className="mb-4">
-            <h2 className="section-title">Attention needed</h2>
-            <p className="text-xs text-muted-foreground">
-              Today and this week: what to sort out before appointments happen. Deposits must be paid at least
-              3 days before the appointment.
-            </p>
+      {/* Owners and managers see the journeys before the lists; everyone else after. */}
+      {isManager && canSee(identity, "dashboard-journeys") && (
+        <TreatmentJourneys
+          journeys={(data as any)?.journeys}
+          status={dashboardStatus}
+          onRetry={retryAll}
+        />
+      )}
+
+      <section className={`flex flex-1 flex-col gap-6 ${isManager ? "mt-8" : ""}`} id="attention">
+        {canSee(identity, "dashboard-attention") && (
+          <div className="scroll-mt-20">
+            <div className="mb-4">
+              <h2 className="section-title">Attention needed</h2>
+              <p className="text-xs text-muted-foreground" data-qc="attention-deposit-rule">
+                Today and this week: what to sort out before appointments happen. Deposits must be
+                paid at least {depositLeadDays} day{depositLeadDays === 1 ? "" : "s"} before the
+                appointment.
+              </p>
+            </div>
+            <AttentionList items={attentionItems} status={dashboardStatus} onRetry={retryAll} />
           </div>
-          <AttentionList
-            items={[...(data?.attentionItems ?? []), ...incompleteItems]}
-            status={dashboardStatus}
-            onRetry={retryAll}
-          />
-        </div>}
+        )}
         <div className="space-y-4">
           {canSee(identity, "dashboard-pauses") && <PauseRequests />}
           {canSee(identity, "dashboard-followups") && <FollowUpTasks />}
         </div>
       </section>
 
-      {canSee(identity, "dashboard-journeys") && (
-        <TreatmentJourneys journeys={(data as any)?.journeys} status={dashboardStatus} onRetry={retryAll} />
+      {!isManager && canSee(identity, "dashboard-journeys") && (
+        <TreatmentJourneys
+          journeys={(data as any)?.journeys}
+          status={dashboardStatus}
+          onRetry={retryAll}
+        />
       )}
     </AppShell>
   );

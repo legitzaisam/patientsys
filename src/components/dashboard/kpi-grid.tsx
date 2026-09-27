@@ -19,6 +19,9 @@ type KpiChip = {
   label: string;
   tone: ChipTone;
   icon?: "up" | "down";
+  /** Where the chip's number lives; the chip becomes a link. */
+  to?: string;
+  search?: Record<string, unknown>;
 };
 
 function percentChip(id: string, change: number, suffix = ""): KpiChip {
@@ -35,19 +38,35 @@ function ChipRow({ chips }: { chips: KpiChip[] }) {
   if (!chips.length) return null;
   return (
     <div className="mt-2.5 flex flex-wrap gap-1.5">
-      {chips.map((chip) => (
-        <span
-          key={chip.id}
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-inset-hi",
-            CHIP_TONE[chip.tone],
-          )}
-        >
-          {chip.icon === "up" && <ArrowUp className="h-3 w-3" aria-hidden />}
-          {chip.icon === "down" && <ArrowDown className="h-3 w-3" aria-hidden />}
-          {chip.label}
-        </span>
-      ))}
+      {chips.map((chip) => {
+        const className = cn(
+          "inline-flex min-h-6 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-inset-hi",
+          CHIP_TONE[chip.tone],
+          chip.to && "transition-[filter] hover:brightness-[0.96]",
+        );
+        const inner = (
+          <>
+            {chip.icon === "up" && <ArrowUp className="h-3 w-3" aria-hidden />}
+            {chip.icon === "down" && <ArrowDown className="h-3 w-3" aria-hidden />}
+            {chip.label}
+          </>
+        );
+        return chip.to ? (
+          <Link
+            key={chip.id}
+            to={chip.to}
+            search={chip.search ?? {}}
+            className={className}
+            data-qc={`kpi-chip-${chip.id}`}
+          >
+            {inner}
+          </Link>
+        ) : (
+          <span key={chip.id} className={className} data-qc={`kpi-chip-${chip.id}`}>
+            {inner}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -86,11 +105,13 @@ export function KpiGrid({
                 id: "revenue-at-risk",
                 label: `£${Number(kpis?.revenueAtRisk ?? 0).toLocaleString()} at risk`,
                 tone: "lilac" as const,
+                to: "/retention",
               },
               {
                 id: "patients-to-chase",
                 label: `${kpis?.patientsToChase ?? 0} to chase`,
                 tone: "peach" as const,
+                to: "/retention",
               },
             ],
           },
@@ -119,6 +140,9 @@ export function KpiGrid({
           id: "plans-overdue",
           label: `${kpis?.plansOverdue ?? 0} overdue step${(kpis?.plansOverdue ?? 0) === 1 ? "" : "s"}`,
           tone: (kpis?.plansOverdue ?? 0) > 0 ? ("rose" as const) : ("mint" as const),
+          // The board opened on its at-risk cards.
+          to: "/patients",
+          search: { tab: "board", risk: true },
         },
       ],
     },
@@ -136,11 +160,15 @@ export function KpiGrid({
           id: "treatments-due",
           label: `${kpis?.treatmentsDueSoon ?? 0} due`,
           tone: "gold" as const,
+          to: "/patients",
+          search: { view: "due" },
         },
         {
           id: "treatments-overdue",
           label: `${kpis?.treatmentsOverdue ?? 0} overdue`,
           tone: "rose" as const,
+          to: "/patients",
+          search: { view: "due" },
         },
       ],
     },
@@ -199,17 +227,29 @@ export function KpiGrid({
               {item.value}
             </p>
             {item.hint && <p className="mt-2 text-2xs text-muted-foreground">{item.hint}</p>}
-            <ChipRow chips={item.chips ?? []} />
           </>
         );
+        // The number and its label link to the list; the chips underneath link
+        // to their own narrower lists, so links never nest.
         const className = "glass-card block p-[18px] text-left transition-shadow hover:shadow-lift";
-        return "to" in item && item.to ? (
-          <Link key={item.label} to={item.to} search={item.search ?? {}} className={className}>
-            {body}
-          </Link>
-        ) : (
-          <div key={item.label} className={className}>
-            {body}
+        return (
+          <div
+            key={item.label}
+            className={className}
+            data-qc={`kpi-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            {"to" in item && item.to ? (
+              <Link
+                to={item.to}
+                search={item.search ?? {}}
+                className="-mx-[18px] -mt-[18px] block rounded-[inherit] px-[18px] pt-[18px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {body}
+              </Link>
+            ) : (
+              body
+            )}
+            <ChipRow chips={item.chips ?? []} />
           </div>
         );
       })}

@@ -80,10 +80,26 @@ const TITLES = ["Mr", "Mrs", "Ms", "Miss", "Mx", "Dr", "Prof"];
 export const Route = createFileRoute("/_authenticated/patients/")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { view?: PatientView; q?: string; tab?: PatientsTab; page?: number } => {
+  ): {
+    view?: PatientView;
+    q?: string;
+    tab?: PatientsTab;
+    page?: number;
+    risk?: boolean;
+  } => {
     // No view in the URL means "the role's default" (practitioners land on My patients).
     const v = String(search?.["view"] ?? "");
-    const parsed: { view?: PatientView; q?: string; tab?: PatientsTab; page?: number } = {};
+    const parsed: {
+      view?: PatientView;
+      q?: string;
+      tab?: PatientsTab;
+      page?: number;
+      risk?: boolean;
+    } = {};
+    // ?risk=1 opens the journey board on its at-risk cards (the dashboard's "overdue steps" chip).
+    if (search?.["risk"] === true || search?.["risk"] === "1" || search?.["risk"] === 1) {
+      parsed.risk = true;
+    }
     if ((PATIENT_VIEWS as string[]).includes(v)) parsed.view = v as PatientView;
     if (typeof search?.["q"] === "string" && search["q"]) parsed.q = search["q"];
     const page = Number(search?.["page"]);
@@ -111,7 +127,13 @@ export const Route = createFileRoute("/_authenticated/patients/")({
 
 function PatientsPage() {
   const { data: identity } = useIdentity();
-  const { view: viewParam, q, tab = "records", page: pageParam = 1 } = Route.useSearch();
+  const {
+    view: viewParam,
+    q,
+    tab = "records",
+    page: pageParam = 1,
+    risk = false,
+  } = Route.useSearch();
   const navigate = useNavigate();
   // A practitioner's list opens on their own patients; everyone else on All.
   const ownBook = Boolean(
@@ -263,7 +285,7 @@ function PatientsPage() {
         </div>
       </div>
 
-      {tab === "board" && <JourneyBoard identity={identity} />}
+      {tab === "board" && <JourneyBoard identity={identity} initialAtRiskOnly={risk} />}
       {tab === "records" && (
       <>
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

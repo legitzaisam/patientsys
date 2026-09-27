@@ -45,7 +45,9 @@ test.describe("as the owner", () => {
   test("KPI cards name the clinic and agree with the retention page", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(page.getByText("Total clients")).toBeVisible();
-    await expect(page.getByText("Whole clinic · overdue or due in 30 days, nothing booked")).toBeVisible();
+    await expect(
+      page.getByText("Whole clinic · overdue or due in 30 days, nothing booked"),
+    ).toBeVisible();
     await expect(page.getByText(/% vs last month/).first()).toBeVisible();
 
     // The retention KPI and the retention page read from the same source.
@@ -97,17 +99,22 @@ test.describe("as the owner", () => {
     await expect(page.getByRole("heading", { name: "Contact preferences" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Email and text" })).toBeVisible();
 
-    // ?chat=1 opens the docked chat with the composer focused.
+    // ?chat=1 opens the floating chat window on this patient (the fixture hides
+    // the dock to keep corners clear; show it for this check).
     const url = new URL(page.url());
     await page.goto(`${url.pathname}?chat=1`);
-    await expect(page.locator("#patient-chat")).toBeVisible();
-    await expect(page.locator("#patient-chat textarea")).toBeFocused();
+    await page.addStyleTag({ content: '[data-qc="floating-dock"] { display: flex !important; }' });
+    await expect(page.locator('[data-qc="chat-window"]')).toBeVisible();
+    await expect(page.locator('[data-qc="chat-window"] header')).toContainText("Olivia Bennett");
+    await expect(page.locator("#patient-chat")).toHaveCount(0);
 
     await expect(page.getByRole("tab", { name: "Visit notes" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Upcoming appointments" })).toBeVisible();
   });
 
-  test("journey card: steps counter, next step, plan kind and a bounded height", async ({ page }) => {
+  test("journey card: steps counter, next step, plan kind and a bounded height", async ({
+    page,
+  }) => {
     await page.goto("/dashboard");
     const consult = page.locator('[data-qc="journey-consult"]');
     await consult.scrollIntoViewIfNeeded();
@@ -118,9 +125,69 @@ test.describe("as the owner", () => {
 
     // Columns keep a consistent minimum height instead of stretching to the tallest.
     const heights = await Promise.all(
-      (await page.locator('[data-qc^="journey-"]').all()).map(async (c) => (await c.boundingBox())?.height ?? 0),
+      (await page.locator('[data-qc^="journey-"]').all()).map(
+        async (c) => (await c.boundingBox())?.height ?? 0,
+      ),
     );
     expect(Math.min(...heights)).toBeGreaterThanOrEqual(240);
+  });
+
+  test("owner dashboard: numbers, Attention summary, diary, journeys, then the lists; week strip; linked numbers", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    await page.locator('[data-qc="attention-summary"]').waitFor();
+    // Order of the sections for an owner.
+    const order = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-qc="attention-summary"], h2.section-title')].map(
+        (e) => e.getAttribute("data-qc") ?? e.textContent?.trim() ?? "",
+      ),
+    );
+    expect(order[0]).toBe("attention-summary");
+    expect(order.findIndex((t) => t.startsWith("Active treatment journeys"))).toBeLessThan(
+      order.findIndex((t) => t.startsWith("Attention needed")),
+    );
+    expect(order.findIndex((t) => t.startsWith("Attention needed"))).toBeLessThan(
+      order.findIndex((t) => t.startsWith("My tasks")),
+    );
+    await expect(page.locator('[data-qc="attention-summary"]')).toContainText(
+      /\d+ urgent · \d+ this week/,
+    );
+
+    // The deposit rule reads the lead days from Settings (3 in the demo).
+    await expect(page.locator('[data-qc="attention-deposit-rule"]')).toContainText(
+      "at least 3 days before the appointment",
+    );
+
+    // Chips link to their lists; the overdue-steps chip opens the board on at-risk cards.
+    await expect(page.locator('a[data-qc="kpi-chip-treatments-overdue"]')).toHaveAttribute(
+      "href",
+      /view=due/,
+    );
+    await expect(page.locator('a[data-qc="kpi-chip-patients-to-chase"]')).toHaveAttribute(
+      "href",
+      "/retention",
+    );
+    await expect(page.locator('a[data-qc="kpi-chip-plans-overdue"]')).toHaveAttribute(
+      "href",
+      /tab=board.*risk/,
+    );
+    // Journey cards deep-link to the record's plan card.
+    await expect(page.locator('[data-qc="plan-link"]').first()).toHaveAttribute(
+      "href",
+      /\/patients\/[^?]+\?tab=treatments#plan/,
+    );
+    // Tasks carry a due date and an assignee.
+    await expect(page.locator('[data-qc="task-meta"]').first()).toBeVisible();
+
+    // Week view: the summary strip sits above the cards.
+    await page.getByRole("button", { name: "week" }).click();
+    const strip = page.locator('[data-qc="week-summary"]');
+    await expect(strip).toBeVisible();
+    await expect(strip).toContainText("Bookings this week");
+    await expect(strip).toContainText("Booked value");
+    await expect(strip.locator('[data-qc="week-fullness"]').first()).toBeVisible();
+    await page.getByRole("button", { name: "day" }).click();
   });
 
   test("diary notes on upcoming appointments read as the pre-read", async ({ page }) => {
@@ -142,7 +209,9 @@ test.describe("as a practitioner", () => {
     await page.goto("/dashboard");
     await expect(page.getByText("Your clients")).toBeVisible();
     await expect(page.getByText(/Clinic total \d+/)).toBeVisible();
-    await expect(page.getByText("Your patients · overdue or due in 30 days, nothing booked")).toBeVisible();
+    await expect(
+      page.getByText("Your patients · overdue or due in 30 days, nothing booked"),
+    ).toBeVisible();
 
     // Their retention numbers match their own retention page.
     const seen = /\d+ of \d+ seen in the last 12 months/;
@@ -154,7 +223,11 @@ test.describe("as a practitioner", () => {
 });
 
 test.describe("pause requests", () => {
-  test("carry a Contact button that opens the patient's chat", async ({ page, context, baseURL }) => {
+  test("carry a Contact button that opens the patient's chat", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
     const base = baseURL ?? "http://localhost:8091";
     // Raise a request as the patient if none is waiting.
     await context.addCookies([{ name: "demo_role", value: "patient", url: base }]);
@@ -175,7 +248,8 @@ test.describe("pause requests", () => {
     await expect(card.getByRole("button", { name: "Approve pause" }).first()).toBeVisible();
     await card.getByRole("link", { name: "Contact" }).first().click();
     await expect(page).toHaveURL(/\/patients\/[^/]+\?chat=/);
-    await expect(page.locator("#patient-chat textarea")).toBeFocused();
+    await page.addStyleTag({ content: '[data-qc="floating-dock"] { display: flex !important; }' });
+    await expect(page.locator('[data-qc="chat-window"]')).toBeVisible();
 
     // Decline it so the plan is not left with an open request for later specs.
     await page.goto("/dashboard");

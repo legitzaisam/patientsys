@@ -52,7 +52,12 @@ const percentage = z.number().min(0).max(100);
 
 export const GetPatient = z.object({ id });
 
-export const ListAppointments = z.object({ from: dateString, to: dateString });
+export const ListAppointments = z.object({
+  from: dateString,
+  to: dateString,
+  /** Narrow to one practitioner's column (the dashboard week view for practitioners). */
+  practitioner_id: optionalId,
+});
 
 export const SaveAppointment = z.object({
   id: optionalId,

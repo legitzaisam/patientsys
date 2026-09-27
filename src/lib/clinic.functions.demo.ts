@@ -1124,10 +1124,17 @@ export const listPractitioners = createServerFn({ method: "GET" }).handler(async
 });
 
 export const listAppointments = createServerFn({ method: "GET" })
-  .validator((data: { from: string; to: string }) => parseInput(schemas.ListAppointments, data))
+  .validator((data: { from: string; to: string; practitioner_id?: string }) =>
+    parseInput(schemas.ListAppointments, data),
+  )
   .handler(async ({ data }) =>
     sortAsc(
-      appointments.filter((a) => a.starts_at >= data.from && a.starts_at < data.to),
+      appointments.filter(
+        (a) =>
+          a.starts_at >= data.from &&
+          a.starts_at < data.to &&
+          (!data.practitioner_id || a.practitioner_id === data.practitioner_id),
+      ),
       "starts_at",
     ).map(appointmentView),
   );

@@ -26,6 +26,31 @@ function readChannels(): Record<string, Channel> {
 }
 
 /** Outstanding patient follow-ups (e.g. after a no show) for the signed-in user. */
+/** "Due 4 Oct · Dr Nadia Rahman" under a task; overdue reads in rose. */
+function TaskMeta({ dueAt, assignee }: { dueAt: string | null; assignee: string | null }) {
+  if (!dueAt && !assignee) return null;
+  const due = dueAt ? new Date(dueAt) : null;
+  const today = new Date();
+  const overdue =
+    !!due &&
+    due.getTime() < new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  return (
+    <p
+      className="mt-1 flex flex-wrap items-center gap-x-1.5 text-2xs text-muted-foreground"
+      data-qc="task-meta"
+    >
+      {due ? (
+        <span className={overdue ? "font-semibold text-destructive-ink" : undefined}>
+          {overdue ? "Overdue since" : "Due"}{" "}
+          {due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+        </span>
+      ) : null}
+      {due && assignee ? <span aria-hidden>·</span> : null}
+      {assignee ? <span>{assignee}</span> : null}
+    </p>
+  );
+}
+
 export function FollowUpTasks() {
   const queryClient = useQueryClient();
   const fetchTasks = useServerFn(listOpenRecallTasks);
@@ -158,6 +183,7 @@ export function FollowUpTasks() {
                 <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">
                   {t.note ?? "Follow-up required"}
                 </p>
+                <TaskMeta dueAt={t.due_at ?? null} assignee={t.assigned_label ?? null} />
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 {t.patients?.phone && (

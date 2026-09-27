@@ -122,9 +122,13 @@ export function TreatmentJourneys({
                     const pct = plan.total ? Math.round((plan.done / plan.total) * 100) : 0;
                     return (
                       <li key={plan.id}>
+                        {/* Straight to the plan card on the record's Treatments tab. */}
                         <Link
                           to="/patients/$id"
                           params={{ id: plan.patientId }}
+                          search={{ tab: "treatments" }}
+                          hash="plan"
+                          data-qc="plan-link"
                           className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 transition-colors hover:bg-[rgba(47,63,102,0.08)]"
                         >
                           <PatientAvatar

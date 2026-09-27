@@ -1199,11 +1199,13 @@ export const listPractitioners = createServerFn({ method: "GET" })
   });
 
 export const listAppointments = createServerFn({ method: "GET" })
-  .validator((data: { from: string; to: string }) => parseInput(schemas.ListAppointments, data))
+  .validator((data: { from: string; to: string; practitioner_id?: string }) =>
+    parseInput(schemas.ListAppointments, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "listAppointments");
-    const { data: rows, error } = await (context as Ctx).supabase
+    let query = (context as Ctx).supabase
       .from("appointments")
       .select(
         "*, patients(first_name, last_name, reference, email, phone), profiles(full_name), documents(status, title), treatment_catalogue(requires_consent), appointment_notes(body, updated_at, updated_by_label)",
@@ -1211,6 +1213,9 @@ export const listAppointments = createServerFn({ method: "GET" })
       .gte("starts_at", data.from)
       .lt("starts_at", data.to)
       .order("starts_at", { ascending: true });
+    // A practitioner's week is filtered here, the same way their day is.
+    if (data.practitioner_id) query = query.eq("practitioner_id", data.practitioner_id);
+    const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
     const list = (rows ?? []) as any[];
     await holdArrivedUntilConsent((context as Ctx).supabase, list);

@@ -73,12 +73,19 @@ function byRiskThenName(a: BoardPlan, b: BoardPlan) {
  * Advanced mockup. Owners, managers and front desk open on the whole clinic; a
  * practitioner opens on "My patients" and can toggle to everyone.
  */
-export function JourneyBoard({ identity }: { identity: Identity }) {
+export function JourneyBoard({
+  identity,
+  initialAtRiskOnly = false,
+}: {
+  identity: Identity;
+  /** Open on the at-risk cards (the dashboard's "overdue steps" chip links here). */
+  initialAtRiskOnly?: boolean;
+}) {
   const isPractitionerOnly = !identity.isManager && identity.roles.includes("practitioner");
   // Role default: practitioners start on their own book.
   const [scope, setScope] = useState<"mine" | "all">(isPractitionerOnly ? "mine" : "all");
   const [practitionerId, setPractitionerId] = useState<string>("all");
-  const [atRiskOnly, setAtRiskOnly] = useState(false);
+  const [atRiskOnly, setAtRiskOnly] = useState(initialAtRiskOnly);
   const [query, setQuery] = useState("");
 
   const effectivePractitioner = isPractitionerOnly
