@@ -100,9 +100,9 @@ export function appointmentFlags(
     const days = daysUntil(a, opts.nowMs);
     if (pay === "unpaid") {
       flags.add("unpaid");
-      // Unpaid and still ahead: the deposit is what is owed. On or past the
-      // day it reads as unpaid only.
-      if (days >= 0) {
+      // Unpaid and still ahead of the day: the deposit is what is owed. On
+      // the day itself, or afterwards, it reads as unpaid only.
+      if (days > 0) {
         flags.add("deposit_due");
         depositUrgency = days <= opts.depositLeadDays ? "urgent" : "this_week";
       }
@@ -118,10 +118,11 @@ export function appointmentFlags(
 }
 
 /** The five types the diary's Needs action menu lists, in display order. */
-export const NEEDS_ACTION_TYPES: FlagKey[] = [
+export const NEEDS_ACTION_TYPES = [
   "unpaid",
   "deposit_due",
   "consent_due",
   "running_late",
   "details_incomplete",
-];
+] as const satisfies readonly FlagKey[];
+export type NeedsActionType = (typeof NEEDS_ACTION_TYPES)[number];

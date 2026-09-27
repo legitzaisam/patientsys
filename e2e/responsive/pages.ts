@@ -280,6 +280,27 @@ function diaryView(view: "week" | "month"): PageState {
   };
 }
 
+/** The diary's Needs action menu open (caret), with everything outstanding highlighted. */
+const needsActionOpen: PageState = {
+  id: "needs-action-open",
+  open: async (page) => {
+    // Nothing outstanding today reads "All clear" and has no menu.
+    if (!(await clickIfVisible(page, '[data-qc="needs-action-main"]', 3_000))) return false;
+    await wait(page, 300);
+    if (!(await clickIfVisible(page, '[data-qc="needs-action-caret"]', 2_000))) return false;
+    await page
+      .locator('[data-qc="needs-action-menu"]')
+      .waitFor({ state: "visible", timeout: 3_000 });
+    await wait(page, 300);
+    return true;
+  },
+  close: async (page) => {
+    await page.keyboard.press("Escape");
+    await clickIfVisible(page, '[data-qc="needs-action-clear"]', 2_000);
+    await wait(page, 200);
+  },
+};
+
 const newBooking: PageState = {
   id: "new-booking",
   open: async (page) => {
@@ -447,15 +468,15 @@ export const PAGES: PageEntry[] = [
     path: "/schedule",
     roles: STAFF,
     settle: '[data-qc="day-planner-scroll"], .page-title',
-    states: [sidebarClosed, newBooking],
-    coreStates: ["sidebar-closed"],
+    states: [sidebarClosed, newBooking, needsActionOpen],
+    coreStates: ["sidebar-closed", "needs-action-open"],
   },
   {
     id: "schedule-week",
     path: "/schedule",
     roles: ["owner"],
     settle: ".page-title",
-    states: [diaryView("week"), sidebarClosed],
+    states: [diaryView("week"), sidebarClosed, needsActionOpen],
     enterState: "view-week",
   },
   {

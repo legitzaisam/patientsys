@@ -39,6 +39,26 @@ export function clinicDayRange(now: Date = new Date(), timeZone: string = CLINIC
   return { dayKey: key, startISO: start.toISOString(), endISO: adjustedEnd.toISOString() };
 }
 
+/** [start, end) of the clinic-local day named by a yyyy-mm-dd key, as UTC ISO strings. */
+export function clinicDayRangeForKey(key: string, timeZone: string = CLINIC_TZ) {
+  // Noon UTC on that date falls inside the same clinic-local day for any
+  // timezone within ±11 h, so the range resolves to the day the key names.
+  return clinicDayRange(new Date(`${key}T12:00:00Z`), timeZone);
+}
+
+/** Minutes since clinic-local midnight for an instant. */
+export function clinicMinutesOfDay(at: Date, timeZone: string = CLINIC_TZ) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  return hour * 60 + minute;
+}
+
 /** Monday 00:00 to next Monday 00:00 in the clinic timezone (ISO bounds). */
 export function clinicWeekRange(now: Date = new Date(), timeZone: string = CLINIC_TZ) {
   const key = clinicDayKey(now, timeZone);

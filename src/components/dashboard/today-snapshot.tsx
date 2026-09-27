@@ -625,6 +625,7 @@ function TodayCard({
           >
             <ConsentChip appointment={a} signed={consentSigned} />
             <PaymentChip appointment={a} status={paymentStatus} />
+            {a.details_incomplete ? <DetailsIncompleteChip /> : null}
             <VisitNoteChip appointmentId={a.id} variant="chip" compact preRead={isPreAppointmentNote(a)} />
             {a.claimedOffer ? <ClaimedOfferChip offer={a.claimedOffer} /> : null}
           </div>
@@ -717,6 +718,7 @@ function TodayCard({
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <ConsentChip appointment={a} signed={consentSigned} />
                   <PaymentChip appointment={a} status={paymentStatus} />
+                  {a.details_incomplete ? <DetailsIncompleteChip /> : null}
                 </div>
                 {(a.patients?.phone || a.patients?.email) && (
                   <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-edge pt-2 text-xs text-muted-foreground">
@@ -956,6 +958,19 @@ function StageBadge({
         </div>
       </HoverCardContent>
     </HoverCard>
+  );
+}
+
+/** A Quick book booking still missing its details; cleared when the booking is edited. */
+function DetailsIncompleteChip() {
+  return (
+    <span
+      data-qc="details-incomplete-chip"
+      title="Booked from Quick book; open the booking to complete its details"
+      className="inline-flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2 text-2xs font-semibold leading-none text-accent-ink shadow-inset-hi"
+    >
+      Details incomplete
+    </span>
   );
 }
 

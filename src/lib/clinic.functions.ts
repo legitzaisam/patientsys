@@ -1,6 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/lib/auth/session-middleware.server";
-import { clinicDayDiff, clinicDayKey, clinicDayRange } from "@/lib/clinic-time";
+import {
+  clinicDayDiff,
+  clinicDayKey,
+  clinicDayRange,
+  clinicDayRangeForKey,
+  clinicMinutesOfDay,
+} from "@/lib/clinic-time";
 import {
   dueState,
   nextDueFor,
@@ -2657,9 +2663,8 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "getPractitionerDay");
     const ctx = context as Ctx;
-    const day = new Date(`${data.date}T00:00:00`);
-    const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
-    const to = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).toISOString();
+    // The day is the clinic's (Europe/London), not the server's clock.
+    const { startISO: from, endISO: to } = clinicDayRangeForKey(data.date);
 
     const [{ data: appts }, { data: alerts }] = await Promise.all([
       ctx.supabase
@@ -2681,10 +2686,7 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
     const booked = (appts ?? []).filter((a: { status: string }) => a.status !== "cancelled");
     const DAY_START = 9 * 60;
     const DAY_END = 18 * 60;
-    const mins = (iso: string) => {
-      const d = new Date(iso);
-      return d.getHours() * 60 + d.getMinutes();
-    };
+    const mins = (iso: string) => clinicMinutesOfDay(new Date(iso));
     const free: { from: number; to: number }[] = [];
     let cursor = DAY_START;
     for (const a of booked as { starts_at: string; ends_at: string }[]) {

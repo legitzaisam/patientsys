@@ -146,6 +146,14 @@ describe("appointment flags", () => {
       { nowMs: NOW, depositLeadDays: 7 },
     );
     expect(withSevenDayRule.depositUrgency).toBe("urgent");
+    // On the day it is simply unpaid; the deposit window has passed.
+    const today = appointmentFlags(
+      { ...base, starts_at: iso(0), payment_status: "unpaid" },
+      { nowMs: NOW, depositLeadDays: 3 },
+    );
+    expect(today.flags.has("unpaid")).toBe(true);
+    expect(today.flags.has("deposit_due")).toBe(false);
+    expect(today.depositUrgency).toBeNull();
   });
 
   it("a deposit-paid booking owes the balance; a signed consent is not due; cancelled bookings carry nothing", () => {
