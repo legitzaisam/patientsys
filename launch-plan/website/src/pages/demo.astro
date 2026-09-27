@@ -1,0 +1,247 @@
+---
+import fs from "node:fs";
+import path from "node:path";
+import Base from "../layouts/Base.astro";
+import MacWindow from "../components/MacWindow.astro";
+import JourneyScreen from "../components/JourneyScreen.astro";
+import { links } from "../lib/links";
+
+// Drop the finished clip at public/media/sqinos-demo.mp4 (and, optionally, a
+// poster at public/media/sqinos-demo-poster.webp). Until then the window shows
+// a placeholder built from the diary screen.
+const media = path.resolve("public/media");
+const hasVideo = fs.existsSync(path.join(media, "sqinos-demo.mp4"));
+const hasPoster = fs.existsSync(path.join(media, "sqinos-demo-poster.webp"));
+
+const personas = [
+  { who: "Clinic owner", line: "Revenue, retention and who needs attention today.", href: links.clinic, c: "var(--butter)" },
+  { who: "Practitioner", line: "Your day, your patients, your notes and earnings.", href: links.practitioner, c: "var(--mint)" },
+  { who: "Front desk", line: "Arrivals, deposits, forms and reminders in one queue.", href: links.frontDesk, c: "var(--arrived)" },
+  { who: "Patient", line: "Your plan, aftercare and progress, in one place.", href: links.patient, c: "var(--aftercare)" },
+];
+---
+
+<Base title="Demo · SQINOS" description="A short walk through the SQINOS clinic and patient portals, then the live demo to explore yourself.">
+  <section class="page wrap demo">
+    <div class="page-header">
+      <div class="page-header__text">
+        <p class="eyebrow">Demo</p>
+        <h1 class="page-title">Fifteen seconds, <em>start to finish.</em></h1>
+      </div>
+      <p class="page-subtitle">A short walk from the first booking to the return visit. Then open the live demo and look around yourself.</p>
+    </div>
+
+    <div class="demo__stage" data-reveal>
+      <MacWindow url="app.sqinos / demo">
+        {hasVideo ? (
+          <video
+            class="demo__video"
+            src="/media/sqinos-demo.mp4"
+            poster={hasPoster ? "/media/sqinos-demo-poster.webp" : undefined}
+            muted
+            loop
+            playsinline
+            preload="metadata"
+            data-demo-video
+          ></video>
+        ) : (
+          <div class="demo__placeholder">
+            <div class="demo__ui is-active" aria-hidden="true"><JourneyScreen kind="book" /></div>
+            <div class="demo__frost">
+              <span class="demo__play" aria-hidden="true"></span>
+              <p class="demo__soon">Demo video coming soon</p>
+              <p class="demo__hint">Ten to fifteen seconds, from booking to return visit.</p>
+            </div>
+          </div>
+        )}
+      </MacWindow>
+      {hasVideo && (
+        <div class="demo__controls">
+          <button class="demo__toggle" type="button" aria-pressed="false" data-demo-toggle>Pause</button>
+          <small>Plays silently and loops.</small>
+        </div>
+      )}
+    </div>
+
+    <section class="live" aria-labelledby="live-title">
+      <div class="section-head">
+        <p class="eyebrow">Try the live demo</p>
+        <h2 id="live-title" class="display">Pick a seat <em>in the room.</em></h2>
+        <p class="lede">The demo runs the real product on a fictional clinic. Nothing you do reaches a real patient, and emails and texts stay in a sandbox.</p>
+      </div>
+      <div class="live__grid">
+        {personas.map((p, i) => (
+          <a class="persona glass" href={p.href} data-astro-reload data-light data-reveal style={`--d: ${i * 70}ms; --c: ${p.c}`}>
+            <span class="persona__dot" aria-hidden="true"></span>
+            <span class="persona__who">{p.who}</span>
+            <span class="persona__line">{p.line}</span>
+            <span class="persona__go">Open this view →</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  </section>
+</Base>
+
+<style>
+  .demo__stage {
+    display: grid;
+    gap: 0.9rem;
+    max-width: 1080px;
+    margin-inline: auto;
+  }
+  .demo__video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #fff;
+  }
+  .demo__placeholder {
+    position: absolute;
+    inset: 0;
+  }
+  .demo__ui {
+    position: absolute;
+    inset: 0;
+    container-type: inline-size; /* JourneyScreen sizes its type in cqw */
+  }
+  .demo__frost {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 0.4rem;
+    text-align: center;
+    padding: 1rem;
+    background: rgba(246, 247, 248, 0.55);
+    backdrop-filter: blur(6px) saturate(1.1);
+    -webkit-backdrop-filter: blur(6px) saturate(1.1);
+  }
+  .demo__play {
+    width: clamp(3.4rem, 7vw, 5rem);
+    height: clamp(3.4rem, 7vw, 5rem);
+    margin-bottom: 0.6rem;
+    border-radius: 50%;
+    background: var(--butter);
+    box-shadow: 0 14px 30px -12px var(--bloom), inset 0 1px 0 var(--edge-hi);
+    position: relative;
+  }
+  .demo__play::after {
+    content: "";
+    position: absolute;
+    left: 56%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    transform: translate(-50%, -50%);
+    border-style: solid;
+    border-width: 0.65em 0 0.65em 1.05em;
+    border-color: transparent transparent transparent var(--ink);
+    font-size: clamp(0.9rem, 1.6vw, 1.2rem);
+  }
+  .demo__soon {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 3vw, 2.4rem);
+    line-height: 1;
+  }
+  .demo__hint {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 0.92rem;
+  }
+  .demo__controls {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    color: var(--ink-3);
+    font-size: 0.85rem;
+  }
+  .demo__toggle {
+    border: 1px solid var(--edge-2);
+    background: var(--glass-2);
+    border-radius: 999px;
+    padding: 0.4rem 0.95rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .live {
+    margin-top: clamp(4rem, 8vw, 7rem);
+  }
+  .live__grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .persona {
+    display: grid;
+    gap: 0.4rem;
+    padding: 1.3rem 1.3rem 1.2rem;
+    text-decoration: none;
+    transition:
+      transform var(--t-ui) var(--ease-dew),
+      box-shadow var(--t-ui) var(--ease-dew);
+  }
+  .persona:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lift);
+  }
+  .persona__dot {
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 50%;
+    background: var(--c);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 28%, transparent);
+    margin-bottom: 0.4rem;
+  }
+  .persona__who {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    line-height: 1.05;
+  }
+  .persona__line {
+    color: var(--ink-2);
+    font-size: 0.92rem;
+  }
+  .persona__go {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  @media (max-width: 960px) {
+    .live__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 540px) {
+    .live__grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<script>
+  import { reducedMotion, motionPaused } from "../scripts/motion";
+
+  const video = document.querySelector<HTMLVideoElement>("[data-demo-video]");
+  const toggle = document.querySelector<HTMLButtonElement>("[data-demo-toggle]");
+  if (video && toggle) {
+    const sync = () => {
+      toggle.textContent = video.paused ? "Play" : "Pause";
+      toggle.setAttribute("aria-pressed", String(!video.paused));
+    };
+    video.addEventListener("play", sync);
+    video.addEventListener("pause", sync);
+    toggle.addEventListener("click", () => (video.paused ? video.play() : video.pause()));
+    // No autoplay under reduced motion or when the site's motion is paused.
+    if (!reducedMotion() && !motionPaused()) video.play().catch(() => {});
+    addEventListener("aetheria:motion", (e) => {
+      if ((e as CustomEvent<{ paused: boolean }>).detail.paused) video.pause();
+    });
+    sync();
+  }
+</script>

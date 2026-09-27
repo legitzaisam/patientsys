@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diary status filter mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --fg:#2f3f66;--ink2:#46557a;--ink3:#6a7390;
+  --card:rgba(255,255,255,.86);--edge:rgba(47,63,102,.08);
+  --accent:#eed488;--accent-soft:rgba(238,212,136,.35);--accent-ink:#7a6220;
+  --rose-bg:rgba(250,204,226,.55);--rose:#a3456e;
+  --mint-bg:rgba(179,232,196,.55);--mint:#2d6a4c;
+  --lilac-bg:rgba(224,213,248,.6);--lilac:#5c4a94;
+  --sky-bg:rgba(190,224,244,.55);--sky:#3d6f96;
+  --lemon:#fbf3d9;--seafoam:#dcefe6;--blue:#e3eef8;--pink:#f9e1ec;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Space Grotesk",system-ui,sans-serif;color:var(--fg);
+  background:linear-gradient(160deg,#fbf6ea 0%,#f6f7f8 40%,#f3f4f8 100%);padding:28px 16px 60px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:26px;margin:0 0 4px;font-weight:600;letter-spacing:-.01em}
+h2{font-size:18px;margin:34px 0 4px;font-weight:600}
+.sub{color:var(--ink2);margin:0 0 20px;font-size:14px;line-height:1.5}
+.panel{background:var(--card);border-radius:24px;padding:20px 22px;box-shadow:0 10px 30px rgba(47,63,102,.07);border:1px solid rgba(255,255,255,.8)}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.bar .t{font-size:14px;margin-right:auto}.bar .t b{font-weight:600}
+.viewby{font-size:13px;color:var(--ink3)}.viewby b{color:var(--fg);font-weight:600;margin-left:8px}
+
+/* The single control */
+.na{position:relative}
+.na-btn{display:inline-flex;align-items:stretch;border-radius:999px;background:rgba(47,63,102,.05);overflow:hidden;box-shadow:inset 0 0 0 1px transparent;transition:.15s}
+.na-btn button{border:0;background:none;font:inherit;cursor:pointer;color:var(--ink2)}
+.na-main{font-size:12.5px!important;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500;padding:7px 6px 7px 13px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--rose)}
+.na-main .n{font-size:11px;font-weight:600;min-width:20px;height:20px;padding:0 6px;border-radius:999px;display:inline-grid;place-items:center;background:#fff}
+.na-caret{padding:0 11px 0 7px;font-size:11px;border-left:1px solid rgba(47,63,102,.08)!important}
+.na-btn:hover{background:rgba(47,63,102,.09)}
+.na.on .na-btn{background:var(--rose-bg);box-shadow:inset 0 0 0 1.5px rgba(163,69,110,.55)}
+.na.on .na-btn button{color:var(--rose)}
+.na-clear{display:none;border:0;background:none;font:inherit;font-size:12px;color:var(--ink3);cursor:pointer;margin-left:6px;text-decoration:underline;text-underline-offset:3px}
+.na.on ~ .na-clear{display:inline}
+.menu{position:absolute;right:0;top:calc(100% + 8px);width:250px;background:#fff;border-radius:16px;padding:6px;box-shadow:0 16px 40px rgba(47,63,102,.16);border:1px solid var(--edge);display:none;z-index:20}
+.na.open .menu{display:block}
+.mi{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;font:inherit;font-size:13px;color:var(--fg);padding:9px 10px;border-radius:10px;cursor:pointer;text-align:left}
+.mi:hover{background:rgba(47,63,102,.05)}
+.mi .sw{width:9px;height:9px;border-radius:50%}
+.mi .c{margin-left:auto;font-size:12px;color:var(--ink3)}
+.mi.sel{background:rgba(47,63,102,.06);font-weight:600}
+.mi.sel:after{content:"✓";margin-left:8px;font-size:12px;color:var(--ink2)}
+.mi.zero{color:var(--ink3)}
+.msep{height:1px;background:var(--edge);margin:4px 6px}
+.mfoot{font-size:11.5px;color:var(--ink3);padding:8px 10px 6px;line-height:1.45}
+
+.hint{font-size:12px;color:var(--ink3);margin:8px 0 0;min-height:18px}
+.grid{display:grid;grid-template-columns:52px repeat(3,minmax(0,1fr));gap:14px;margin-top:10px}
+.colh{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;padding-bottom:8px}
+.av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:11px;border:2px solid #9cc9ae;background:#fff}
+.colh .c{margin-left:auto;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--accent-soft)}
+.times{font-size:12px;color:var(--ink3)}.times div{height:92px}
+.col{position:relative;height:552px}
+.appt{position:absolute;left:0;right:0;border-radius:16px;padding:10px 12px;box-shadow:0 4px 14px rgba(47,63,102,.06);transition:opacity .2s, filter .2s}
+.appt .tm{font-size:11.5px;font-weight:600;color:var(--ink2)}
+.appt .nm{font-size:13.5px;font-weight:600;margin:3px 0 2px}
+.appt .tx{font-size:12px;color:var(--ink2)}
+.icons{position:absolute;top:9px;right:10px;display:flex;gap:4px}
+.ic{width:15px;height:15px;border-radius:50%;display:grid;place-items:center;font-size:8px;font-weight:700}
+.ic.ok{background:var(--mint-bg);color:var(--mint)}.ic.bad{background:var(--rose-bg);color:var(--rose)}.ic.wait{background:var(--lilac-bg);color:var(--lilac)}
+.tags{display:none;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tag{font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:999px}
+.tag.rose{background:var(--rose-bg);color:var(--rose)}.tag.lilac{background:var(--lilac-bg);color:var(--lilac)}.tag.sky{background:var(--sky-bg);color:var(--sky)}
+.filtering .appt:not(.match){opacity:.28;filter:saturate(.3)}
+.filtering .appt.match{box-shadow:0 0 0 2px rgba(163,69,110,.35),0 8px 20px rgba(47,63,102,.12)}
+.filtering .appt.match .tags{display:flex}
+
+/* Dashboard preview */
+.att{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+.acard{background:var(--card);border-radius:22px;padding:18px 20px;box-shadow:0 10px 30px rgba(47,63,102,.07)}
+.ah{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;margin-bottom:10px}
+.ah.urgent{color:var(--rose)}.ah .tot{margin-left:auto;font-size:13px;color:var(--fg)}
+.arow{display:flex;align-items:center;gap:10px;padding:10px 4px;font-size:13.5px;font-weight:500;border-radius:10px}
+.arow .chev{color:var(--ink3);font-size:12px}
+.arow .n{margin-left:auto;font-size:11.5px;font-weight:600;min-width:24px;height:22px;padding:0 7px;border-radius:999px;display:inline-grid;place-items:center}
+.arow.new{background:rgba(250,204,226,.25)}
+.newtag{font-size:10px;font-weight:600;color:var(--rose);background:#fff;border-radius:999px;padding:2px 7px;margin-left:4px}
+.sub2{font-size:12px;color:var(--ink3);font-weight:400;margin-left:4px}
+.notes{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.note{background:rgba(255,255,255,.6);border-radius:18px;padding:14px 16px;font-size:13px;line-height:1.5;color:var(--ink2);border:1px solid var(--edge)}
+.note b{color:var(--fg);display:block;margin-bottom:3px;font-size:13.5px}
+@media (max-width:760px){
+  .grid{grid-template-columns:40px repeat(3,minmax(150px,1fr));overflow-x:auto}
+  .att{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Diary status filter mockup, v2</h1>
+  <p class="sub">One control instead of five pills. It sits on the same line as “View by”, so the diary gains no extra row. Click <b>Needs action</b> to highlight everything outstanding, or open the arrow to narrow it to one type.</p>
+
+  <div class="panel" id="panel">
+    <div class="bar">
+      <div class="t"><b>Day planner</b> · 10 booked · 09:00–18:00</div>
+      <div class="na" id="na">
+        <div class="na-btn">
+          <button class="na-main" id="naMain"><span class="dot"></span><span id="naLabel">Needs action</span><span class="n" id="naCount"></span></button>
+          <button class="na-caret" id="naCaret" aria-label="Choose type">▾</button>
+        </div>
+        <div class="menu" id="menu"></div>
+      </div>
+      <button class="na-clear" id="clear">Clear</button>
+      <div class="viewby">View by<b>All practitioners ▾</b></div>
+    </div>
+    <p class="hint" id="hint"></p>
+
+    <div class="grid">
+      <div class="times" style="padding-top:38px"><div>09:00</div><div>10:00</div><div>11:00</div><div>12:00</div><div>13:00</div><div>14:00</div></div>
+      <div><div class="colh"><span class="av">DA</span>Dr Amara Osei<span class="c">3</span></div><div class="col" id="c0"></div></div>
+      <div><div class="colh"><span class="av" style="border-color:#e5cf8a">DN</span>Dr Nadia Rahman<span class="c">4</span></div><div class="col" id="c1"></div></div>
+      <div><div class="colh"><span class="av" style="border-color:#c8b9ef">DT</span>Dr Tom Whitfield<span class="c">3</span></div><div class="col" id="c2"></div></div>
+    </div>
+  </div>
+
+  <h2>Where the chasing happens: Attention needed on the dashboard</h2>
+  <p class="sub">No chase list on the diary. The same items feed the Urgent card for owner, manager and front desk. Your existing card already has Deposit, Consent and Balance due; the only additions are the “today” breakdown and Running late.</p>
+  <div class="att">
+    <div class="acard">
+      <div class="ah urgent">⚠ Urgent <span class="tot">28</span></div>
+      <div class="arow new"><span class="chev">›</span>Due today<span class="sub2">from the diary</span><span class="newtag">NEW</span><span class="n" style="background:var(--rose-bg);color:var(--rose)">5</span></div>
+      <div class="arow"><span class="chev">›</span>No show<span class="n" style="background:var(--rose-bg);color:var(--rose)">1</span></div>
+      <div class="arow"><span class="chev">›</span>Deposit due<span class="n" style="background:var(--rose-bg);color:var(--rose)">17</span></div>
+      <div class="arow"><span class="chev">›</span>Consent due<span class="n" style="background:var(--lilac-bg);color:var(--lilac)">3</span></div>
+      <div class="arow"><span class="chev">›</span>Balance due<span class="n" style="background:var(--lilac-bg);color:var(--lilac)">2</span></div>
+    </div>
+    <div class="acard">
+      <div class="ah">Due today, opened <span class="tot">5</span></div>
+      <div class="arow"><span class="chev">›</span>Zara Haddad · 11:30<span class="sub2">Unpaid, consent due</span></div>
+      <div class="arow"><span class="chev">›</span>Leila Farouk · 11:00<span class="sub2">Unpaid</span></div>
+      <div class="arow"><span class="chev">›</span>Hannah Ormshurst · 11:45<span class="sub2">Unpaid, running late</span></div>
+      <div class="arow"><span class="chev">›</span>Grace Adeyemi · 10:15<span class="sub2">Consent due</span></div>
+      <div class="arow"><span class="chev">›</span>Orla Kesfield · 13:00<span class="sub2">Deposit due</span></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><b>One control, no extra row</b>“Needs action” with a single total. The breakdown lives in the dropdown, so the diary header stays as clean as it is today.</div>
+    <div class="note"><b>Dim, don't hide</b>Everything else fades but stays in place, so staff still see where the problems fall in the day.</div>
+    <div class="note"><b>Hidden when there's nothing to do</b>At 0 the control shows “All clear” in green and does nothing, which is a nice signal in itself.</div>
+    <div class="note"><b>Diary shows, dashboard chases</b>The diary is for seeing; the actions (send payment link, send consent) happen from Attention needed, as you wanted.</div>
+  </div>
+</div>
+
+<script>
+const H = 92;
+const appts = [
+  {c:0,s:11.5,e:12,nm:"Zara Haddad",tx:"Anti-Wrinkle Injections · Session 2",col:"var(--seafoam)",f:["unpaid","consent"]},
+  {c:0,s:12.75,e:13.5,nm:"Greta Radley",tx:"IPL · Session 4",col:"var(--blue)",f:[]},
+  {c:0,s:13.75,e:14.5,nm:"Iris Wexshaw",tx:"Tear Trough Filler · Session 2",col:"var(--lemon)",f:[]},
+  {c:1,s:9,e:9.75,nm:"Priya Chandrasekhar",tx:"Chemical Peel · Session 4",col:"var(--pink)",f:[]},
+  {c:1,s:10.25,e:11.5,nm:"Grace Adeyemi",tx:"Microneedling with PRP · Session 1",col:"var(--lemon)",f:["consent"]},
+  {c:1,s:11.75,e:12.5,nm:"Hannah Ormshurst",tx:"Cheek Filler · Session 3",col:"var(--blue)",f:["unpaid","late"]},
+  {c:1,s:13,e:14,nm:"Orla Kesfield",tx:"Polynucleotides · Session 1",col:"var(--seafoam)",f:["deposit"]},
+  {c:2,s:9.5,e:10.5,nm:"Amelia Fitzgerald",tx:"Lip Filler · Session 1",col:"var(--lemon)",f:[]},
+  {c:2,s:11,e:11.75,nm:"Leila Farouk",tx:"Lip Filler · Session 2",col:"var(--lemon)",f:["unpaid"]},
+  {c:2,s:12.5,e:13.25,nm:"Leo Fenford",tx:"Vitamin Injection · Session 3",col:"var(--seafoam)",f:[]},
+];
+const TYPES = [
+  ["unpaid","Unpaid","rose","var(--rose)"],
+  ["deposit","Deposit due","lilac","var(--lilac)"],
+  ["consent","Consent due","sky","var(--sky)"],
+  ["late","Running late","rose","var(--rose)"],
+];
+const TAG = Object.fromEntries(TYPES.map(t=>[t[0],[t[1],t[2]]]));
+const fmt = h => `${String(Math.floor(h)).padStart(2,"0")}:${String(Math.round((h%1)*60)).padStart(2,"0")}`;
+
+appts.forEach((a,i)=>{
+  const el=document.createElement("div");
+  el.className="appt";el.dataset.i=i;
+  el.style.top=((a.s-9)*H)+"px";el.style.height=Math.max((a.e-a.s)*H-6,56)+"px";el.style.background=a.col;
+  el.innerHTML=`<div class="icons">
+    <span class="ic ${a.f.includes("unpaid")?"bad":a.f.includes("deposit")?"wait":"ok"}">£</span>
+    <span class="ic ${a.f.includes("consent")?"bad":"ok"}">✓</span></div>
+    <div class="tm">${fmt(a.s)}–${fmt(a.e)}</div><div class="nm">${a.nm}</div><div class="tx">${a.tx}</div>
+    <div class="tags">${a.f.map(k=>`<span class="tag ${TAG[k][1]}">${TAG[k][0]}</span>`).join("")}</div>`;
+  document.getElementById("c"+a.c).appendChild(el);
+});
+
+const na=document.getElementById("na"),menu=document.getElementById("menu"),hint=document.getElementById("hint");
+const count = k => appts.filter(a=> k==="any" ? a.f.length : a.f.includes(k)).length;
+let active=null; // null | "any" | type key
+
+menu.innerHTML =
+  `<button class="mi" data-k="any"><span class="sw" style="background:var(--rose)"></span>Everything outstanding<span class="c">${count("any")}</span></button><div class="msep"></div>` +
+  TYPES.map(([k,l,,c])=>`<button class="mi ${count(k)?"":"zero"}" data-k="${k}"><span class="sw" style="background:${c}"></span>${l}<span class="c">${count(k)}</span></button>`).join("") +
+  `<div class="msep"></div><div class="mfoot">To chase these, open <b>Attention needed</b> on the dashboard.</div>`;
+
+function render(){
+  const label = active && active!=="any" ? TAG[active][0] : "Needs action";
+  document.getElementById("naLabel").textContent = label;
+  document.getElementById("naCount").textContent = count(active && active!=="any" ? active : "any");
+  na.classList.toggle("on",!!active);
+  document.getElementById("panel").classList.toggle("filtering",!!active);
+  menu.querySelectorAll(".mi").forEach(m=>m.classList.toggle("sel",m.dataset.k===active));
+  document.querySelectorAll(".appt").forEach(el=>{
+    const a=appts[el.dataset.i];
+    el.classList.toggle("match", !!active && (active==="any" ? a.f.length>0 : a.f.includes(active)));
+  });
+  hint.textContent = !active
+    ? `${count("any")} appointments today need something. Click to highlight them.`
+    : `Highlighting ${count(active)} ${active==="any"?"appointments that need action":TAG[active][0].toLowerCase()}. Everything else is faded but still in place.`;
+}
+document.getElementById("naMain").onclick=()=>{ active = active ? null : "any"; na.classList.remove("open"); render(); };
+document.getElementById("naCaret").onclick=e=>{ e.stopPropagation(); na.classList.toggle("open"); };
+menu.onclick=e=>{ const m=e.target.closest(".mi"); if(!m||m.classList.contains("zero")) return; active=m.dataset.k; na.classList.remove("open"); render(); };
+document.getElementById("clear").onclick=()=>{ active=null; render(); };
+document.addEventListener("click",e=>{ if(!na.contains(e.target)) na.classList.remove("open"); });
+render();
+</script>
+</body>
+</html>

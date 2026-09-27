@@ -1,0 +1,148 @@
+---
+import Mark from "./Mark.astro";
+import { links } from "../lib/links";
+const year = new Date().getFullYear();
+---
+
+<footer class="footer" data-footer>
+  <div class="footer__rules" aria-hidden="true">
+    {Array.from({ length: 6 }).map((_, i) => <span style={`--i:${i}`} />)}
+  </div>
+  <div class="wrap footer__grid">
+    <div class="footer__brand">
+      <a href="/" class="footer__word" aria-label="Aetheria home">
+        <Mark size={44} />
+        <span data-sweep>Aetheria</span>
+      </a>
+      <p>The aesthetics clinic platform where the journey is the treatment.</p>
+    </div>
+    <nav aria-label="Product">
+      <h3>Product</h3>
+      <a href="/#journey">The patient journey</a>
+      <a href="/#clinics">Clinic OS</a>
+      <a href="/#safety">Safety by design</a>
+    </nav>
+    <nav aria-label="Sign in">
+      <h3>Sign in</h3>
+      <a href={links.clinic} data-astro-reload>Clinic team</a>
+      <a href={links.patient} data-astro-reload>Patients</a>
+      <a href="/login">All options</a>
+    </nav>
+    <div class="footer__note">
+      <h3>A note on care</h3>
+      <p>
+        Aetheria is software for regulated clinics. Nothing on this site is medical advice; treatment decisions are
+        made with a qualified practitioner after a consultation.
+      </p>
+    </div>
+  </div>
+  <div class="wrap footer__base">
+    <span>© {year} Aetheria</span>
+    <span>Demo environment · fixture data only</span>
+    <button class="footer__pause" type="button" data-motion-toggle aria-pressed="false">Pause motion</button>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    position: relative;
+    padding: 6rem 0 2rem;
+    border-top: 1px solid var(--edge-2);
+    background: linear-gradient(180deg, transparent, rgba(238, 212, 136, 0.12));
+    overflow: hidden;
+  }
+  .footer__rules {
+    position: absolute;
+    inset: 1.5rem 0 auto;
+    display: grid;
+    gap: 13px;
+    pointer-events: none;
+  }
+  .footer__rules span {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--butter-line), transparent);
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  .footer.is-in .footer__rules span {
+    transform: scaleX(1);
+    transition: transform 1.4s var(--ease-dew) calc(var(--i) * 90ms);
+  }
+  .footer__grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1.4fr;
+    gap: 2.5rem;
+  }
+  .footer__word {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    text-decoration: none;
+    font-family: var(--font-display);
+    font-size: clamp(2.4rem, 4vw, 3.4rem);
+    line-height: 1;
+  }
+  [data-sweep] {
+    background: linear-gradient(100deg, var(--ink) 40%, var(--butter-deep) 50%, var(--ink) 60%) 0 0 / 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    background-position: 100% 0;
+  }
+  .footer.is-in [data-sweep] {
+    background-position: 0 0;
+    transition: background-position 2.2s var(--ease-dew) 0.4s;
+  }
+  .footer p {
+    color: var(--ink-3);
+    font-size: 0.95rem;
+    max-width: 22rem;
+  }
+  .footer h3 {
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--butter-ink);
+    margin: 0.4rem 0 1rem;
+  }
+  .footer nav a {
+    display: block;
+    padding: 0.3rem 0;
+    color: var(--ink-2);
+    text-decoration: none;
+  }
+  .footer nav a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  .footer__base {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 2rem;
+    align-items: center;
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--edge-2);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+  }
+  .footer__pause {
+    margin-left: auto;
+    border: 1px solid var(--edge-2);
+    background: transparent;
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+    cursor: pointer;
+    font-size: 0.82rem;
+  }
+  @media (max-width: 860px) {
+    .footer__grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .footer__brand,
+    .footer__note {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

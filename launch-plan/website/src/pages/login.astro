@@ -9,9 +9,9 @@ const personas = [
 ];
 ---
 
-<Base title="Sign in · Aetheria" description="Sign in to the Aetheria clinic portal or your patient portal." bare>
+<Base title="Sign in · SQINOS" description="Sign in to the SQINOS clinic portal or your patient portal." bare>
   <div class="login" data-login>
-    <a class="login__home" href="/" aria-label="Back to Aetheria home"><Mark size={34} /><span>Aetheria</span></a>
+    <a class="login__home" href="/" aria-label="Back to SQINOS home"><Mark size={34} /><span>SQINOS</span></a>
 
     <section class="half half--clinic" data-half aria-labelledby="clinic-h">
       <div class="scene scene--diary" aria-hidden="true">
@@ -20,7 +20,7 @@ const personas = [
       <div class="half__body">
         <p class="half__k">Clinic team</p>
         <h1 id="clinic-h" class="display">Run today’s clinic.</h1>
-        <p class="half__p">Diary, records, consent, retention and reports for owners, practitioners and front desk.</p>
+        <p class="half__p">Diary, patient journeys, retention and reports for owners, practitioners and front desk.</p>
         {links.showPersonas ? (
           <div class="personas" role="group" aria-label="Choose a demo view">
             {personas.map((p, i) => (

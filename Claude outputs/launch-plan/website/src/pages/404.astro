@@ -1,0 +1,19 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="Page not found · Aetheria" description="This page doesn't exist yet.">
+  <section class="nf wrap">
+    <p class="eyebrow">404</p>
+    <h1 class="display">This step isn’t on <em>the plan</em> yet.</h1>
+    <p class="lede">The page you asked for doesn’t exist, or hasn’t been built yet. The journey starts here instead.</p>
+    <div class="nf__btns">
+      <a class="btn" href="/">Back to the start</a>
+      <a class="btn btn--glass" href="/login">Sign in</a>
+    </div>
+  </section>
+</Base>
+<style>
+  .nf { min-height: 80svh; display: grid; align-content: center; justify-items: start; gap: 1.2rem; padding-top: 8rem; }
+  .nf h1 { font-size: clamp(2.8rem, 7vw, 6rem); max-width: 14ch; }
+  .nf__btns { display: flex; gap: .7rem; flex-wrap: wrap; }
+</style>
