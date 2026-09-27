@@ -18,9 +18,14 @@ export type PeriodSelection = {
   to?: string;
 };
 
-export const CURRENT_MONTH: PeriodSelection = { key: "month", offset: 0 };
-/** The default for every metrics page: the feedback asked for one consistent picker defaulting to the year. */
-export const CURRENT_YEAR: PeriodSelection = { key: "year", offset: 0 };
+/** Trailing month ending today. */
+export const CURRENT_MONTH: PeriodSelection = { key: "month", offset: 0, preset: "1m" };
+/**
+ * The default for every metrics page: the last 12 months ending today. A
+ * calendar year would show empty months at its end, so every preset is a
+ * trailing window.
+ */
+export const CURRENT_YEAR: PeriodSelection = { key: "year", offset: 0, preset: "1y" };
 
 const MAX_OFFSET: Record<PeriodKey, number> = {
   day: 365,
@@ -32,6 +37,7 @@ const MAX_OFFSET: Record<PeriodKey, number> = {
 const PRESET_MONTHS: Partial<Record<PeriodPreset, number>> = {
   "1m": 1,
   "6m": 6,
+  "1y": 12,
 };
 
 export function asPeriod(period: PeriodKey | PeriodSelection): PeriodSelection {
@@ -167,10 +173,20 @@ const PREVIOUS_LABEL: Record<PeriodKey, string> = {
   year: "Last year",
 };
 
+function dayMonthYear(date: Date) {
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
 /** Short label for the resolved window (stepper and section copy). */
 export function periodWindowLabel(period: PeriodKey | PeriodSelection, now: Date = new Date()) {
-  const { start, end } = shift(asPeriod(period), now);
-  const { key } = asPeriod(period);
+  const selection = asPeriod(period);
+  // Trailing presets and custom ranges read as their dates, not a calendar unit.
+  if (selection.preset) {
+    const { start, end } = boundsOf(selection, now);
+    return `${dayMonthYear(start)} – ${dayMonthYear(end)}`;
+  }
+  const { start, end } = shift(selection, now);
+  const { key } = selection;
   if (key === "day") return dayMonth(start);
   if (key === "week") {
     if (start.getMonth() === end.getMonth()) return `${start.getDate()}–${dayMonth(end)}`;
@@ -180,11 +196,12 @@ export function periodWindowLabel(period: PeriodKey | PeriodSelection, now: Date
   return start.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 }
 
+/** Every preset is a trailing window, and the heading says so. */
 const PRESET_HEADING: Record<PeriodPreset, string> = {
-  "1w": "This week",
-  "1m": "This month",
+  "1w": "Last 7 days",
+  "1m": "Last month",
   "6m": "Last 6 months",
-  "1y": "This year",
+  "1y": "Last 12 months",
   custom: "Select dates",
 };
 
@@ -222,15 +239,19 @@ const pillIdle = "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foregrou
 const track = "flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi";
 
 const PRESETS: { id: Exclude<PeriodPreset, "custom">; label: string; key: PeriodKey }[] = [
-  { id: "1w", label: "1 week", key: "week" },
+  { id: "1w", label: "7 days", key: "week" },
   { id: "1m", label: "1 month", key: "month" },
   { id: "6m", label: "6 months", key: "month" },
-  { id: "1y", label: "1 year", key: "year" },
+  { id: "1y", label: "12 months", key: "year" },
 ];
 
+/** The pill to highlight. A selection without a preset maps to the nearest one, so something is always active. */
 function activePreset(period: PeriodSelection): PeriodPreset | undefined {
   if (period.preset) return period.preset;
-  if (period.offset === 0 && period.key === "year") return "1y";
+  if (period.offset !== 0) return undefined;
+  if (period.key === "year") return "1y";
+  if (period.key === "month") return "1m";
+  if (period.key === "week") return "1w";
   return undefined;
 }
 
