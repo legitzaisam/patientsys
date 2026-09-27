@@ -32,6 +32,7 @@ import {
   updateAppointmentState,
 } from "@/lib/clinic.functions";
 import { checkEmail } from "@/lib/email";
+import { checkPhone } from "@/lib/phone";
 import { useIdentity } from "@/lib/use-identity";
 import { useStaffPresence } from "@/lib/use-staff-presence";
 import { cn } from "@/lib/utils";
@@ -396,6 +397,8 @@ function SchedulePage() {
   const [newEmail, setNewEmail] = useState("");
   const [newEmailError, setNewEmailError] = useState<string | null>(null);
   const [newEmailSuggestion, setNewEmailSuggestion] = useState<string | null>(null);
+  const [newPhone, setNewPhone] = useState("");
+  const [newPhoneError, setNewPhoneError] = useState<string | null>(null);
   const [bookingPatientId, setBookingPatientId] = useState("");
   const [bookingCatalogueId, setBookingCatalogueId] = useState("");
   const [bookingPractitionerId, setBookingPractitionerId] = useState("");
@@ -415,9 +418,12 @@ function SchedulePage() {
     : Boolean(bookingPatientId);
   const emailReady =
     !newPatient || !newEmail.trim() || (!newEmailError && checkEmail(newEmail).ok);
+  const phoneReady =
+    !newPatient || !newPhone.trim() || (!newPhoneError && checkPhone(newPhone).ok);
   const canSubmitBooking =
     patientReady &&
     emailReady &&
+    phoneReady &&
     Boolean(bookingCatalogueId) &&
     Boolean(bookingPractitionerId) &&
     Boolean(bookingStartsAt);
@@ -437,6 +443,8 @@ function SchedulePage() {
       setNewEmail("");
       setNewEmailError(null);
       setNewEmailSuggestion(null);
+      setNewPhone("");
+      setNewPhoneError(null);
       setBookingPatientId("");
       setBookingCatalogueId("");
       setBookingPractitionerId("");
@@ -585,6 +593,15 @@ function SchedulePage() {
                       }
                       patientEmail = check.email;
                     }
+                    let patientPhone = "";
+                    if (newPhone.trim()) {
+                      const check = checkPhone(newPhone);
+                      if (!check.ok) {
+                        setNewPhoneError(check.error);
+                        return;
+                      }
+                      patientPhone = check.phone;
+                    }
                     if (!bookingCatalogueId) {
                       toast.error("Choose a treatment");
                       return;
@@ -604,7 +621,7 @@ function SchedulePage() {
                           last_name: last,
                           title: String(f.get("new_title") ?? ""),
                           email: patientEmail,
-                          phone: String(f.get("new_phone") ?? "").trim(),
+                          phone: patientPhone,
                           date_of_birth: newDob,
                         },
                       });
@@ -750,7 +767,31 @@ function SchedulePage() {
                           </p>
                         )}
                       </div>
-                      <TextField name="new_phone" label="Mobile" />
+                      <div className="field-stack">
+                        <Label htmlFor="new_phone">Mobile</Label>
+                        <Input
+                          id="new_phone"
+                          name="new_phone"
+                          type="tel"
+                          value={newPhone}
+                          aria-invalid={Boolean(newPhoneError)}
+                          placeholder="07700 900000"
+                          onChange={(e) => {
+                            setNewPhone(e.target.value);
+                            setNewPhoneError(null);
+                          }}
+                          onBlur={() => {
+                            if (!newPhone.trim()) {
+                              setNewPhoneError(null);
+                              return;
+                            }
+                            const check = checkPhone(newPhone);
+                            setNewPhoneError(check.ok ? null : check.error);
+                          }}
+                          className="rounded-xl"
+                        />
+                        {newPhoneError ? <p className="text-xs text-destructive">{newPhoneError}</p> : null}
+                      </div>
                     </div>
                   ) : (
                     <SelectField

@@ -23,6 +23,7 @@ import {
   submitHistoryUpdate,
   updatePortalProfile,
 } from "@/lib/clinic.functions";
+import { checkPhone } from "@/lib/phone";
 import { PortalCard, PortalHead, PortalLink, PortalNote, formatPortalDate } from "@/components/portal/ui";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -437,6 +438,7 @@ function EditProfileModal({ patient, onClose }: { patient: any; onClose: () => v
     emergency_contact_relationship: patient.emergency_contact_relationship ?? "",
     emergency_contact_phone: patient.emergency_contact_phone ?? "",
   });
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const save = useMutation({
     mutationFn: useServerFn(updatePortalProfile),
@@ -470,6 +472,14 @@ function EditProfileModal({ patient, onClose }: { patient: any; onClose: () => v
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
+          if (form.emergency_contact_phone.trim()) {
+            const check = checkPhone(form.emergency_contact_phone, "phone number");
+            if (!check.ok) {
+              setPhoneError(check.error);
+              return;
+            }
+          }
+          setPhoneError(null);
           save.mutate({ data: form });
         }}
         className="max-h-[80vh] w-[min(460px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
@@ -491,17 +501,34 @@ function EditProfileModal({ patient, onClose }: { patient: any; onClose: () => v
           </button>
         </div>
 
-        {fields.map((f) => (
-          <label key={f.key} className="mt-2.5 block">
-            <span className="text-xs font-semibold">{f.label}</span>
-            <input
-              data-qc={`profile-${f.key}`}
-              value={form[f.key]}
-              onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
-              className="mt-1 h-[32px] w-full rounded-[11px] border border-edge-2 bg-glass-2 px-2.5 text-xs shadow-inset-hi"
-            />
-          </label>
-        ))}
+        {fields.map((f) => {
+          const isPhone = f.key === "emergency_contact_phone";
+          return (
+            <label key={f.key} className="mt-2.5 block">
+              <span className="text-xs font-semibold">{f.label}</span>
+              <input
+                data-qc={`profile-${f.key}`}
+                type={isPhone ? "tel" : "text"}
+                value={form[f.key]}
+                aria-invalid={isPhone && Boolean(phoneError)}
+                onChange={(e) => {
+                  setForm((s) => ({ ...s, [f.key]: e.target.value }));
+                  if (isPhone) setPhoneError(null);
+                }}
+                onBlur={() => {
+                  if (!isPhone || !form.emergency_contact_phone.trim()) {
+                    if (isPhone) setPhoneError(null);
+                    return;
+                  }
+                  const check = checkPhone(form.emergency_contact_phone, "phone number");
+                  setPhoneError(check.ok ? null : check.error);
+                }}
+                className="mt-1 h-[32px] w-full rounded-[11px] border border-edge-2 bg-glass-2 px-2.5 text-xs shadow-inset-hi"
+              />
+              {isPhone && phoneError ? <p className="mt-1 text-xs text-destructive">{phoneError}</p> : null}
+            </label>
+          );
+        })}
 
         <div className="mt-3.5 flex gap-2.5">
           <button

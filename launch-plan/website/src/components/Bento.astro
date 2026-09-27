@@ -46,15 +46,33 @@ const accessOn = [
     </div>
 
     <div class="grid">
-      <article class="tile tile--diary glass" data-light data-reveal>
+      <article class="tile tile--diary glass" data-light data-reveal data-diary>
         <h3>Diary</h3>
-        <p>Day, week and month views across practitioners. Quiet hours fold away, so the time you're actually working stays in focus. Drag to rebook; the patient hears about it.</p>
+        <p>Day, week and month views across practitioners. Needs action lifts the bookings that still need consent or payment — the rest fade in place.</p>
         <div class="mini-diary" aria-hidden="true">
-          {["Dr Osei", "Dr Rahman", "Dr Whitfield"].map((p) => (
-            <div class="mini-diary__col"><span>{p}</span><i /><i /><i /></div>
-          ))}
-          <div class="mini-diary__card"><b>11:15</b> Skin peel</div>
-          <span class="mini-diary__fold">2 quiet hours folded away</span>
+          <div class="mini-diary__stage">
+            <div class="mini-diary__canvas" data-diary-canvas>
+              {["off", "on", "menu"].map((s) => (
+                <img
+                  class={`mini-diary__shot mini-diary__shot--${s}`}
+                  data-diary-shot={s}
+                  src={`/img/shots/diary-live-${s}-800.webp`}
+                  srcset={`/img/shots/diary-live-${s}-800.webp 800w, /img/shots/diary-live-${s}-1600.webp 1600w`}
+                  sizes="(max-width: 640px) 160vw, (max-width: 1000px) 92vw, 56vw"
+                  alt=""
+                  width="1600"
+                  height="869"
+                />
+              ))}
+              {/* Matched cards in the live capture, as % of the planner. */}
+              <i class="mini-diary__ring" data-diary-ring style="--l:7.71%; --t:63.68%"></i>
+              <i class="mini-diary__ring" data-diary-ring style="--l:68.57%; --t:55.26%"></i>
+              <span class="mini-diary__ripple" data-diary-ripple></span>
+              <svg class="mini-diary__cursor" data-diary-cursor viewBox="0 0 24 24" width="22" height="22">
+                <path d="M4 2.5 19.5 13l-7 1.2 3.9 7.3-2.7 1.4-3.9-7.4L4 20.4Z" />
+              </svg>
+            </div>
+          </div>
         </div>
       </article>
 
@@ -203,94 +221,93 @@ const accessOn = [
     grid-column: span 3;
   }
 
-  /* Diary */
+  /* Diary: live planner, then Needs action as a feature. */
   .mini-diary {
+    margin-top: auto;
+    padding-top: 0.5rem;
+  }
+  .mini-diary__stage {
     position: relative;
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.7rem;
-    min-height: 16rem;
-    margin-top: 0.5rem;
+    aspect-ratio: 1600 / 869;
+    overflow: hidden;
+    border-radius: 16px;
+    background: #fbfbfc;
+    box-shadow:
+      inset 0 0 0 1px var(--edge-2),
+      0 18px 40px -24px rgba(47, 63, 102, 0.35);
   }
-  .mini-diary__col {
-    display: grid;
-    grid-template-rows: auto repeat(3, 1fr);
-    gap: 0.5rem;
-    padding: 0.6rem;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid var(--edge);
-  }
-  .mini-diary__col span {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--ink-3);
-  }
-  .mini-diary__col i {
-    border-radius: 10px;
-    background: repeating-linear-gradient(0deg, rgba(47, 63, 102, 0.05) 0 1px, transparent 1px 14px);
-  }
-  .mini-diary__col:nth-child(1) i:nth-of-type(1),
-  .mini-diary__col:nth-child(3) i:nth-of-type(3) {
-    background: color-mix(in srgb, var(--mint) 50%, white);
-    border-left: 3px solid var(--mint);
-  }
-  .mini-diary__col:nth-child(2) i:nth-of-type(3) {
-    background: color-mix(in srgb, var(--aftercare) 35%, white);
-    border-left: 3px solid var(--aftercare);
-  }
-  .mini-diary__card {
+  .mini-diary__stage::after {
+    content: "";
     position: absolute;
-    left: 0.6rem;
-    top: 46%;
-    width: calc(33.33% - 1.7rem);
-    padding: 0.7rem 0.8rem;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--butter) 55%, white);
-    border-left: 3px solid var(--butter-deep);
-    box-shadow: var(--shadow-lift);
-    font-size: 0.85rem;
-    animation: rebook 9s var(--ease-dew) infinite;
+    inset: auto 0 0;
+    z-index: 10;
+    height: 2.75rem;
+    background: linear-gradient(to bottom, transparent, rgba(251, 251, 252, 0.95));
+    pointer-events: none;
   }
-  .mini-diary__card b {
-    display: block;
-    font-size: 0.72rem;
-    color: var(--ink-3);
-  }
-  @keyframes rebook {
-    0%,
-    22% {
-      transform: translateX(0) rotate(0);
-    }
-    30% {
-      transform: translateX(35%) translateY(-6px) rotate(2deg);
-    }
-    40%,
-    62% {
-      transform: translateX(calc(100% + 1.95rem)) rotate(0);
-    }
-    70% {
-      transform: translateX(calc(150% + 2rem)) translateY(-6px) rotate(-2deg);
-    }
-    80%,
-    100% {
-      transform: translateX(calc(200% + 3.9rem)) rotate(0);
-    }
-  }
-
-  .mini-diary__fold {
+  .mini-diary__canvas {
     position: absolute;
-    left: 16.66%;
-    bottom: 16%;
-    transform: translateX(-50%);
-    padding: 0.25rem 0.7rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px dashed rgba(47, 63, 102, 0.2);
-    font-size: 0.72rem;
-    color: var(--ink-3);
-    white-space: nowrap;
+    inset: 0;
+    transform-origin: 58% 42%;
+    will-change: transform;
+  }
+  .mini-diary__shot {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .mini-diary__shot--on {
+    clip-path: circle(0% at 72% 4%);
+  }
+  .mini-diary__shot--menu {
+    opacity: 0;
+  }
+  /* Glow over the matched cards; radius tracks the card's own corners. */
+  .mini-diary__ring {
+    position: absolute;
+    left: var(--l);
+    top: var(--t);
+    width: 29.5%;
+    height: 13.16%;
+    border-radius: 3.9% / 16%;
+    box-shadow:
+      0 0 0 2px rgba(163, 69, 110, 0.4),
+      0 14px 34px -12px rgba(163, 69, 110, 0.55);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .mini-diary__ripple {
+    position: absolute;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(163, 69, 110, 0.28), rgba(163, 69, 110, 0) 70%);
+    box-shadow: 0 0 0 1.5px rgba(163, 69, 110, 0.35);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .mini-diary__cursor {
+    position: absolute;
+    left: 46%;
+    top: 72%;
+    z-index: 5;
+    transform-origin: 4px 3px;
+    fill: var(--ink);
+    stroke: #fff;
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 3px 6px rgba(47, 63, 102, 0.35));
+    opacity: 0;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mini-diary__shot--on {
+      clip-path: none;
+    }
+    .mini-diary__ring {
+      opacity: 1;
+    }
   }
 
   /* Where to focus */
@@ -714,9 +731,106 @@ const accessOn = [
     .bento__pause {
       margin: -1.5rem 0 1.5rem;
     }
-    .mini-diary__card {
-      font-size: 0.75rem;
-      padding: 0.5rem;
+    /* Keep the planner legible on a phone: show its right-hand side larger. */
+    .mini-diary__stage {
+      aspect-ratio: 941 / 869;
+    }
+    .mini-diary__canvas {
+      inset: 0 0 auto auto;
+      width: 170%;
+      aspect-ratio: 1600 / 869;
     }
   }
 </style>
+
+<script>
+  import { gsap, reducedMotion, motionPaused } from "../scripts/motion";
+
+  const tile = document.querySelector<HTMLElement>("[data-diary]");
+  if (tile) {
+    const pick = (s: string) => tile.querySelector<HTMLElement>(s)!;
+    const canvas = pick("[data-diary-canvas]");
+    const on = pick('[data-diary-shot="on"]');
+    const menu = pick('[data-diary-shot="menu"]');
+    const cursor = pick("[data-diary-cursor]");
+    const ripple = pick("[data-diary-ripple]");
+    const rings = tile.querySelectorAll<HTMLElement>("[data-diary-ring]");
+
+    // Points measured on the live planner capture, as % of its width and height.
+    const at = (x: number, y: number) => ({ left: `${x}%`, top: `${y}%` });
+    const START = at(46, 72);
+    const CARET = at(78.05, 4.1);
+    const ANY = at(70.2, 10.6);
+    const REST = at(88, 36);
+    const CLEAR = at(77.7, 4.1);
+    const MENU_SHUT = "inset(6.6% 20.2% 92% 60.6% round 14px)";
+    const MENU_OPEN = "inset(6.6% 20.2% 53.8% 60.6% round 14px)";
+
+    gsap.set(ripple, { xPercent: -50, yPercent: -50 });
+
+    const tl = gsap.timeline({ repeat: -1, paused: true, defaults: { ease: "power3.inOut" } });
+    const click = (time: number, point: { left: string; top: string }) => {
+      tl.to(cursor, { scale: 0.8, duration: 0.08, ease: "power2.in" }, time)
+        .to(cursor, { scale: 1, duration: 0.3, ease: "back.out(3)" }, time + 0.08)
+        .fromTo(
+          ripple,
+          { ...point, scale: 0.25, autoAlpha: 1 },
+          { scale: 1.4, autoAlpha: 0, duration: 0.55, ease: "power2.out", immediateRender: false },
+          time + 0.04,
+        );
+    };
+
+    tl.set(on, { clipPath: "circle(0% at 72% 4%)" }, 0)
+      .set(menu, { clipPath: MENU_SHUT, autoAlpha: 0 }, 0)
+      .set(rings, { autoAlpha: 0, scale: 1.06 }, 0)
+      .set(canvas, { scale: 1 }, 0)
+      .fromTo(cursor, { ...START, autoAlpha: 0 }, { autoAlpha: 1, duration: 0.25, ease: "power1.out" }, 0.1)
+      .to(cursor, { ...CARET, duration: 0.75 }, 0.2);
+    click(0.95, CARET);
+    tl.to(menu, { clipPath: MENU_OPEN, autoAlpha: 1, duration: 0.32, ease: "power3.out" }, 1.02)
+      .to(cursor, { ...ANY, duration: 0.45 }, 1.35);
+    click(1.85, ANY);
+    tl.to(menu, { autoAlpha: 0, duration: 0.16, ease: "power1.out" }, 1.95)
+      .to(on, { clipPath: "circle(150% at 72% 4%)", duration: 0.7, ease: "power2.inOut" }, 1.95)
+      .to(cursor, { ...REST, duration: 0.7 }, 2.15)
+      .to(canvas, { scale: 1.045, duration: 1.8, ease: "power1.inOut" }, 2.1)
+      .to(rings, { autoAlpha: 1, scale: 1, duration: 0.45, stagger: 0.12, ease: "back.out(2)" }, 2.45)
+      .to(cursor, { ...CLEAR, duration: 0.55 }, 4.55);
+    click(5.15, CLEAR);
+    tl.to(rings, { autoAlpha: 0, duration: 0.2, ease: "power1.out" }, 5.2)
+      .to(on, { clipPath: "circle(0% at 77.7% 4.1%)", duration: 0.55, ease: "power2.in" }, 5.22)
+      .to(canvas, { scale: 1, duration: 0.8 }, 5.22)
+      .to(cursor, { autoAlpha: 0, duration: 0.3, ease: "power1.out" }, 5.7)
+      .to({}, { duration: 0.5 }, 6.0);
+
+    // Still frame: the filter applied, no cursor.
+    let frozen = false;
+    const still = () => {
+      frozen = true;
+      tl.pause(3.4);
+      gsap.set(cursor, { autoAlpha: 0 });
+    };
+
+    if (reducedMotion()) {
+      still();
+    } else {
+      let visible = false;
+      const sync = () => {
+        if (motionPaused()) return still();
+        if (!visible) return tl.pause();
+        if (frozen) {
+          frozen = false;
+          tl.restart();
+        } else tl.play();
+      };
+      new IntersectionObserver(
+        ([e]) => {
+          visible = e.isIntersecting;
+          sync();
+        },
+        { threshold: 0.3 },
+      ).observe(tile);
+      addEventListener("aetheria:motion", sync);
+    }
+  }
+</script>

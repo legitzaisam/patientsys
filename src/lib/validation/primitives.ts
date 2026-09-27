@@ -10,6 +10,7 @@
  */
 import { z } from "zod";
 import { checkEmail } from "@/lib/email";
+import { checkPhone } from "@/lib/phone";
 // Side-effect import: installs the shared wording for validation failures.
 import "./parse";
 
@@ -58,6 +59,25 @@ const emailShape = (allowEmpty: boolean) =>
 export const email = emailShape(false);
 export const optionalEmail = emailShape(true).optional();
 export const nullableEmail = emailShape(true).nullable().optional();
+
+const phoneShape = (allowEmpty: boolean) =>
+  z
+    .string()
+    .trim()
+    .max(50)
+    .superRefine((value, ctx) => {
+      if (allowEmpty && value === "") return;
+      const result = checkPhone(value);
+      if (!result.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: result.error });
+    });
+
+/**
+ * Reuses `checkPhone` so every patient, clinic and portal form agrees on how
+ * many digits a number needs for its country code.
+ */
+export const phone = phoneShape(false);
+export const optionalPhone = phoneShape(true).optional();
+export const nullablePhone = phoneShape(true).nullable().optional();
 
 /** Money in pounds. Non-negative, with a ceiling that catches slipped decimals. */
 export const money = z.number().finite().min(0).max(1_000_000);

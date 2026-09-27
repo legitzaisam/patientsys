@@ -1457,13 +1457,17 @@ export type Database = {
           job_title: string | null;
           note: string | null;
           registration_body: string | null;
+          registration_expiry: string | null;
           registration_number: string | null;
+          requires_owner: boolean;
           reviewed_at: string | null;
           reviewed_by: string | null;
           reviewer_note: string | null;
           status: Database["public"]["Enums"]["change_request_status"];
           updated_at: string;
           user_id: string;
+          work_email: string | null;
+          working_arrangement: string | null;
         };
         Insert: {
           clinic_id: string;
@@ -1473,13 +1477,17 @@ export type Database = {
           job_title?: string | null;
           note?: string | null;
           registration_body?: string | null;
+          registration_expiry?: string | null;
           registration_number?: string | null;
+          requires_owner?: boolean;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
           reviewer_note?: string | null;
           status?: Database["public"]["Enums"]["change_request_status"];
           updated_at?: string;
           user_id: string;
+          work_email?: string | null;
+          working_arrangement?: string | null;
         };
         Update: {
           clinic_id?: string;
@@ -1489,13 +1497,17 @@ export type Database = {
           job_title?: string | null;
           note?: string | null;
           registration_body?: string | null;
+          registration_expiry?: string | null;
           registration_number?: string | null;
+          requires_owner?: boolean;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
           reviewer_note?: string | null;
           status?: Database["public"]["Enums"]["change_request_status"];
           updated_at?: string;
           user_id?: string;
+          work_email?: string | null;
+          working_arrangement?: string | null;
         };
         Relationships: [
           {
@@ -1523,6 +1535,7 @@ export type Database = {
           registration_expiry: string | null;
           registration_number: string | null;
           updated_at: string;
+          working_arrangement: string | null;
         };
         Insert: {
           avatar_url?: string | null;
@@ -1539,6 +1552,7 @@ export type Database = {
           registration_expiry?: string | null;
           registration_number?: string | null;
           updated_at?: string;
+          working_arrangement?: string | null;
         };
         Update: {
           avatar_url?: string | null;
@@ -1555,6 +1569,7 @@ export type Database = {
           registration_expiry?: string | null;
           registration_number?: string | null;
           updated_at?: string;
+          working_arrangement?: string | null;
         };
         Relationships: [
           {

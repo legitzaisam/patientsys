@@ -233,28 +233,29 @@ test.describe("as the owner", () => {
     );
   });
 
-  test("my profile: tabs above the heading, registration dropdown and expiry fields, earnings summary", async ({
+  test("my profile: registration fields stay on the page; Security, Documents and Performance are tabs", async ({
     page,
   }) => {
     await page.goto("/profile");
-    const tabs = page.getByRole("tablist", { name: "My profile sections" });
-    await expect(tabs.getByRole("tab", { name: "Profile" })).toHaveAttribute(
+    await expect(page.getByRole("heading", { level: 1, name: "My profile" })).toBeVisible();
+    await expect(page.locator('[data-qc="registration-body"] option')).toHaveCount(7);
+    await expect(page.getByLabel("Registration expiry")).toBeVisible();
+    await expect(page.getByLabel("Working arrangement")).toBeVisible();
+    await expect(page.getByLabel("Insurance provider")).toBeVisible();
+    await expect(page.getByLabel("Qualifications")).toBeVisible();
+    const tabs = page.getByRole("tablist", { name: "Account" });
+    await expect(tabs.getByRole("tab", { name: "Performance" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await expect(page.locator('[data-qc="registration-body"] option')).toHaveCount(7);
-    await expect(page.getByLabel("Registration expiry")).toBeVisible();
-    await expect(page.getByLabel("Insurance provider")).toBeVisible();
-    await expect(page.getByLabel("Qualifications")).toBeVisible();
-    // The performance block is a one-line summary that points at My earnings.
+    await expect(page.getByRole("heading", { level: 2, name: "Your performance" })).toBeVisible();
     await expect(page.locator('[data-qc="profile-earnings-summary"]')).toContainText(
-      "Your share, last month",
+      "Your share",
     );
-    await expect(page.locator('[data-qc="see-my-earnings"]')).toHaveAttribute("href", "/earnings");
     await tabs.getByRole("tab", { name: "Security" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Security" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Security" })).toBeVisible();
     await tabs.getByRole("tab", { name: "Documents" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Documents" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Documents" })).toBeVisible();
   });
 
   test("diary notes on upcoming appointments read as the pre-read", async ({ page }) => {
@@ -273,8 +274,9 @@ test.describe("as a practitioner", () => {
   test.use({ role: "practitioner" });
 
   test("My earnings reads in share terms with rate, payout status and export", async ({ page }) => {
-    await page.goto("/earnings");
-    await expect(page.getByRole("heading", { level: 1, name: "My earnings" })).toBeVisible();
+    await page.goto("/profile");
+    await expect(page.getByRole("heading", { level: 1, name: "My profile" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Your performance" })).toBeVisible();
     await expect(page.getByText("Your share", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Earned", { exact: true })).toHaveCount(0);
     await expect(page.locator('[data-qc="earnings-rate"]')).toContainText(/your rate is \d+%/);

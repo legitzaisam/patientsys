@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Calendar, Check, ChevronsUpDown, Clock, GripVertical, Plus, Search, UserPlus } from "lucide-react";
 import { saveAppointment, savePatient } from "@/lib/clinic.functions";
 import { checkEmail } from "@/lib/email";
+import { checkPhone } from "@/lib/phone";
 import { bookingNotifyDescription } from "@/lib/payment-link";
 import { durationForCatalogueItem } from "@/lib/treatment-duration";
 import { Button } from "@/components/ui/button";
@@ -255,6 +256,7 @@ export function QuickAddAppointment({
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [catalogueId, setCatalogueId] = useState("");
   const [practitionerId, setPractitionerId] = useState(defaultPractitionerId ?? "");
   const [time, setTime] = useState(defaultStart ? toLocalTime(defaultStart) : "09:00");
@@ -294,7 +296,8 @@ export function QuickAddAppointment({
     /^\d{4}-\d{2}-\d{2}$/.test(day) &&
     /^\d{2}:\d{2}$/.test(time);
   const emailReady = !email.trim() || (!emailError && checkEmail(email).ok);
-  const canBook = patientReady && scheduleReady && emailReady;
+  const phoneReady = !phone.trim() || (!phoneError && checkPhone(phone).ok);
+  const canBook = patientReady && scheduleReady && emailReady && phoneReady;
   const addPatient = useMutation({
     mutationFn: useServerFn(savePatient),
     onError: (e: Error) => toast.error(e.message),
@@ -314,6 +317,7 @@ export function QuickAddAppointment({
       setEmailError(null);
       setEmailSuggestion(null);
       setPhone("");
+      setPhoneError(null);
       queryClient.invalidateQueries({ queryKey: ["appointments"] });
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -359,6 +363,10 @@ export function QuickAddAppointment({
           setEmailSuggestion(check.suggestion ?? null);
         }
       }
+      if (phone.trim()) {
+        const check = checkPhone(phone);
+        if (!check.ok) setPhoneError(check.error);
+      }
       return;
     }
 
@@ -376,6 +384,16 @@ export function QuickAddAppointment({
       }
       setEmailError(null);
       setEmailSuggestion(null);
+      let patientPhone: string | undefined;
+      if (phone.trim()) {
+        const phoneCheck = checkPhone(phone);
+        if (!phoneCheck.ok) {
+          setPhoneError(phoneCheck.error);
+          return;
+        }
+        patientPhone = phoneCheck.phone;
+      }
+      setPhoneError(null);
       try {
         const created = await addPatient.mutateAsync({
           data: {
@@ -383,7 +401,7 @@ export function QuickAddAppointment({
             last_name: lastName.trim(),
             date_of_birth: dob,
             email: patientEmail,
-            phone: phone.trim() || undefined,
+            phone: patientPhone,
           },
         });
         id = created.id;
@@ -577,11 +595,24 @@ export function QuickAddAppointment({
                   <Input
                     type="tel"
                     className={field}
-                    placeholder="Phone"
+                    placeholder="07700 900000"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    aria-invalid={Boolean(phoneError)}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      setPhoneError(null);
+                    }}
+                    onBlur={() => {
+                      if (!phone.trim()) {
+                        setPhoneError(null);
+                        return;
+                      }
+                      const check = checkPhone(phone);
+                      setPhoneError(check.ok ? null : check.error);
+                    }}
                     aria-label="Phone"
                   />
+                  {phoneError ? <p className="text-xs text-destructive">{phoneError}</p> : null}
                 </div>
               </>
             ) : (

@@ -24,13 +24,13 @@ test.describe("owner", () => {
 test.describe("practitioner", () => {
   test.use({ role: "practitioner" });
 
-  test("sees earnings and insights but not clinic performance", async ({ page }) => {
+  test("sees insights but not clinic performance", async ({ page }) => {
     await page.goto("/dashboard");
     const nav = page.getByRole("navigation").first();
-    await expect(nav.getByRole("link", { name: "Earnings" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Retention" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Insights" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Performance" })).toHaveCount(0);
+    await expect(nav.getByRole("link", { name: "Earnings" })).toHaveCount(0);
   });
 
   test("a direct URL to /performance bounces to the dashboard", async ({ page }) => {

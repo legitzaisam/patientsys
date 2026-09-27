@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Building2 } from "lucide-react";
 import { getClinicDetails, updateClinicDetails } from "@/lib/clinic.functions";
 import { checkEmail, isEmailOk } from "@/lib/email";
+import { checkPhone, isPhoneOk } from "@/lib/phone";
 import { toastEmailError } from "@/lib/email-toast";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -135,12 +136,24 @@ export function ClinicDetailsSettings({ canEdit }: { canEdit: boolean }) {
         <div className="flex justify-end">
           <Button
             size="sm"
-            disabled={!form.name.trim() || save.isPending || !isEmailOk(form.email ?? "", true)}
+            disabled={
+              !form.name.trim() ||
+              save.isPending ||
+              !isEmailOk(form.email ?? "", true) ||
+              !isPhoneOk(form.phone ?? "", true)
+            }
             onClick={() => {
               const offsets = parseOffsets(offsetsText);
               if (offsets.length === 0) {
                 toast.error("Enter at least one reminder time in hours, e.g. 168, 24");
                 return;
+              }
+              if (form.phone?.trim()) {
+                const phoneCheck = checkPhone(form.phone, "phone number");
+                if (!phoneCheck.ok) {
+                  toast.error(phoneCheck.error);
+                  return;
+                }
               }
               const payload = { ...form, reminder_offsets: offsets };
               if (form.email?.trim()) {

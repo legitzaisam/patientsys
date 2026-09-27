@@ -13,11 +13,14 @@ test.describe("as owner", () => {
     await page.goto("/team");
     await expect(page.getByRole("heading", { level: 1, name: "Team & access" })).toBeVisible();
     await page
-      .getByRole("link", { name: /Nadia Rahman/ })
-      .first()
+      .locator('[data-qc="team-member"]')
+      .filter({ hasText: "Nadia Rahman" })
+      .getByRole("link")
       .click();
     await expect(page).toHaveURL(/\/team\/.+/);
     await expect(page.getByRole("heading", { level: 1, name: "Staff profile" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Performance" })).toBeVisible();
+    await expect(page.getByText("Their share", { exact: true }).first()).toBeVisible();
   });
 
   test("each member shows last active, compliance status and, for the owner, commission; access changes are logged", async ({

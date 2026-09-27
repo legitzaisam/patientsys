@@ -5,7 +5,6 @@ import {
   Repeat,
   Lightbulb,
   TrendingUp,
-  Wallet,
   UserCog,
   Settings as SettingsIcon,
   IdCard,
@@ -49,13 +48,6 @@ const SHORTCUTS: Shortcut[] = [
     icon: TrendingUp,
     permission: "reports.performance",
   },
-  {
-    to: "/earnings",
-    label: "Earnings",
-    blurb: "Your treatments delivered and total earned",
-    icon: Wallet,
-    roles: ["practitioner"],
-  },
   { to: "/team", label: "Team", blurb: "Staff profiles and documents", icon: UserCog, permission: "team.view" },
   {
     to: "/settings",
@@ -64,7 +56,7 @@ const SHORTCUTS: Shortcut[] = [
     icon: SettingsIcon,
     permission: "settings.treatments",
   },
-  { to: "/profile", label: "My profile", blurb: "Your details, documents and change requests", icon: IdCard },
+  { to: "/profile", label: "My profile", blurb: "Your details, earnings and documents", icon: IdCard },
 ];
 
 /** Home shortcuts filtered to the modules this member is actually allowed to open. */
@@ -72,7 +64,6 @@ export function RoleShortcuts({ identity }: { identity: Identity }) {
   const items = SHORTCUTS.filter((s) => {
     if (s.permission && !can(identity, s.permission)) return false;
     if (s.roles && !s.roles.some((r) => identity.roles.includes(r))) return false;
-    if (s.to === "/earnings" && identity.isManager) return false;
     return true;
   });
 

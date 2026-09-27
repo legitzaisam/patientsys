@@ -21,12 +21,14 @@ export const USERS = {
   patient: "10000000-0000-4000-8000-000000000005",
   former: "10000000-0000-4000-8000-000000000006",
   admin: "10000000-0000-4000-8000-000000000007",
+  manager: "10000000-0000-4000-8000-000000000008",
 } as const;
 
-export type DemoRole = "owner" | "practitioner" | "front_desk" | "patient" | "admin";
+export type DemoRole = "owner" | "manager" | "practitioner" | "front_desk" | "patient" | "admin";
 
 export const DEMO_ACCOUNTS: Record<DemoRole, { userId: string; email: string; label: string }> = {
   owner: { userId: USERS.owner, email: "amara.osei@aetheria.clinic", label: "Clinic owner" },
+  manager: { userId: USERS.manager, email: "maya.chen@aetheria.clinic", label: "Manager" },
   practitioner: {
     userId: USERS.practitioner,
     email: "nadia.rahman@aetheria.clinic",
@@ -135,6 +137,7 @@ export const profiles: Row[] = [
     insurance_provider: "Hamilton Fraser",
     insurance_expiry: dateOnly(140),
     qualifications: "MBBS, MRCGP, Level 7 Aesthetic Medicine",
+    working_arrangement: "Full time",
     avatar_url: "/patient-avatars/avatar-priya.png",
     commission_rate: 40,
     created_at: iso(-720),
@@ -151,6 +154,7 @@ export const profiles: Row[] = [
     insurance_provider: "Cosmetic Insure",
     insurance_expiry: dateOnly(200),
     qualifications: "RGN, Independent Prescriber (V300), Level 7 Aesthetics",
+    working_arrangement: "Self-employed",
     avatar_url: "/patient-avatars/avatar-emma.png",
     commission_rate: 45,
     created_at: iso(-540),
@@ -167,6 +171,7 @@ export const profiles: Row[] = [
     insurance_provider: "Hamilton Fraser",
     insurance_expiry: dateOnly(28),
     qualifications: "MBChB, MRCS, Level 7 Aesthetic Medicine",
+    working_arrangement: "Full time",
     avatar_url: "/patient-avatars/avatar-theo.png",
     commission_rate: 42,
     created_at: iso(-400),
@@ -183,10 +188,28 @@ export const profiles: Row[] = [
     insurance_provider: null,
     insurance_expiry: null,
     qualifications: null,
+    working_arrangement: "Full time",
     avatar_url: "/patient-avatars/avatar-grace.png",
     commission_rate: 0,
     created_at: iso(-300),
     updated_at: iso(-45),
+  },
+  {
+    id: USERS.manager,
+    clinic_id: CLINIC_ID,
+    full_name: "Maya Chen",
+    job_title: "Clinic manager",
+    registration_body: null,
+    registration_number: null,
+    registration_expiry: null,
+    insurance_provider: null,
+    insurance_expiry: null,
+    qualifications: "CIPD Level 5, Clinic operations",
+    working_arrangement: "Full time",
+    avatar_url: "/patient-avatars/avatar-alex.png",
+    commission_rate: 0,
+    created_at: iso(-480),
+    updated_at: iso(-18),
   },
   {
     id: USERS.former,
@@ -199,6 +222,7 @@ export const profiles: Row[] = [
     insurance_provider: "Enhance Insurance",
     insurance_expiry: dateOnly(365),
     qualifications: "MBBS, Level 7 Aesthetic Medicine",
+    working_arrangement: "Part time",
     avatar_url: "/patient-avatars/avatar-leila.png",
     commission_rate: 40,
     created_at: iso(-500),
@@ -215,6 +239,7 @@ export const profiles: Row[] = [
     insurance_provider: null,
     insurance_expiry: null,
     qualifications: null,
+    working_arrangement: null,
     avatar_url: null,
     commission_rate: 0,
     created_at: iso(-10),
@@ -224,6 +249,7 @@ export const profiles: Row[] = [
 
 export const userRoles: Row[] = [
   { id: id("a1"), user_id: USERS.owner, role: "owner", created_at: iso(-720) },
+  { id: id("a1"), user_id: USERS.manager, role: "manager", created_at: iso(-480) },
   { id: id("a1"), user_id: USERS.practitioner, role: "practitioner", created_at: iso(-540) },
   { id: id("a1"), user_id: USERS.practitioner2, role: "practitioner", created_at: iso(-400) },
   { id: id("a1"), user_id: USERS.frontDesk, role: "front_desk", created_at: iso(-300) },
@@ -233,6 +259,7 @@ export const userRoles: Row[] = [
 
 export const staffEmails: Record<string, string> = {
   [USERS.owner]: "amara.osei@aetheria.clinic",
+  [USERS.manager]: "maya.chen@aetheria.clinic",
   [USERS.practitioner]: "nadia.rahman@aetheria.clinic",
   [USERS.practitioner2]: "tom.whitfield@aetheria.clinic",
   [USERS.frontDesk]: "sofia.marchetti@aetheria.clinic",
@@ -242,6 +269,7 @@ export const staffEmails: Record<string, string> = {
 /** Last sign-in per staff account, as Supabase Auth's last_sign_in_at. */
 export const staffLastActive: Record<string, string> = {
   [USERS.owner]: iso(0, 8, 5),
+  [USERS.manager]: iso(0, 8, 20),
   [USERS.practitioner]: iso(0, 8, 40),
   [USERS.practitioner2]: iso(-2, 17, 20),
   [USERS.frontDesk]: iso(-1, 9, 0),
@@ -3069,11 +3097,20 @@ pushCommunication({
   created_at: iso(-8, 10, 0),
 });
 
-export const staffNotifications: Row[] = [
-  {
+/** Owner and manager both see clinic-wide ops alerts. */
+const CLINIC_LEADS = [USERS.owner, USERS.manager] as const;
+
+function notifyLeads(row: Omit<Row, "id" | "recipient_id">): Row[] {
+  return CLINIC_LEADS.map((recipient_id) => ({
+    ...row,
     id: id("l1"),
+    recipient_id,
+  }));
+}
+
+export const staffNotifications: Row[] = [
+  ...notifyLeads({
     clinic_id: CLINIC_ID,
-    recipient_id: USERS.owner,
     sender_id: USERS.frontDesk,
     kind: "urgent",
     title: "Urgent from Sofia Marchetti: Room 2 autoclave",
@@ -3083,11 +3120,9 @@ export const staffNotifications: Row[] = [
     appointment_id: null,
     read_at: null,
     created_at: iso(0, 8, 15),
-  },
-  {
-    id: id("l1"),
+  }),
+  ...notifyLeads({
     clinic_id: CLINIC_ID,
-    recipient_id: USERS.owner,
     sender_id: null,
     kind: "appointment",
     title: "New booking",
@@ -3097,11 +3132,9 @@ export const staffNotifications: Row[] = [
     appointment_id: null,
     read_at: null,
     created_at: iso(-1, 16, 45),
-  },
-  {
-    id: id("l1"),
+  }),
+  ...notifyLeads({
     clinic_id: CLINIC_ID,
-    recipient_id: USERS.owner,
     sender_id: USERS.practitioner,
     kind: "staff_message",
     title: "Message from Dr Nadia Rahman: Stock",
@@ -3111,7 +3144,7 @@ export const staffNotifications: Row[] = [
     appointment_id: null,
     read_at: null,
     created_at: iso(-1, 12, 5),
-  },
+  }),
   {
     id: id("l1"),
     clinic_id: CLINIC_ID,
@@ -3196,10 +3229,8 @@ export const staffNotifications: Row[] = [
     read_at: iso(-1, 18, 10),
     created_at: iso(-2, 17, 5),
   },
-  {
-    id: id("l1"),
+  ...notifyLeads({
     clinic_id: CLINIC_ID,
-    recipient_id: USERS.owner,
     sender_id: null,
     kind: "appointment",
     title: "No-show logged",
@@ -3209,6 +3240,20 @@ export const staffNotifications: Row[] = [
     appointment_id: null,
     read_at: iso(0, 16, 0),
     created_at: iso(0, 15, 40),
+  }),
+  {
+    id: id("l1"),
+    clinic_id: CLINIC_ID,
+    recipient_id: USERS.manager,
+    sender_id: USERS.frontDesk,
+    kind: "staff_message",
+    title: "Message from Sofia Marchetti: Consent chase",
+    body: "Two outstanding consent forms are still unsigned. I'll chase again before the afternoon list.",
+    urgent: false,
+    patient_id: null,
+    appointment_id: null,
+    read_at: null,
+    created_at: iso(0, 9, 10),
   },
 ];
 
@@ -3407,6 +3452,10 @@ export const profileChangeRequests: Row[] = [
     job_title: "Senior Aesthetic Practitioner",
     registration_body: "NMC",
     registration_number: "18C4471E",
+    registration_expiry: null,
+    work_email: null,
+    working_arrangement: null,
+    requires_owner: false,
     note: "Promoted to senior in July — please update my job title.",
     status: "pending",
     reviewed_by: null,
@@ -3423,6 +3472,10 @@ export const profileChangeRequests: Row[] = [
     job_title: "Lead Patient Coordinator",
     registration_body: null,
     registration_number: null,
+    registration_expiry: null,
+    work_email: null,
+    working_arrangement: "Full time",
+    requires_owner: false,
     note: "Taking on the reception rota from September.",
     status: "pending",
     reviewed_by: null,
@@ -3439,6 +3492,10 @@ export const profileChangeRequests: Row[] = [
     job_title: "Aesthetic Doctor",
     registration_body: "GMC",
     registration_number: "7719034",
+    registration_expiry: null,
+    work_email: null,
+    working_arrangement: null,
+    requires_owner: false,
     note: "Corrected my GMC number.",
     status: "approved",
     reviewed_by: USERS.owner,
@@ -4313,6 +4370,22 @@ seedStaffThread(USERS.owner, USERS.practitioner2, [
   { from: USERS.owner, body: "Can you cover Nadia's Thursday morning if her course overruns?", daysAgo: 2, hour: 17 },
   { from: USERS.practitioner2, body: "Yes — I can take the 09:30 and 10:15.", daysAgo: 2, hour: 18 },
   { from: USERS.owner, body: "Perfect. Sofia will move the diary.", daysAgo: 1, hour: 8 },
+]);
+
+seedStaffThread(USERS.manager, USERS.frontDesk, [
+  { from: USERS.frontDesk, body: "Autoclave in room 2 failed its cycle. Engineer booked for 11.", daysAgo: 0, hour: 8 },
+  { from: USERS.manager, body: "Thank you. Use room 1 and put a note on the door. I'll speak to the engineer.", daysAgo: 0, hour: 8 },
+  { from: USERS.frontDesk, body: "Done. Also chasing the two outstanding consent forms now.", daysAgo: 0, hour: 9 },
+]);
+
+seedStaffThread(USERS.manager, USERS.practitioner, [
+  { from: USERS.practitioner, body: "We are down to two vials of Profhilo. Can we reorder before Friday?", daysAgo: 1, hour: 12 },
+  { from: USERS.manager, body: "I'll raise the order this afternoon and copy Amara.", daysAgo: 1, hour: 13 },
+]);
+
+seedStaffThread(USERS.owner, USERS.manager, [
+  { from: USERS.manager, body: "Nadia flagged Profhilo stock — I'll place the order today.", daysAgo: 1, hour: 13 },
+  { from: USERS.owner, body: "Please do. Sign it off on the account.", daysAgo: 1, hour: 14 },
 ]);
 
 export const formerTeamSeed = [

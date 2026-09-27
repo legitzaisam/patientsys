@@ -434,7 +434,7 @@ function PatientsPage() {
                     label="Email"
                     type="email"
                   />
-                  <PatientField control={patientForm.control} name="phone" label="Phone" />
+                  <PatientField control={patientForm.control} name="phone" label="Phone" type="tel" />
                   <PatientField
                     control={patientForm.control}
                     name="date_of_birth"

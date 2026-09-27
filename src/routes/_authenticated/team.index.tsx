@@ -600,7 +600,8 @@ function TeamPage() {
                     )}
                   </div>
                   <p className="shrink-0 text-xs text-muted-foreground">
-                    Staff updates wait here until you approve.
+                    Staff updates wait here. A manager changing their own details needs the clinic
+                    owner.
                   </p>
                   <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
                     {(requests ?? []).length === 0 && (
@@ -609,7 +610,17 @@ function TeamPage() {
                       </Card>
                     )}
                     {(requests ?? []).map((r: any) => (
-                      <RequestCard key={r.id} r={r} onReview={(v) => review.mutate({ data: v })} busy={review.isPending} />
+                      <RequestCard
+                        key={r.id}
+                        r={r}
+                        onReview={(v) => review.mutate({ data: v })}
+                        busy={review.isPending}
+                        canReview={
+                          r.status === "pending" &&
+                          r.user_id !== identity.userId &&
+                          (Boolean(identity.isOwner) || !r.requires_owner)
+                        }
+                      />
                     ))}
                   </div>
                 </aside>
@@ -845,7 +856,17 @@ function EditStaffDialog({
   );
 }
 
-function RequestCard({ r, onReview, busy }: { r: any; onReview: (v: any) => void; busy: boolean }) {
+function RequestCard({
+  r,
+  onReview,
+  busy,
+  canReview,
+}: {
+  r: any;
+  onReview: (v: any) => void;
+  busy: boolean;
+  canReview: boolean;
+}) {
   const [note, setNote] = useState("");
   const pending = r.status === "pending";
   const line = (label: string, from: string, to: string) =>
@@ -863,7 +884,8 @@ function RequestCard({ r, onReview, busy }: { r: any; onReview: (v: any) => void
             {r.current?.full_name || r.full_name}
             {pending ? (
               <Badge variant="secondary">
-                <Clock className="h-3 w-3" /> Pending
+                <Clock className="h-3 w-3" />{" "}
+                {r.requires_owner ? "Needs clinic owner" : "Pending"}
               </Badge>
             ) : (
               <Badge variant="outline" className="capitalize">
@@ -876,10 +898,13 @@ function RequestCard({ r, onReview, busy }: { r: any; onReview: (v: any) => void
             {line("Job title", r.current?.job_title ?? "", r.job_title ?? "")}
             {line("Registration body", r.current?.registration_body ?? "", r.registration_body ?? "")}
             {line("Registration number", r.current?.registration_number ?? "", r.registration_number ?? "")}
+            {line("Registration expiry", r.current?.registration_expiry ?? "", r.registration_expiry ?? "")}
+            {line("Work email", r.current?.email ?? "", r.work_email ?? "")}
+            {line("Working arrangement", r.current?.working_arrangement ?? "", r.working_arrangement ?? "")}
           </div>
           {r.note && <p className="mt-2 text-xs italic text-muted-foreground">“{r.note}”</p>}
         </div>
-        {pending && (
+        {pending && canReview && (
           <div className="space-y-2">
             <Textarea
               rows={2}

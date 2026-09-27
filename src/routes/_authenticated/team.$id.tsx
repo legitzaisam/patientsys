@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { getStaffProfile, restoreExTeamMember, updateStaffMember } from "@/lib/clinic.functions";
 import { joinStaffName, splitStaffName, STAFF_TITLES } from "@/lib/staff-name";
+import { WORKING_ARRANGEMENTS } from "@/lib/profile-change-policy";
 import { UpdateStaffMember } from "@/lib/validation/schemas";
 import { numericText } from "@/lib/validation/primitives";
 import { can } from "@/lib/permissions";
@@ -19,10 +20,10 @@ import { AppShell } from "@/components/app-shell";
 import { StaffAvatar } from "@/components/staff-files";
 import { StaffChatPanel } from "@/components/staff-chat-panel";
 import { StaffRecordTabs } from "@/components/staff-record-tabs";
-import { StaffPerformanceKpis } from "@/components/performance/staff-performance-kpis";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -34,12 +35,19 @@ import {
 } from "@/components/ui/form";
 
 /** Commission is typed as text; the percentage bound comes from the server schema. */
+const REGISTRATION_BODIES = ["GMC", "NMC", "GPhC", "GDC", "HCPC", "None"] as const;
+
 const StaffProfileSchema = z.object({
   title: z.string().trim().max(20),
   fullName: UpdateStaffMember.shape.fullName,
   jobTitle: z.string().trim().max(200),
   registrationBody: z.string().trim().max(200),
   registrationNumber: z.string().trim().max(100),
+  registrationExpiry: z.string().trim().max(10),
+  insuranceProvider: z.string().trim().max(200),
+  insuranceExpiry: z.string().trim().max(10),
+  qualifications: z.string().trim().max(2_000),
+  workingArrangement: z.string().trim().max(80),
   role: UpdateStaffMember.shape.role,
   commissionRate: numericText(UpdateStaffMember.shape.commissionRate, 0),
 });
@@ -120,6 +128,11 @@ function StaffProfilePage() {
       jobTitle: "",
       registrationBody: "",
       registrationNumber: "",
+      registrationExpiry: "",
+      insuranceProvider: "",
+      insuranceExpiry: "",
+      qualifications: "",
+      workingArrangement: "",
       role: "practitioner",
       commissionRate: "0",
     },
@@ -170,6 +183,11 @@ function StaffProfilePage() {
       jobTitle: data.profile.job_title ?? "",
       registrationBody: data.profile.registration_body ?? "",
       registrationNumber: data.profile.registration_number ?? "",
+      registrationExpiry: (data.profile.registration_expiry ?? "").slice(0, 10),
+      insuranceProvider: data.profile.insurance_provider ?? "",
+      insuranceExpiry: (data.profile.insurance_expiry ?? "").slice(0, 10),
+      qualifications: data.profile.qualifications ?? "",
+      workingArrangement: data.profile.working_arrangement ?? "",
       role: (data.role as "owner" | "manager" | "practitioner" | "front_desk") || "practitioner",
       commissionRate: String(Number(data.profile.commission_rate ?? 0)),
     });
@@ -298,6 +316,11 @@ function StaffProfilePage() {
                           jobTitle: values.jobTitle,
                           registrationBody: values.registrationBody,
                           registrationNumber: values.registrationNumber,
+                          registrationExpiry: values.registrationExpiry,
+                          insuranceProvider: values.insuranceProvider,
+                          insuranceExpiry: values.insuranceExpiry,
+                          qualifications: values.qualifications,
+                          workingArrangement: values.workingArrangement,
                           commissionRate: Number(values.commissionRate),
                         },
                       }),
@@ -364,12 +387,59 @@ function StaffProfilePage() {
                     </div>
                     <FormField
                       control={profileForm.control}
+                      name="workingArrangement"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0">
+                          <FormLabel>Working arrangement</FormLabel>
+                          <FormControl>
+                            <select
+                              data-qc="staff-working-arrangement"
+                              className="flex h-9 w-full rounded-[11px] border border-edge bg-glass-2 px-3 text-[13px] shadow-inset-hi outline-none transition-colors hover:border-edge-2 focus-visible:border-accent-deep focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={!canEdit}
+                              {...field}
+                            >
+                              <option value="">—</option>
+                              {WORKING_ARRANGEMENTS.map((a) => (
+                                <option key={a} value={a}>
+                                  {a}
+                                </option>
+                              ))}
+                              {field.value &&
+                              !(WORKING_ARRANGEMENTS as readonly string[]).includes(
+                                field.value as (typeof WORKING_ARRANGEMENTS)[number],
+                              ) ? (
+                                <option value={field.value}>{field.value}</option>
+                              ) : null}
+                            </select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
                       name="registrationBody"
                       render={({ field }) => (
                         <FormItem className="min-w-0">
                           <FormLabel>Registration body</FormLabel>
                           <FormControl>
-                            <Input readOnly={!canEdit} placeholder="e.g. JCCP, NMC" {...field} />
+                            <select
+                              data-qc="staff-registration-body"
+                              className="flex h-9 w-full rounded-[11px] border border-edge bg-glass-2 px-3 text-[13px] shadow-inset-hi outline-none transition-colors hover:border-edge-2 focus-visible:border-accent-deep focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={!canEdit}
+                              {...field}
+                            >
+                              <option value="">—</option>
+                              {REGISTRATION_BODIES.map((b) => (
+                                <option key={b} value={b}>
+                                  {b}
+                                </option>
+                              ))}
+                              {field.value &&
+                              !(REGISTRATION_BODIES as readonly string[]).includes(field.value) ? (
+                                <option value={field.value}>{field.value}</option>
+                              ) : null}
+                            </select>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -382,8 +452,83 @@ function StaffProfilePage() {
                         <FormItem className="min-w-0">
                           <FormLabel>Registration number</FormLabel>
                           <FormControl>
-                            <Input readOnly={!canEdit} {...field} />
+                            <Input
+                              readOnly={!canEdit}
+                              disabled={watched.registrationBody === "None"}
+                              {...field}
+                            />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="registrationExpiry"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0">
+                          <FormLabel>Registration expiry</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="date"
+                              readOnly={!canEdit}
+                              disabled={watched.registrationBody === "None"}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="insuranceProvider"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0">
+                          <FormLabel>Insurance provider</FormLabel>
+                          <FormControl>
+                            <Input
+                              readOnly={!canEdit}
+                              placeholder="e.g. Hamilton Fraser"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="insuranceExpiry"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0">
+                          <FormLabel>Insurance expiry</FormLabel>
+                          <FormControl>
+                            <Input type="date" readOnly={!canEdit} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="qualifications"
+                      render={({ field }) => (
+                        <FormItem className="min-w-0 @sm:col-span-2">
+                          <FormLabel>Qualifications</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              rows={2}
+                              readOnly={!canEdit}
+                              placeholder="e.g. Level 7 in Aesthetic Medicine, Foundation botulinum toxin and dermal fillers"
+                              className="rounded-xl"
+                              {...field}
+                            />
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            The clinic owner is reminded 60 days before a registration or insurance
+                            expiry.
+                          </p>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -450,14 +595,14 @@ function StaffProfilePage() {
             </div>
           </Card>
 
-          <StaffPerformanceKpis userId={id} identity={identity} role={data?.role ?? ""} />
-
           <StaffRecordTabs
             name={displayName}
             {...(data?.capabilities ? { capabilities: data.capabilities } : {})}
             userId={id}
             canViewDocuments={canViewDocuments}
             presentCategories={data?.presentCategories ?? []}
+            identity={identity}
+            role={data?.role ?? ""}
           />
         </div>
 

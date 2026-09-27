@@ -61,7 +61,7 @@ function InsightsPage() {
   const canSendOffers = can(identity, "comms.send");
   const tabs = (
     [
-      ...(canSee(identity, "insights-pipeline") ? [{ key: "pipeline" as const, label: "Pipeline" }] : []),
+      ...(canSee(identity, "insights-pipeline") ? [{ key: "pipeline" as const, label: "Funnel" }] : []),
       ...(canSee(identity, "insights-book") ? [{ key: "book" as const, label: "Patient base" }] : []),
     ] as { key: InsightsTab; label: string }[]
   );

@@ -28,7 +28,8 @@ import {
   type PaymentLinkKind,
 } from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
-import { PERMISSION_KEYS, type PermissionKey } from "@/lib/permissions";
+import { assertPhone } from "@/lib/phone";
+import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
@@ -55,6 +56,11 @@ import { EMAIL_MFA_SESSION_MS, EMAIL_OTP_RESEND_MS, EMAIL_OTP_TTL_MS } from "@/l
 import { emailMfaDelivery } from "@/lib/auth/email-mfa.server";
 import { createHash, randomInt } from "node:crypto";
 import { generateInsightsIngestKey } from "@/lib/insights-ingest.server";
+import {
+  canSelfApplyIdentityChanges,
+  clinicHasSeparateManager,
+  profileChangeRequiresOwner,
+} from "@/lib/profile-change-policy";
 
 export { PERMISSION_KEYS, type PermissionKey };
 
@@ -1929,7 +1935,7 @@ export const savePatient = createServerFn({ method: "POST" })
       last_name: data.last_name.trim(),
       title: data.title?.trim() || null,
       email: assertEmail(data.email ?? "", "email address", true),
-      phone: data.phone?.trim() || null,
+      phone: assertPhone(data.phone ?? "", "phone number", true),
       date_of_birth: data.date_of_birth || null,
       status: (data.status as "active" | "inactive" | "archived") ?? "active",
       allergies: data.allergies ?? null,
@@ -2655,7 +2661,7 @@ export const listStaffDirectory = createServerFn({ method: "GET" })
     const { data: roles } = await ctx.supabase
       .from("user_roles")
       .select("user_id, role")
-      .in("role", ["owner", "practitioner", "front_desk"]);
+      .in("role", ["owner", "manager", "practitioner", "front_desk"]);
     const ids = [...new Set((roles ?? []).map((r: { user_id: string }) => r.user_id))] as string[];
     if (ids.length === 0) return [];
     const { data: profiles } = await ctx.supabase
@@ -4183,7 +4189,7 @@ export const updatePortalProfile = createServerFn({ method: "POST" })
         postcode: data.postcode ?? null,
         emergency_contact_name: data.emergency_contact_name ?? null,
         emergency_contact_relationship: data.emergency_contact_relationship ?? null,
-        emergency_contact_phone: data.emergency_contact_phone ?? null,
+        emergency_contact_phone: assertPhone(data.emergency_contact_phone ?? "", "phone number", true),
       })
       .eq("id", patient.id);
     if (error) throw new Error(error.message);
@@ -4463,6 +4469,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       insuranceProvider?: string;
       insuranceExpiry?: string;
       qualifications?: string;
+      workingArrangement?: string;
       commissionRate?: number;
     }) => parseInput(schemas.UpdateStaffMember, data),
   )
@@ -4480,6 +4487,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       insurance_provider: data.insuranceProvider?.trim() || null,
       insurance_expiry: data.insuranceExpiry || null,
       qualifications: data.qualifications?.trim() || null,
+      working_arrangement: data.workingArrangement?.trim() || null,
     };
     if (data.commissionRate !== undefined) {
       patch.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
@@ -5401,11 +5409,17 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
 
 /** The caller's own earnings and KPIs. Never returns clinic figures or the split percentage. */
 export const getMyEarnings = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string }) => parseInput(schemas.GetMyEarnings, data))
+  .validator((data: { from: string; to: string; userId?: string }) => parseInput(schemas.GetMyEarnings, data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "getMyEarnings");
+    const identity = await authorize(ctx, "getMyEarnings");
+    const targetUserId = data.userId ?? ctx.userId;
+    if (targetUserId !== ctx.userId) {
+      if (!identity.isManager) throw new Error("Only managers can open another person's earnings");
+    } else if (!can(identity, "view.earnings")) {
+      throw new Error("You do not have access to this area");
+    }
     const supabaseAdmin = await adminClient(context);
     const { buildStats } = await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
@@ -5422,26 +5436,26 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         supabaseAdmin
           .from("profiles")
           .select("id, full_name, job_title, commission_rate")
-          .eq("id", ctx.userId)
+          .eq("id", targetUserId)
           .maybeSingle(),
         supabaseAdmin
           .from("treatments")
           .select(
             "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id, patients(first_name, last_name)",
           )
-          .eq("practitioner_id", ctx.userId)
+          .eq("practitioner_id", targetUserId)
           .gte("performed_at", data.from)
           .lte("performed_at", data.to)
           .order("performed_at", { ascending: false }),
         supabaseAdmin
           .from("appointments")
           .select("id, practitioner_id, price, payment_status, status, starts_at")
-          .eq("practitioner_id", ctx.userId)
+          .eq("practitioner_id", targetUserId)
           .gte("starts_at", data.from),
         supabaseAdmin
           .from("treatments")
           .select("practitioner_id, patient_id")
-          .eq("practitioner_id", ctx.userId)
+          .eq("practitioner_id", targetUserId)
           .gte("performed_at", yearAgo),
         supabaseAdmin.from("patients").select("id, created_at"),
         supabaseAdmin.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
@@ -5462,7 +5476,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
     const stats = buildStats(
       [
         {
-          userId: ctx.userId,
+          userId: targetUserId,
           fullName: profile?.full_name ?? "",
           jobTitle: profile?.job_title ?? "",
           commissionRate: rate,
@@ -5536,7 +5550,30 @@ export const setCommissionRate = createServerFn({ method: "POST" })
 /* Practitioner self-service profile updates (manager approval)        */
 /* ------------------------------------------------------------------ */
 
-/** Staff submit changes to their own profile; a manager must approve them. */
+async function notifyProfileChangeApprovers(
+  ctx: Ctx,
+  opts: { requiresOwner: boolean; fromName: string; summary: string },
+) {
+  const supabaseAdmin = await adminClient(ctx);
+  const wanted = opts.requiresOwner ? ["owner"] : ["owner", "manager"];
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("user_id").in("role", wanted);
+  const recipients = [
+    ...new Set(((roles ?? []) as { user_id: string }[]).map((r) => r.user_id).filter((id) => id !== ctx.userId)),
+  ];
+  if (recipients.length === 0) return;
+  await supabaseAdmin.from("staff_notifications").insert(
+    recipients.map((recipient_id) => ({
+      clinic_id: clinicIdOf(ctx),
+      recipient_id,
+      sender_id: ctx.userId,
+      kind: "profile_change",
+      title: "Profile change request",
+      body: `${opts.fromName} asked to update ${opts.summary}.`,
+    })),
+  );
+}
+
+/** Staff submit changes to their own profile; a manager or the owner must approve them. */
 export const submitProfileChange = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -5544,14 +5581,22 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      workEmail?: string;
+      workingArrangement?: string;
       note?: string;
     }) => parseInput(schemas.SubmitProfileChange, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "submitProfileChange");
+    const identity = await authorize(ctx, "submitProfileChange");
+    if (canSelfApplyIdentityChanges(identity)) {
+      throw new Error("You can save these details yourself.");
+    }
     if (!data.fullName?.trim()) throw new Error("Full name is required");
+    const workEmail = data.workEmail?.trim() ? assertEmail(data.workEmail, "work email") : null;
+    const requiresOwner = profileChangeRequiresOwner(identity);
     const { error } = await ctx.supabase.from("profile_change_requests").insert({
       clinic_id: clinicIdOf(context),
       user_id: ctx.userId,
@@ -5559,14 +5604,62 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       job_title: data.jobTitle?.trim() || null,
       registration_body: data.registrationBody?.trim() || null,
       registration_number: data.registrationNumber?.trim() || null,
+      registration_expiry: data.registrationExpiry || null,
+      work_email: workEmail,
+      working_arrangement: data.workingArrangement?.trim() || null,
       note: data.note?.trim() || null,
+      requires_owner: requiresOwner,
     });
     if (error) throw new Error(error.message);
+    const summary = [
+      data.jobTitle ? "job title" : null,
+      data.registrationBody || data.registrationNumber || data.registrationExpiry ? "registration" : null,
+      workEmail ? "work email" : null,
+      data.workingArrangement ? "working arrangement" : null,
+    ]
+      .filter(Boolean)
+      .join(", ") || "their profile";
+    try {
+      await notifyProfileChangeApprovers(ctx, {
+        requiresOwner,
+        fromName: identity.profile?.full_name || identity.email || "A colleague",
+        summary,
+      });
+    } catch {
+      // The request is already stored; a missed inbox ping must not roll it back.
+    }
     await audit(ctx, "profile.change_requested", "profile_change_requests", ctx.userId, null);
     return { ok: true };
   });
 
-/** Staff update their own profile details immediately (no approval queue). */
+/** Photo-adjacent professional facts anyone may keep current without approval. */
+export const saveMyInstantProfile = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
+    }) => parseInput(schemas.SaveMyInstantProfile, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "saveMyInstantProfile");
+    const supabaseAdmin = await adminClient(context);
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        insurance_provider: data.insuranceProvider?.trim() || null,
+        insurance_expiry: data.insuranceExpiry || null,
+        qualifications: data.qualifications?.trim() || null,
+      })
+      .eq("id", ctx.userId);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "profile.instant_updated", "profiles", ctx.userId, null);
+    return { ok: true };
+  });
+
+/** Clinic owner (or admin) applies their own identity fields immediately. */
 export const saveMyProfile = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -5578,12 +5671,17 @@ export const saveMyProfile = createServerFn({ method: "POST" })
       insuranceProvider?: string;
       insuranceExpiry?: string;
       qualifications?: string;
+      workEmail?: string;
+      workingArrangement?: string;
     }) => parseInput(schemas.SaveMyProfile, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "saveMyProfile");
+    const identity = await authorize(ctx, "saveMyProfile");
+    if (!canSelfApplyIdentityChanges(identity)) {
+      throw new Error("These details need approval.");
+    }
     if (!data.fullName?.trim()) throw new Error("Full name is required");
     const supabaseAdmin = await adminClient(context);
     const { error } = await supabaseAdmin
@@ -5597,9 +5695,21 @@ export const saveMyProfile = createServerFn({ method: "POST" })
         insurance_provider: data.insuranceProvider?.trim() || null,
         insurance_expiry: data.insuranceExpiry || null,
         qualifications: data.qualifications?.trim() || null,
+        working_arrangement: data.workingArrangement?.trim() || null,
       })
       .eq("id", ctx.userId);
     if (error) throw new Error(error.message);
+    if (data.workEmail?.trim()) {
+      const email = assertEmail(data.workEmail, "work email")!;
+      if (email !== identity.email) {
+        const res = await supabaseAdmin.auth.admin.updateUserById(ctx.userId, {
+          email,
+          email_confirm: true,
+        });
+        if (res.error) throw new Error(res.error.message);
+        await audit(ctx, "staff.set_email", "user_roles", ctx.userId, null);
+      }
+    }
     await audit(ctx, "profile.updated", "profiles", ctx.userId, null);
     return { ok: true };
   });
@@ -5610,15 +5720,24 @@ export const getMyProfile = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "getMyProfile");
-    const { data: requests } = await ctx.supabase
-      .from("profile_change_requests")
-      .select("*")
-      .eq("user_id", ctx.userId)
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const supabaseAdmin = await adminClient(context);
+    const [{ data: requests }, { data: roleRows }] = await Promise.all([
+      ctx.supabase
+        .from("profile_change_requests")
+        .select("*")
+        .eq("user_id", ctx.userId)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabaseAdmin.from("user_roles").select("user_id, role").in("role", ["owner", "manager"]),
+    ]);
     return {
       profile: identity.profile,
+      email: identity.email,
+      isOwner: identity.isOwner,
       isManager: identity.isManager,
+      canSelfApply: canSelfApplyIdentityChanges(identity),
+      requiresOwner: profileChangeRequiresOwner(identity),
+      hasSeparateManager: clinicHasSeparateManager((roleRows ?? []) as { user_id: string; role: string }[]),
       requests: requests ?? [],
     };
   });
@@ -5628,20 +5747,36 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "listProfileChangeRequests");
+    const identity = await authorize(ctx, "listProfileChangeRequests");
     const supabaseAdmin = await adminClient(context);
-    const [{ data: requests }, { data: profiles }] = await Promise.all([
+    const [{ data: requests }, { data: profiles }, users] = await Promise.all([
       supabaseAdmin
         .from("profile_change_requests")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(50),
-      supabaseAdmin.from("profiles").select("id, full_name, job_title, registration_body, registration_number"),
+      supabaseAdmin
+        .from("profiles")
+        .select(
+          "id, full_name, job_title, registration_body, registration_number, registration_expiry, working_arrangement",
+        ),
+      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
     ]);
-    return (requests ?? []).map((r: any) => ({
-      ...r,
-      current: (profiles ?? []).find((p: any) => p.id === r.user_id) ?? null,
-    }));
+    const emailFor = new Map<string, string>(
+      (users.data?.users ?? []).map((u) => [u.id, u.email ?? ""]),
+    );
+    const visible = ((requests ?? []) as { requires_owner?: boolean }[]).filter(
+      (r) => identity.isOwner || identity.isAdmin || !r.requires_owner,
+    );
+    return visible.map((r: any) => {
+      const current = (profiles ?? []).find((p: any) => p.id === r.user_id) ?? null;
+      return {
+        ...r,
+        current: current
+          ? { ...current, email: emailFor.get(r.user_id) ?? "" }
+          : { email: emailFor.get(r.user_id) ?? "" },
+      };
+    });
   });
 
 /** Manager-only: approve (applies the change) or decline a request. */
@@ -5650,7 +5785,7 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "reviewProfileChange");
+    const identity = await authorize(ctx, "reviewProfileChange");
     const supabaseAdmin = await adminClient(context);
     const { data: req, error: reqError } = await supabaseAdmin
       .from("profile_change_requests")
@@ -5660,18 +5795,31 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
     if (reqError) throw new Error(reqError.message);
     if (!req) throw new Error("Request not found");
     if (req.status !== "pending") throw new Error("This request has already been reviewed");
+    if (req.user_id === ctx.userId) throw new Error("You cannot review your own request");
+    if (req.requires_owner && !identity.isOwner && !identity.isAdmin) {
+      throw new Error("Only the clinic owner can approve this change");
+    }
 
     if (data.approve) {
-      const { error } = await supabaseAdmin
-        .from("profiles")
-        .update({
-          full_name: req.full_name ?? "",
-          job_title: req.job_title,
-          registration_body: req.registration_body,
-          registration_number: req.registration_number,
-        })
-        .eq("id", req.user_id);
+      const patch: Record<string, unknown> = {
+        full_name: req.full_name ?? "",
+        job_title: req.job_title,
+        registration_body: req.registration_body,
+        registration_number: req.registration_number,
+      };
+      if (req.registration_expiry !== undefined) patch.registration_expiry = req.registration_expiry;
+      if (req.working_arrangement != null) patch.working_arrangement = req.working_arrangement;
+      const { error } = await supabaseAdmin.from("profiles").update(patch).eq("id", req.user_id);
       if (error) throw new Error(error.message);
+      if (req.work_email) {
+        const email = assertEmail(req.work_email, "work email")!;
+        const res = await supabaseAdmin.auth.admin.updateUserById(req.user_id, {
+          email,
+          email_confirm: true,
+        });
+        if (res.error) throw new Error(res.error.message);
+        await audit(ctx, "staff.set_email", "user_roles", req.user_id, null);
+      }
     }
 
     // Not atomic with the profile write above: if this fails after an approval,
@@ -6739,7 +6887,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
       .update({
         name,
         address: data.address?.trim() || null,
-        phone: data.phone?.trim() || null,
+        phone: assertPhone(data.phone ?? "", "phone number", true),
         email: assertEmail(data.email ?? "", "clinic email", true),
         ...(data.reminder_offsets ? { reminder_offsets: data.reminder_offsets } : {}),
       })

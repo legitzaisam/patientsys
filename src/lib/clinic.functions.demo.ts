@@ -52,6 +52,12 @@ import {
   type PaymentLinkKind,
 } from "@/lib/payment-link";
 import { assertEmail } from "@/lib/email";
+import { assertPhone } from "@/lib/phone";
+import {
+  canSelfApplyIdentityChanges,
+  clinicHasSeparateManager,
+  profileChangeRequiresOwner,
+} from "@/lib/profile-change-policy";
 // Re-exported rather than redeclared: a second copy of the key list silently
 // drifted from the real one, so demo mode enforced a different set of
 // capabilities than production.
@@ -136,6 +142,7 @@ function currentRole(): DemoRole {
     value === "front_desk" ||
     value === "patient" ||
     value === "owner" ||
+    value === "manager" ||
     value === "admin"
   ) {
     return value;
@@ -267,7 +274,7 @@ function identity(): Identity {
   const linked = patients.find((p) => p.user_id === account.userId);
   return {
     userId: account.userId,
-    email: account.email,
+    email: db.staffEmails[account.userId] ?? account.email,
     roles: [role],
     isStaff,
     isOwner,
@@ -1043,9 +1050,10 @@ export const savePatient = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     requireCapability("patients.edit");
     const email = assertEmail(data.email ?? "", "email address", true);
+    const phone = assertPhone(data.phone ?? "", "phone number", true);
     if (data.id) {
       const row = patientById(data.id);
-      if (row) Object.assign(row, { ...data, email, updated_at: new Date().toISOString() });
+      if (row) Object.assign(row, { ...data, email, phone, updated_at: new Date().toISOString() });
       return { id: data.id };
     }
     const created = {
@@ -1058,7 +1066,7 @@ export const savePatient = createServerFn({ method: "POST" })
       last_name: data.last_name.trim(),
       date_of_birth: data.date_of_birth ?? null,
       email,
-      phone: data.phone ?? null,
+      phone,
       status: data.status ?? "active",
       allergies: data.allergies ?? null,
       medications: data.medications ?? null,
@@ -3407,7 +3415,7 @@ export const updatePortalProfile = createServerFn({ method: "POST" })
     patient.postcode = data.postcode ?? null;
     patient.emergency_contact_name = data.emergency_contact_name ?? null;
     patient.emergency_contact_relationship = data.emergency_contact_relationship ?? null;
-    patient.emergency_contact_phone = data.emergency_contact_phone ?? null;
+    patient.emergency_contact_phone = assertPhone(data.emergency_contact_phone ?? "", "phone number", true);
     return { ok: true };
   });
 
@@ -3609,6 +3617,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       insuranceProvider?: string;
       insuranceExpiry?: string;
       qualifications?: string;
+      workingArrangement?: string;
       commissionRate?: number;
     }) => parseInput(schemas.UpdateStaffMember, data),
   )
@@ -3628,6 +3637,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       profile.insurance_provider = data.insuranceProvider?.trim() || null;
       profile.insurance_expiry = data.insuranceExpiry || null;
       profile.qualifications = data.qualifications?.trim() || null;
+      profile.working_arrangement = data.workingArrangement?.trim() || null;
       if (data.commissionRate !== undefined) {
         profile.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
       }
@@ -4105,27 +4115,33 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   });
 
 export const getMyEarnings = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string }) => parseInput(schemas.GetMyEarnings, data))
+  .validator((data: { from: string; to: string; userId?: string }) => parseInput(schemas.GetMyEarnings, data))
   .handler(async ({ data }) => {
-    const me = requireCapability("view.earnings");
-    if (!me.isStaff) throw new Error("Staff access only");
+    const me = requireStaff();
+    const targetUserId = data.userId ?? me.userId;
+    if (targetUserId !== me.userId) {
+      if (!me.isManager) throw new Error("Only managers can open another person's earnings");
+    } else if (!can(me, "view.earnings")) {
+      throw new Error("You do not have access to this area");
+    }
     const { buildStats } = await import("./earnings.server");
     const inputs = earningsInputs(data.from, data.to);
-    const rate = Number(me.profile?.commission_rate ?? 0);
-    const mine = inputs.treatments.filter((t) => t.practitioner_id === me.userId);
+    const targetProfile = profiles.find((p) => p.id === targetUserId);
+    const rate = Number(targetProfile?.commission_rate ?? 0);
+    const mine = inputs.treatments.filter((t) => t.practitioner_id === targetUserId);
 
     const stats = buildStats(
       [
         {
-          userId: me.userId,
-          fullName: me.profile?.full_name ?? "",
-          jobTitle: me.profile?.job_title ?? "",
+          userId: targetUserId,
+          fullName: targetProfile?.full_name ?? "",
+          jobTitle: targetProfile?.job_title ?? "",
           commissionRate: rate,
         },
       ],
       inputs.treatments as never,
       inputs.appointments as never,
-      inputs.yearTreatments.filter((t) => t.practitioner_id === me.userId) as never,
+      inputs.yearTreatments.filter((t) => t.practitioner_id === targetUserId) as never,
       inputs.firstSeen,
       { from: data.from, to: data.to },
       inputs.money,
@@ -4191,12 +4207,21 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      workEmail?: string;
+      workingArrangement?: string;
       note?: string;
     }) => parseInput(schemas.SubmitProfileChange, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
+    if (canSelfApplyIdentityChanges(me)) {
+      throw new Error("You can save these details yourself.");
+    }
     if (!data.fullName?.trim()) throw new Error("Full name is required");
+    const workEmail = data.workEmail?.trim() ? assertEmail(data.workEmail, "work email") : null;
+    const requiresOwner = profileChangeRequiresOwner(me);
+    const now = new Date().toISOString();
     profileChangeRequests.unshift({
       id: newId("o9"),
       clinic_id: CLINIC_ID,
@@ -4205,14 +4230,65 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       job_title: data.jobTitle?.trim() || null,
       registration_body: data.registrationBody?.trim() || null,
       registration_number: data.registrationNumber?.trim() || null,
+      registration_expiry: data.registrationExpiry || null,
+      work_email: workEmail,
+      working_arrangement: data.workingArrangement?.trim() || null,
       note: data.note?.trim() || null,
+      requires_owner: requiresOwner,
       status: "pending",
       reviewed_by: null,
       reviewed_at: null,
       reviewer_note: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: now,
+      updated_at: now,
     });
+    const wanted = requiresOwner ? ["owner"] : ["owner", "manager"];
+    const recipients = [
+      ...new Set(userRoles.filter((r) => wanted.includes(r.role) && r.user_id !== me.userId).map((r) => r.user_id)),
+    ];
+    const from = me.profile?.full_name || me.email || "A colleague";
+    const summary = [
+      data.jobTitle ? "job title" : null,
+      data.registrationBody || data.registrationNumber || data.registrationExpiry ? "registration" : null,
+      workEmail ? "work email" : null,
+      data.workingArrangement ? "working arrangement" : null,
+    ]
+      .filter(Boolean)
+      .join(", ") || "their profile";
+    for (const rid of recipients) {
+      staffNotifications.unshift({
+        id: newId("l9"),
+        clinic_id: CLINIC_ID,
+        recipient_id: rid,
+        sender_id: me.userId,
+        urgent: false,
+        kind: "profile_change",
+        title: "Profile change request",
+        body: `${from} asked to update ${summary}.`,
+        patient_id: null,
+        appointment_id: null,
+        read_at: null,
+        created_at: now,
+      });
+    }
+    return { ok: true };
+  });
+
+export const saveMyInstantProfile = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
+    }) => parseInput(schemas.SaveMyInstantProfile, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const profile = profiles.find((p) => p.id === me.userId);
+    if (!profile) throw new Error("Profile not found");
+    profile.insurance_provider = data.insuranceProvider?.trim() || null;
+    profile.insurance_expiry = data.insuranceExpiry || null;
+    profile.qualifications = data.qualifications?.trim() || null;
     return { ok: true };
   });
 
@@ -4227,10 +4303,15 @@ export const saveMyProfile = createServerFn({ method: "POST" })
       insuranceProvider?: string;
       insuranceExpiry?: string;
       qualifications?: string;
+      workEmail?: string;
+      workingArrangement?: string;
     }) => parseInput(schemas.SaveMyProfile, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
+    if (!canSelfApplyIdentityChanges(me)) {
+      throw new Error("These details need approval.");
+    }
     if (!data.fullName?.trim()) throw new Error("Full name is required");
     const profile = profiles.find((p) => p.id === me.userId);
     if (!profile) throw new Error("Profile not found");
@@ -4242,6 +4323,10 @@ export const saveMyProfile = createServerFn({ method: "POST" })
     profile.insurance_provider = data.insuranceProvider?.trim() || null;
     profile.insurance_expiry = data.insuranceExpiry || null;
     profile.qualifications = data.qualifications?.trim() || null;
+    profile.working_arrangement = data.workingArrangement?.trim() || null;
+    if (data.workEmail?.trim()) {
+      db.staffEmails[me.userId] = assertEmail(data.workEmail, "work email")!;
+    }
     return { ok: true };
   });
 
@@ -4250,7 +4335,16 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
   if (!me.isStaff) throw new Error("Staff access only");
   return {
     profile: me.profile,
+    email: me.email,
+    isOwner: me.isOwner,
     isManager: me.isManager,
+    canSelfApply: canSelfApplyIdentityChanges(me),
+    requiresOwner: profileChangeRequiresOwner(me),
+    hasSeparateManager: clinicHasSeparateManager(
+      userRoles
+        .filter((r) => r.role === "owner" || r.role === "manager")
+        .map((r) => ({ user_id: r.user_id, role: r.role })),
+    ),
     requests: sortDesc(
       profileChangeRequests.filter((r) => r.user_id === me.userId),
       "created_at",
@@ -4265,10 +4359,16 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" }).handl
   }
   return sortDesc(profileChangeRequests, "created_at")
     .slice(0, 50)
-    .map((r) => ({
-      ...r,
-      current: profiles.find((p) => p.id === r.user_id) ?? null,
-    }));
+    .filter((r) => me.isOwner || me.isAdmin || !r.requires_owner)
+    .map((r) => {
+      const current = profiles.find((p) => p.id === r.user_id) ?? null;
+      return {
+        ...r,
+        current: current
+          ? { ...current, email: db.staffEmails[r.user_id] ?? "" }
+          : { email: db.staffEmails[r.user_id] ?? "" },
+      };
+    });
 });
 
 export const reviewProfileChange = createServerFn({ method: "POST" })
@@ -4278,6 +4378,10 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
     const req = profileChangeRequests.find((r) => r.id === data.id);
     if (!req) throw new Error("Request not found");
     if (req.status !== "pending") throw new Error("This request has already been reviewed");
+    if (req.user_id === me.userId) throw new Error("You cannot review your own request");
+    if (req.requires_owner && !me.isOwner && !me.isAdmin) {
+      throw new Error("Only the clinic owner can approve this change");
+    }
     if (data.approve) {
       const profile = profiles.find((p) => p.id === req.user_id);
       if (profile) {
@@ -4285,6 +4389,11 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
         profile.job_title = req.job_title;
         profile.registration_body = req.registration_body;
         profile.registration_number = req.registration_number;
+        if (req.registration_expiry !== undefined) profile.registration_expiry = req.registration_expiry;
+        if (req.working_arrangement != null) profile.working_arrangement = req.working_arrangement;
+      }
+      if (req.work_email) {
+        db.staffEmails[req.user_id] = assertEmail(req.work_email, "work email")!;
       }
     }
     req.status = data.approve ? "approved" : "declined";
@@ -4978,7 +5087,7 @@ export const updateClinicDetails = createServerFn({ method: "POST" })
     if (!name) throw new Error("Clinic name is required");
     db.clinic["name"] = name;
     db.clinic["address"] = data.address?.trim() || null;
-    db.clinic["phone"] = data.phone?.trim() || null;
+    db.clinic["phone"] = assertPhone(data.phone ?? "", "phone number", true);
     db.clinic["email"] = assertEmail(data.email ?? "", "clinic email", true);
     if (data.reminder_offsets) db.clinic["reminder_offsets"] = data.reminder_offsets;
     return { ok: true };

@@ -301,7 +301,7 @@ const needsActionOpen: PageState = {
   },
 };
 
-/** My profile's Security / Documents tabs, now on the page header. */
+/** My profile's Security / Documents / Performance tabs on the account card. */
 function profileTab(key: "security" | "documents"): PageState {
   return {
     id: `profile-${key}`,
@@ -311,7 +311,7 @@ function profileTab(key: "security" | "documents"): PageState {
       return true;
     },
     close: async (page) => {
-      await clickIfVisible(page, '[data-qc="profile-tab-profile"]', 2_000);
+      await clickIfVisible(page, '[data-qc="profile-tab-security"]', 2_000);
       await wait(page, 300);
     },
   };
@@ -604,9 +604,9 @@ export const PAGES: PageEntry[] = [
   },
   {
     id: "earnings",
-    path: "/earnings",
+    path: "/profile",
     roles: ["practitioner"],
-    settle: ".page-title",
+    settle: '[data-qc="metric:earnings.share"]',
     states: [sidebarClosed],
   },
   {

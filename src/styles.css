@@ -327,6 +327,22 @@
   .glass-table tbody tr:hover {
     background: rgba(47, 63, 102, 0.08);
   }
+
+  /* Earnings tree: light navy wash on the open month, day and treatments.
+     Hover uses the same wash as sidebar nav items. */
+  .glass-table.earnings-open-rows tbody tr {
+    transition: background-color 0.15s ease;
+  }
+  .glass-table.earnings-open-rows tbody tr[data-opened] {
+    background: rgba(47, 63, 102, 0.04);
+  }
+  .glass-table.earnings-open-rows tbody tr:hover,
+  .glass-table.earnings-open-rows tbody tr[data-opened]:hover {
+    background: rgba(47, 63, 102, 0.08);
+  }
+  .glass-table.earnings-open-rows tbody tr[data-opened]:has(+ tr[data-opened]) td {
+    border-bottom-color: transparent;
+  }
 }
 
 @layer components {

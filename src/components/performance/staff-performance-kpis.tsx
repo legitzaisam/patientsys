@@ -124,13 +124,21 @@ export function StaffPerformanceKpis({
   userId,
   identity,
   role,
+  embedded = false,
+  period: periodProp,
+  onPeriod,
 }: {
   userId: string;
   identity: IdentityLike;
   role: string;
+  embedded?: boolean;
+  period?: PeriodSelection;
+  onPeriod?: (next: PeriodSelection) => void;
 }) {
   const fetchPerformance = useServerFn(getPractitionerPerformance);
-  const [period, setPeriod] = useState<PeriodSelection>({ key: "month", offset: 0 });
+  const [innerPeriod, setInnerPeriod] = useState<PeriodSelection>({ key: "month", offset: 0 });
+  const period = periodProp ?? innerPeriod;
+  const setPeriod = onPeriod ?? setInnerPeriod;
   const range = useMemo(() => periodRange(period), [period]);
   const previous = useMemo(() => previousPeriodRange(period), [period]);
 
@@ -148,6 +156,12 @@ export function StaffPerformanceKpis({
 
   if (!allowed || !clinical) return null;
 
+  const picker = (
+    <div className="min-w-0 max-w-full shrink-0">
+      <PeriodPicker value={period} onChange={setPeriod} />
+    </div>
+  );
+
   const rows = data?.rows ?? [];
   const row = rows.find((r) => r.userId === userId);
   const prev = data?.previousRows?.find((r) => r.userId === userId);
@@ -164,23 +178,11 @@ export function StaffPerformanceKpis({
   const settled = row ? row.attended + row.noShows : 0;
   const noShowRate = settled ? Math.round((row!.noShows / settled) * 100) : 0;
 
-  return (
-    <section>
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="section-title">Performance</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            How they sit against the rest of the clinic.
-          </p>
-        </div>
-        <div className="min-w-0 max-w-full shrink-0">
-          <PeriodPicker value={period} onChange={setPeriod} />
-        </div>
-      </div>
-
-      {!row || !clinic ? (
-        <Card className="p-5 text-sm text-muted-foreground">No treatments or bookings in this period.</Card>
-      ) : (
+  const body = !row || !clinic ? (
+    <Card className="p-5 text-sm text-muted-foreground">
+      No treatments or bookings in this period.
+    </Card>
+  ) : (
         <Card className="@container overflow-hidden p-0">
           <div className="flex flex-wrap items-end justify-between gap-4 px-5 py-5 sm:px-6">
             <div className="min-w-0">
@@ -296,7 +298,22 @@ export function StaffPerformanceKpis({
             </div>
           </div>
         </Card>
-      )}
+  );
+
+  if (embedded) return body;
+
+  return (
+    <section>
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="section-title">Performance</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            How they sit against the rest of the clinic.
+          </p>
+        </div>
+        {picker}
+      </div>
+      {body}
     </section>
   );
 }

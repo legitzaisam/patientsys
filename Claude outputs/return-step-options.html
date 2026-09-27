@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Return step options</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f7f8;--ink:#2f3f66;--ink2:#46557a;--ink3:#6a7390;
+  --butter:#eed488;--butter-deep:#e2c46b;--butter-ink:#7a6220;--butter-soft:rgba(238,212,136,.3);--butter-wash:rgba(238,212,136,.14);
+  --mint:#a6dccd;--success:#4a9d75;--success-ink:#2d6a4c;--arrived:#8fc7ea;--arrived-ink:#3d6f96;--after:#ef9bc4;--after-ink:#8a3d66;
+  --edge:rgba(47,63,102,.08);
+  --serif:"Instrument Serif",Georgia,serif;--sans:"Space Grotesk",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(170deg,#fbf3df 0%,#f7f4ee 20%,#f6f7f8 45%);color:var(--ink);font-family:var(--sans);padding:40px 16px 80px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.2rem,5vw,3.4rem);margin:0 0 .3rem;line-height:1}
+.lead{color:var(--ink2);max-width:46rem;margin:0 0 2.4rem;line-height:1.55}
+h2{font-family:var(--serif);font-weight:400;font-size:2rem;margin:3rem 0 .4rem}
+.sub{color:var(--ink3);margin:0 0 1.2rem;font-size:.95rem}
+
+/* Copy options */
+.copy{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.c{background:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.9);border-radius:20px;padding:20px 22px;box-shadow:0 8px 24px -14px rgba(47,63,102,.25)}
+.c .k{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--butter-ink)}
+.c p{margin:.6rem 0 0;line-height:1.6;color:var(--ink2)}
+.c p b{color:var(--ink);font-weight:500}
+.c small{display:block;margin-top:.7rem;color:var(--ink3);font-size:.8rem}
+
+/* Mockup options */
+.opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.opt{display:grid;gap:10px}
+.opt h3{margin:0;font-size:1rem;font-weight:600;display:flex;gap:.6rem;align-items:baseline}
+.opt h3 span{font-family:var(--serif);font-weight:400;font-size:1.5rem;color:var(--butter-ink)}
+.opt p{margin:0;color:var(--ink3);font-size:.88rem;line-height:1.5}
+.device{border-radius:16px;overflow:hidden;background:rgba(255,255,255,.85);box-shadow:0 30px 60px -30px rgba(47,63,102,.4);border:1px solid rgba(255,255,255,.9)}
+.bar{display:flex;align-items:center;gap:5px;padding:.5rem .75rem;border-bottom:1px solid var(--edge)}
+.bar i{width:8px;height:8px;border-radius:50%;background:rgba(47,63,102,.15)}
+.bar span{margin:0 auto;padding:.15rem .8rem;border-radius:999px;background:rgba(47,63,102,.05);font-size:.7rem;color:var(--ink3)}
+.screen{position:relative;aspect-ratio:16/10;container-type:inline-size;overflow:hidden}
+.ui{position:absolute;inset:0;display:flex;font-size:clamp(6px,2.05cqw,17px);background:linear-gradient(170deg,#fbf4e2 0%,#f7f5f0 30%,#f6f7f8 60%);line-height:1.3}
+.nav{flex:none;width:15%;padding:1.3em .8em;display:flex;flex-direction:column;gap:.3em;background:rgba(255,255,255,.55);border-right:1px solid var(--edge);font-size:.85em;color:var(--ink2)}
+.nav b{font-family:var(--serif);font-weight:400;font-size:1.3em;margin-bottom:.7em;color:var(--ink)}
+.nav span{padding:.4em .55em;border-radius:.6em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav .on{background:var(--butter-soft);color:var(--ink);font-weight:600}
+.main{flex:1;min-width:0;padding:1.3em 1.5em;display:flex;flex-direction:column;gap:.8em}
+.ttl{font-family:var(--serif);font-size:1.9em;line-height:1}
+.ttl small{display:block;font-family:var(--sans);font-size:.42em;color:var(--ink3);margin-top:.35em}
+.card{background:rgba(255,255,255,.92);border-radius:1em;padding:.9em 1em;box-shadow:0 1px 2px rgba(47,63,102,.06),0 6px 18px -10px rgba(47,63,102,.2);min-width:0}
+.card h4{margin:0 0 .5em;font-size:.76em;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+.muted{color:var(--ink3);font-size:.85em}
+.btn{display:inline-block;padding:.35em .85em;border-radius:999px;background:var(--butter);font-weight:600;font-size:.82em;white-space:nowrap}
+.ghost{display:inline-block;padding:.35em .8em;border-radius:999px;border:1px solid rgba(47,63,102,.14);font-weight:600;font-size:.8em;white-space:nowrap}
+.tog{position:relative;flex:none;width:2.2em;height:1.25em;border-radius:999px;background:rgba(47,63,102,.14)}
+.tog::after{content:"";position:absolute;top:.15em;left:.15em;width:.95em;height:.95em;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(47,63,102,.3)}
+.tog.on{background:var(--butter-deep)}.tog.on::after{left:1.1em}
+.chip{display:inline-block;padding:.2em .6em;border-radius:999px;font-size:.75em;font-weight:600}
+.rose{background:rgba(239,155,196,.3);color:var(--after-ink)}.gold{background:var(--butter-soft);color:var(--butter-ink)}.mint{background:rgba(166,220,205,.5);color:var(--success-ink)}.sky{background:rgba(143,199,234,.3);color:var(--arrived-ink)}
+
+/* A: offers page */
+.stages{display:grid;grid-template-columns:1fr 1fr;gap:.9em;align-content:start}
+.stage{display:flex;flex-direction:column;gap:.45em}
+.stage .row{display:flex;align-items:center;justify-content:space-between;gap:.6em}
+.stage b{font-size:1.05em}
+.stage .offer{margin-top:.3em;padding:.55em .7em;border-radius:.7em;background:var(--butter-wash);font-size:.85em}
+.stage .stats{display:flex;gap:1em;font-size:.78em;color:var(--ink3)}
+.stage .stats b{font-size:1em;color:var(--ink)}
+
+/* B: offer in the patient's hands */
+.split{position:absolute;inset:0;display:grid;grid-template-columns:1.25fr 1fr;gap:1.4em;padding:1.6em;font-size:clamp(6px,2.05cqw,17px);background:linear-gradient(160deg,#fbf4e2,#f6f7f8 60%)}
+.tpl{display:flex;flex-direction:column;gap:.6em}
+.tpl .f{display:grid;gap:.25em;font-size:.85em}
+.tpl .f span{padding:.45em .7em;border-radius:.6em;border:1px solid rgba(47,63,102,.12);background:#fff}
+.phone{justify-self:center;align-self:center;width:78%;height:92%;border-radius:1.8em;background:#fff;box-shadow:0 20px 40px -20px rgba(47,63,102,.5);padding:1.1em;display:flex;flex-direction:column;gap:.7em;border:6px solid #eef0f4}
+.phone .h{font-family:var(--serif);font-size:1.45em;line-height:1}
+.gift{border-radius:1em;padding:1em;background:linear-gradient(150deg,rgba(238,212,136,.5),rgba(239,155,196,.25));display:grid;gap:.35em}
+.gift b{font-family:var(--serif);font-weight:400;font-size:1.5em;line-height:1.05}
+.bubble{align-self:flex-end;max-width:88%;padding:.55em .75em;border-radius:1em 1em .2em 1em;background:var(--ink);color:#fff;font-size:.8em}
+.arrow{position:absolute;left:55%;top:48%;font-size:1.6em;color:var(--butter-deep)}
+
+/* C: due dates */
+.due{display:grid;grid-template-columns:1fr 1.35fr;gap:.8em;align-items:start}
+.list .li{display:flex;justify-content:space-between;gap:.5em;padding:.45em 0;border-bottom:1px solid var(--edge);font-size:.88em}
+.list .li:last-child{border:0}
+.tl{position:relative;display:grid;gap:.55em}
+.pt{display:grid;grid-template-columns:auto 1fr auto;gap:.6em;align-items:center;padding:.55em .7em;border-radius:.8em;background:rgba(255,255,255,.95);border:1px solid var(--edge);font-size:.88em}
+.av{display:grid;place-items:center;width:2.2em;height:2.2em;border-radius:50%;background:#f1e6f7;font-weight:600;font-size:.8em}
+.pt small{display:block;color:var(--ink3);font-size:.85em}
+
+/* D: recall tasks */
+.tasks{display:grid;grid-template-columns:1.5fr 1fr;gap:.8em;align-items:start}
+.task{display:grid;grid-template-columns:auto 1fr auto;gap:.7em;align-items:center;padding:.6em .2em;border-bottom:1px solid var(--edge);font-size:.88em}
+.task:last-child{border:0}
+.task .ic{display:flex;gap:.3em}
+.task .ic i{width:1.7em;height:1.7em;border-radius:50%;background:rgba(47,63,102,.06);display:grid;place-items:center;font-style:normal;font-size:.8em}
+.who{display:flex;flex-direction:column;gap:.5em}
+.who .w{display:flex;align-items:center;gap:.55em;font-size:.88em}
+.who .w .av{background:var(--butter-soft)}
+.meter{height:.45em;border-radius:1em;background:rgba(47,63,102,.08);overflow:hidden;flex:1}
+.meter i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--mint),var(--success))}
+.tpls{display:grid;gap:.35em;font-size:.82em}
+.tpls span{padding:.4em .6em;border-radius:.6em;background:var(--butter-wash)}
+
+/* entrance */
+.anim{opacity:0;transform:translateY(.8em);animation:rise .8s cubic-bezier(.22,1,.36,1) forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+@media (max-width:860px){.copy,.opts{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.anim{animation:none;opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Return step: options</h1>
+  <p class="lead">Your first sentence stays the same in every option. Pick one second sentence and one picture, and I'll put them on the site. The pictures only use features Aetheria already has, and the offers picture now shows the Offers page, not Retention.</p>
+
+  <h2>The paragraph</h2>
+  <p class="sub">Always starts: “Design your own offer templates and switch one on for each stage of the journey, and they send themselves.”</p>
+  <div class="copy">
+    <div class="c"><span class="k">1 · Treatment due dates</span>
+      <p>…and they send themselves. <b>Every treatment carries its own recall interval, so the clinic always knows who is due back, and when.</b></p>
+      <small>From the recall interval set on each treatment in Settings (for example, 120 days for anti-wrinkle).</small></div>
+    <div class="c"><span class="k">2 · Offers in the patient's hands</span>
+      <p>…and they send themselves. <b>Patients find their offer waiting in their own portal and can book with it in a tap.</b></p>
+      <small>From the portal's offers strip and the “book using my offer” message.</small></div>
+    <div class="c"><span class="k">3 · Recall tasks with an owner</span>
+      <p>…and they send themselves. <b>Patients who start to drift become recall tasks for a named team member, with a call, text or email one click away.</b></p>
+      <small>From recall tasks on the dashboard and patient list.</small></div>
+    <div class="c"><span class="k">4 · Who comes back</span>
+      <p>…and they send themselves. <b>Month-by-month cohorts show how many new patients return for a second and third visit, by treatment and by practitioner.</b></p>
+      <small>From “New patient cohorts” on the Retention page.</small></div>
+  </div>
+
+  <h2>The picture</h2>
+  <p class="sub">Each would sit in the device frame on the right of the Return step.</p>
+  <div class="opts">
+
+    <!-- A -->
+    <div class="opt">
+      <h3><span>A</span>The Offers page</h3>
+      <div class="device"><div class="bar"><i></i><i></i><i></i><span>app.aetheria / offers</span></div>
+        <div class="screen"><div class="ui">
+          <aside class="nav"><b>Aetheria</b><span>Dashboard</span><span>Diary</span><span>Patients</span><span>Retention</span><span class="on">Offers</span></aside>
+          <div class="main">
+            <div class="ttl">Offers<small>One offer per stage of a patient's journey, sent automatically when switched on.</small></div>
+            <div class="stages">
+              <div class="card stage anim" style="animation-delay:.1s"><div class="row"><b>Pre-consultation</b><span class="tog on"></span></div><span class="muted">Signed up, no consultation booked</span><div class="offer">Complimentary consultation</div><div class="stats"><span><b>4</b> in stage</span><span><b>2</b> sent</span></div></div>
+              <div class="card stage anim" style="animation-delay:.25s"><div class="row"><b>Post-consultation</b><span class="tog on"></span></div><span class="muted">Consulted, nothing booked yet</span><div class="offer">£25 off your first treatment</div><div class="stats"><span><b>20</b> in stage</span><span><b>8</b> sent</span></div></div>
+              <div class="card stage anim" style="animation-delay:.4s"><div class="row"><b>Single treatment</b><span class="tog on"></span></div><span class="muted">One treatment, nothing booked since</span><div class="offer">15% off your next session</div><div class="stats"><span><b>11</b> sending today</span></div></div>
+              <div class="card stage anim" style="animation-delay:.55s"><div class="row"><b>Plan ending</b><span class="tog"></span></div><span class="muted">Skin plan nearly finished</span><div class="offer">20% off a maintenance course</div><div class="stats"><span><b>2</b> in stage</span></div></div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+      <p>Closest to the real Offers page: the four stage cards, each with its own offer and an on/off switch. Works with any of the four sentences.</p>
+    </div>
+
+    <!-- B -->
+    <div class="opt">
+      <h3><span>B</span>From template to booking</h3>
+      <div class="device"><div class="bar"><i></i><i></i><i></i><span>app.aetheria / offers → my-record</span></div>
+        <div class="screen"><div class="split">
+          <div class="tpl">
+            <div class="card anim" style="animation-delay:.1s"><h4>New template</h4>
+              <div class="tpl"><div class="f"><small class="muted">Headline</small><span>15% off your next session</span></div>
+              <div class="f"><small class="muted">Stage</small><span>After a single treatment</span></div>
+              <div class="f"><small class="muted">Send by</small><span>Email · Text · Portal</span></div></div>
+            </div>
+            <div class="card anim" style="animation-delay:.3s;display:flex;align-items:center;justify-content:space-between"><span><b>Automation</b><br><small class="muted">Sends daily, once per patient</small></span><span class="tog on"></span></div>
+          </div>
+          <div class="phone anim" style="animation-delay:.6s">
+            <span class="h">Hi Olivia</span>
+            <div class="gift"><span class="chip gold" style="justify-self:start">From your clinic</span><b>15% off your next session</b><span class="muted">Sent by Aetheria Clinic</span><span class="btn" style="justify-self:start">Book with this offer</span></div>
+            <span class="bubble">Hi, I'd like to book using my offer “15% off your next session”.</span>
+          </div>
+          <span class="arrow">→</span>
+        </div></div>
+      </div>
+      <p>Tells the whole story in one frame: the clinic builds the offer, the patient books with it. Best with sentence 2.</p>
+    </div>
+
+    <!-- C -->
+    <div class="opt">
+      <h3><span>C</span>Due dates do the remembering</h3>
+      <div class="device"><div class="bar"><i></i><i></i><i></i><span>app.aetheria / patients</span></div>
+        <div class="screen"><div class="ui">
+          <aside class="nav"><b>Aetheria</b><span>Dashboard</span><span>Diary</span><span class="on">Patients</span><span>Retention</span><span>Offers</span></aside>
+          <div class="main">
+            <div class="ttl">Treatments due<small>Worked out from each treatment's recall interval.</small></div>
+            <div class="due">
+              <div class="card list anim" style="animation-delay:.1s"><h4>Recall intervals</h4>
+                <div class="li"><span>Anti-wrinkle</span><span class="chip gold">120 days</span></div>
+                <div class="li"><span>Chemical peel</span><span class="chip gold">60 days</span></div>
+                <div class="li"><span>Dermaplaning</span><span class="chip gold">28 days</span></div>
+                <div class="li"><span>Cheek filler</span><span class="chip gold">365 days</span></div>
+              </div>
+              <div class="tl">
+                <div class="pt anim" style="animation-delay:.3s"><span class="av">GA</span><span><b>Grace Adeyemi</b><small>Chemical peel · due in 4 days</small></span><span class="chip sky">Due soon</span></div>
+                <div class="pt anim" style="animation-delay:.45s"><span class="av">KB</span><span><b>Kayla Bradham</b><small>Dermaplaning · due 2 Oct</small></span><span class="chip sky">Due soon</span></div>
+                <div class="pt anim" style="animation-delay:.6s"><span class="av">MD</span><span><b>Martha Dunshaw</b><small>Microneedling · 3 weeks overdue</small></span><span class="btn">Send recall</span></div>
+                <div class="pt anim" style="animation-delay:.75s"><span class="av">XG</span><span><b>Xanthe Greenton</b><small>Fat dissolving · 5 weeks overdue</small></span><span class="btn">Send recall</span></div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+      <p>Shows the clinic never has to remember who's due: intervals on the left, patients due and overdue on the right. Best with sentence 1.</p>
+    </div>
+
+    <!-- D -->
+    <div class="opt">
+      <h3><span>D</span>Recall tasks, with an owner</h3>
+      <div class="device"><div class="bar"><i></i><i></i><i></i><span>app.aetheria / dashboard</span></div>
+        <div class="screen"><div class="ui">
+          <aside class="nav"><b>Aetheria</b><span class="on">Dashboard</span><span>Diary</span><span>Patients</span><span>Retention</span><span>Offers</span></aside>
+          <div class="main">
+            <div class="ttl">Recall tasks<small>Patients to contact and rebook, each with a named owner.</small></div>
+            <div class="tasks">
+              <div class="card anim" style="animation-delay:.1s"><h4>Open tasks</h4>
+                <div class="task"><span class="av">OA</span><span><b>Oliver Ashworth</b><br><small class="muted">Rosacea laser overdue · Sofia</small></span><span class="ic"><i>☏</i><i>✉</i><i>▭</i></span></div>
+                <div class="task"><span class="av">FM</span><span><b>Fiona MacGregor</b><br><small class="muted">Six-month peel check-in · Dr Rahman</small></span><span class="ic"><i>☏</i><i>✉</i><i>▭</i></span></div>
+                <div class="task"><span class="av">TN</span><span><b>Theo Nakamura</b><br><small class="muted">Consultation, never converted · Sofia</small></span><span class="chip mint">Contacted</span></div>
+              </div>
+              <div class="card who anim" style="animation-delay:.35s"><h4>Assigned to</h4>
+                <div class="w"><span class="av">SM</span><span>Sofia Marchetti</span><span class="chip gold" style="margin-left:auto">2 open</span></div>
+                <div class="w"><span class="av">NR</span><span>Dr Nadia Rahman</span><span class="chip gold" style="margin-left:auto">1 open</span></div>
+                <h4 style="margin-top:.4em">Message templates</h4>
+                <div class="tpls"><span>“It's been a while…”</span><span>“Time for your top-up”</span></div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+      <p>Shows follow-up as teamwork: every drifting patient has a person responsible, with call, text or email a click away. Best with sentence 3.</p>
+    </div>
+  </div>
+
+  <p class="sub" style="margin-top:2.5rem">My pick: <b>B</b> with sentence 2. It's the most visual, it's something competitors don't show, and it follows the patient-facing story of the Aftercare and Progress steps.</p>
+</div>
+</body>
+</html>

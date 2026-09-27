@@ -160,7 +160,7 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
   "view.shell.alerts": { label: "Alert toolbar", description: "See the staff alert, notes and sent-alert controls." },
   "view.insights.pipeline": { label: "Insights pipeline", description: "See the pipeline tab on Insights." },
   "view.insights.book": { label: "Insights patient base", description: "See the Patient base tab on Insights." },
-  "view.earnings": { label: "My earnings", description: "Open your own earnings page." },
+  "view.earnings": { label: "My earnings", description: "See your own earnings on My profile." },
   "view.portal.home": { label: "Portal home", description: "Open the patient home page." },
   "view.portal.plan": { label: "Skin plan", description: "Open the skin plan." },
   "view.portal.plan.overview": { label: "Plan overview", description: "See the plan overview." },

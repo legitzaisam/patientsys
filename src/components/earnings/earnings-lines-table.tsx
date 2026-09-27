@@ -104,9 +104,12 @@ function PatientCell({ line }: { line: EarningsLine }) {
   );
 }
 
+const OPEN_WASH = "bg-[rgba(47,63,102,0.04)] hover:bg-[rgba(47,63,102,0.08)]";
+const CLOSED_ROW = "hover:bg-[rgba(47,63,102,0.08)]";
+
 function LineRow({ line }: { line: EarningsLine }) {
   return (
-    <tr>
+    <tr data-opened className={OPEN_WASH}>
       <td className="px-5 py-2.5 pl-12 text-xs tabular-nums text-muted-foreground">{timeLabel(line.performedAt)}</td>
       <td className="px-5 py-2.5">
         <PatientCell line={line} />
@@ -162,7 +165,8 @@ function GroupRow({
 }) {
   return (
     <tr
-      className={cn("cursor-pointer", open && "bg-[rgba(47,63,102,0.08)]")}
+      data-opened={open || undefined}
+      className={cn("cursor-pointer", open ? OPEN_WASH : CLOSED_ROW)}
       onClick={onToggle}
     >
       <td className={cn("px-5 py-3", inset && "pl-10")}>
@@ -318,7 +322,7 @@ export function EarningsLinesTable({
       ) : (
         <>
           <div className={cn(LIST_MAX_H, "overflow-auto overscroll-contain")}>
-            <table className="glass-table w-full min-w-[640px] table-fixed text-sm">
+            <table className="glass-table earnings-open-rows w-full min-w-[640px] table-fixed text-sm">
               <colgroup>
                 <col className="w-1/4" />
                 <col className="w-1/4" />

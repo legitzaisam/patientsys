@@ -27,12 +27,14 @@ import {
   money,
   nullableEmail,
   nullableMoney,
+  nullablePhone,
   nullableText,
   optionalDateString,
   optionalDurationMinutes,
   optionalEmail,
   optionalId,
   optionalMoney,
+  optionalPhone,
   optionalText,
   password,
   paymentLinkKind,
@@ -92,7 +94,7 @@ export const SavePatient = z.object({
   last_name: requiredText(100),
   title: optionalText(50),
   email: optionalEmail,
-  phone: optionalText(50),
+  phone: optionalPhone,
   date_of_birth: optionalDateString,
   status: z.enum(["active", "inactive", "archived"]).optional(),
   allergies: optionalText(20_000),
@@ -265,6 +267,7 @@ export const UpdateStaffMember = z.object({
   insuranceProvider: optionalText(200),
   insuranceExpiry: optionalDateOnly,
   qualifications: optionalText(2_000),
+  workingArrangement: optionalText(80),
   commissionRate: percentage.optional(),
 });
 
@@ -312,7 +315,7 @@ export const GetPractitionerPerformance = z.object({
   previousTo: dateString,
 });
 
-export const GetMyEarnings = z.object({ from: dateString, to: dateString });
+export const GetMyEarnings = z.object({ from: dateString, to: dateString, userId: optionalId });
 
 export const GetInsights = z.object({ from: dateString, to: dateString });
 /** Empty means the last 12 months. */
@@ -344,7 +347,16 @@ export const SubmitProfileChange = z.object({
   jobTitle: optionalText(200),
   registrationBody: optionalText(200),
   registrationNumber: optionalText(100),
+  registrationExpiry: optionalDateOnly,
+  workEmail: optionalEmail,
+  workingArrangement: optionalText(80),
   note: optionalText(4_000),
+});
+
+export const SaveMyInstantProfile = z.object({
+  insuranceProvider: optionalText(200),
+  insuranceExpiry: optionalDateOnly,
+  qualifications: optionalText(2_000),
 });
 
 export const SaveMyProfile = z.object({
@@ -356,6 +368,8 @@ export const SaveMyProfile = z.object({
   insuranceProvider: optionalText(200),
   insuranceExpiry: optionalDateOnly,
   qualifications: optionalText(2_000),
+  workEmail: optionalEmail,
+  workingArrangement: optionalText(80),
 });
 
 export const ReviewProfileChange = z.object({
@@ -485,7 +499,7 @@ export const SetCatalogueItemActive = z.object({ id, active: z.boolean() });
 export const UpdateClinicDetails = z.object({
   name: requiredText(200),
   address: nullableText(500),
-  phone: nullableText(50),
+  phone: nullablePhone,
   email: nullableEmail,
   /** Hours before an appointment when reminders go out (max 90 days). */
   reminder_offsets: z.array(z.number().int().min(1).max(2160)).max(6).optional(),
@@ -569,7 +583,7 @@ export const UpdatePortalProfile = z.object({
   postcode: optionalText(32),
   emergency_contact_name: optionalText(160),
   emergency_contact_relationship: optionalText(80),
-  emergency_contact_phone: optionalText(40),
+  emergency_contact_phone: optionalPhone,
 });
 
 export const AddExternalTreatment = z.object({

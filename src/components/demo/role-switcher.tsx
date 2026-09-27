@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 const ROLES = [
   { value: "owner", label: "Clinic owner", who: "Dr Amara Osei" },
+  { value: "manager", label: "Manager", who: "Maya Chen" },
   { value: "practitioner", label: "Practitioner", who: "Dr Nadia Rahman" },
   { value: "front_desk", label: "Receptionist", who: "Sofia Marchetti" },
   { value: "patient", label: "Patient", who: "Olivia Bennett" },

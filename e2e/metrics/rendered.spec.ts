@@ -155,7 +155,7 @@ async function become(page: Page, persona: Persona) {
 const PAGES: Record<Persona, string[]> = {
   owner: ["/dashboard", "/patients", "/retention", "/insights?tab=book", "/performance", "/offers"],
   admin: ["/dashboard", "/patients", "/performance", "/offers"],
-  practitioner: ["/dashboard", "/patients", "/insights?tab=book", "/earnings"],
+  practitioner: ["/dashboard", "/patients", "/insights?tab=book", "/profile"],
   front_desk: ["/dashboard", "/patients"],
   patient: ["/my-record"],
 };

@@ -59,7 +59,7 @@ type Identity = {
   isManager?: boolean;
   roles: string[];
   permissions?: string[];
-  /** Has treated someone in the last 12 months; hides My earnings for non-treating owners. */
+  /** Has treated someone in the last 12 months. */
   treatsPatients?: boolean;
   profile: { full_name?: string | null; job_title?: string | null } | null;
   patient: { first_name: string; last_name: string } | null;
@@ -573,10 +573,6 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     ...(canSee(identity, "insights") ? [{ to: "/insights", label: "Insights", icon: Lightbulb }] : []),
     ...(canSee(identity, "retention") ? [{ to: "/retention", label: "Retention", icon: Repeat }] : []),
     ...(canSee(identity, "performance") ? [{ to: "/performance", label: "Performance", icon: TrendingUp }] : []),
-    // My earnings is for people who treat: an owner with no treatments in 12 months does not see it.
-    ...(canSee(identity, "earnings") && (!identity.isOwner || identity.treatsPatients !== false)
-      ? [{ to: "/earnings", label: "Earnings", icon: Wallet }]
-      : []),
   ];
 
   const displayName =

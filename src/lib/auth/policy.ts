@@ -182,6 +182,7 @@ export const POLICY = {
   /* Own staff profile */
   getMyProfile: { kind: "capability", key: "view.profile" },
   saveMyProfile: { kind: "staff" },
+  saveMyInstantProfile: { kind: "staff" },
   setMyAvatar: { kind: "staff" },
   submitProfileChange: { kind: "staff" },
   listProfileChangeRequests: { kind: "capability", key: "team.approve_changes" },
@@ -195,7 +196,7 @@ export const POLICY = {
   /* Reports */
   getInsights: { kind: "capability", key: "reports.insights" },
   getPractitionerPerformance: { kind: "capability", key: "reports.performance" },
-  getMyEarnings: { kind: "capability", key: "view.earnings" },
+  getMyEarnings: { kind: "staff" },
   getRetention: { kind: "capability", key: "reports.retention" },
   logRetentionOutreach: { kind: "staff" },
   sendRecall: { kind: "capability", key: "comms.send" },
