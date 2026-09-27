@@ -361,6 +361,13 @@
     z-index: 1;
   }
 
+  /* Butter outline on the toolbar icons (the chip surface forces border and
+     box-shadow off, so this uses outline, which follows the radius). */
+  .toolbar-icon-ring {
+    outline: 1.5px solid var(--accent);
+    outline-offset: -1.5px;
+  }
+
   /* Ghost hover at top; glass brightens on ::before when scrolled. */
   .toolbar-scroll-chip:hover {
     background: color-mix(

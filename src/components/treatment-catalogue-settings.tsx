@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useForm, type Control } from "react-hook-form";
@@ -97,6 +98,7 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
   const [search, setSearch] = useState("");
   /** null closes the panel; `id` is null for a new treatment. */
   const [editing, setEditing] = useState<{ id: string | null } | null>(null);
+  const [archiving, setArchiving] = useState<{ id: string; name: string } | null>(null);
   const overrides = useTreatmentColours();
 
   const draftForm = useForm<Draft>({
@@ -179,6 +181,21 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
 
   return (
     <Card className="space-y-4 p-5">
+      <ConfirmDialog
+        open={archiving !== null}
+        onOpenChange={(open) => {
+          if (!open) setArchiving(null);
+        }}
+        title={`Archive "${archiving?.name ?? ""}"?`}
+        description="It disappears from booking and treatment forms. Past treatments keep their record and you can restore it any time."
+        confirmLabel="Archive"
+        destructive
+        qc="treatment-archive-confirm"
+        onConfirm={() => {
+          if (archiving) toggleActive.mutate({ data: { id: archiving.id, active: false } });
+          setArchiving(null);
+        }}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <ClipboardList className="h-4 w-4 shrink-0 text-ink-3" />
@@ -407,7 +424,9 @@ export function TreatmentCatalogueSettings({ canEdit }: { canEdit: boolean }) {
                   size="sm"
                   disabled={toggleActive.isPending}
                   onClick={() =>
-                    toggleActive.mutate({ data: { id: item.id, active: !item.active } })
+                    item.active
+                      ? setArchiving({ id: item.id, name: item.name })
+                      : toggleActive.mutate({ data: { id: item.id, active: true } })
                   }
                 >
                   {item.active ? (

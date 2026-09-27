@@ -154,7 +154,7 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     permission: "documents.send",
     defaults: staff(),
   }),
-  node({ id: "patient-history", parentId: "patient-record", kind: "tab", label: "History updates", route: "/patients/$id", permission: "view.patients.history" }),
+  node({ id: "patient-history", parentId: "patient-record", kind: "tab", label: "Medical history", route: "/patients/$id", permission: "view.patients.history" }),
   node({ id: "patient-from-patient", parentId: "patient-record", kind: "tab", label: "From the patient", route: "/patients/$id", permission: "view.patients.from_patient" }),
   node({ id: "patient-contact", parentId: "patient-record", kind: "tab", label: "Contact", route: "/patients/$id", permission: "view.patients.contact" }),
 
@@ -214,7 +214,7 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     id: "insights-book",
     parentId: "insights",
     kind: "tab",
-    label: "Book",
+    label: "Patient base",
     route: "/insights",
     permission: "view.insights.book",
     defaults: staff({ practitioner: false, front_desk: true }),

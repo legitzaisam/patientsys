@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -135,6 +137,18 @@ export function OfferTemplateEditor({
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
 
+  // Closing with edits (Cancel, the X, a click outside, Escape) confirms first;
+  // a successful save closes through the prop directly and skips the guard.
+  const dirty = open && JSON.stringify(form) !== JSON.stringify(formFor(template, stage));
+  const [confirmClose, setConfirmClose] = useState(false);
+  const requestClose = (next: boolean) => {
+    if (!next && dirty) {
+      setConfirmClose(true);
+      return;
+    }
+    onOpenChange(next);
+  };
+
   const save = useMutation({
     mutationFn: useServerFn(saveOfferTemplate),
     onSuccess: () => {
@@ -144,6 +158,8 @@ export function OfferTemplateEditor({
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const leaveGuard = useUnsavedChanges(dirty && !save.isPending, "offer-editor-unsaved");
 
   const draft = useMutation({
     mutationFn: useServerFn(draftOfferTemplate),
@@ -238,7 +254,23 @@ export function OfferTemplateEditor({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <>
+    {leaveGuard}
+    <ConfirmDialog
+      open={confirmClose}
+      onOpenChange={setConfirmClose}
+      title="Discard your changes?"
+      description="This offer has edits that have not been saved."
+      confirmLabel="Discard"
+      cancelLabel="Keep editing"
+      destructive
+      qc="offer-editor-discard"
+      onConfirm={() => {
+        setConfirmClose(false);
+        onOpenChange(false);
+      }}
+    />
+    <Sheet open={open} onOpenChange={requestClose}>
       <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[1040px]" data-qc="offer-editor">
         <SheetHeader className="border-b border-edge px-6 py-4 text-left">
           <SheetTitle>{template ? `Edit ${template.name}` : "Design your offer"}</SheetTitle>
@@ -454,7 +486,7 @@ export function OfferTemplateEditor({
         </div>
 
         <SheetFooter className="justify-center border-t border-edge px-6 py-4 sm:justify-center">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => requestClose(false)}>
             Cancel
           </Button>
           <Button type="button" onClick={submit} disabled={save.isPending} data-qc="offer-save">
@@ -463,5 +495,6 @@ export function OfferTemplateEditor({
         </SheetFooter>
       </SheetContent>
     </Sheet>
+    </>
   );
 }

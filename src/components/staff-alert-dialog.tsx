@@ -33,7 +33,7 @@ type Audience = "managers" | "practitioners" | "front_desk" | "all" | "user";
 const DEPARTMENTS: { value: Exclude<Audience, "user">; label: string }[] = [
   { value: "managers", label: "Owners & managers" },
   { value: "practitioners", label: "Practitioners" },
-  { value: "front_desk", label: "Reception" },
+  { value: "front_desk", label: "Receptionists" },
   { value: "all", label: "Everyone" },
 ];
 
@@ -41,7 +41,7 @@ const ROLE_LABEL: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
   practitioner: "Practitioner",
-  front_desk: "Reception",
+  front_desk: "Receptionist",
 };
 
 function encodeTarget(audience: Audience, userId?: string) {

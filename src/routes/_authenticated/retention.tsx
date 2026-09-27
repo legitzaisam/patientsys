@@ -17,11 +17,11 @@ import { RouteErrorBoundary } from "@/components/route-error-boundary";
 import {
   CURRENT_YEAR,
   PeriodPicker,
-  money,
   periodHeading,
   periodRange,
   type PeriodSelection,
 } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/retention")({
   head: () => ({
@@ -144,7 +144,11 @@ function RetentionPage() {
           hint={`${s?.repeatPatients ?? 0} repeat patients seen ${periodPhrase}`}
         />
         <Stat label="Average visits" value={`${s?.averageVisits ?? 0}`} hint={`Per patient seen ${periodPhrase}`} />
-        <Stat label="Revenue at risk" value={money(s?.revenueAtRisk ?? 0)} hint={`Patients who lapsed ${periodPhrase}`} />
+        <Stat
+          label="Revenue at risk"
+          value={moneyWhole(s?.revenueAtRisk ?? 0)}
+          hint={`Lifetime spend of the at-risk patients whose last visit was ${periodPhrase}`}
+        />
       </div>
 
       <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-[1fr_380px]">

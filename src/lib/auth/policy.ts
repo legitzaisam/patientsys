@@ -239,8 +239,8 @@ export const POLICY = {
   listRetailProducts: { kind: "staff" },
   saveRetailProduct: { kind: "capability", key: "settings.treatments" },
   setRetailProductActive: { kind: "capability", key: "settings.treatments" },
-  getInsightsIngestKeyStatus: { kind: "owner" },
-  rotateInsightsIngestKey: { kind: "owner" },
+  getInsightsIngestKeyStatus: { kind: "accessAdmin" },
+  rotateInsightsIngestKey: { kind: "accessAdmin" },
 } as const satisfies Record<string, Access>;
 
 export type HandlerName = keyof typeof POLICY;

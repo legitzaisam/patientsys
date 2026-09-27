@@ -58,7 +58,7 @@ export function CommsPreferencesCard({ patientId, patient, as = "staff", onSaved
       <p className="mt-1 text-xs text-muted-foreground">
         {as === "patient"
           ? "Reminders are on unless you turn them off. Marketing needs you to opt in."
-          : "UK marketing is opt-in. Reminders stay on unless the patient opts out. Nothing is emailed or texted from here yet."}
+          : "UK marketing is opt-in. Reminders stay on unless the patient opts out."}
       </p>
       <div className="mt-4 space-y-3">
         <PrefRow
@@ -77,16 +77,18 @@ export function CommsPreferencesCard({ patientId, patient, as = "staff", onSaved
         />
         <PrefRow
           label="Marketing by email"
-          hint="Also needs the marketing switch on."
+          hint={draft.marketing_opt_in ? "Offers and news by email." : "Turn Marketing on first."}
           checked={draft.email_opt_in}
-          disabled={save.isPending}
+          disabled={save.isPending || !draft.marketing_opt_in}
+          muted={!draft.marketing_opt_in}
           onCheckedChange={(value) => set("email_opt_in", value)}
         />
         <PrefRow
           label="Marketing by text"
-          hint="Also needs the marketing switch on."
+          hint={draft.marketing_opt_in ? "Offers and news by text." : "Turn Marketing on first."}
           checked={draft.sms_opt_in}
-          disabled={save.isPending}
+          disabled={save.isPending || !draft.marketing_opt_in}
+          muted={!draft.marketing_opt_in}
           onCheckedChange={(value) => set("sms_opt_in", value)}
         />
       </div>
@@ -99,16 +101,23 @@ function PrefRow({
   hint,
   checked,
   disabled,
+  muted,
   onCheckedChange,
 }: {
   label: string;
   hint: string;
   checked: boolean;
   disabled?: boolean;
+  /** Greyed out because a parent switch is off (the row stays readable). */
+  muted?: boolean;
   onCheckedChange: (value: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-edge bg-glass-2 px-4 py-3">
+    <div
+      className={`flex items-center justify-between gap-4 rounded-2xl border border-edge bg-glass-2 px-4 py-3 transition-opacity ${
+        muted ? "opacity-60" : ""
+      }`}
+    >
       <div>
         <p className="text-sm text-foreground">{label}</p>
         <p className="text-xs text-muted-foreground">{hint}</p>

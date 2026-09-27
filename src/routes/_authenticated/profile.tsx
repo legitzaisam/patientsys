@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { isDirtyForm, useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -48,25 +49,30 @@ function ProfilePage() {
     enabled: !!identity?.isStaff,
   });
 
-  const [form, setForm] = useState({
+  const blankForm = {
     title: "",
     fullName: "",
     jobTitle: "",
     registrationBody: "",
     registrationNumber: "",
-  });
+  };
+  const [form, setForm] = useState(blankForm);
+  // What the server holds, so we can tell an edited form from a saved one.
+  const [saved, setSaved] = useState<typeof blankForm | null>(null);
 
   // Sync from server only when those fields change — not on every query object identity.
   useEffect(() => {
     if (!data?.profile) return;
     const split = splitStaffName(data.profile.full_name ?? "");
-    setForm({
+    const next = {
       title: split.title,
       fullName: split.name,
       jobTitle: data.profile.job_title ?? "",
       registrationBody: data.profile.registration_body ?? "",
       registrationNumber: data.profile.registration_number ?? "",
-    });
+    };
+    setForm(next);
+    setSaved(next);
   }, [
     data?.profile?.full_name,
     data?.profile?.job_title,
@@ -88,12 +94,15 @@ function ProfilePage() {
       }),
     onSuccess: () => {
       toast.success("Profile saved");
+      setSaved(form);
       queryClient.invalidateQueries({ queryKey: ["my-profile"] });
       queryClient.invalidateQueries({ queryKey: ["me"] });
       queryClient.invalidateQueries({ queryKey: ["team"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const leaveGuard = useUnsavedChanges(isDirtyForm(form, saved) && !submit.isPending, "profile-unsaved");
 
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
   if (!identity.isStaff)
@@ -107,6 +116,7 @@ function ProfilePage() {
 
   return (
     <AppShell identity={identity}>
+      {leaveGuard}
       <div className="mb-6">
         <h1 className="page-title">My profile</h1>
         <p className="page-subtitle">
@@ -181,6 +191,7 @@ function ProfilePage() {
                 <div className="field-stack min-w-0">
                   <Label htmlFor="p-email">Work email</Label>
                   <Input id="p-email" value={identity.email} disabled />
+                  <p className="text-xs text-muted-foreground">Ask the clinic owner to change this.</p>
                 </div>
                 <div className="field-stack min-w-0">
                   <Label htmlFor="p-body">Registration body</Label>

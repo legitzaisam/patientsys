@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useForm } from "react-hook-form";
@@ -47,6 +48,7 @@ export function RetailProductSettings({ canEdit }: { canEdit: boolean }) {
   const queryClient = useQueryClient();
   const fetchItems = useServerFn(listRetailProducts);
   const [editing, setEditing] = useState<{ id: string | null } | null>(null);
+  const [archiving, setArchiving] = useState<{ id: string; name: string } | null>(null);
   const { data } = useQuery({ queryKey: ["retail-products"], queryFn: () => fetchItems() });
   const draftForm = useForm<Draft>({
     resolver: zodResolver(DraftSchema),
@@ -79,11 +81,26 @@ export function RetailProductSettings({ canEdit }: { canEdit: boolean }) {
 
   return (
     <Card className="p-5">
+      <ConfirmDialog
+        open={archiving !== null}
+        onOpenChange={(open) => {
+          if (!open) setArchiving(null);
+        }}
+        title={`Archive "${archiving?.name ?? ""}"?`}
+        description="It comes off the patient portal and out of Insights. You can restore it any time."
+        confirmLabel="Archive"
+        destructive
+        qc="product-archive-confirm"
+        onConfirm={() => {
+          if (archiving) setActive.mutate({ data: { id: archiving.id, active: false } });
+          setArchiving(null);
+        }}
+      />
       <div className="mb-3 flex items-end justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="section-title">Retail products</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Physical products for Insights and a featured strip on the patient portal. No cart.
+            Physical products shown on the patient portal and counted in Insights.
           </p>
         </div>
         {canEdit && (
@@ -218,7 +235,11 @@ export function RetailProductSettings({ canEdit }: { canEdit: boolean }) {
                   variant="ghost"
                   size="icon"
                   aria-label={item.active ? "Archive product" : "Restore product"}
-                  onClick={() => setActive.mutate({ data: { id: item.id, active: !item.active } })}
+                  onClick={() =>
+                    item.active
+                      ? setArchiving({ id: item.id, name: item.name })
+                      : setActive.mutate({ data: { id: item.id, active: true } })
+                  }
                 >
                   {item.active ? <Archive className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}
                 </Button>

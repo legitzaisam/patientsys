@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -199,8 +200,22 @@ function TemplateActions({
   onHistory: () => void;
   onArchive: () => void;
 }) {
+  const [confirmArchive, setConfirmArchive] = useState(false);
   return (
     <div className="flex flex-wrap gap-2">
+      <ConfirmDialog
+        open={confirmArchive}
+        onOpenChange={setConfirmArchive}
+        title={`Archive "${template.name}"?`}
+        description="It leaves the Offers page and stops sending. Offers already sent stay as they are."
+        confirmLabel="Archive"
+        destructive
+        qc="offer-archive-confirm"
+        onConfirm={() => {
+          setConfirmArchive(false);
+          onArchive();
+        }}
+      />
       <Button variant="outline" size="sm" onClick={onEdit} data-qc="offer-edit">
         <Pencil className="h-3.5 w-3.5" />
         Edit
@@ -213,9 +228,8 @@ function TemplateActions({
         variant="ghost"
         size="sm"
         className="ml-auto text-muted-foreground"
-        onClick={() => {
-          if (window.confirm(`Archive "${template.name}"? Offers already sent stay as they are.`)) onArchive();
-        }}
+        onClick={() => setConfirmArchive(true)}
+        data-qc="offer-archive"
       >
         <Archive className="h-3.5 w-3.5" />
         Archive

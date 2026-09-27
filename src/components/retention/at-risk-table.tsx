@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { RiskBadge, type RiskLevel } from "./risk-badge";
 import { SendRecallDialog } from "./send-recall-dialog";
 import { StaffTaskHoverCard } from "./staff-task-hovercard";
-import { money } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export type AtRiskRow = {
@@ -325,7 +325,8 @@ export function AtRiskTable({
           </div>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Overdue for a treatment, or not seen recently, with nothing booked in the diary.
+          Existing patients drifting away: overdue for a treatment or not seen recently, with nothing booked in the
+          diary.
         </p>
       </div>
 
@@ -427,7 +428,7 @@ export function AtRiskTable({
                 )}
               </td>
               <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{r.visits}</td>
-              <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{money(r.lifetimeValue)}</td>
+              <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{moneyWhole(r.lifetimeValue)}</td>
               <td className="whitespace-nowrap px-5 py-3">
                 <RiskBadge risk={r.risk} />
               </td>

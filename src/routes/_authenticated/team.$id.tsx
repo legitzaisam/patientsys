@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type TouchEvent } from "react";
@@ -176,6 +177,9 @@ function StaffProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.profile, data?.role]);
 
+  // react-hook-form tracks edits against the last reset(); the save resets on success via the refetch.
+  const leaveGuard = useUnsavedChanges(profileForm.formState.isDirty && !save.isPending, "staff-profile-unsaved");
+
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
   if (!identity.isStaff)
     return (
@@ -205,6 +209,7 @@ function StaffProfilePage() {
 
   return (
     <AppShell identity={identity}>
+      {leaveGuard}
       {canViewTeam ? (
         <Link
           to="/team"

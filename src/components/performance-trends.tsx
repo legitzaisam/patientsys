@@ -20,7 +20,7 @@ import {
   labelAt,
 } from "@/components/charts/axis-tick";
 import { Card } from "@/components/ui/card";
-import { money } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import {
   Select,
   SelectContent,
@@ -221,7 +221,7 @@ export function PerformanceTrends({ trend, trendViews, practitioners }: Props) {
               <Tooltip
                 {...tooltipStyle()}
                 labelFormatter={(v) => labelAt(labels, v)}
-                formatter={(v: number, n: string) => [money(v), n === "earned" ? "Earned" : "Collected"]}
+                formatter={(v: number, n: string) => [moneyWhole(v), n === "earned" ? "Earned" : "Collected"]}
               />
               <Area
                 type="monotone"

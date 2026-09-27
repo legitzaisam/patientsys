@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { Card } from "@/components/ui/card";
 import { money, type PeriodKey } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export type EarningsLine = {
@@ -171,7 +172,7 @@ function GroupRow({
         {treatments} treatment{treatments === 1 ? "" : "s"}
       </td>
       <td className="px-5 py-3 text-right text-sm font-semibold tabular-nums text-foreground">
-        {money(total)}
+        {moneyWhole(total)}
       </td>
     </tr>
   );
@@ -354,7 +355,7 @@ export function EarningsLinesTable({
                 · {count} treatment{count === 1 ? "" : "s"}
               </span>
             </p>
-            <p className="text-sm font-semibold tabular-nums text-foreground">{money(total)}</p>
+            <p className="text-sm font-semibold tabular-nums text-foreground">{moneyWhole(total)}</p>
           </div>
         </>
       )}

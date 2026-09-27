@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isDirtyForm, useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -37,23 +38,29 @@ export function ClinicDetailsSettings({ canEdit }: { canEdit: boolean }) {
   const { data } = useQuery({ queryKey: ["clinic-details"], queryFn: () => fetchClinic() });
   const [form, setForm] = useState<Clinic>({ name: "", address: "", phone: "", email: "" });
   const [offsetsText, setOffsetsText] = useState("168, 24");
+  // The saved values, so an edited form can be told from a loaded one.
+  const [saved, setSaved] = useState<{ form: Clinic; offsetsText: string } | null>(null);
 
   useEffect(() => {
     if (data) {
       const c = data as Clinic;
-      setForm({
+      const next = {
         name: c.name ?? "",
         address: c.address ?? "",
         phone: c.phone ?? "",
         email: c.email ?? "",
-      });
-      setOffsetsText((c.reminder_offsets ?? [168, 24]).join(", "));
+      };
+      const offsets = (c.reminder_offsets ?? [168, 24]).join(", ");
+      setForm(next);
+      setOffsetsText(offsets);
+      setSaved({ form: next, offsetsText: offsets });
     }
   }, [data]);
 
   const save = useMutation({
     mutationFn: useServerFn(updateClinicDetails),
     onSuccess: () => {
+      setSaved({ form, offsetsText });
       queryClient.invalidateQueries({ queryKey: ["clinic-details"] });
       toast.success("Clinic details saved");
     },
@@ -81,8 +88,18 @@ export function ClinicDetailsSettings({ canEdit }: { canEdit: boolean }) {
     </div>
   );
 
+  const leaveGuard = useUnsavedChanges(
+    canEdit &&
+      !save.isPending &&
+      saved !== null &&
+      (isDirtyForm(form as unknown as Record<string, unknown>, saved.form as unknown as Record<string, unknown>) ||
+        offsetsText !== saved.offsetsText),
+    "clinic-details-unsaved",
+  );
+
   return (
     <Card className="space-y-4 p-5">
+      {leaveGuard}
       <div className="flex items-center gap-2">
         <Building2 className="h-4 w-4 text-ink-3" />
         <div>

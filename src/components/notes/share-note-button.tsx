@@ -20,7 +20,7 @@ const ROLE_LABEL: Record<string, string> = {
   owner: "Owner",
   manager: "Manager",
   practitioner: "Practitioner",
-  front_desk: "Reception",
+  front_desk: "Receptionist",
 };
 
 const CHAT_BODY_LIMIT = 4000;

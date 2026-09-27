@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -64,6 +65,7 @@ export function MessageComposer({
   const [pending, setPending] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [deleteTemplate, setDeleteTemplate] = useState<{ id: string; title: string } | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newBody, setNewBody] = useState("");
@@ -193,6 +195,22 @@ export function MessageComposer({
 
   const templatesButton = (sizeClass: string) =>
     withTemplates ? (
+      <>
+      <ConfirmDialog
+        open={deleteTemplate !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTemplate(null);
+        }}
+        title={`Delete "${deleteTemplate?.title ?? ""}"?`}
+        description="The template goes for everyone in the clinic. Messages already sent with it are not affected."
+        confirmLabel="Delete template"
+        destructive
+        qc="template-delete-confirm"
+        onConfirm={() => {
+          if (deleteTemplate) removeTemplate.mutate({ data: { id: deleteTemplate.id } });
+          setDeleteTemplate(null);
+        }}
+      />
       <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
         <DialogTrigger asChild>
           <Button
@@ -230,7 +248,7 @@ export function MessageComposer({
                         size="icon"
                         variant="ghost"
                         aria-label={`Delete ${t.title}`}
-                        onClick={() => removeTemplate.mutate({ data: { id: t.id } })}
+                        onClick={() => setDeleteTemplate({ id: t.id, title: t.title })}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -273,6 +291,7 @@ export function MessageComposer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </>
     ) : null;
 
   const sendButton = (sizeClass: string, iconClass = "h-4 w-4") => (

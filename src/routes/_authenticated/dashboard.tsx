@@ -39,17 +39,41 @@ function DashboardPage() {
   );
   const weekRange = useMemo(() => clinicWeekRange(), []);
   const fetchDashboard = useServerFn(getDashboard);
-  const { data } = useQuery({
+  const {
+    data,
+    isPending: dashboardPending,
+    isError: dashboardError,
+    refetch: refetchDashboard,
+  } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => fetchDashboard(),
     enabled: !!identity?.isStaff,
   });
   const fetchRetention = useServerFn(getRetention);
-  const { data: retention } = useQuery({
+  const canRetentionQuery = !!identity?.isStaff && can(identity, "reports.retention");
+  const {
+    data: retention,
+    isPending: retentionPending,
+    isError: retentionError,
+    refetch: refetchRetention,
+  } = useQuery({
     queryKey: ["retention"],
     queryFn: () => fetchRetention({ data: {} }),
-    enabled: !!identity?.isStaff && can(identity, "reports.retention"),
+    enabled: canRetentionQuery,
   });
+  // Placeholders until the first answer arrives; a failure shows a retry line
+  // instead of zeros. The KPI grid also waits for retention when it is allowed.
+  const dashboardStatus = dashboardError ? "error" : dashboardPending ? "loading" : "ready";
+  const kpiStatus =
+    dashboardError || (canRetentionQuery && retentionError)
+      ? "error"
+      : dashboardPending || (canRetentionQuery && retentionPending)
+        ? "loading"
+        : "ready";
+  const retryAll = () => {
+    void refetchDashboard();
+    if (canRetentionQuery) void refetchRetention();
+  };
   const fetchIncomplete = useServerFn(listAccountsMissingEmail);
   const { data: incomplete } = useQuery({
     queryKey: ["accounts-missing-email"],
@@ -111,7 +135,7 @@ function DashboardPage() {
   const isFrontDesk = identity.roles.includes("front_desk");
   const canRetention = can(identity, "reports.retention");
   const canRevenue = can(identity, "reports.performance");
-  const heading = isManager ? "Clinic overview" : isFrontDesk ? "Front desk" : "My day";
+  const heading = isManager ? "Clinic overview" : isFrontDesk ? "Reception" : "My day";
   const subheading = isManager
     ? "Live picture of today's diary, what needs attention and clinic performance."
     : isFrontDesk
@@ -160,6 +184,8 @@ function DashboardPage() {
               }}
               canRetention={canRetention}
               canRevenue={canRevenue}
+              status={kpiStatus}
+              onRetry={retryAll}
             />
       </section>
 
@@ -197,7 +223,13 @@ function DashboardPage() {
             </QuickAddAppointment>}
           </div>
         </div>
-        <TodaySnapshot appointments={diaryAppointments} isManager={isManager} span={diarySpan} />
+        <TodaySnapshot
+          appointments={diaryAppointments}
+          isManager={isManager}
+          span={diarySpan}
+          status={dashboardStatus}
+          onRetry={retryAll}
+        />
       </section>}
 
       <section className="flex flex-1 flex-col gap-6">
@@ -205,10 +237,15 @@ function DashboardPage() {
           <div className="mb-4">
             <h2 className="section-title">Attention needed</h2>
             <p className="text-xs text-muted-foreground">
-              Outstanding items that need action — deposits must be paid at least 3 days before the appointment.
+              Today and this week: what to sort out before appointments happen. Deposits must be paid at least
+              3 days before the appointment.
             </p>
           </div>
-          <AttentionList items={[...(data?.attentionItems ?? []), ...incompleteItems]} />
+          <AttentionList
+            items={[...(data?.attentionItems ?? []), ...incompleteItems]}
+            status={dashboardStatus}
+            onRetry={retryAll}
+          />
         </div>}
         <div className="space-y-4">
           {canSee(identity, "dashboard-pauses") && <PauseRequests />}
@@ -216,7 +253,9 @@ function DashboardPage() {
         </div>
       </section>
 
-      {canSee(identity, "dashboard-journeys") && <TreatmentJourneys journeys={(data as any)?.journeys} />}
+      {canSee(identity, "dashboard-journeys") && (
+        <TreatmentJourneys journeys={(data as any)?.journeys} status={dashboardStatus} onRetry={retryAll} />
+      )}
     </AppShell>
   );
 }

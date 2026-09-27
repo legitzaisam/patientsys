@@ -16,14 +16,14 @@ import { expect, test, type Page } from "./fixtures";
 
 const BASE = "http://localhost:8091";
 
-async function become(page: Page, role: "owner" | "practitioner" | "front_desk" | "patient") {
+async function become(page: Page, role: "owner" | "practitioner" | "front_desk" | "patient" | "admin") {
   await page.context().addCookies([{ name: "demo_role", value: role, url: BASE }]);
 }
 
 async function openOliviaRecord(page: Page) {
   await page.goto("/patients");
   await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
-  await expect(page.getByRole("heading", { level: 1, name: /Bennett, .*Olivia/ })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /Olivia Bennett/ })).toBeVisible();
 }
 
 test.describe("access", () => {
@@ -125,10 +125,13 @@ test.describe("designer", () => {
     await expect(card.locator('[data-qc="offer-automation-switch"]')).toHaveAttribute("aria-checked", "true");
 
     // Process queue runs the automation first, then delivers what it queued.
+    // The drain button is a software-admin control, so switch persona for it.
+    await become(page, "admin");
     await openOliviaRecord(page);
     await page.getByRole("tab", { name: "Contact" }).click();
     await page.getByRole("button", { name: "Process queue" }).click();
     await expect(page.getByText(/sent/).first()).toBeVisible();
+    await become(page, "owner");
 
     // The stage card now shows the sends, and the patient's record carries the offer and the email.
     await page.goto("/offers");

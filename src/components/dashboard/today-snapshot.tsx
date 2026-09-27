@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { LoadError, LoadingCard, type LoadStatus } from "@/components/dashboard/load-state";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -85,10 +86,14 @@ export function TodaySnapshot({
   appointments,
   isManager,
   span = "day",
+  status = "ready",
+  onRetry,
 }: {
   appointments: any[];
   isManager: boolean;
   span?: "day" | "week";
+  status?: LoadStatus;
+  onRetry?: () => void;
 }) {
   const queryClient = useQueryClient();
   const ordered = useMemo(
@@ -99,6 +104,17 @@ export function TodaySnapshot({
   useEffect(() => {
     seedAppointmentNoteQueries(queryClient, ordered);
   }, [ordered, queryClient]);
+
+  if (status === "error") return <LoadError what="today's diary" onRetry={onRetry} className="mb-9" />;
+  if (status === "loading") {
+    return (
+      <div className="grid grid-cols-1 gap-3 pb-9 sm:grid-cols-2 lg:grid-cols-3" data-qc="diary-loading">
+        <LoadingCard lines={3} />
+        <LoadingCard lines={3} />
+        <LoadingCard lines={3} />
+      </div>
+    );
+  }
 
   if (ordered.length === 0) {
     // Match carousel bottom padding (item pb-1 + viewport pb-8).
@@ -592,7 +608,7 @@ function TodayCard({
                 <p className="truncate text-xs leading-snug text-muted-foreground">
                   {a.plan && a.treatment_number <= a.plan.totalSessions
                     ? `Session ${a.treatment_number} of ${a.plan.totalSessions}`
-                    : `#${a.treatment_number}`}
+                    : `Session ${a.treatment_number}`}
                   {" · "}
                   {a.treatment_name}
                 </p>

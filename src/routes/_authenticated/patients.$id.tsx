@@ -1,4 +1,5 @@
 import { RiskBadge } from "@/components/retention/risk-badge";
+import { dateTime, daysAgoLabel, displayName } from "@/lib/format";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -417,10 +418,7 @@ function PatientRecord() {
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h1 className="page-title">
-                  {p.last_name}, {p.title ? `${p.title} ` : ""}
-                  {p.first_name}
-                </h1>
+                <h1 className="page-title">{displayName(p, { withTitle: true })}</h1>
                 <p className="page-subtitle">
                   {p.reference} · {p.date_of_birth ? new Date(p.date_of_birth).toLocaleDateString("en-GB") : "DOB not set"} ·{" "}
                   {p.email ?? "no email"} · {p.phone ?? "no phone"}
@@ -431,7 +429,7 @@ function PatientRecord() {
                     <span className="text-xs text-muted-foreground">
                       {data.retention.visits} visit{data.retention.visits === 1 ? "" : "s"}
                       {data.retention.daysSince !== null
-                        ? ` · last seen ${data.retention.daysSince} days ago`
+                        ? ` · last seen ${daysAgoLabel(data.retention.daysSince)}`
                         : ""}
                     </span>
                   </div>
@@ -609,9 +607,10 @@ function PatientRecord() {
                           }}
                         >
                           <p className="text-sm text-muted-foreground">
-                            They will drop out of the patient list and the diary. Nothing is
-                            deleted: the clinical record is kept for 8 years after their last
-                            treatment, and you can restore them at any time.
+                            They will drop out of the patient list and the diary, and this starts
+                            the 8-year retention clock. Nothing is deleted: the clinical record is
+                            kept for 8 years after their last treatment, and you can restore them at
+                            any time.
                           </p>
                           <div className="field-stack">
                             <Label htmlFor="reason">Reason (optional)</Label>
@@ -664,7 +663,7 @@ function PatientRecord() {
               )}
               {canSee(identity, "patient-photos") && <TabsTrigger value="photos">Before and after</TabsTrigger>}
               {canSee(identity, "patient-documents") && <TabsTrigger value="documents">Documents</TabsTrigger>}
-              {canSee(identity, "patient-history") && <TabsTrigger value="history">History updates</TabsTrigger>}
+              {canSee(identity, "patient-history") && <TabsTrigger value="history">Medical history</TabsTrigger>}
               {canSee(identity, "patient-from-patient") && <TabsTrigger value="portal">From the patient</TabsTrigger>}
               {canSee(identity, "patient-contact") && <TabsTrigger value="contact">Contact</TabsTrigger>}
             </TabsList>
@@ -672,14 +671,6 @@ function PatientRecord() {
             {/* How we may reach this patient, and what has been sent. Lives in
                 a tab so the record opens on clinical content, not admin. */}
             <TabsContent value="contact" className="space-y-4">
-              <CommsPreferencesCard
-                patientId={id}
-                patient={p}
-                onSaved={() => {
-                  invalidate();
-                  void queryClient.invalidateQueries({ queryKey: ["communications", id] });
-                }}
-              />
               <PatientOffersCard
                 patientId={id}
                 action={
@@ -690,8 +681,21 @@ function PatientRecord() {
                   ) : null
                 }
               />
+              <CommsPreferencesCard
+                patientId={id}
+                patient={p}
+                onSaved={() => {
+                  invalidate();
+                  void queryClient.invalidateQueries({ queryKey: ["communications", id] });
+                }}
+              />
               {can(identity, "comms.send") ? (
-                <CommsLogCard patientId={id} enabled canDrain={can(identity, "comms.send")} />
+                <CommsLogCard
+                  patientId={id}
+                  enabled
+                  canDrain={can(identity, "comms.send")}
+                  showDiagnostics={Boolean(identity.isAdmin)}
+                />
               ) : null}
             </TabsContent>
 
@@ -1248,7 +1252,7 @@ function PatientRecord() {
                           .join("\n")}
                       </pre>
                       <p className="mt-1 text-2xs text-muted-foreground">
-                        {new Date(h.created_at).toLocaleString("en-GB")} · {h.source}
+                        {dateTime(h.created_at)} · {h.source}
                       </p>
                     </li>
                   ))}

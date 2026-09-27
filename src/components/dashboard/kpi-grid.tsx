@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { LoadError, LoadingCard, type LoadStatus } from "@/components/dashboard/load-state";
 import { ArrowDown, ArrowRight, ArrowUp, Calendar, Layers, PoundSterling, Repeat, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,10 +56,15 @@ export function KpiGrid({
   kpis,
   canRetention = true,
   canRevenue = true,
+  status = "ready",
+  onRetry,
 }: {
   kpis: any;
   canRetention?: boolean;
   canRevenue?: boolean;
+  /** Loading shows placeholders (never a "0"); error shows a retry line. */
+  status?: LoadStatus;
+  onRetry?: () => void;
 }) {
   // A practitioner's dashboard is scoped to their own book, so the client and
   // treatments-due cards say whose numbers they are; a manager sees the clinic.
@@ -157,6 +163,17 @@ export function KpiGrid({
         : items.length === 3
           ? "lg:grid-cols-3"
           : "lg:grid-cols-2";
+
+  if (status === "error") return <LoadError what="the clinic figures" onRetry={onRetry} />;
+  if (status === "loading") {
+    return (
+      <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${cols}`} data-qc="kpi-grid-loading">
+        {items.map((item) => (
+          <LoadingCard key={item.label} lines={2} />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${cols}`}>

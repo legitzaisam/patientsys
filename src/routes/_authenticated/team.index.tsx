@@ -21,6 +21,7 @@ import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
 import { InviteStaffDialog } from "@/components/invite-staff-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AccessControlSettings } from "@/components/access-control-settings";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -236,6 +237,14 @@ function TeamPage() {
 
   const [staffTab, setStaffTab] = useState<"current" | "former">("current");
   const [staffQuery, setStaffQuery] = useState("");
+  // Role changes and access removal confirm first; the pending action waits here.
+  const [confirm, setConfirm] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    destructive: boolean;
+    run: () => void;
+  } | null>(null);
 
   const restoreEx = useMutation({
     mutationFn: useServerFn(restoreExTeamMember),
@@ -366,7 +375,8 @@ function TeamPage() {
           <div>
             <h1 className="page-title">Team &amp; access</h1>
             <p className="page-subtitle">
-              {members.length} staff accounts{canAdmin ? " · you hold manager access" : ""}
+              {members.length} staff accounts
+              {identity.isOwner ? " · You're the clinic owner" : identity.isManager ? " · You hold manager access" : ""}
             </p>
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -430,18 +440,27 @@ function TeamPage() {
                       <RoleSelect
                         value={m.role}
                         className="h-8 w-full rounded-xl border border-edge-2 bg-glass-2 px-2 text-xs text-foreground shadow-inset-hi"
-                        onChange={(role) =>
-                          update.mutate({
-                            data: {
-                              userId: m.userId,
-                              role: role as "owner" | "practitioner" | "front_desk",
-                              fullName: m.fullName,
-                              jobTitle: m.jobTitle,
-                              registrationBody: m.registrationBody,
-                              registrationNumber: m.registrationNumber,
-                            },
-                          })
-                        }
+                        onChange={(role) => {
+                          if (role === m.role) return;
+                          const label = ROLES.find((r) => r.value === role)?.label ?? role;
+                          setConfirm({
+                            title: `Change ${m.fullName || m.email || "this person"} to ${label}?`,
+                            description: `Their access changes straight away to what a ${label.toLowerCase()} can see and do.`,
+                            confirmLabel: "Change role",
+                            destructive: false,
+                            run: () =>
+                              update.mutate({
+                                data: {
+                                  userId: m.userId,
+                                  role: role as "owner" | "practitioner" | "front_desk",
+                                  fullName: m.fullName,
+                                  jobTitle: m.jobTitle,
+                                  registrationBody: m.registrationBody,
+                                  registrationNumber: m.registrationNumber,
+                                },
+                              }),
+                          });
+                        }}
                       />
                     </div>
                     )}
@@ -453,15 +472,23 @@ function TeamPage() {
                           aria-label="Revoke access"
                           disabled={m.isSelf || revoke.isPending}
                           onClick={() =>
-                            requestRevoke({
-                              userId: m.userId,
-                              role: m.role,
-                              fullName: m.fullName,
-                              email: m.email,
-                              jobTitle: m.jobTitle,
-                              registrationBody: m.registrationBody,
-                              registrationNumber: m.registrationNumber,
-                              isSelf: m.isSelf,
+                            setConfirm({
+                              title: `Remove ${m.fullName || m.email || "this person"} from the team?`,
+                              description:
+                                "They lose access to Aetheria straight away. Their record stays under Former staff and can be restored.",
+                              confirmLabel: "Remove access",
+                              destructive: true,
+                              run: () =>
+                                requestRevoke({
+                                  userId: m.userId,
+                                  role: m.role,
+                                  fullName: m.fullName,
+                                  email: m.email,
+                                  jobTitle: m.jobTitle,
+                                  registrationBody: m.registrationBody,
+                                  registrationNumber: m.registrationNumber,
+                                  isSelf: m.isSelf,
+                                }),
                             })
                           }
                         >
@@ -576,6 +603,21 @@ function TeamPage() {
           )}
         </TabsContent>
       </Tabs>
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+        title={confirm?.title ?? ""}
+        description={confirm?.description}
+        confirmLabel={confirm?.confirmLabel ?? "Confirm"}
+        destructive={confirm?.destructive ?? false}
+        qc="team-confirm"
+        onConfirm={() => {
+          confirm?.run();
+          setConfirm(null);
+        }}
+      />
     </AppShell>
   );
 }

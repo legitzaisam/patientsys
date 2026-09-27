@@ -3128,7 +3128,7 @@ export const staffNotifications: Row[] = [
     sender_id: null,
     kind: "appointment",
     title: "No-show logged",
-    body: "A diary no-show was logged this afternoon. Front desk will offer a rebook.",
+    body: "A diary no-show was logged this afternoon. Reception will offer a rebook.",
     urgent: false,
     patient_id: patients[23]!["id"],
     appointment_id: null,
@@ -4316,7 +4316,7 @@ userNotes.push(
   {
     id: id("q1"),
     user_id: USERS.frontDesk,
-    body: "Front desk\n\n- Print peel aftercare for room 2\n- Chase two consent forms\n- Engineer for autoclave at 11",
+    body: "Reception\n\n- Print peel aftercare for room 2\n- Chase two consent forms\n- Engineer for autoclave at 11",
     created_at: iso(-1),
     updated_at: iso(0, 8, 20),
   },

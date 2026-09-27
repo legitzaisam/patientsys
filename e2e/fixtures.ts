@@ -16,7 +16,7 @@ export function localDateTime(daysAhead: number, hour: number, minute: number) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(hour)}:${pad(minute)}`;
 }
 
-export type DemoRole = "owner" | "practitioner" | "front_desk" | "patient";
+export type DemoRole = "owner" | "practitioner" | "front_desk" | "patient" | "admin";
 
 type Options = {
   /** Demo persona for the test file. Override with `test.use({ role: ... })`. */

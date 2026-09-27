@@ -9,10 +9,12 @@ import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { CURRENT_YEAR, PeriodPicker, periodRange, previousPeriodRange, money, type PeriodSelection } from "@/components/period-picker";
+import { CURRENT_YEAR, PeriodPicker, periodRange, previousPeriodRange, type PeriodSelection } from "@/components/period-picker";
 import { PerformanceTrends } from "@/components/performance-trends";
 import { PerformanceTable } from "@/components/performance/performance-table";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
+import { InfoHint } from "@/components/info-hint";
+import { moneyWhole } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/performance")({
   head: () => ({
@@ -63,7 +65,16 @@ function PerformancePage() {
     <AppShell identity={identity}>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Performance</h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="page-title">Performance</h1>
+            <InfoHint label="How to read these figures">
+              <span className="font-medium text-foreground">Earned</span> is treatment value delivered.{" "}
+              <span className="font-medium text-foreground">Collected</span> is booking revenue marked paid.{" "}
+              <span className="font-medium text-foreground">Outstanding</span> covers unpaid and deposit-only
+              bookings. <span className="font-medium text-foreground">Retention</span> is repeat patients over the
+              last 12 months.
+            </InfoHint>
+          </div>
           <p className="page-subtitle">
             Earnings and collections for the clinic, then a breakdown by practitioner.
           </p>
@@ -86,9 +97,16 @@ function PerformancePage() {
 
       <div className="mb-3 flex items-end justify-between gap-4">
         <div>
-          <h2 className="section-title">Practitioner KPIs</h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="section-title">Practitioner KPIs</h2>
+            <InfoHint label="How to read the practitioner rows">
+              Each row is one practitioner over the selected period. Expand it for cash collected, outstanding
+              balances and activity. Retention is repeat patients over the last 12 months. Commission rates are
+              edited under Team.
+            </InfoHint>
+          </div>
           <p className="text-sm text-muted-foreground">
-            Expand a row for cash collected, outstanding balances, and activity. Edit commission under Team.
+            Expand a row for cash collected, outstanding balances, and activity.
           </p>
         </div>
       </div>
@@ -99,11 +117,6 @@ function PerformancePage() {
         trend={data?.trend}
       />
 
-      <p className="mt-3 rounded-2xl border border-edge bg-glass-2 px-4 py-3 text-xs leading-relaxed text-muted-foreground shadow-inset-hi">
-        <span className="font-medium text-foreground">How to read this.</span> Earned is treatment
-        value delivered; collected is booking revenue marked paid. Outstanding covers unpaid and
-        deposit-only bookings. Retention is repeat patients over the last 12 months.
-      </p>
     </AppShell>
   );
 }
@@ -127,7 +140,7 @@ function Total({
   return (
     <Card className="p-5">
       <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{money(value ?? 0)}</p>
+      <p className="mt-2 text-[22px] font-semibold tracking-[-0.016em] text-foreground">{moneyWhole(value ?? 0)}</p>
       <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
         {delta !== 0 ? <TrendIcon className={`h-3 w-3 ${trendClass}`} /> : null}
         {hint}

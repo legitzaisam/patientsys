@@ -10,6 +10,7 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { EarningsLinesTable } from "@/components/earnings/earnings-lines-table";
 import { CURRENT_YEAR, PeriodPicker, periodGroupsByMonth, periodRange, money, type PeriodSelection } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/earnings")({
   head: () => ({
@@ -54,11 +55,11 @@ function EarningsPage() {
       </div>
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Earned" value={money(data?.earnedShare ?? 0)} hint="Treatments performed" />
-        <Stat label="Collected" value={money(data?.collectedShare ?? 0)} hint="Payments received" />
+        <Stat label="Earned" value={moneyWhole(data?.earnedShare ?? 0)} hint="Treatments performed" />
+        <Stat label="Collected" value={moneyWhole(data?.collectedShare ?? 0)} hint="Payments received" />
         <Stat
           label="Outstanding"
-          value={data?.outstanding ? money(data.outstanding) : "—"}
+          value={data?.outstanding ? moneyWhole(data.outstanding) : "—"}
           hint="Unpaid or deposit only"
           tone={data?.outstanding ? "danger" : undefined}
         />

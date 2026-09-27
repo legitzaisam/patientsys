@@ -57,7 +57,7 @@ export function PatientMetrics() {
       label: "Dormant",
       value: data?.totals.dormant ?? "—",
       hint: data
-        ? `${pct(data.totals.dormantShare)} of the book · clinics often 25–40%`
+        ? `${pct(data.totals.dormantShare)} of the book · no visit in 12 months`
         : "No visit in 12 months, or never treated",
       icon: Moon,
       target: "book-status",
@@ -68,14 +68,14 @@ export function PatientMetrics() {
     {
       label: "First-to-second",
       value: pct(data?.quality.firstToSecond),
-      hint: "in 90 days · clinic median ~46%",
+      hint: "Second visit within 90 days of the first",
       icon: Repeat2,
       target: "book-mix",
     },
     {
       label: "Rebooked",
       value: pct(data?.quality.rebooked),
-      hint: "after a visit · clinic median ~69%",
+      hint: "Booked again after a visit in the last 90 days",
       icon: CalendarCheck,
       target: "book-mix",
     },
@@ -188,7 +188,7 @@ export function PatientMetrics() {
         <Card id="book-mix" className="scroll-mt-20 p-5">
           <h2 className="section-title">New vs returning</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Of people treated in the last 12 months · aim near 30 / 70.
+            Of people treated in the last 12 months.
           </p>
           <div className="mt-4 flex h-56 items-center gap-6">
             <div className="h-full flex-1">

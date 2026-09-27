@@ -5653,14 +5653,14 @@ export const setRetailProductActive = createServerFn({ method: "POST" })
 
 export const getInsightsIngestKeyStatus = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
-  if (!me.isOwner) throw new Error("Clinic owner access only");
+  if (!me.isOwner && !me.isAdmin) throw new Error("Admin access required");
   const last4 = (db.clinic["insights_ingest_key_last4"] as string | null) ?? null;
   return { configured: Boolean(last4), last4 };
 });
 
 export const rotateInsightsIngestKey = createServerFn({ method: "POST" }).handler(async () => {
   const me = identity();
-  if (!me.isOwner) throw new Error("Clinic owner access only");
+  if (!me.isOwner && !me.isAdmin) throw new Error("Admin access required");
   const { generateInsightsIngestKey } = await import("./insights-ingest.server");
   const generated = generateInsightsIngestKey();
   db.clinic["insights_ingest_key_hash"] = generated.hash;

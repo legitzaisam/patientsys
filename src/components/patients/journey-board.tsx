@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { JOURNEY_PHASES } from "@/lib/journey-phases";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -32,12 +33,9 @@ type BoardPlan = {
   riskReason: string | null;
 };
 
-const COLUMNS: Array<{ phase: BoardPlan["phase"]; label: string; sub: string }> = [
-  { phase: "consult", label: "Consultation & prep", sub: "New plans and pre-treatment preparation" },
-  { phase: "foundation", label: "Foundation", sub: "Assess, plan and prepare" },
-  { phase: "build", label: "Build & support", sub: "Ongoing treatment and clinic support" },
-  { phase: "results", label: "Results & review", sub: "Assess results and plan next steps" },
-];
+const COLUMNS: Array<{ phase: BoardPlan["phase"]; label: string; sub: string }> = JOURNEY_PHASES.map(
+  ({ phase, label, sub }) => ({ phase, label, sub }),
+);
 
 function dueLabel(dueDate?: string | null) {
   if (!dueDate) return null;

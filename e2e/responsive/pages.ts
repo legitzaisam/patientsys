@@ -490,7 +490,7 @@ export const PAGES: PageEntry[] = [
       sidebarClosed,
       recordTab("photos", "Before and after"),
       recordTab("documents", "Documents"),
-      recordTab("history", "History updates"),
+      recordTab("history", "Medical history"),
       recordTab("portal", "From the patient"),
       recordTab("contact", "Contact"),
       recordTreatment,

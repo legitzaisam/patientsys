@@ -73,7 +73,7 @@ export function ActionList({
       </div>
       <ul className="mt-3">
         {rows.map((row) => {
-          const name = `${row.lastName}, ${row.title ? `${row.title} ` : ""}${row.firstName}`.trim();
+          const name = `${row.firstName} ${row.lastName}`.trim();
           const meta =
             kind === "waiting"
               ? `${row.daysWaiting ?? 0}d waiting · ${SOURCE_LABEL[row.source]}${row.interest ? ` · ${row.interest}` : ""}`

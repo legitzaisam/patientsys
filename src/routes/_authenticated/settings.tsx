@@ -4,7 +4,6 @@ import { can } from "@/lib/permissions";
 import { AppShell } from "@/components/app-shell";
 import { TreatmentCatalogueSettings } from "@/components/treatment-catalogue-settings";
 import { ClinicDetailsSettings } from "@/components/clinic-details-settings";
-import { InsightsIntegrationsSettings } from "@/components/insights-integrations-settings";
 import { RetailProductSettings } from "@/components/retail-product-settings";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -45,7 +44,6 @@ function SettingsPage() {
         <ClinicDetailsSettings canEdit={canEditClinic} />
         <TreatmentCatalogueSettings canEdit={canEditClinic} />
         <RetailProductSettings canEdit={canEditClinic} />
-        {identity.isOwner && <InsightsIntegrationsSettings />}
       </div>
     </AppShell>
   );

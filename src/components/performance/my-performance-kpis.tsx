@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyEarnings } from "@/lib/clinic.functions";
 import { PeriodPicker, periodRange, money, type PeriodSelection } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 
 function Cell({
@@ -74,16 +75,16 @@ export function MyPerformanceKpis() {
           <div className="px-5 py-5 sm:px-6">
             <p className="text-2xs font-medium tracking-[0.02em] text-ink-3">Your earnings</p>
             <p className="mt-1 text-[28px] font-semibold tabular-nums tracking-[-0.03em] text-foreground">
-              {money(data.earnedShare)}
+              {moneyWhole(data.earnedShare)}
             </p>
             <p className="mt-1.5 text-xs text-muted-foreground">Your share of treatments you delivered</p>
           </div>
 
           <div className="grid border-t border-edge sm:grid-cols-3">
-            <Cell label="Collected" value={money(data.collectedShare)} hint="Bookings marked paid" />
+            <Cell label="Collected" value={moneyWhole(data.collectedShare)} hint="Bookings marked paid" />
             <Cell
               label="Outstanding"
-              value={data.outstanding > 0 ? money(data.outstanding) : "—"}
+              value={data.outstanding > 0 ? moneyWhole(data.outstanding) : "—"}
               hint={data.outstanding > 0 ? "Unpaid or deposit only" : "All settled"}
               tone={data.outstanding > 0 ? "danger" : undefined}
             />

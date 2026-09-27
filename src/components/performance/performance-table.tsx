@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { money } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TrendPoint } from "@/components/performance-trends";
 
@@ -144,7 +145,7 @@ function ExpandRow({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">
-                {label}’s extras
+                Details
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Cash, activity and trend beyond the row above.
@@ -162,11 +163,11 @@ function ExpandRow({
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <MetricTile label="Collected" value={money(row.collected)} hint="Marked paid" />
-            <MetricTile label="Clinic keeps" value={money(row.clinicEarnedShare)} hint="After their share" />
+            <MetricTile label="Collected" value={moneyWhole(row.collected)} hint="Marked paid" />
+            <MetricTile label="Clinic keeps" value={moneyWhole(row.clinicEarnedShare)} hint="After their share" />
             <MetricTile
               label="Outstanding"
-              value={hasOutstanding ? money(row.outstanding) : "—"}
+              value={hasOutstanding ? moneyWhole(row.outstanding) : "—"}
               hint={hasOutstanding ? "Unpaid or deposit only" : "All settled"}
               tone={hasOutstanding ? "danger" : "default"}
             />
@@ -253,7 +254,7 @@ export function PerformanceTable({
                 <span className="text-sm font-normal text-muted-foreground">{top.jobTitle || "Practitioner"}</span>
               </p>
               <p className="text-xs text-muted-foreground">
-                {money(top.earned)} earned · {top.treatments} treatments · {top.retention}% retention
+                {moneyWhole(top.earned)} earned · {top.treatments} treatments · {top.retention}% retention
               </p>
             </div>
           </div>
@@ -325,8 +326,8 @@ export function PerformanceTable({
                         </div>
                       </td>
                       <td className="px-5 py-3">
-                        <p className="text-foreground">{money(r.earned)}</p>
-                        <p className="text-2xs text-muted-foreground">{money(r.earnedShare)} to them</p>
+                        <p className="text-foreground">{moneyWhole(r.earned)}</p>
+                        <p className="text-2xs text-muted-foreground">{moneyWhole(r.earnedShare)} to them</p>
                       </td>
                       <td className="px-5 py-3">
                         <p className="text-foreground">{r.treatments}</p>
@@ -342,7 +343,7 @@ export function PerformanceTable({
                       </td>
                       <td className="px-5 py-3">
                         <p className={r.outstanding > 0 ? "text-destructive" : "text-foreground"}>
-                          {r.outstanding > 0 ? money(r.outstanding) : "—"}
+                          {r.outstanding > 0 ? moneyWhole(r.outstanding) : "—"}
                         </p>
                       </td>
                       <td className="px-5 py-3 text-right">
@@ -383,9 +384,9 @@ export function PerformanceTable({
                     </p>
                   </td>
                   <td className="px-5 py-3.5">
-                    <p className="tabular-nums">{money(clinic.earned)}</p>
+                    <p className="tabular-nums">{moneyWhole(clinic.earned)}</p>
                     <p className="text-2xs font-normal text-muted-foreground">
-                      {money(clinic.toPractitioners)} paid out
+                      {moneyWhole(clinic.toPractitioners)} paid out
                     </p>
                   </td>
                   <td className="px-5 py-3.5 tabular-nums">{clinic.treatments}</td>
@@ -397,7 +398,7 @@ export function PerformanceTable({
                       clinic.outstanding > 0 ? "text-destructive-ink" : undefined,
                     )}
                   >
-                    {clinic.outstanding > 0 ? money(clinic.outstanding) : "—"}
+                    {clinic.outstanding > 0 ? moneyWhole(clinic.outstanding) : "—"}
                   </td>
                   <td className="px-5 py-3.5" />
                 </tr>

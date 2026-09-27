@@ -1,4 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { displayName } from "@/lib/format";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -272,8 +273,8 @@ function PatientsPage() {
             <Input
               id="dob-search"
               type="text"
-              placeholder="DD/MM/YYYY"
-              aria-label="Search by date of birth"
+              placeholder="Date of birth"
+              aria-label="Search by date of birth (DD/MM/YYYY)"
               value={dobSearch}
               onChange={(e) => setDobSearch(e.target.value)}
               className="h-[34px] w-44 rounded-xl pr-9"
@@ -420,7 +421,8 @@ function PatientsPage() {
               {canSendOffers ? (
                 <th className="w-[1%] px-4 py-3">
                   <Checkbox
-                    aria-label="Select all patients in this view"
+                    aria-label={`Select all ${rows.length} matching patient${rows.length === 1 ? "" : "s"}`}
+                    title={`Select all ${rows.length} matching`}
                     checked={rows.length > 0 && rows.every((p: any) => selected.has(p.id))}
                     onCheckedChange={(checked) =>
                       setSelected(checked ? new Set(rows.map((p: any) => p.id as string)) : new Set())
@@ -462,8 +464,7 @@ function PatientsPage() {
                     <PatientAvatar patientId={p.id} name={`${p.first_name} ${p.last_name}`} photoUrl={p.avatar_url} size="sm" />
                     <div className="min-w-0">
                       <Link to="/patients/$id" params={{ id: p.id }} className="text-foreground hover:text-accent-ink">
-                        {p.last_name}, {p.title ? `${p.title} ` : ""}
-                        {p.first_name}
+                        {displayName(p, { surnameFirst: true })}
                       </Link>
                       <p className="text-xs text-muted-foreground">
                         {p.date_of_birth ? new Date(p.date_of_birth).toLocaleDateString("en-GB") : ""}

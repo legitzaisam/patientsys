@@ -51,7 +51,7 @@ export function SuggestedActions({
           <h2 className="section-title">Where to focus</h2>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Insights from your clinic's own patterns — the engine sharpens as more data accrues.
+          These get more accurate as your clinic's data grows.
         </p>
       </div>
       <ul className="space-y-2">

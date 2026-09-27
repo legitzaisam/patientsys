@@ -188,9 +188,7 @@ export function SecuritySettings({
 
   const emailHint = requiredCodes
     ? `Required on this account. Sent to ${identity.email || "your email"} at each sign-in.`
-    : DEMO_MODE
-      ? "Asked at each sign-in. Demo keeps this on this device only."
-      : `Asked at each sign-in and sent to ${identity.email || "your email"}.`;
+    : `Asked at each sign-in and sent to ${identity.email || "your email"}.`;
 
   const body = (
     <div>
@@ -245,7 +243,7 @@ export function SecuritySettings({
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
               {passwordOpen
                 ? `We email ${identity.email || "your email"} before this can change.`
-                : "Click to change. We email you first so a stolen session is not enough."}
+                : "Click to change. We'll email you a code first to confirm it's you."}
             </p>
           </div>
           <ChevronDown
@@ -369,8 +367,8 @@ export function SecuritySettings({
                 <p className="mt-0.5 text-xs text-muted-foreground">{sinceLabel(row.createdAt)}</p>
               </div>
               {row.current ? (
-                <Badge variant="outline" className="shrink-0 rounded-xl text-2xs uppercase">
-                  Current
+                <Badge variant="outline" className="shrink-0 rounded-xl text-2xs">
+                  This device
                 </Badge>
               ) : (
                 <Button
