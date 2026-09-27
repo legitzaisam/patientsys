@@ -113,6 +113,8 @@ export const clinic: Row = {
   phone: "020 7946 0812",
   email: "hello@aetheria.clinic",
   reminder_offsets: [168, 24],
+  deposit_lead_days: 3,
+  deposit_percent: 30,
   insights_ingest_key_hash: "5e32b7c1034fe10f127852c3b2b47b1ca9b4fff862a47440a2d79505de198682",
   insights_ingest_key_last4: "ghts",
   created_at: iso(-720),
@@ -129,6 +131,10 @@ export const profiles: Row[] = [
     job_title: "Clinic Director",
     registration_body: "GMC",
     registration_number: "7412885",
+    registration_expiry: dateOnly(310),
+    insurance_provider: "Hamilton Fraser",
+    insurance_expiry: dateOnly(140),
+    qualifications: "MBBS, MRCGP, Level 7 Aesthetic Medicine",
     avatar_url: "/patient-avatars/avatar-priya.png",
     commission_rate: 40,
     created_at: iso(-720),
@@ -141,6 +147,10 @@ export const profiles: Row[] = [
     job_title: "Aesthetic Practitioner",
     registration_body: "NMC",
     registration_number: "18C4471E",
+    registration_expiry: dateOnly(45),
+    insurance_provider: "Cosmetic Insure",
+    insurance_expiry: dateOnly(200),
+    qualifications: "RGN, Independent Prescriber (V300), Level 7 Aesthetics",
     avatar_url: "/patient-avatars/avatar-emma.png",
     commission_rate: 45,
     created_at: iso(-540),
@@ -153,6 +163,10 @@ export const profiles: Row[] = [
     job_title: "Aesthetic Doctor",
     registration_body: "GMC",
     registration_number: "7719034",
+    registration_expiry: dateOnly(520),
+    insurance_provider: "Hamilton Fraser",
+    insurance_expiry: dateOnly(28),
+    qualifications: "MBChB, MRCS, Level 7 Aesthetic Medicine",
     avatar_url: "/patient-avatars/avatar-theo.png",
     commission_rate: 42,
     created_at: iso(-400),
@@ -165,6 +179,10 @@ export const profiles: Row[] = [
     job_title: "Patient Coordinator",
     registration_body: null,
     registration_number: null,
+    registration_expiry: null,
+    insurance_provider: null,
+    insurance_expiry: null,
+    qualifications: null,
     avatar_url: "/patient-avatars/avatar-grace.png",
     commission_rate: 0,
     created_at: iso(-300),
@@ -177,6 +195,10 @@ export const profiles: Row[] = [
     job_title: "Aesthetic Practitioner",
     registration_body: "GMC",
     registration_number: "7018821",
+    registration_expiry: dateOnly(400),
+    insurance_provider: "Enhance Insurance",
+    insurance_expiry: dateOnly(365),
+    qualifications: "MBBS, Level 7 Aesthetic Medicine",
     avatar_url: "/patient-avatars/avatar-leila.png",
     commission_rate: 40,
     created_at: iso(-500),
@@ -189,6 +211,10 @@ export const profiles: Row[] = [
     job_title: "Admin",
     registration_body: null,
     registration_number: null,
+    registration_expiry: null,
+    insurance_provider: null,
+    insurance_expiry: null,
+    qualifications: null,
     avatar_url: null,
     commission_rate: 0,
     created_at: iso(-10),
@@ -213,6 +239,15 @@ export const staffEmails: Record<string, string> = {
   [USERS.admin]: "developer@aetheria.clinic",
 };
 
+/** Last sign-in per staff account, as Supabase Auth's last_sign_in_at. */
+export const staffLastActive: Record<string, string> = {
+  [USERS.owner]: iso(0, 8, 5),
+  [USERS.practitioner]: iso(0, 8, 40),
+  [USERS.practitioner2]: iso(-2, 17, 20),
+  [USERS.frontDesk]: iso(-1, 9, 0),
+  [USERS.admin]: iso(-10, 12, 0),
+};
+
 export const rolePermissions: Row[] = [
   { role: "manager", permission: "reports.insights", enabled: true },
   { role: "manager", permission: "reports.retention", enabled: true },
@@ -223,12 +258,14 @@ export const rolePermissions: Row[] = [
   { role: "manager", permission: "notifications.delete", enabled: true },
   { role: "manager", permission: "tasks.delete", enabled: true },
   { role: "manager", permission: "patients.edit", enabled: true },
+  { role: "manager", permission: "patients.edit_clinical", enabled: true },
+  { role: "manager", permission: "reports.commission", enabled: false },
   { role: "manager", permission: "treatments.record", enabled: true },
   { role: "manager", permission: "documents.send", enabled: true },
   { role: "manager", permission: "photos.manage", enabled: true },
   { role: "manager", permission: "appointments.edit", enabled: true },
   { role: "manager", permission: "comms.send", enabled: true },
-  { role: "practitioner", permission: "reports.insights", enabled: false },
+  { role: "practitioner", permission: "reports.insights", enabled: true },
   { role: "practitioner", permission: "reports.retention", enabled: true },
   { role: "practitioner", permission: "reports.performance", enabled: false },
   { role: "practitioner", permission: "team.view", enabled: true },
@@ -237,31 +274,63 @@ export const rolePermissions: Row[] = [
   { role: "practitioner", permission: "notifications.delete", enabled: true },
   { role: "practitioner", permission: "tasks.delete", enabled: false },
   { role: "practitioner", permission: "patients.edit", enabled: true },
+  { role: "practitioner", permission: "patients.edit_clinical", enabled: true },
+  { role: "practitioner", permission: "reports.commission", enabled: false },
   { role: "practitioner", permission: "treatments.record", enabled: true },
   { role: "practitioner", permission: "documents.send", enabled: true },
   { role: "practitioner", permission: "photos.manage", enabled: true },
   { role: "practitioner", permission: "appointments.edit", enabled: true },
   { role: "practitioner", permission: "comms.send", enabled: true },
-  { role: "front_desk", permission: "reports.insights", enabled: true },
+  { role: "front_desk", permission: "reports.insights", enabled: false },
   { role: "front_desk", permission: "reports.retention", enabled: true },
   { role: "front_desk", permission: "reports.performance", enabled: false },
   { role: "front_desk", permission: "team.view", enabled: true },
   { role: "front_desk", permission: "team.approve_changes", enabled: false },
-  { role: "front_desk", permission: "settings.treatments", enabled: true },
+  { role: "front_desk", permission: "settings.treatments", enabled: false },
   { role: "front_desk", permission: "notifications.delete", enabled: false },
   { role: "front_desk", permission: "tasks.delete", enabled: false },
   { role: "front_desk", permission: "patients.edit", enabled: true },
+  { role: "front_desk", permission: "patients.edit_clinical", enabled: false },
+  { role: "front_desk", permission: "reports.commission", enabled: false },
   // Front desk books and takes payment but does not write the clinical record.
   { role: "front_desk", permission: "treatments.record", enabled: false },
   { role: "front_desk", permission: "documents.send", enabled: true },
   { role: "front_desk", permission: "photos.manage", enabled: false },
   { role: "front_desk", permission: "appointments.edit", enabled: true },
   { role: "front_desk", permission: "comms.send", enabled: true },
-  // Offers and marketing stay with the owner until granted from the Team page.
-  { role: "manager", permission: "offers.manage", enabled: false },
+  // Managers design offers by default; other roles are granted from the Team page.
+  { role: "manager", permission: "offers.manage", enabled: true },
   { role: "practitioner", permission: "offers.manage", enabled: false },
   { role: "front_desk", permission: "offers.manage", enabled: false },
-].map((r) => ({ ...r, id: id("b1"), updated_by: USERS.owner, updated_at: iso(-12) }));
+].map((r) => ({ ...r, id: id("b1"), updated_by: null, updated_at: iso(-12) }));
+
+// Two grants the owner changed by hand, so the access grid shows who and when.
+for (const [role, permission, daysAgo] of [
+  ["front_desk", "documents.send", 12],
+  ["manager", "offers.manage", 4],
+] as const) {
+  const row = rolePermissions.find((r) => r["role"] === role && r["permission"] === permission);
+  if (row) {
+    row["updated_by"] = USERS.owner;
+    row["updated_at"] = iso(-daysAgo, 10, 15);
+  }
+}
+
+/** Who changed what: access grants, archives and settings, as production's audit_log. */
+export const auditLog: Row[] = [
+  {
+    id: id("g1"),
+    clinic_id: CLINIC_ID,
+    actor_id: USERS.owner,
+    actor_label: "Dr Amara Osei",
+    action: "staff.update",
+    entity: "user_roles",
+    entity_id: USERS.practitioner2,
+    patient_id: null,
+    meta: { role: "practitioner", previous_role: "practitioner", commission_rate: 42 },
+    created_at: iso(-20, 11, 30),
+  },
+];
 
 for (const row of viewGrantRows()) {
   rolePermissions.push({
@@ -1509,6 +1578,7 @@ function makeAppointment(input: {
     consent_document_id: input.consentDocumentId ?? null,
     patient_confirmed_at: null,
     notes: null,
+    details_incomplete: false,
     created_by: USERS.frontDesk,
     created_at: iso(input.dayOffset - between(5, 30)),
     updated_at: iso(input.dayOffset),
@@ -2702,6 +2772,7 @@ export const recallTasks: Row[] = [
     status_by_label: null,
     created_at: iso(-3, 9, 0),
     updated_at: iso(-3, 9, 0),
+    due_at: iso(4, 9, 0),
   },
   {
     id: id("k1"),
@@ -2720,6 +2791,7 @@ export const recallTasks: Row[] = [
     status_by_label: null,
     created_at: iso(-3, 9, 0),
     updated_at: iso(-3, 9, 0),
+    due_at: iso(4, 9, 0),
   },
   {
     id: id("k1"),
@@ -2738,6 +2810,7 @@ export const recallTasks: Row[] = [
     status_by_label: "Sofia Marchetti",
     created_at: iso(-8, 11, 0),
     updated_at: iso(-1, 15, 20),
+    due_at: iso(-1, 11, 0),
   },
   {
     id: id("k1"),
@@ -2756,6 +2829,7 @@ export const recallTasks: Row[] = [
     status_by_label: null,
     created_at: iso(-5, 16, 0),
     updated_at: iso(-5, 16, 0),
+    due_at: iso(2, 16, 0),
   },
   {
     id: id("k1"),
@@ -2774,6 +2848,7 @@ export const recallTasks: Row[] = [
     status_by_label: null,
     created_at: iso(-2, 8, 30),
     updated_at: iso(-2, 8, 30),
+    due_at: iso(5, 8, 30),
   },
 ];
 
@@ -3128,7 +3203,7 @@ export const staffNotifications: Row[] = [
     sender_id: null,
     kind: "appointment",
     title: "No-show logged",
-    body: "A diary no-show was logged this afternoon. Front desk will offer a rebook.",
+    body: "A diary no-show was logged this afternoon. Reception will offer a rebook.",
     urgent: false,
     patient_id: patients[23]!["id"],
     appointment_id: null,
@@ -4316,7 +4391,7 @@ userNotes.push(
   {
     id: id("q1"),
     user_id: USERS.frontDesk,
-    body: "Front desk\n\n- Print peel aftercare for room 2\n- Chase two consent forms\n- Engineer for autoclave at 11",
+    body: "Reception\n\n- Print peel aftercare for room 2\n- Chase two consent forms\n- Engineer for autoclave at 11",
     created_at: iso(-1),
     updated_at: iso(0, 8, 20),
   },
@@ -4736,6 +4811,8 @@ export const patientOffers: Row[] = [];
       automation_enabled?: boolean;
       automation_delay_days?: number;
       last_automation_at?: string | null;
+      one_per_patient?: boolean;
+      no_stacking?: boolean;
     },
   ) => {
     const row: Row = {
@@ -4758,6 +4835,9 @@ export const patientOffers: Row[] = [];
       last_automation_at: fields.last_automation_at ?? null,
       image_url: null,
       image_placement: null,
+      applies_to_catalogue_ids: [],
+      one_per_patient: fields.one_per_patient ?? true,
+      no_stacking: fields.no_stacking ?? true,
       created_by: USERS.owner,
       archived_at: null,
       created_at: iso(-30, 9, 0),
@@ -4820,6 +4900,9 @@ export const patientOffers: Row[] = [];
     code: "AUTUMNLED",
     cta_label: "Claim this offer",
     valid_days: 21,
+    // A seasonal one-off staff send by hand, to anyone, as often as they like.
+    one_per_patient: false,
+    no_stacking: false,
   });
 
   const offer = (
@@ -4944,6 +5027,7 @@ export const db = {
   profiles,
   userRoles,
   rolePermissions,
+  auditLog,
   catalogue,
   patients,
   treatments,
@@ -4982,6 +5066,7 @@ export const db = {
   staffDocuments,
   userNotes,
   staffEmails,
+  staffLastActive,
   websiteLeads,
   retailProducts,
   productSales,

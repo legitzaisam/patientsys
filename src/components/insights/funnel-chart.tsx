@@ -1,10 +1,10 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui/card";
+import { CHART_SERIES } from "@/lib/chart-palette";
 import type { InsightsResult } from "@/lib/insights.server";
 
-const SIGNUPS = "var(--accent-line)";
-const BOOKINGS = "rgba(47, 63, 102, 0.45)";
-const CONSULTS = "rgba(214, 105, 137, 0.75)";
+// Brand pastels with projector-safe contrast: butter, sky, pink.
+const [SIGNUPS, BOOKINGS, CONSULTS] = CHART_SERIES;
 
 function tooltipStyle() {
   return {
@@ -30,7 +30,7 @@ function Legend() {
     <ul className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted-foreground">
       <li className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ background: SIGNUPS }} />
-        Sign-ups
+        Online enquiries
       </li>
       <li className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ background: BOOKINGS }} />
@@ -50,7 +50,7 @@ export function FunnelChart({ monthly }: { monthly: InsightsResult["monthly"] | 
   return (
     <Card id="insights-by-month" className="scroll-mt-20 p-5">
       <h2 className="section-title">{seriesTitle(monthly ?? [])}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">For people who signed up in this window.</p>
+      <p className="mt-1 text-xs text-muted-foreground">For the enquiries in this window.</p>
       {monthly == null ? (
         <p className="flex h-56 items-center justify-center text-sm text-muted-foreground">Loading…</p>
       ) : empty ? (
@@ -71,7 +71,7 @@ export function FunnelChart({ monthly }: { monthly: InsightsResult["monthly"] | 
               />
               <YAxis tickLine={false} axisLine={false} fontSize={11} allowDecimals={false} />
               <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: "rgba(47,63,102,0.05)" }} />
-              <Bar dataKey="signUps" name="Sign-ups" fill={SIGNUPS} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="signUps" name="Online enquiries" fill={SIGNUPS} radius={[6, 6, 0, 0]} />
               <Bar dataKey="firstBookings" name="First bookings" fill={BOOKINGS} radius={[6, 6, 0, 0]} />
               <Bar dataKey="firstConsults" name="First consults" fill={CONSULTS} radius={[6, 6, 0, 0]} />
             </BarChart>

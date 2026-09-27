@@ -41,6 +41,7 @@ import { Route as AuthenticatedPatientsIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedTeamIndexRouteImport } from './routes/_authenticated/team.index'
 import { Route as AuthenticatedTeamIdRouteImport } from './routes/_authenticated/team.$id'
 import { Route as ApiCommsDrainRouteImport } from './routes/api.comms.drain'
+import { Route as ApiDemoMetricsRouteImport } from './routes/api.demo.metrics'
 import { Route as ApiInsightsEventsRouteImport } from './routes/api.insights.events'
 import { Route as AuthenticatedMyRecordPlanIndexRouteImport } from './routes/_authenticated/my-record.plan.index'
 import { Route as AuthenticatedMyRecordPlanJournalRouteImport } from './routes/_authenticated/my-record.plan.journal'
@@ -219,6 +220,11 @@ const ApiCommsDrainRoute = ApiCommsDrainRouteImport.update({
   path: '/api/comms/drain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDemoMetricsRoute = ApiDemoMetricsRouteImport.update({
+  id: '/api/demo/metrics',
+  path: '/api/demo/metrics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiInsightsEventsRoute = ApiInsightsEventsRouteImport.update({
   id: '/api/insights/events',
   path: '/api/insights/events',
@@ -299,6 +305,7 @@ export interface FileRoutesByFullPath {
   '/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
+  '/api/demo/metrics': typeof ApiDemoMetricsRoute
   '/api/insights/events': typeof ApiInsightsEventsRoute
   '/my-record/': typeof AuthenticatedMyRecordIndexRoute
   '/patients/': typeof AuthenticatedPatientsIndexRoute
@@ -339,6 +346,7 @@ export interface FileRoutesByTo {
   '/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
+  '/api/demo/metrics': typeof ApiDemoMetricsRoute
   '/api/insights/events': typeof ApiInsightsEventsRoute
   '/my-record': typeof AuthenticatedMyRecordIndexRoute
   '/patients': typeof AuthenticatedPatientsIndexRoute
@@ -383,6 +391,7 @@ export interface FileRoutesById {
   '/_authenticated/patients/$id': typeof AuthenticatedPatientsIdRoute
   '/_authenticated/team/$id': typeof AuthenticatedTeamIdRoute
   '/api/comms/drain': typeof ApiCommsDrainRoute
+  '/api/demo/metrics': typeof ApiDemoMetricsRoute
   '/api/insights/events': typeof ApiInsightsEventsRoute
   '/_authenticated/my-record/': typeof AuthenticatedMyRecordIndexRoute
   '/_authenticated/patients/': typeof AuthenticatedPatientsIndexRoute
@@ -427,6 +436,7 @@ export interface FileRouteTypes {
     | '/patients/$id'
     | '/team/$id'
     | '/api/comms/drain'
+    | '/api/demo/metrics'
     | '/api/insights/events'
     | '/my-record/'
     | '/patients/'
@@ -467,6 +477,7 @@ export interface FileRouteTypes {
     | '/patients/$id'
     | '/team/$id'
     | '/api/comms/drain'
+    | '/api/demo/metrics'
     | '/api/insights/events'
     | '/my-record'
     | '/patients'
@@ -510,6 +521,7 @@ export interface FileRouteTypes {
     | '/_authenticated/patients/$id'
     | '/_authenticated/team/$id'
     | '/api/comms/drain'
+    | '/api/demo/metrics'
     | '/api/insights/events'
     | '/_authenticated/my-record/'
     | '/_authenticated/patients/'
@@ -532,6 +544,7 @@ export interface RootRouteChildren {
   DTokenRoute: typeof DTokenRoute
   UTokenRoute: typeof UTokenRoute
   ApiCommsDrainRoute: typeof ApiCommsDrainRoute
+  ApiDemoMetricsRoute: typeof ApiDemoMetricsRoute
   ApiInsightsEventsRoute: typeof ApiInsightsEventsRoute
   ApiCommsUnsubscribeTokenRoute: typeof ApiCommsUnsubscribeTokenRoute
   ApiCommsWebhooksResendRoute: typeof ApiCommsWebhooksResendRoute
@@ -765,6 +778,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCommsDrainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/demo/metrics': {
+      id: '/api/demo/metrics'
+      path: '/api/demo/metrics'
+      fullPath: '/api/demo/metrics'
+      preLoaderRoute: typeof ApiDemoMetricsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/insights/events': {
       id: '/api/insights/events'
       path: '/api/insights/events'
@@ -936,6 +956,7 @@ const rootRouteChildren: RootRouteChildren = {
   DTokenRoute: DTokenRoute,
   UTokenRoute: UTokenRoute,
   ApiCommsDrainRoute: ApiCommsDrainRoute,
+  ApiDemoMetricsRoute: ApiDemoMetricsRoute,
   ApiInsightsEventsRoute: ApiInsightsEventsRoute,
   ApiCommsUnsubscribeTokenRoute: ApiCommsUnsubscribeTokenRoute,
   ApiCommsWebhooksResendRoute: ApiCommsWebhooksResendRoute,

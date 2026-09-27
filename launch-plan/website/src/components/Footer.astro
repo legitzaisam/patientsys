@@ -10,34 +10,39 @@ const year = new Date().getFullYear();
   </div>
   <div class="wrap footer__grid">
     <div class="footer__brand">
-      <a href="/" class="footer__word" aria-label="Aetheria home">
+      <a href="/" class="footer__word" aria-label="SQINOS home">
         <Mark size={44} />
-        <span data-sweep>Aetheria</span>
+        <span data-sweep>SQINOS</span>
       </a>
-      <p>The aesthetics clinic platform where the journey is the treatment.</p>
+      <p>The clinic platform where the journey is the treatment.</p>
     </div>
     <nav aria-label="Product">
       <h3>Product</h3>
       <a href="/#journey">The patient journey</a>
       <a href="/#clinics">Clinic OS</a>
       <a href="/#safety">Safety by design</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/demo">Demo</a>
     </nav>
-    <nav aria-label="Sign in">
+    <nav aria-label="Sign in and contact">
       <h3>Sign in</h3>
       <a href={links.clinic} data-astro-reload>Clinic team</a>
       <a href={links.patient} data-astro-reload>Patients</a>
       <a href="/login">All options</a>
+      <h3>Contact</h3>
+      <a href="/contact?topic=sales">Contact sales</a>
+      <a href="/contact">Contact us</a>
     </nav>
     <div class="footer__note">
       <h3>A note on care</h3>
       <p>
-        Aetheria is software for regulated clinics. Nothing on this site is medical advice; treatment decisions are
+        SQINOS is software for regulated clinics. Nothing on this site is medical advice; treatment decisions are
         made with a qualified practitioner after a consultation.
       </p>
     </div>
   </div>
   <div class="wrap footer__base">
-    <span>© {year} Aetheria</span>
+    <span>© {year} SQINOS</span>
     <span>Demo environment · fixture data only</span>
     <button class="footer__pause" type="button" data-motion-toggle aria-pressed="false">Pause motion</button>
   </div>
@@ -104,6 +109,10 @@ const year = new Date().getFullYear();
     text-transform: uppercase;
     color: var(--butter-ink);
     margin: 0.4rem 0 1rem;
+  }
+  .footer nav h3 + h3,
+  .footer nav a + h3 {
+    margin-top: 1.6rem;
   }
   .footer nav a {
     display: block;

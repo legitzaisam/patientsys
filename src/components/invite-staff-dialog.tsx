@@ -35,7 +35,7 @@ const ROLES: { value: InviteRole; label: string; baseline: string }[] = [
   {
     value: "front_desk",
     label: "Receptionist",
-    baseline: "Front desk work — diary, patient records, bookings and admin.",
+    baseline: "Reception work — diary, patient records, bookings and admin.",
   },
   {
     value: "practitioner",

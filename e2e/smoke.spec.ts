@@ -23,13 +23,10 @@ const ROLE_PAGES: Record<DemoRole, { path: string; heading: string | RegExp }[]>
   practitioner: [
     ...STAFF_PAGES,
     { path: "/retention", heading: "Retention" },
+    { path: "/insights", heading: "Insights" },
     { path: "/earnings", heading: "My earnings" },
   ],
-  front_desk: [
-    ...STAFF_PAGES,
-    { path: "/retention", heading: "Retention" },
-    { path: "/insights", heading: "Insights" },
-  ],
+  front_desk: [...STAFF_PAGES, { path: "/retention", heading: "Retention" }],
   patient: [{ path: "/my-record", heading: /Good (morning|afternoon|evening), / }],
 };
 
@@ -61,9 +58,9 @@ test.describe("patient record detail", () => {
     await page.goto("/patients");
     await expect(page.getByRole("heading", { level: 1, name: "Patients" })).toBeVisible();
     // The fixture set always includes Olivia Bennett (the demo patient persona);
-    // the list renders names as "Bennett, Ms Olivia".
+    // the list renders names surname-first ("Bennett, Olivia").
     await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
     await expect(page).toHaveURL(/\/patients\/.+/);
-    await expect(page.getByRole("heading", { level: 1, name: /Bennett, .*Olivia/ })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /Olivia Bennett/ })).toBeVisible();
   });
 });

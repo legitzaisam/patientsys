@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -17,7 +20,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
-import { draftOfferTemplate, saveOfferTemplate } from "@/lib/clinic.functions";
+import { draftOfferTemplate, getCatalogue, saveOfferTemplate } from "@/lib/clinic.functions";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import type { DraftResult } from "@/lib/offers/draft.server";
 import type { OfferImagePlacement } from "@/lib/offers/picture";
@@ -49,6 +52,9 @@ type Form = {
   show_in_portal: boolean;
   image_url: string | null;
   image_placement: OfferImagePlacement;
+  applies_to_catalogue_ids: string[];
+  one_per_patient: boolean;
+  no_stacking: boolean;
 };
 
 function formFor(template: OfferTemplateRow | null, stage: TemplateStage): Form {
@@ -68,6 +74,9 @@ function formFor(template: OfferTemplateRow | null, stage: TemplateStage): Form 
       show_in_portal: template.show_in_portal,
       image_url: template.image_url ?? null,
       image_placement: template.image_placement ?? "top",
+      applies_to_catalogue_ids: template.applies_to_catalogue_ids ?? [],
+      one_per_patient: template.one_per_patient ?? true,
+      no_stacking: template.no_stacking ?? true,
     };
   }
   const d = STAGE_DEFAULT_DRAFT[stage];
@@ -86,6 +95,9 @@ function formFor(template: OfferTemplateRow | null, stage: TemplateStage): Form 
     show_in_portal: true,
     image_url: null,
     image_placement: "top",
+    applies_to_catalogue_ids: [],
+    one_per_patient: true,
+    no_stacking: true,
   };
 }
 
@@ -135,6 +147,18 @@ export function OfferTemplateEditor({
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
 
+  // Closing with edits (Cancel, the X, a click outside, Escape) confirms first;
+  // a successful save closes through the prop directly and skips the guard.
+  const dirty = open && JSON.stringify(form) !== JSON.stringify(formFor(template, stage));
+  const [confirmClose, setConfirmClose] = useState(false);
+  const requestClose = (next: boolean) => {
+    if (!next && dirty) {
+      setConfirmClose(true);
+      return;
+    }
+    onOpenChange(next);
+  };
+
   const save = useMutation({
     mutationFn: useServerFn(saveOfferTemplate),
     onSuccess: () => {
@@ -144,6 +168,8 @@ export function OfferTemplateEditor({
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const leaveGuard = useUnsavedChanges(dirty && !save.isPending, "offer-editor-unsaved");
 
   const draft = useMutation({
     mutationFn: useServerFn(draftOfferTemplate),
@@ -190,6 +216,27 @@ export function OfferTemplateEditor({
   const canPickStage = !template;
   const stageOptions: TemplateStage[] = [...OFFER_STAGES, "custom"];
 
+  // Treatments the offer can be limited to; none ticked means any treatment.
+  const fetchCatalogue = useServerFn(getCatalogue);
+  const { data: catalogueRows } = useQuery({
+    queryKey: ["catalogue"],
+    queryFn: () => fetchCatalogue(),
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+  const catalogueItems = (
+    (catalogueRows ?? []) as { id: string; name: string; category?: string | null }[]
+  )
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const toggleTreatment = (id: string) =>
+    setForm((f) => ({
+      ...f,
+      applies_to_catalogue_ids: f.applies_to_catalogue_ids.includes(id)
+        ? f.applies_to_catalogue_ids.filter((x) => x !== id)
+        : [...f.applies_to_catalogue_ids, id],
+    }));
+
   async function persistImage(url: string | null) {
     if (!url || DEMO_MODE || !url.startsWith("data:")) return url;
     try {
@@ -233,12 +280,31 @@ export function OfferTemplateEditor({
         show_in_portal: form.show_in_portal,
         image_url: imageUrl,
         image_placement: imageUrl ? form.image_placement : null,
+        applies_to_catalogue_ids: form.applies_to_catalogue_ids,
+        one_per_patient: form.one_per_patient,
+        no_stacking: form.no_stacking,
       },
     });
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <>
+    {leaveGuard}
+    <ConfirmDialog
+      open={confirmClose}
+      onOpenChange={setConfirmClose}
+      title="Discard your changes?"
+      description="This offer has edits that have not been saved."
+      confirmLabel="Discard"
+      cancelLabel="Keep editing"
+      destructive
+      qc="offer-editor-discard"
+      onConfirm={() => {
+        setConfirmClose(false);
+        onOpenChange(false);
+      }}
+    />
+    <Sheet open={open} onOpenChange={requestClose}>
       <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[1040px]" data-qc="offer-editor">
         <SheetHeader className="border-b border-edge px-6 py-4 text-left">
           <SheetTitle>{template ? `Edit ${template.name}` : "Design your offer"}</SheetTitle>
@@ -392,6 +458,80 @@ export function OfferTemplateEditor({
               }
             />
 
+            <div className="rounded-2xl border border-edge bg-glass-2 p-4 shadow-inset-hi" data-qc="offer-rules">
+              <p className="text-sm font-semibold text-foreground">Rules</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Expires {form.valid_days} {form.valid_days === 1 ? "day" : "days"} after it is sent (set above). The rules
+                below are checked on every send, by hand or automatic.
+              </p>
+              <div className="mt-3 space-y-3">
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span>
+                    One per patient
+                    <span className="block text-xs text-muted-foreground">Nobody receives this offer twice.</span>
+                  </span>
+                  <Switch
+                    checked={form.one_per_patient}
+                    onCheckedChange={(v) => set("one_per_patient", v)}
+                    aria-label="One per patient"
+                    data-qc="offer-rule-one-per-patient"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span>
+                    No stacking
+                    <span className="block text-xs text-muted-foreground">
+                      Skips anyone who already holds a live offer from any template.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={form.no_stacking}
+                    onCheckedChange={(v) => set("no_stacking", v)}
+                    aria-label="No stacking"
+                    data-qc="offer-rule-no-stacking"
+                  />
+                </label>
+                <div>
+                  <p className="text-sm">
+                    Applies to
+                    <span className="block text-xs text-muted-foreground">
+                      {form.applies_to_catalogue_ids.length === 0
+                        ? "Any treatment. Tick treatments to limit it; the offer then says which."
+                        : `${form.applies_to_catalogue_ids.length} ${form.applies_to_catalogue_ids.length === 1 ? "treatment" : "treatments"} — the offer names them.`}
+                    </span>
+                  </p>
+                  <div
+                    className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-edge bg-card/60 p-2"
+                    data-qc="offer-rule-applies-to"
+                  >
+                    {catalogueItems.length === 0 ? (
+                      <p className="px-1 py-1 text-xs text-muted-foreground">No treatments in the catalogue yet.</p>
+                    ) : (
+                      catalogueItems.map((item) => {
+                        const checked = form.applies_to_catalogue_ids.includes(item.id);
+                        return (
+                          <label
+                            key={item.id}
+                            className="flex min-h-7 cursor-pointer items-center gap-2.5 rounded-lg px-2 text-xs hover:bg-glass-2"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => toggleTreatment(item.id)}
+                              aria-label={item.name}
+                            />
+                            <span className="min-w-0 flex-1 truncate text-foreground">{item.name}</span>
+                            {item.category ? (
+                              <span className="shrink-0 text-2xs text-muted-foreground">{item.category}</span>
+                            ) : null}
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-edge bg-glass-2 p-4 shadow-inset-hi">
               <p className="text-sm font-semibold text-foreground">How it reaches the patient</p>
               <div className="mt-3 space-y-3">
@@ -454,7 +594,7 @@ export function OfferTemplateEditor({
         </div>
 
         <SheetFooter className="justify-center border-t border-edge px-6 py-4 sm:justify-center">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => requestClose(false)}>
             Cancel
           </Button>
           <Button type="button" onClick={submit} disabled={save.isPending} data-qc="offer-save">
@@ -463,5 +603,6 @@ export function OfferTemplateEditor({
         </SheetFooter>
       </SheetContent>
     </Sheet>
+    </>
   );
 }

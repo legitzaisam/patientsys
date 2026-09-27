@@ -59,6 +59,53 @@ export function missingEssentialDocs(presentCategories: string[]) {
   return ESSENTIAL_DOC_CATEGORIES.filter((c) => !present.has(c.value));
 }
 
+export type ComplianceStatus = { tone: "ok" | "warn" | "bad"; label: string };
+
+function daysUntil(dateKey: string, todayKey: string) {
+  return Math.round((Date.parse(dateKey) - Date.parse(todayKey)) / 86_400_000);
+}
+
+/**
+ * One line for the Team list: lapsed registration or insurance first, then an
+ * expiry inside 60 days, then missing essential documents, else "Compliant".
+ * `todayKey` is the clinic's day as YYYY-MM-DD.
+ */
+export function complianceStatus(
+  input: {
+    docsMissing: number;
+    registrationExpiry?: string | null;
+    insuranceExpiry?: string | null;
+  },
+  todayKey: string,
+): ComplianceStatus {
+  const expiries = [
+    { what: "Registration", key: input.registrationExpiry },
+    { what: "Insurance", key: input.insuranceExpiry },
+  ].filter((e): e is { what: string; key: string } => Boolean(e.key));
+  const lapsed = expiries.find((e) => daysUntil(e.key, todayKey) < 0);
+  if (lapsed) return { tone: "bad", label: `${lapsed.what} lapsed` };
+  const soon = expiries
+    .map((e) => ({ ...e, days: daysUntil(e.key, todayKey) }))
+    .filter((e) => e.days <= 60)
+    .sort((a, b) => a.days - b.days)[0];
+  if (soon) {
+    return {
+      tone: "warn",
+      label:
+        soon.days === 0
+          ? `${soon.what} expires today`
+          : `${soon.what} expires in ${soon.days} day${soon.days === 1 ? "" : "s"}`,
+    };
+  }
+  if (input.docsMissing > 0) {
+    return {
+      tone: "warn",
+      label: `${input.docsMissing} document${input.docsMissing === 1 ? "" : "s"} missing`,
+    };
+  }
+  return { tone: "ok", label: "Compliant" };
+}
+
 export function remindUploadCopy(missingLabels: string[]) {
   const list =
     missingLabels.length === 0

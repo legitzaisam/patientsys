@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { money } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TrendPoint } from "@/components/performance-trends";
 
@@ -21,26 +22,36 @@ export type PerformanceRow = {
   attendance: number;
   noShows: number;
   outstanding: number;
+  bookedAhead?: number;
   patients: number;
   newPatients: number;
   retention: number;
   averageValue: number;
 };
 
-function Sparkline({ data, dataKey, color }: { data: TrendPoint[]; dataKey: keyof TrendPoint; color: string }) {
+function Sparkline({
+  data,
+  dataKey,
+  color,
+}: {
+  data: TrendPoint[];
+  dataKey: keyof TrendPoint;
+  color: string;
+}) {
   if (!data.length) return <span className="text-2xs text-muted-foreground">No trend yet</span>;
   const values = data.map((d) => Number(d[dataKey] ?? 0));
   const max = Math.max(...values, 1);
   const min = Math.min(...values);
   const range = Math.max(max - min, 1);
+  // Inset so the end dot and stroke stay inside the box instead of running past the card.
   const points = values.map((v, i) => {
-    const x = (i / (values.length - 1 || 1)) * 100;
-    const y = 100 - ((v - min) / range) * 100;
+    const x = 3 + (i / (values.length - 1 || 1)) * 94;
+    const y = 8 + (100 - ((v - min) / range) * 100) * 0.84;
     return { x, y };
   });
   const last = points[points.length - 1];
   return (
-    <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="h-10 w-full overflow-visible">
+    <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="h-10 w-full overflow-hidden">
       <polyline
         fill="none"
         stroke={color}
@@ -130,9 +141,11 @@ function shortStaffName(fullName: string) {
 function ExpandRow({
   row,
   trend,
+  showMoney,
 }: {
   row: PerformanceRow;
   trend: TrendPoint[] | undefined;
+  showMoney: boolean;
 }) {
   const hasOutstanding = row.outstanding > 0;
   const label = shortStaffName(row.fullName);
@@ -144,43 +157,76 @@ function ExpandRow({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">
-                {label}’s extras
+                Details
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Cash, activity and trend beyond the row above.
               </p>
             </div>
-            <Link
-              to="/team/$id" search={{}}
-              params={{ id: row.userId }}
-              onClick={(e) => e.stopPropagation()}
-              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-edge bg-background/70 px-3 py-1.5 text-2xs font-semibold text-foreground shadow-inset-hi transition-colors hover:bg-[rgba(47,63,102,0.08)]"
-            >
-              Commission {row.commissionRate}%
-              <span className="font-medium opacity-80">· Edit on Team</span>
-            </Link>
+            {showMoney ? (
+              <Link
+                to="/team/$id"
+                search={{}}
+                params={{ id: row.userId }}
+                onClick={(e) => e.stopPropagation()}
+                className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-edge bg-background/70 px-3 py-1.5 text-2xs font-semibold text-foreground shadow-inset-hi transition-colors hover:bg-[rgba(47,63,102,0.08)]"
+              >
+                Commission {row.commissionRate}%
+                <span className="font-medium opacity-80">· Edit on Team</span>
+              </Link>
+            ) : null}
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <MetricTile label="Collected" value={money(row.collected)} hint="Marked paid" />
-            <MetricTile label="Clinic keeps" value={money(row.clinicEarnedShare)} hint="After their share" />
-            <MetricTile
-              label="Outstanding"
-              value={hasOutstanding ? money(row.outstanding) : "—"}
-              hint={hasOutstanding ? "Unpaid or deposit only" : "All settled"}
-              tone={hasOutstanding ? "danger" : "default"}
-            />
+          {/* Money tiles need reports.commission; counts show for everyone. */}
+          <div
+            className={cn(
+              "mt-4 grid gap-3 sm:grid-cols-2",
+              showMoney ? "lg:grid-cols-6" : "lg:grid-cols-3",
+            )}
+          >
+            {showMoney ? (
+              <>
+                <MetricTile
+                  label="Collected"
+                  value={moneyWhole(row.collected)}
+                  hint="Paid so far"
+                />
+                <MetricTile
+                  label="Clinic keeps"
+                  value={moneyWhole(row.clinicEarnedShare)}
+                  hint="After their share"
+                />
+                <MetricTile
+                  label="Outstanding"
+                  value={hasOutstanding ? moneyWhole(row.outstanding) : "—"}
+                  hint={hasOutstanding ? "Earned, not yet paid" : "All settled"}
+                  tone={hasOutstanding ? "danger" : "default"}
+                />
+                <MetricTile
+                  label="Booked ahead"
+                  value={moneyWhole(row.bookedAhead ?? 0)}
+                  hint="Future bookings"
+                />
+              </>
+            ) : null}
             <MetricTile label="Appointments" value={String(row.appointments)} />
             <MetricTile label="New patients" value={String(row.newPatients)} />
+            {!showMoney ? <MetricTile label="Patients seen" value={String(row.patients)} /> : null}
           </div>
 
-          <div className="mt-3 rounded-2xl border border-edge bg-background/60 px-3.5 py-3 shadow-inset-hi">
+          <div className="mt-3 min-w-0 rounded-2xl border border-edge bg-background/60 px-3.5 py-3 shadow-inset-hi">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-2xs font-medium tracking-[0.02em] text-ink-3">Earnings trend</p>
+              <p className="text-2xs font-medium tracking-[0.02em] text-ink-3">
+                {showMoney ? "Earnings trend" : "Appointments trend"}
+              </p>
               <span className="text-2xs text-muted-foreground">This period</span>
             </div>
-            <div className="mt-2">
-              <Sparkline data={trend ?? []} dataKey="earned" color="var(--accent-deep)" />
+            <div className="mt-2 min-w-0 overflow-hidden">
+              <Sparkline
+                data={trend ?? []}
+                dataKey={showMoney ? "earned" : "appointments"}
+                color="var(--accent-deep)"
+              />
             </div>
           </div>
         </div>
@@ -193,8 +239,11 @@ export function PerformanceTable({
   rows,
   clinic,
   trend,
+  showMoney = true,
 }: {
   rows: PerformanceRow[];
+  /** False for a manager without reports.commission: no £ columns, no commission. */
+  showMoney?: boolean;
   clinic?: {
     earned: number;
     collected: number;
@@ -211,7 +260,9 @@ export function PerformanceTable({
     outstanding: number;
     averageCommission: number;
   };
-  trend: { monthly: boolean; clinic: TrendPoint[]; byPractitioner: Record<string, TrendPoint[]> } | undefined;
+  trend:
+    | { monthly: boolean; clinic: TrendPoint[]; byPractitioner: Record<string, TrendPoint[]> }
+    | undefined;
 }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
 
@@ -240,7 +291,9 @@ export function PerformanceTable({
               <TrendingUp className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-xs font-medium tracking-[0.02em] text-muted-foreground">Top performer</p>
+              <p className="text-xs font-medium tracking-[0.02em] text-muted-foreground">
+                Top performer
+              </p>
               <p className="section-title">
                 <Link
                   to="/team/$id"
@@ -250,10 +303,13 @@ export function PerformanceTable({
                 >
                   {top.fullName}
                 </Link>{" "}
-                <span className="text-sm font-normal text-muted-foreground">{top.jobTitle || "Practitioner"}</span>
+                <span className="text-sm font-normal text-muted-foreground">
+                  {top.jobTitle || "Practitioner"}
+                </span>
               </p>
               <p className="text-xs text-muted-foreground">
-                {money(top.earned)} earned · {top.treatments} treatments · {top.retention}% retention
+                {showMoney ? `${moneyWhole(top.earned)} earned · ` : ""}
+                {top.treatments} treatments · {top.retention}% retention
               </p>
             </div>
           </div>
@@ -267,24 +323,31 @@ export function PerformanceTable({
 
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
-          <table className="glass-table w-full min-w-[960px] table-fixed text-sm">
+          <table
+            className={cn(
+              "glass-table w-full table-fixed text-sm",
+              showMoney ? "min-w-[960px]" : "min-w-[720px]",
+            )}
+            data-qc="performance-table"
+            data-money={showMoney ? "shown" : "hidden"}
+          >
             <colgroup>
               <col className="w-[22%]" />
+              {showMoney ? <col className="w-[13%]" /> : null}
               <col className="w-[13%]" />
               <col className="w-[13%]" />
               <col className="w-[13%]" />
-              <col className="w-[13%]" />
-              <col className="w-[13%]" />
+              {showMoney ? <col className="w-[13%]" /> : null}
               <col className="w-[13%]" />
             </colgroup>
             <thead>
               <tr>
                 <th className="px-5 py-3">Practitioner</th>
-                <th className="px-5 py-3">Earned</th>
+                {showMoney ? <th className="px-5 py-3">Earned</th> : null}
                 <th className="px-5 py-3">Treatments</th>
                 <th className="px-5 py-3">Attendance</th>
                 <th className="px-5 py-3">Retention</th>
-                <th className="px-5 py-3">Outstanding</th>
+                {showMoney ? <th className="px-5 py-3">Outstanding</th> : null}
                 <th className="px-5 py-3">Details</th>
               </tr>
             </thead>
@@ -320,17 +383,42 @@ export function PerformanceTable({
                             >
                               {r.fullName}
                             </Link>
-                            <p className="text-2xs text-muted-foreground">{r.jobTitle || "Practitioner"}</p>
+                            <p className="text-2xs text-muted-foreground">
+                              {r.jobTitle || "Practitioner"}
+                            </p>
                           </div>
                         </div>
                       </td>
+                      {showMoney ? (
+                        <td className="px-5 py-3">
+                          <p
+                            className="text-foreground"
+                            data-qc={`metric:performance.practitioner.${r.userId}.earned`}
+                          >
+                            {moneyWhole(r.earned)}
+                          </p>
+                          <p className="text-2xs text-muted-foreground">
+                            <span
+                              data-qc={`metric:performance.practitioner.${r.userId}.earnedShare`}
+                            >
+                              {moneyWhole(r.earnedShare)}
+                            </span>{" "}
+                            to them
+                          </p>
+                        </td>
+                      ) : null}
                       <td className="px-5 py-3">
-                        <p className="text-foreground">{money(r.earned)}</p>
-                        <p className="text-2xs text-muted-foreground">{money(r.earnedShare)} to them</p>
-                      </td>
-                      <td className="px-5 py-3">
-                        <p className="text-foreground">{r.treatments}</p>
-                        <p className="text-2xs text-muted-foreground">{money(r.averageValue)} avg</p>
+                        <p
+                          className="text-foreground"
+                          data-qc={`metric:performance.practitioner.${r.userId}.treatments`}
+                        >
+                          {r.treatments}
+                        </p>
+                        {showMoney ? (
+                          <p className="text-2xs text-muted-foreground">
+                            {money(r.averageValue)} avg
+                          </p>
+                        ) : null}
                       </td>
                       <td className="px-5 py-3">
                         <p className="text-foreground">{r.attendance}%</p>
@@ -340,11 +428,13 @@ export function PerformanceTable({
                         <p className="text-foreground">{r.retention}%</p>
                         <p className="text-2xs text-muted-foreground">{r.patients} patients seen</p>
                       </td>
-                      <td className="px-5 py-3">
-                        <p className={r.outstanding > 0 ? "text-destructive" : "text-foreground"}>
-                          {r.outstanding > 0 ? money(r.outstanding) : "—"}
-                        </p>
-                      </td>
+                      {showMoney ? (
+                        <td className="px-5 py-3">
+                          <p className={r.outstanding > 0 ? "text-destructive" : "text-foreground"}>
+                            {r.outstanding > 0 ? moneyWhole(r.outstanding) : "—"}
+                          </p>
+                        </td>
+                      ) : null}
                       <td className="px-5 py-3 text-right">
                         <Button
                           type="button"
@@ -355,17 +445,30 @@ export function PerformanceTable({
                             toggle(r.userId);
                           }}
                         >
-                          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          {expanded ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
                         </Button>
                       </td>
                     </tr>
-                    {expanded && <ExpandRow row={r} trend={trend?.byPractitioner[r.userId]} />}
+                    {expanded && (
+                      <ExpandRow
+                        row={r}
+                        trend={trend?.byPractitioner[r.userId]}
+                        showMoney={showMoney}
+                      />
+                    )}
                   </Fragment>
                 );
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
+                  <td
+                    colSpan={showMoney ? 7 : 5}
+                    className="px-5 py-10 text-center text-muted-foreground"
+                  >
                     No practitioners yet — add them under Team.
                   </td>
                 </tr>
@@ -378,27 +481,39 @@ export function PerformanceTable({
                     <p className="tracking-tight">Clinic total</p>
                     <p className="text-xs font-normal text-muted-foreground">
                       {rows.length} practitioner{rows.length === 1 ? "" : "s"}
-                      <span className="text-ink-3"> · </span>
-                      <span className="tabular-nums">{clinic.averageCommission}% avg commission</span>
+                      {showMoney ? (
+                        <>
+                          <span className="text-ink-3"> · </span>
+                          <span className="tabular-nums">
+                            {clinic.averageCommission}% avg commission
+                          </span>
+                        </>
+                      ) : null}
                     </p>
                   </td>
-                  <td className="px-5 py-3.5">
-                    <p className="tabular-nums">{money(clinic.earned)}</p>
-                    <p className="text-2xs font-normal text-muted-foreground">
-                      {money(clinic.toPractitioners)} paid out
-                    </p>
-                  </td>
+                  {showMoney ? (
+                    <td className="px-5 py-3.5">
+                      <p className="tabular-nums" data-qc="metric:performance.earned">
+                        {moneyWhole(clinic.earned)}
+                      </p>
+                      <p className="text-2xs font-normal text-muted-foreground">
+                        {moneyWhole(clinic.toPractitioners)} paid out
+                      </p>
+                    </td>
+                  ) : null}
                   <td className="px-5 py-3.5 tabular-nums">{clinic.treatments}</td>
                   <td className="px-5 py-3.5 tabular-nums">{clinic.attendance}%</td>
                   <td className="px-5 py-3.5 tabular-nums">{clinic.retention}%</td>
-                  <td
-                    className={cn(
-                      "px-5 py-3.5 tabular-nums",
-                      clinic.outstanding > 0 ? "text-destructive-ink" : undefined,
-                    )}
-                  >
-                    {clinic.outstanding > 0 ? money(clinic.outstanding) : "—"}
-                  </td>
+                  {showMoney ? (
+                    <td
+                      className={cn(
+                        "px-5 py-3.5 tabular-nums",
+                        clinic.outstanding > 0 ? "text-destructive-ink" : undefined,
+                      )}
+                    >
+                      {clinic.outstanding > 0 ? moneyWhole(clinic.outstanding) : "—"}
+                    </td>
+                  ) : null}
                   <td className="px-5 py-3.5" />
                 </tr>
               </tfoot>

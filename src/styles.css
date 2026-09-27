@@ -361,6 +361,17 @@
     z-index: 1;
   }
 
+  /* Butter ring on the toolbar icons: it lives on the glass layer, so it fades
+     in with the glass as the page scrolls (--toolbar-chip-blend 0 at the top,
+     1 once scrolled) and is absent while the page sits at the top. */
+  .toolbar-icon-ring::before {
+    border: 1.5px solid var(--accent);
+  }
+
+  .toolbar-icon-ring:hover::before {
+    border-color: var(--accent-deep);
+  }
+
   /* Ghost hover at top; glass brightens on ::before when scrolled. */
   .toolbar-scroll-chip:hover {
     background: color-mix(

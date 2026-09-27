@@ -42,8 +42,7 @@ import { StaffAlertDialog } from "@/components/staff-alert-dialog";
 import { FloatingNotes } from "@/components/dashboard/floating-notes";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
-import { listAppointments, listTeam } from "@/lib/clinic.functions";
-import { clinicDayRange } from "@/lib/clinic-time";
+import { listTeam } from "@/lib/clinic.functions";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { canSee, isAccessAdmin } from "@/lib/access-catalogue";
@@ -60,11 +59,13 @@ type Identity = {
   isManager?: boolean;
   roles: string[];
   permissions?: string[];
+  /** Has treated someone in the last 12 months; hides My earnings for non-treating owners. */
+  treatsPatients?: boolean;
   profile: { full_name?: string | null; job_title?: string | null } | null;
   patient: { first_name: string; last_name: string } | null;
 };
 
-type NavLink = { to: string; label: string; icon: typeof LayoutDashboard; badge?: number };
+type NavLink = { to: string; label: string; icon: typeof LayoutDashboard };
 
 const TOOLBAR_SCROLL_BLEND_RANGE = 72;
 
@@ -150,9 +151,6 @@ function NavItem({
         <item.icon className="h-3 w-3" />
       </span>
       <span className="flex-1 truncate">{item.label}</span>
-      {item.badge != null && item.badge > 0 && (
-        <span className="text-[11px] font-medium tabular-nums text-ink-3">{item.badge}</span>
-      )}
     </Link>
   );
 }
@@ -172,7 +170,7 @@ function ToolbarAlerts({
   identity: Identity;
 }) {
   const iconHover = "hover:text-foreground active:bg-[rgba(47,63,102,0.14)]";
-  const chipSurface = "toolbar-scroll-chip";
+  const chipSurface = "toolbar-scroll-chip toolbar-icon-ring";
   return (
     <>
       {identity.isStaff && canSee(identity, "shell-alerts") && (
@@ -402,6 +400,8 @@ function SidebarChrome({
 
         {identity.isStaff && canSee(identity, "team") && teamMembers.length > 0 && (
           <NavGroup label="Team">
+            {/* Long teams scroll inside their own box so Dashboard never leaves the screen. */}
+            <div className="scrollbar-none max-h-[calc(5*44px)] space-y-1 overflow-y-auto overscroll-contain">
             {teamMembers.map((member) => {
               const name = member.fullName || "Team member";
               const tone = laneFor(member.id);
@@ -440,6 +440,16 @@ function SidebarChrome({
                 </Link>
               );
             })}
+            </div>
+            {teamMembers.length > 5 ? (
+              <Link
+                to="/team"
+                onClick={onNavigate}
+                className="block rounded-[11px] px-2.5 py-2 text-xs font-medium text-ink-3 transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground"
+              >
+                See all {teamMembers.length} on the Team page
+              </Link>
+            ) : null}
           </NavGroup>
         )}
       </nav>
@@ -492,8 +502,6 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   }, [pathname]);
 
   const fetchTeam = useServerFn(listTeam);
-  const fetchAppointments = useServerFn(listAppointments);
-  const { startISO, endISO } = clinicDayRange();
 
   const { data: team } = useQuery({
     queryKey: ["team"],
@@ -525,14 +533,6 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     });
   }, [teamMembers, onlineIds]);
 
-  const { data: todayAppointments } = useQuery({
-    queryKey: ["sidebar-diary-count", startISO],
-    queryFn: () => fetchAppointments({ data: { from: startISO, to: endISO } }),
-    refetchInterval: 60_000,
-    enabled: identity.isStaff && sessionReady && canSee(identity, "schedule"),
-  });
-  const diaryCount = (todayAppointments ?? []).length;
-
   const canTeam = canSee(identity, "team");
   const canOffers = canSee(identity, "offers");
 
@@ -540,7 +540,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     ? [
         ...(canSee(identity, "dashboard") ? [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
         ...(canSee(identity, "schedule")
-          ? [{ to: "/schedule", label: "Diary", icon: CalendarDays, badge: diaryCount }]
+          ? [{ to: "/schedule", label: "Diary", icon: CalendarDays }]
           : []),
         ...(canSee(identity, "patients") ? [{ to: "/patients", label: "Patients", icon: Users }] : []),
         ...(isAccessAdmin(identity) ? [{ to: "/access", label: "Access", icon: ShieldCheck }] : []),
@@ -573,7 +573,10 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     ...(canSee(identity, "insights") ? [{ to: "/insights", label: "Insights", icon: Lightbulb }] : []),
     ...(canSee(identity, "retention") ? [{ to: "/retention", label: "Retention", icon: Repeat }] : []),
     ...(canSee(identity, "performance") ? [{ to: "/performance", label: "Performance", icon: TrendingUp }] : []),
-    ...(canSee(identity, "earnings") ? [{ to: "/earnings", label: "Earnings", icon: Wallet }] : []),
+    // My earnings is for people who treat: an owner with no treatments in 12 months does not see it.
+    ...(canSee(identity, "earnings") && (!identity.isOwner || identity.treatsPatients !== false)
+      ? [{ to: "/earnings", label: "Earnings", icon: Wallet }]
+      : []),
   ];
 
   const displayName =

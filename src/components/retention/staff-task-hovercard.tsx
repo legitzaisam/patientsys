@@ -27,6 +27,7 @@ export function StaffTaskHoverCard({
   practitionerId,
   practitionerName,
   treatment,
+  openOnClick = false,
 }: {
   children: React.ReactNode;
   patientId: string;
@@ -34,10 +35,13 @@ export function StaffTaskHoverCard({
   practitionerId?: string | null;
   practitionerName?: string | null;
   treatment?: string | null;
+  /** Also toggle on click, for a button trigger (the record's Assign task). */
+  openOnClick?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [note, setNote] = useState("");
+  const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   const [touched, setTouched] = useState(false);
   const queryClient = useQueryClient();
 
@@ -82,7 +86,12 @@ export function StaffTaskHoverCard({
   const send = useMutation({
     mutationFn: async (vars: { recipients: { id: string; label: string }[]; note: string }) => {
       await createTask({
-        data: { patient_id: patientId, recipients: vars.recipients, note: vars.note },
+        data: {
+          patient_id: patientId,
+          recipients: vars.recipients,
+          note: vars.note,
+          due_at: new Date(`${dueDate}T12:00:00`).toISOString(),
+        },
       });
       await logOutreach({
         data: {
@@ -120,7 +129,15 @@ export function StaffTaskHoverCard({
 
   return (
     <HoverCard open={open} onOpenChange={setOpen} openDelay={150} closeDelay={120}>
-      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
+      <HoverCardTrigger asChild>
+        {openOnClick ? (
+          <span className="inline-flex" onClick={() => setOpen((v) => !v)}>
+            {children}
+          </span>
+        ) : (
+          children
+        )}
+      </HoverCardTrigger>
       <HoverCardContent align="start" className="w-80 rounded-2xl p-4">
         <div className="mb-3">
           <p className="text-sm font-medium text-foreground">Ask the team to recall</p>
@@ -156,6 +173,17 @@ export function StaffTaskHoverCard({
           placeholder={`Please contact ${patientName} to rebook${treatment ? ` their ${treatment}` : ""}.`}
           className="mb-3 rounded-xl text-xs"
         />
+
+        <label className="mb-3 flex items-center justify-between gap-2 text-xs text-ink-2">
+          <span>Due by</span>
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="h-8 rounded-lg border border-edge-2 bg-glass-2 px-2 text-xs text-foreground shadow-inset-hi"
+            aria-label="Task due date"
+          />
+        </label>
 
         <p className="mb-3 text-2xs text-muted-foreground">
           Everyone ticked sees the same task. When one of them marks it off, it updates for the

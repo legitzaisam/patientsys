@@ -280,6 +280,43 @@ function diaryView(view: "week" | "month"): PageState {
   };
 }
 
+/** The diary's Needs action menu open (caret), with everything outstanding highlighted. */
+const needsActionOpen: PageState = {
+  id: "needs-action-open",
+  open: async (page) => {
+    // Nothing outstanding today reads "All clear" and has no menu.
+    if (!(await clickIfVisible(page, '[data-qc="needs-action-main"]', 3_000))) return false;
+    await wait(page, 300);
+    if (!(await clickIfVisible(page, '[data-qc="needs-action-caret"]', 2_000))) return false;
+    await page
+      .locator('[data-qc="needs-action-menu"]')
+      .waitFor({ state: "visible", timeout: 3_000 });
+    await wait(page, 300);
+    return true;
+  },
+  close: async (page) => {
+    await page.keyboard.press("Escape");
+    await clickIfVisible(page, '[data-qc="needs-action-clear"]', 2_000);
+    await wait(page, 200);
+  },
+};
+
+/** My profile's Security / Documents tabs, now on the page header. */
+function profileTab(key: "security" | "documents"): PageState {
+  return {
+    id: `profile-${key}`,
+    open: async (page) => {
+      if (!(await clickIfVisible(page, `[data-qc="profile-tab-${key}"]`, 3_000))) return false;
+      await wait(page, 500);
+      return true;
+    },
+    close: async (page) => {
+      await clickIfVisible(page, '[data-qc="profile-tab-profile"]', 2_000);
+      await wait(page, 300);
+    },
+  };
+}
+
 const newBooking: PageState = {
   id: "new-booking",
   open: async (page) => {
@@ -306,10 +343,35 @@ const recordTreatment: PageState = {
   },
 };
 
+/** The record header's ⋯ menu (Send form, Send offer, Archive). */
+const recordMenu: PageState = {
+  id: "record-menu",
+  open: async (page) => {
+    if (!(await clickIfVisible(page, '[data-qc="record-more"]'))) return false;
+    await page.getByRole("menu").waitFor({ state: "visible", timeout: 3_000 });
+    await wait(page, 300);
+    return true;
+  },
+};
+
+/** Opens an item from the record's ⋯ menu. */
+async function openRecordMenuItem(page: Page, qc: string) {
+  if (!(await clickIfVisible(page, '[data-qc="record-more"]'))) return false;
+  const item = page.locator(`[data-qc="${qc}"]`).first();
+  try {
+    await item.waitFor({ state: "visible", timeout: 3_000 });
+  } catch {
+    await page.keyboard.press("Escape");
+    return false;
+  }
+  await item.click();
+  return true;
+}
+
 const sendForm: PageState = {
   id: "send-form",
   open: async (page) => {
-    if (!(await clickRoleIfVisible(page, "button", "Send form"))) return false;
+    if (!(await openRecordMenuItem(page, "menu-send-form"))) return false;
     return waitDialog(page);
   },
 };
@@ -317,7 +379,7 @@ const sendForm: PageState = {
 const sendOffer: PageState = {
   id: "send-offer",
   open: async (page) => {
-    if (!(await clickIfVisible(page, '[data-qc="send-offer-open"]'))) return false;
+    if (!(await openRecordMenuItem(page, "send-offer-open"))) return false;
     return waitDialog(page, '[data-qc="send-offer"]');
   },
 };
@@ -378,6 +440,17 @@ const teamFormer: PageState = {
     return true;
   },
   close: async () => {},
+};
+
+/** Quick book opened from a journey-board card's Book button. */
+const boardBook: PageState = {
+  id: "board-book",
+  open: async (page) => {
+    if (!(await clickIfVisible(page, '[data-qc="board-book"]', 3_000))) return false;
+    await page.getByPlaceholder("Search patient…").waitFor({ state: "visible", timeout: 3_000 });
+    await wait(page, 300);
+    return true;
+  },
 };
 
 const bulkSelect: PageState = {
@@ -447,15 +520,15 @@ export const PAGES: PageEntry[] = [
     path: "/schedule",
     roles: STAFF,
     settle: '[data-qc="day-planner-scroll"], .page-title',
-    states: [sidebarClosed, newBooking],
-    coreStates: ["sidebar-closed"],
+    states: [sidebarClosed, newBooking, needsActionOpen],
+    coreStates: ["sidebar-closed", "needs-action-open"],
   },
   {
     id: "schedule-week",
     path: "/schedule",
     roles: ["owner"],
     settle: ".page-title",
-    states: [diaryView("week"), sidebarClosed],
+    states: [diaryView("week"), sidebarClosed, needsActionOpen],
     enterState: "view-week",
   },
   {
@@ -479,7 +552,7 @@ export const PAGES: PageEntry[] = [
     path: "/patients?tab=board",
     roles: ["owner"],
     settle: ".page-title",
-    states: [sidebarClosed],
+    states: [sidebarClosed, boardBook],
   },
   {
     id: "patient-record",
@@ -490,20 +563,21 @@ export const PAGES: PageEntry[] = [
       sidebarClosed,
       recordTab("photos", "Before and after"),
       recordTab("documents", "Documents"),
-      recordTab("history", "History updates"),
+      recordTab("history", "Medical history"),
       recordTab("portal", "From the patient"),
       recordTab("contact", "Contact"),
       recordTreatment,
+      recordMenu,
       sendForm,
       sendOffer,
       treatmentForm,
     ],
-    coreStates: ["sidebar-closed", "tab-contact", "tab-documents"],
+    coreStates: ["sidebar-closed", "tab-contact", "tab-documents", "record-menu"],
   },
   {
     id: "insights",
     path: "/insights",
-    roles: ["owner", "front_desk", "admin"],
+    roles: ["owner", "practitioner", "admin"],
     settle: ".page-title",
     states: [sidebarClosed],
   },
@@ -569,7 +643,7 @@ export const PAGES: PageEntry[] = [
     path: "/profile",
     roles: STAFF,
     settle: ".page-title",
-    states: [sidebarClosed],
+    states: [sidebarClosed, profileTab("security"), profileTab("documents")],
     coreStates: ["sidebar-closed"],
   },
   {

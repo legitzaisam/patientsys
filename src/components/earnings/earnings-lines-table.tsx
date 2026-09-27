@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { Card } from "@/components/ui/card";
 import { money, type PeriodKey } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export type EarningsLine = {
@@ -13,6 +14,8 @@ export type EarningsLine = {
   patient: string;
   patientId?: string | undefined;
   share: number;
+  /** Paid once the linked booking is settled in full; pending until then. */
+  payout?: "paid" | "pending";
 };
 
 type LineGroup = {
@@ -117,7 +120,22 @@ function LineRow({ line }: { line: EarningsLine }) {
         </span>
       </td>
       <td className="px-5 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">
-        {money(line.share)}
+        <span className="inline-flex items-center justify-end gap-2">
+          {line.payout ? (
+            <span
+              data-qc="payout-status"
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-inset-hi",
+                line.payout === "paid"
+                  ? "bg-success-bg text-success-ink"
+                  : "bg-warning-bg text-warning-ink",
+              )}
+            >
+              {line.payout === "paid" ? "Paid" : "Pending"}
+            </span>
+          ) : null}
+          {money(line.share)}
+        </span>
       </td>
     </tr>
   );
@@ -171,7 +189,7 @@ function GroupRow({
         {treatments} treatment{treatments === 1 ? "" : "s"}
       </td>
       <td className="px-5 py-3 text-right text-sm font-semibold tabular-nums text-foreground">
-        {money(total)}
+        {moneyWhole(total)}
       </td>
     </tr>
   );
@@ -312,7 +330,7 @@ export function EarningsLinesTable({
                   <th className="bg-card px-5 py-3">Date</th>
                   <th className="bg-card px-5 py-3">Patient</th>
                   <th className="bg-card px-5 py-3">Treatment</th>
-                  <th className="bg-card px-5 py-3">Your earnings</th>
+                  <th className="bg-card px-5 py-3 text-right">Your share</th>
                 </tr>
               </thead>
               <tbody>
@@ -354,7 +372,7 @@ export function EarningsLinesTable({
                 · {count} treatment{count === 1 ? "" : "s"}
               </span>
             </p>
-            <p className="text-sm font-semibold tabular-nums text-foreground">{money(total)}</p>
+            <p className="text-sm font-semibold tabular-nums text-foreground">{moneyWhole(total)}</p>
           </div>
         </>
       )}

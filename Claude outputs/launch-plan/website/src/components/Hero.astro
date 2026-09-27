@@ -1,0 +1,330 @@
+---
+// Hero: serum drop (WebGL) with the journey thread (SVG) as the fallback.
+const milestones = ["Consult", "Consent", "Treatment", "Aftercare", "Review", "Next session"];
+---
+
+<section class="hero" data-hero aria-labelledby="hero-title">
+  <canvas class="hero__gl" aria-hidden="true" data-hero-canvas></canvas>
+
+  <svg class="hero__thread" viewBox="0 0 1200 260" preserveAspectRatio="none" aria-hidden="true" data-thread>
+    <defs>
+      <linearGradient id="thread-g" x1="0" x2="1">
+        <stop offset="0" stop-color="#eed488" stop-opacity="0" />
+        <stop offset=".15" stop-color="#e2c46b" />
+        <stop offset=".85" stop-color="#e2c46b" />
+        <stop offset="1" stop-color="#eed488" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+    <path d="M-20 170 C 160 60, 260 230, 420 150 S 700 40, 820 140 S 1060 230, 1220 110" fill="none" stroke="url(#thread-g)" stroke-width="2.2" pathLength="1" class="hero__thread-path"></path>
+  </svg>
+  <ol class="hero__milestones" aria-hidden="true">
+    {milestones.map((m, i) => <li style={`--i:${i}`}><span />{m}</li>)}
+  </ol>
+
+  <div class="hero__content wrap">
+    <p class="eyebrow hero__eyebrow">The aesthetics clinic platform</p>
+    <h1 id="hero-title" class="hero__title display" data-hero-title>
+      <span class="hl">The journey</span>
+      <span class="hl">is the <em>treatment.</em></span>
+    </h1>
+    <p class="hero__lede lede">
+      One calm system for the clinic, and a living plan for every patient: consent before care, aftercare that
+      follows up, and a reason to come back.
+    </p>
+    <div class="doors" role="group" aria-label="Choose your door">
+      <a class="door glass" href="#patients" data-light>
+        <span class="door__glow" style="--c: var(--aftercare)"></span>
+        <span class="door__k">For patients</span>
+        <span class="door__t">Your plan, your progress</span>
+        <span class="door__arrow" aria-hidden="true">→</span>
+      </a>
+      <a class="door glass" href="#clinics" data-light>
+        <span class="door__glow" style="--c: var(--arrived)"></span>
+        <span class="door__k">For clinics</span>
+        <span class="door__t">Run the clinic, keep them coming back</span>
+        <span class="door__arrow" aria-hidden="true">→</span>
+      </a>
+    </div>
+  </div>
+
+  <a class="hero__cue" href="#journey" aria-label="Scroll to the journey">
+    <span></span>
+  </a>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    min-height: 100svh;
+    display: grid;
+    align-items: center;
+    padding-block: 7.5rem 5rem;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .hero__gl {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 400ms ease;
+  }
+  .hero.gl-on .hero__gl {
+    opacity: 1;
+  }
+  .hero__content {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    text-align: center;
+    gap: 1.4rem;
+  }
+  .hero__title {
+    --gl-color: #2f3f66;
+    font-size: clamp(3.4rem, 10.5vw, 9.6rem);
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+  }
+  .hero__title em {
+    --gl-color: #7a6220;
+  }
+  .hero__title .hl {
+    display: block;
+  }
+  /* The canvas paints the headline while WebGL runs; the DOM copy stays for
+     screen readers and text selection. */
+  .hero.gl-on .hero__title,
+  .hero.gl-on .hero__title em {
+    color: transparent;
+  }
+  .hero__lede {
+    max-width: 36rem;
+    margin: 0.4rem auto 0;
+  }
+  .hero__eyebrow,
+  .hero__lede,
+  .doors {
+    transition:
+      opacity 900ms var(--ease-dew),
+      transform 900ms var(--ease-dew);
+  }
+  .js .hero:not(.is-landed) .hero__eyebrow,
+  .js .hero:not(.is-landed) .hero__lede,
+  .js .hero:not(.is-landed) .doors {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  .js .hero:not(.is-landed):not(.gl-on) .hero__title {
+    opacity: 0;
+  }
+  .hero__title {
+    transition: opacity 900ms var(--ease-dew);
+  }
+  .hero.is-landed .hero__lede {
+    transition-delay: 120ms;
+  }
+  .hero.is-landed .doors {
+    transition-delay: 260ms;
+  }
+
+  .doors {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 17rem));
+    gap: 1rem;
+    margin-top: 1.2rem;
+  }
+  .door {
+    display: grid;
+    gap: 0.25rem;
+    text-align: left;
+    padding: 1.2rem 1.3rem 1.25rem;
+    text-decoration: none;
+    overflow: hidden;
+    background: var(--glass);
+    transition:
+      transform var(--t-ui) var(--ease-dew),
+      box-shadow var(--t-ui) var(--ease-dew);
+  }
+  .door:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lift);
+  }
+  .door__glow {
+    position: absolute;
+    right: -30%;
+    top: -60%;
+    width: 80%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--c) 70%, transparent), transparent 65%);
+    opacity: 0.55;
+    transition:
+      opacity var(--t-ui),
+      transform var(--t-section) var(--ease-dew);
+    animation: breathe 7s ease-in-out infinite;
+  }
+  .door:hover .door__glow {
+    opacity: 0.95;
+    transform: scale(1.25);
+  }
+  @keyframes breathe {
+    50% {
+      transform: scale(1.12);
+      opacity: 0.75;
+    }
+  }
+  .door__k {
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .door__t {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    line-height: 1.1;
+    padding-right: 1.5rem;
+  }
+  .door__arrow {
+    position: absolute;
+    right: 1.1rem;
+    bottom: 1.1rem;
+    transition: transform var(--t-ui) var(--ease-dew);
+  }
+  .door:hover .door__arrow {
+    transform: translateX(4px);
+  }
+
+  /* Fallback: the journey thread (concept C). Shown when WebGL is off. */
+  .hero__thread,
+  .hero__milestones {
+    display: none;
+  }
+  .hero.no-gl .hero__thread {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 9%;
+    width: 100%;
+    height: 26vh;
+    z-index: -1;
+  }
+  .hero__thread-path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  .hero.no-gl.is-landed .hero__thread-path {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 2.4s var(--ease-dew);
+  }
+  .hero.no-gl .hero__milestones {
+    display: flex;
+    position: absolute;
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: 5%;
+    justify-content: space-between;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    z-index: -1;
+  }
+  .hero__milestones li {
+    display: grid;
+    justify-items: center;
+    gap: 0.4rem;
+    opacity: 0;
+  }
+  .hero__milestones span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--butter);
+    box-shadow: 0 0 0 5px var(--butter-soft);
+  }
+  .hero.no-gl.is-landed .hero__milestones li {
+    opacity: 1;
+    transition: opacity 600ms var(--ease-dew) calc(400ms + var(--i) * 220ms);
+  }
+
+  .hero__cue {
+    position: absolute;
+    left: 50%;
+    bottom: 1.6rem;
+    width: 26px;
+    height: 42px;
+    margin-left: -13px;
+    border: 1.5px solid var(--ink-3);
+    border-radius: 999px;
+    opacity: 0.6;
+  }
+  .hero__cue span {
+    position: absolute;
+    left: 50%;
+    top: 8px;
+    width: 3px;
+    height: 8px;
+    margin-left: -1.5px;
+    border-radius: 2px;
+    background: var(--ink-2);
+    animation: cue 2.2s var(--ease-dew) infinite;
+  }
+  @keyframes cue {
+    60% {
+      transform: translateY(12px);
+      opacity: 0;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @media (max-width: 640px) {
+    .doors {
+      grid-template-columns: 1fr;
+      width: 100%;
+      max-width: 22rem;
+    }
+    .hero.no-gl .hero__milestones {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  import { canRunHeroGL, startHeroGL } from "../scripts/hero-gl";
+  import { motionPaused } from "../scripts/motion";
+
+  const hero = document.querySelector<HTMLElement>("[data-hero]")!;
+  const canvas = hero.querySelector<HTMLCanvasElement>("[data-hero-canvas]")!;
+  const title = hero.querySelector<HTMLElement>("[data-hero-title]")!;
+  const land = () => hero.classList.add("is-landed");
+
+  async function start() {
+    if (canRunHeroGL()) {
+      try {
+        await Promise.race([
+          document.fonts.load('400 96px "Instrument Serif"').then(() => document.fonts.ready),
+          new Promise((r) => setTimeout(r, 1500)),
+        ]);
+      } catch {
+        /* fonts API unavailable */
+      }
+      if (startHeroGL({ canvas, hero, title, onLanded: land, isPaused: motionPaused })) return;
+    }
+    hero.classList.add("no-gl");
+    requestAnimationFrame(() => requestAnimationFrame(land));
+  }
+
+  // Start after the first-visit loader (if any) lifts.
+  if (document.documentElement.classList.contains("loading")) {
+    addEventListener("aetheria:loader-done", start, { once: true });
+  } else {
+    start();
+  }
+</script>

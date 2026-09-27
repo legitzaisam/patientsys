@@ -1,6 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/lib/auth/session-middleware.server";
-import { clinicDayDiff, clinicDayKey, clinicDayRange } from "@/lib/clinic-time";
+import {
+  clinicDayDiff,
+  clinicDayKey,
+  clinicDayRange,
+  clinicDayRangeForKey,
+  clinicMinutesOfDay,
+} from "@/lib/clinic-time";
+import { complianceReminders } from "@/lib/metrics/compliance";
+import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
+import {
+  dueState,
+  nextDueFor,
+  upcomingBookingSet,
+  visitsByPatient,
+} from "@/lib/metrics/definitions";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import {
@@ -326,7 +340,6 @@ export const getDashboard = createServerFn({ method: "GET" })
     const identity = await authorize(context as Ctx, "getDashboard");
     const supabase = (context as Ctx).supabase;
     const today = new Date();
-    const in30 = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
     const weekAhead = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
     const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString();
@@ -342,7 +355,6 @@ export const getDashboard = createServerFn({ method: "GET" })
 
     const [
       patients,
-      dueRows,
       monthTreatments,
       pendingDocs,
       historyFlags,
@@ -352,15 +364,10 @@ export const getDashboard = createServerFn({ method: "GET" })
       prevMonthPatients,
       unreadMessages,
       dueDatesRaw,
+      upcomingApptsRaw,
+      clinicRow,
     ] = await Promise.all([
       supabase.from("patients").select("id, status, created_at"),
-      supabase
-        .from("treatments")
-        .select("id, name, next_due_at, patient_id, practitioner_id, patients(first_name, last_name)")
-        .not("next_due_at", "is", null)
-        .lte("next_due_at", in30)
-        .order("next_due_at", { ascending: true })
-        .limit(12),
       supabase.from("treatments").select("id, price, patient_id, practitioner_id, performed_at").gte("performed_at", monthStart),
       supabase
         .from("documents")
@@ -405,8 +412,21 @@ export const getDashboard = createServerFn({ method: "GET" })
         .limit(10),
       supabase
         .from("treatments")
-        .select("patient_id, performed_at, next_due_at, practitioner_id")
+        .select(
+          "id, name, patient_id, performed_at, next_due_at, practitioner_id, patients(first_name, last_name)",
+        )
         .not("next_due_at", "is", null),
+      // Live bookings from now on: a booked patient is never due or to chase.
+      supabase
+        .from("appointments")
+        .select("patient_id, starts_at, status")
+        .gte("starts_at", today.toISOString())
+        .neq("status", "cancelled"),
+      supabase
+        .from("clinics")
+        .select("deposit_lead_days")
+        .eq("id", clinicIdOf(context))
+        .maybeSingle(),
     ]);
 
     // Journeys + Safe-to-proceed. Fetched after the main fan-out so the three
@@ -431,26 +451,46 @@ export const getDashboard = createServerFn({ method: "GET" })
     ]);
 
     let all = patients.data ?? [];
-    let due = (dueRows.data ?? []) as any[];
     let monthTreats = (monthTreatments.data ?? []) as any[];
     let prevMonthTreats = (prevMonthTreatments.data ?? []) as any[];
     let todayAppts = (todayAppointmentsRaw.data ?? []) as any[];
     await holdArrivedUntilConsent(supabase, todayAppts);
     let unpaidDeposits = (unpaidDepositRaw.data ?? []) as any[];
-    // A patient's next due date is the one on their most recent treatment that
-    // carries one — the same rule the retention page and the patient list use.
-    // Counting every historical row with a stale next_due_at inflated this
-    // card into the thousands while retention reported a few dozen.
-    const latestDueByPatient = new Map<string, { next_due_at: string; performed_at: string; practitioner_id: string | null }>();
-    for (const t of (dueDatesRaw.data ?? []) as any[]) {
-      const cur = latestDueByPatient.get(t.patient_id);
-      if (!cur || t.performed_at > cur.performed_at) latestDueByPatient.set(t.patient_id, t);
+    // Shared definition (metrics/definitions): a patient's next due date is
+    // the one on their most recent treatment carrying one, and only an active
+    // patient with no upcoming booking can be overdue or due soon. The same
+    // rule drives the retention page, the patient list and check:metrics.
+    const todayISO = clinicDayKey(today);
+    type DueRow = {
+      id: string;
+      name: string;
+      patient_id: string;
+      performed_at: string;
+      next_due_at: string;
+      practitioner_id: string | null;
+      patients: { first_name: string | null; last_name: string | null } | null;
+    };
+    const statusById = new Map(all.map((p: { id: string; status: string }) => [p.id, p.status]));
+    const upcomingSet = upcomingBookingSet(
+      (upcomingApptsRaw.data ?? []) as { patient_id: string; starts_at: string; status: string }[],
+      today.getTime(),
+    );
+    let dueDates: (DueRow & { state: "overdue" | "due_soon" })[] = [];
+    for (const [pid, visits] of visitsByPatient((dueDatesRaw.data ?? []) as DueRow[])) {
+      const state = dueState({
+        patient: { id: pid, status: String(statusById.get(pid) ?? "archived") },
+        visits,
+        hasUpcoming: upcomingSet.has(pid),
+        nowMs: today.getTime(),
+        todayKey: todayISO,
+      });
+      if (state !== "overdue" && state !== "due_soon") continue;
+      dueDates.push({ ...nextDueFor(visits)!, state });
     }
-    let dueDates = [...latestDueByPatient.values()].filter((t) => t.next_due_at <= in30);
+    dueDates.sort((a, b) => String(a.next_due_at).localeCompare(String(b.next_due_at)));
 
     const scoped = scopeFor(identity, "getDashboard");
     if (scoped) {
-      due = due.filter((t: any) => t.practitioner_id === scoped || !t.practitioner_id);
       dueDates = dueDates.filter((t) => t.practitioner_id === scoped || !t.practitioner_id);
       monthTreats = monthTreats.filter((t: any) => t.practitioner_id === scoped);
       prevMonthTreats = prevMonthTreats.filter((t: any) => t.practitioner_id === scoped);
@@ -459,20 +499,64 @@ export const getDashboard = createServerFn({ method: "GET" })
     }
 
     // Claimed offers for today's patients, so the diary card can flag them.
-    const claimedOfferByPatient = new Map<string, { id: string; headline: string; code: string | null }>();
+    // An offer limited to certain treatments only flags a booking for one of them.
+    const claimedOfferByPatient = new Map<
+      string,
+      { id: string; headline: string; code: string | null; appliesTo: string[] }
+    >();
     const todayPatientIds = [...new Set(todayAppts.map((a: any) => a.patient_id as string).filter(Boolean))];
     if (todayPatientIds.length > 0) {
       const { data: claimedRows } = await supabase
         .from("patient_offers")
-        .select("id, patient_id, headline, code, status, expires_at, claimed_at")
+        .select("id, patient_id, template_id, headline, code, status, expires_at, claimed_at")
         .in("patient_id", todayPatientIds)
         .eq("status", "claimed");
+      type ClaimedRow = { template_id: string | null };
+      type TemplateRule = { id: string; applies_to_catalogue_ids: string[] | null };
+      const templateIds = [
+        ...new Set(
+          ((claimedRows ?? []) as ClaimedRow[])
+            .map((r) => r.template_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      const { data: templateRows } = templateIds.length
+        ? await supabase
+            .from("offer_templates")
+            .select("id, applies_to_catalogue_ids")
+            .in("id", templateIds)
+        : { data: [] as TemplateRule[] };
+      const appliesByTemplate = new Map<string, string[]>(
+        ((templateRows ?? []) as TemplateRule[]).map((t) => [
+          t.id,
+          (t.applies_to_catalogue_ids ?? []) as string[],
+        ]),
+      );
       const { liveClaimedOffer } = await import("./offers/shape");
       for (const pid of todayPatientIds) {
         const live = liveClaimedOffer(((claimedRows ?? []) as any[]).filter((r) => r.patient_id === pid));
-        if (live) claimedOfferByPatient.set(pid, { id: live.id, headline: live.headline, code: live.code });
+        if (live) {
+          claimedOfferByPatient.set(pid, {
+            id: live.id,
+            headline: live.headline,
+            code: live.code,
+            appliesTo: appliesByTemplate.get(live.template_id) ?? [],
+          });
+        }
       }
     }
+    const claimedOfferFor = (a: { patient_id: string; catalogue_id?: string | null }) => {
+      const offer = claimedOfferByPatient.get(a.patient_id);
+      if (!offer) return null;
+      if (
+        offer.appliesTo.length > 0 &&
+        a.catalogue_id &&
+        !offer.appliesTo.includes(a.catalogue_id)
+      ) {
+        return null;
+      }
+      return { id: offer.id, headline: offer.headline, code: offer.code };
+    };
 
     const active = all.filter((p: { status: string }) => p.status === "active").length;
     const inactive = all.filter((p: { status: string }) => p.status !== "active").length;
@@ -507,9 +591,10 @@ export const getDashboard = createServerFn({ method: "GET" })
     const clientsPrev = ownClients === null ? clinicClientsPrev : ownClientsPrev;
     const clientsChange = clientsPrev ? Math.round(((clientsNow - clientsPrev) / clientsPrev) * 100) : 0;
 
-    const todayISO = clinicDayKey(today);
-    const treatmentsOverdue = dueDates.filter((t) => t.next_due_at < todayISO).length;
-    const treatmentsDueSoon = dueDates.filter((t) => t.next_due_at >= todayISO).length;
+    const treatmentsOverdue = dueDates.filter((t) => t.state === "overdue").length;
+    const treatmentsDueSoon = dueDates.filter((t) => t.state === "due_soon").length;
+    // The attention list shows the soonest dozen of the same population.
+    const due = dueDates.slice(0, 12);
 
     const revenue = monthTreats.reduce((sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0), 0);
     const prevRevenue = prevMonthTreats.reduce((sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0), 0);
@@ -563,9 +648,10 @@ export const getDashboard = createServerFn({ method: "GET" })
       }
     }
 
-    // Deposits must be paid at least 3 clinic days before the appointment.
-    // Inside that window (≤3 days) → urgent chase; further out → this week.
-    const DEPOSIT_LEAD_DAYS = 3;
+    // Deposits must be paid at least `deposit_lead_days` clinic days before the
+    // appointment (Settings → Payments and deposits). Inside that window →
+    // urgent chase; further out → this week.
+    const DEPOSIT_LEAD_DAYS = Number(clinicRow.data?.deposit_lead_days ?? 3);
     for (const a of unpaidDeposits) {
       const apptDay = clinicDayKey(new Date(a.starts_at));
       const daysUntil = clinicDayDiff(todayISO, apptDay);
@@ -608,6 +694,19 @@ export const getDashboard = createServerFn({ method: "GET" })
         subtitle: m.body.slice(0, 60) + (m.body.length > 60 ? "…" : ""),
         patientId: m.patient_id,
       });
+    }
+
+    // Owner reminder: a team member's registration or insurance runs out within
+    // 60 days (or has already). Managers see the row; it links to the profile.
+    if (isManager) {
+      const { data: staffRows } = await supabase
+        .from("profiles")
+        .select(
+          "id, full_name, registration_body, registration_expiry, insurance_provider, insurance_expiry",
+        );
+      for (const item of complianceReminders((staffRows ?? []) as any[], todayISO)) {
+        attentionItems.push(item);
+      }
     }
 
     // ---- Journeys: active plans grouped by phase (dashboard bottom section).
@@ -714,13 +813,14 @@ export const getDashboard = createServerFn({ method: "GET" })
       todayAppointments: todayAppts.map((a: any) => ({
         ...a,
         consentState: consentStateOf(a),
-        claimedOffer: claimedOfferByPatient.get(a.patient_id) ?? null,
+        claimedOffer: claimedOfferFor(a),
       })),
       attentionItems,
       journeys,
       safeToProceed,
       safeReadyCount,
       due,
+      depositLeadDays: DEPOSIT_LEAD_DAYS,
       pendingDocuments: pendingDocs.data ?? [],
       historyFlags: historyFlags.data ?? [],
       role: {
@@ -738,7 +838,9 @@ export const listPatients = createServerFn({ method: "GET" })
     const supabase = (context as Ctx).supabase;
     const { data, error } = await supabase
       .from("patients")
-      .select("id, first_name, last_name, title, date_of_birth, status, reference, last_visit_at, allergies, avatar_url")
+      .select(
+        "id, first_name, last_name, title, date_of_birth, status, reference, last_visit_at, allergies, avatar_url, email, phone, marketing_opt_in, email_opt_in, sms_opt_in, reminders_opt_in, unsubscribed_at",
+      )
       // Archived records stay in the database for the retention window but drop
       // out of every clinical view; getPatient still resolves them by id.
       .is("deleted_at", null)
@@ -772,13 +874,36 @@ export const listPatients = createServerFn({ method: "GET" })
       ]);
 
     const nameOf = new Map((staffProfiles ?? []).map((s: any) => [s.id, s.full_name as string]));
-    const todayKey = clinicDayKey(new Date());
+    const now = new Date();
+    const todayKey = clinicDayKey(now);
+    // Shared definitions (metrics/definitions): visits oldest first, next due
+    // from the most recent treatment carrying a date, and one due state per
+    // patient so the list, the dashboard and retention agree.
+    type VisitRow = {
+      patient_id: string;
+      name: string;
+      performed_at: string;
+      next_due_at: string | null;
+      practitioner_id: string | null;
+    };
+    const visits = visitsByPatient((treatments ?? []) as VisitRow[]);
+    const upcomingSet = upcomingBookingSet(
+      (upcoming ?? []) as { patient_id: string; starts_at: string; status: string }[],
+      now.getTime(),
+    );
 
     return (data ?? []).map((p: Record<string, unknown>) => {
-      const mine = (treatments ?? []).filter((t: { patient_id: string }) => t.patient_id === p["id"]);
-      const last = mine.sort((a: any, b: any) => (a.performed_at < b.performed_at ? 1 : -1))[0];
-      // Most recent treatment carrying a due date (mine is sorted newest first).
-      const due = mine.find((t: any) => t.next_due_at);
+      const id = p["id"] as string;
+      const mine = [...(visits.get(id) ?? [])].reverse();
+      const last = mine[0];
+      const due = nextDueFor(mine);
+      const state = dueState({
+        patient: { id, status: String(p["status"] ?? "active") },
+        visits: visits.get(id),
+        hasUpcoming: upcomingSet.has(id),
+        nowMs: now.getTime(),
+        todayKey,
+      });
       const outstanding = (docs ?? []).filter(
         (d: any) => d.patient_id === p["id"] && (d.status === "sent" || d.status === "viewed"),
       ).length;
@@ -808,8 +933,8 @@ export const listPatients = createServerFn({ method: "GET" })
           kind: "paperwork",
         });
       }
-      if (due?.next_due_at && due.next_due_at < todayKey) {
-        openTasks.push({ id: `due-${p["id"]}`, label: `${due.name} overdue`, kind: "treatment_due" });
+      if (state === "overdue" && due) {
+        openTasks.push({ id: `due-${id}`, label: `${due.name} overdue`, kind: "treatment_due" });
       }
 
       return {
@@ -819,14 +944,21 @@ export const listPatients = createServerFn({ method: "GET" })
         nextAppointment: next ?? null,
         outstandingDocuments: outstanding,
         practitioners,
+        practitionerIds,
         openTasks,
+        // Drives the "Treatments due" (overdue + due_soon) and "No upcoming
+        // treatment" (anything but booked) filters on the list.
+        dueState: state,
       };
     });
   });
 
 export const getPatientMetrics = createServerFn({ method: "GET" })
+  .validator((data: { from?: string; to?: string }) =>
+    parseInput(schemas.GetPatientMetrics, data ?? {}),
+  )
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "getPatientMetrics");
     const supabase = (context as Ctx).supabase;
     const { buildBookMetrics } = await import("./insights.server");
@@ -837,6 +969,8 @@ export const getPatientMetrics = createServerFn({ method: "GET" })
     ]);
 
     return buildBookMetrics({
+      ...(data.from ? { from: data.from } : {}),
+      ...(data.to ? { to: data.to } : {}),
       patients: (patients ?? []) as any,
       treatments: (treatments ?? []) as any,
       appointments: (appointments ?? []) as any,
@@ -1129,11 +1263,13 @@ export const listPractitioners = createServerFn({ method: "GET" })
   });
 
 export const listAppointments = createServerFn({ method: "GET" })
-  .validator((data: { from: string; to: string }) => parseInput(schemas.ListAppointments, data))
+  .validator((data: { from: string; to: string; practitioner_id?: string }) =>
+    parseInput(schemas.ListAppointments, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "listAppointments");
-    const { data: rows, error } = await (context as Ctx).supabase
+    let query = (context as Ctx).supabase
       .from("appointments")
       .select(
         "*, patients(first_name, last_name, reference, email, phone), profiles(full_name), documents(status, title), treatment_catalogue(requires_consent), appointment_notes(body, updated_at, updated_by_label)",
@@ -1141,6 +1277,9 @@ export const listAppointments = createServerFn({ method: "GET" })
       .gte("starts_at", data.from)
       .lt("starts_at", data.to)
       .order("starts_at", { ascending: true });
+    // A practitioner's week is filtered here, the same way their day is.
+    if (data.practitioner_id) query = query.eq("practitioner_id", data.practitioner_id);
+    const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
     const list = (rows ?? []) as any[];
     await holdArrivedUntilConsent((context as Ctx).supabase, list);
@@ -1370,6 +1509,8 @@ export const saveAppointment = createServerFn({ method: "POST" })
       app_origin?: string;
       /** Pay-link amount when status is unpaid (defaults to full). */
       pay_kind?: PaymentLinkKind;
+      /** Quick book marks the booking for reception to finish. */
+      details_incomplete?: boolean;
     }) => parseInput(schemas.SaveAppointment, data),
   )
   .middleware([requireSupabaseAuth])
@@ -1391,6 +1532,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       payment_status: (data.payment_status as "unpaid" | "deposit_paid" | "paid" | "refunded") ?? "unpaid",
       consent_document_id: data.consent_document_id || null,
       notes: data.notes || null,
+      details_incomplete: data.details_incomplete ?? false,
       created_by: context.userId,
     };
     await assertNoPractitionerOverlap(supabase, {
@@ -2593,9 +2735,8 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "getPractitionerDay");
     const ctx = context as Ctx;
-    const day = new Date(`${data.date}T00:00:00`);
-    const from = new Date(day.getFullYear(), day.getMonth(), day.getDate()).toISOString();
-    const to = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).toISOString();
+    // The day is the clinic's (Europe/London), not the server's clock.
+    const { startISO: from, endISO: to } = clinicDayRangeForKey(data.date);
 
     const [{ data: appts }, { data: alerts }] = await Promise.all([
       ctx.supabase
@@ -2617,10 +2758,7 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
     const booked = (appts ?? []).filter((a: { status: string }) => a.status !== "cancelled");
     const DAY_START = 9 * 60;
     const DAY_END = 18 * 60;
-    const mins = (iso: string) => {
-      const d = new Date(iso);
-      return d.getHours() * 60 + d.getMinutes();
-    };
+    const mins = (iso: string) => clinicMinutesOfDay(new Date(iso));
     const free: { from: number; to: number }[] = [];
     let cursor = DAY_START;
     for (const a of booked as { starts_at: string; ends_at: string }[]) {
@@ -4205,19 +4343,45 @@ export const listTeam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "listTeam");
+    const identity = await authorize(ctx, "listTeam");
+    const showCommission = identity.isOwner || identity.permissions.includes("reports.commission");
     const supabaseAdmin = await adminClient(context);
-    const [{ data: profiles }, { data: roles }, users] = await Promise.all([
-      supabaseAdmin.from("profiles").select("*"),
-      supabaseAdmin.from("user_roles").select("user_id, role"),
-      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
-    ]);
+    const [{ data: profiles }, { data: roles }, users, { data: docs }, { data: changes }] =
+      await Promise.all([
+        supabaseAdmin.from("profiles").select("*"),
+        supabaseAdmin.from("user_roles").select("user_id, role"),
+        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
+        supabaseAdmin.from("staff_documents").select("user_id, category"),
+        // The latest role or commission change per person, for the "changed by" line.
+        supabaseAdmin
+          .from("audit_log")
+          .select("entity_id, actor_id, actor_label, created_at")
+          .eq("action", "staff.update")
+          .order("created_at", { ascending: false })
+          .limit(200),
+      ]);
     const emailFor = new Map<string, string>(
       (users.data?.users ?? []).map((u) => [u.id, u.email ?? ""]),
     );
     const signedInAt = new Map<string, string | null>(
       (users.data?.users ?? []).map((u) => [u.id, u.last_sign_in_at ?? null]),
     );
+    const essential = new Set<string>(ESSENTIAL_DOC_CATEGORIES.map((c) => c.value));
+    const docsFor = new Map<string, Set<string>>();
+    for (const d of docs ?? []) {
+      if (!essential.has(d.category)) continue;
+      (docsFor.get(d.user_id) ?? docsFor.set(d.user_id, new Set()).get(d.user_id)!).add(d.category);
+    }
+    const nameOf = (userId: string | null) =>
+      (profiles ?? []).find((p) => p.id === userId)?.full_name ?? null;
+    const changedFor = new Map<string, { by: string; at: string }>();
+    for (const c of changes ?? []) {
+      if (!c.entity_id || changedFor.has(c.entity_id)) continue;
+      changedFor.set(c.entity_id, {
+        by: nameOf(c.actor_id) ?? c.actor_label ?? "A manager",
+        at: c.created_at,
+      });
+    }
     const staffRoles = (roles ?? []).filter((r) => r.role !== "patient" && r.role !== "admin");
     return staffRoles
       .map((r) => {
@@ -4232,6 +4396,15 @@ export const listTeam = createServerFn({ method: "GET" })
           registrationNumber: profile?.registration_number ?? "",
           isSelf: r.user_id === ctx.userId,
           hasSignedIn: Boolean(signedInAt.get(r.user_id)),
+          lastActiveAt: signedInAt.get(r.user_id) ?? null,
+          commissionRate: showCommission ? Number(profile?.commission_rate ?? 0) : null,
+          compliance: {
+            docsOnFile: docsFor.get(r.user_id)?.size ?? 0,
+            docsTotal: ESSENTIAL_DOC_CATEGORIES.length,
+            registrationExpiry: (profile?.registration_expiry as string | null) ?? null,
+            insuranceExpiry: (profile?.insurance_expiry as string | null) ?? null,
+          },
+          accessChanged: changedFor.get(r.user_id) ?? null,
         };
       })
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -4286,6 +4459,10 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
       commissionRate?: number;
     }) => parseInput(schemas.UpdateStaffMember, data),
   )
@@ -4299,6 +4476,10 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       job_title: data.jobTitle ?? null,
       registration_body: data.registrationBody ?? null,
       registration_number: data.registrationNumber ?? null,
+      registration_expiry: data.registrationExpiry || null,
+      insurance_provider: data.insuranceProvider?.trim() || null,
+      insurance_expiry: data.insuranceExpiry || null,
+      qualifications: data.qualifications?.trim() || null,
     };
     if (data.commissionRate !== undefined) {
       patch.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
@@ -5022,12 +5203,15 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "getPractitionerPerformance");
+    const identity = await authorize(ctx, "getPractitionerPerformance");
+    // Money and commission need reports.commission (owners always have it); a
+    // manager without it gets counts, attendance and retention only.
+    const showMoney = identity.isOwner || identity.permissions.includes("reports.commission");
     const supabaseAdmin = await adminClient(context);
-    const { buildStats, buildTrend, moneyChanges, moneyTotals, trendViewWindows } = await import("./earnings.server");
+    const { buildStats, buildTrend, moneyChanges, moneyTotals, whatSold, withoutMoney } =
+      await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
     const previous = { from: data.previousFrom, to: data.previousTo };
-    const windows = trendViewWindows();
 
     const [
       { data: profiles },
@@ -5038,45 +5222,63 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       { data: prevAppointments },
       { data: yearTreatments },
       { data: firstSeen },
-      { data: yearTrendTreatments },
-      { data: yearTrendAppointments },
+      { data: futureAppointments },
+      { data: clinicRow },
+      { data: periodSales },
+      { data: products },
     ] =
       await Promise.all([
         supabaseAdmin.from("profiles").select("id, full_name, job_title, commission_rate"),
         supabaseAdmin.from("user_roles").select("user_id, role"),
         supabaseAdmin
           .from("treatments")
-          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot")
+          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id")
           .gte("performed_at", data.from)
           .lte("performed_at", data.to),
         supabaseAdmin
           .from("appointments")
-          .select("practitioner_id, price, payment_status, status, starts_at")
+          .select("id, practitioner_id, price, payment_status, status, starts_at")
           .gte("starts_at", data.from)
           .lte("starts_at", data.to),
         supabaseAdmin
           .from("treatments")
-          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot")
+          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id")
           .gte("performed_at", previous.from)
           .lte("performed_at", previous.to),
         supabaseAdmin
           .from("appointments")
-          .select("practitioner_id, price, payment_status, status, starts_at")
+          .select("id, practitioner_id, price, payment_status, status, starts_at")
           .gte("starts_at", previous.from)
           .lte("starts_at", previous.to),
         supabaseAdmin.from("treatments").select("practitioner_id, patient_id").gte("performed_at", yearAgo),
         supabaseAdmin.from("patients").select("id, created_at"),
-        supabaseAdmin
-          .from("treatments")
-          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot")
-          .gte("performed_at", windows.year.from)
-          .lte("performed_at", windows.year.to),
+        // Booked ahead: live bookings from now on, whatever the period.
         supabaseAdmin
           .from("appointments")
-          .select("practitioner_id, price, payment_status, status, starts_at")
-          .gte("starts_at", windows.year.from)
-          .lte("starts_at", windows.year.to),
+          .select("id, practitioner_id, price, payment_status, status, starts_at")
+          .gte("starts_at", new Date().toISOString())
+          .neq("status", "cancelled"),
+        supabaseAdmin.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
+        // Retail in the period, for its share of revenue and What sold.
+        supabaseAdmin
+          .from("product_sales")
+          .select("product_id, qty, amount, occurred_at")
+          .gte("occurred_at", data.from)
+          .lte("occurred_at", data.to),
+        supabaseAdmin.from("retail_products").select("id, name, sku"),
       ]);
+    const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
+    // Period bookings plus the live future ones, once each.
+    const withFuture = (rows: unknown[] | null) => {
+      const seen = new Set<string>();
+      const out: unknown[] = [];
+      for (const a of [...(rows ?? []), ...(futureAppointments ?? [])] as { id: string }[]) {
+        if (seen.has(a.id)) continue;
+        seen.add(a.id);
+        out.push(a);
+      }
+      return out;
+    };
 
     const staffIds = (roles ?? [])
       .filter((r) => r.role === "owner" || r.role === "practitioner")
@@ -5098,10 +5300,11 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
     const rows = buildStats(
       staff,
       (treatments ?? []) as never,
-      (appointments ?? []) as never,
+      withFuture(appointments) as never,
       (yearTreatments ?? []) as never,
       patientFirstSeen,
       { from: data.from, to: data.to },
+      money,
     ).sort((a, b) => b.earned - a.earned);
 
     const prevRows = buildStats(
@@ -5111,6 +5314,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       (yearTreatments ?? []) as never,
       patientFirstSeen,
       previous,
+      money,
     );
 
     const totals = rows.reduce(
@@ -5127,6 +5331,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         noShows: acc.noShows + r.noShows,
         cancelled: acc.cancelled + r.cancelled,
         outstanding: acc.outstanding + r.outstanding,
+        bookedAhead: acc.bookedAhead + r.bookedAhead,
       }),
       {
         earned: 0,
@@ -5141,6 +5346,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         noShows: 0,
         cancelled: 0,
         outstanding: 0,
+        bookedAhead: 0,
       },
     );
 
@@ -5160,25 +5366,37 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       (treatments ?? []) as never,
       (appointments ?? []) as never,
       { from: data.from, to: data.to },
+      money,
     );
 
-    const trendSourceTreatments = (yearTrendTreatments ?? []) as never;
-    const trendSourceAppointments = (yearTrendAppointments ?? []) as never;
-    const trendViews = {
-      month: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.month),
-      six: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.six),
-      year: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.year),
-    };
-
-    return {
-      rows,
-      previousRows: prevRows,
-      totals,
-      clinic,
-      trend,
-      trendViews,
-      changes: moneyChanges(moneyTotals(rows), moneyTotals(prevRows)),
-    };
+    // One period per page: the trend follows the picker (Phase 10, bullet 097).
+    const changes = moneyChanges(moneyTotals(rows), moneyTotals(prevRows));
+    const sold = whatSold(
+      (treatments ?? []) as never,
+      (periodSales ?? []) as never,
+      (products ?? []) as never,
+      { from: data.from, to: data.to },
+    );
+    if (!showMoney) {
+      const strip = (points: import("./earnings.server").TrendPoint[]) => points.map(withoutMoney);
+      return {
+        rows: rows.map(withoutMoney),
+        previousRows: prevRows.map(withoutMoney),
+        totals: withoutMoney(totals),
+        clinic: withoutMoney(clinic),
+        trend: {
+          ...trend,
+          clinic: strip(trend.clinic),
+          byPractitioner: Object.fromEntries(
+            Object.entries(trend.byPractitioner).map(([k, v]) => [k, strip(v)]),
+          ),
+        },
+        changes: withoutMoney(changes),
+        showMoney,
+        sold: null,
+      };
+    }
+    return { rows, previousRows: prevRows, totals, clinic, trend, changes, showMoney, sold };
   });
 
 /** The caller's own earnings and KPIs. Never returns clinic figures or the split percentage. */
@@ -5192,7 +5410,14 @@ export const getMyEarnings = createServerFn({ method: "POST" })
     const { buildStats } = await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
 
-    const [{ data: profile }, { data: treatments }, { data: appointments }, { data: yearTreatments }, { data: firstSeen }] =
+    const [
+      { data: profile },
+      { data: treatments },
+      { data: appointments },
+      { data: yearTreatments },
+      { data: firstSeen },
+      { data: clinicRow },
+    ] =
       await Promise.all([
         supabaseAdmin
           .from("profiles")
@@ -5202,7 +5427,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         supabaseAdmin
           .from("treatments")
           .select(
-            "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, patients(first_name, last_name)",
+            "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id, patients(first_name, last_name)",
           )
           .eq("practitioner_id", ctx.userId)
           .gte("performed_at", data.from)
@@ -5210,19 +5435,30 @@ export const getMyEarnings = createServerFn({ method: "POST" })
           .order("performed_at", { ascending: false }),
         supabaseAdmin
           .from("appointments")
-          .select("practitioner_id, price, payment_status, status, starts_at")
+          .select("id, practitioner_id, price, payment_status, status, starts_at")
           .eq("practitioner_id", ctx.userId)
-          .gte("starts_at", data.from)
-          .lte("starts_at", data.to),
+          .gte("starts_at", data.from),
         supabaseAdmin
           .from("treatments")
           .select("practitioner_id, patient_id")
           .eq("practitioner_id", ctx.userId)
           .gte("performed_at", yearAgo),
         supabaseAdmin.from("patients").select("id, created_at"),
+        supabaseAdmin.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
       ]);
 
     const rate = Number(profile?.commission_rate ?? 0);
+    const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
+    const paymentById = new Map(
+      ((appointments ?? []) as { id: string; payment_status: string | null }[]).map((a) => [
+        a.id,
+        a.payment_status,
+      ]),
+    );
+    const payoutFor = (appointmentId: string | null | undefined): "paid" | "pending" => {
+      if (!appointmentId) return "paid";
+      return paymentById.get(appointmentId) === "paid" ? "paid" : "pending";
+    };
     const stats = buildStats(
       [
         {
@@ -5239,12 +5475,20 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         (firstSeen ?? []).map((p: { id: string; created_at: string }) => [p.id, p.created_at]),
       ),
       { from: data.from, to: data.to },
+      money,
     )[0]!;
 
     // Only the caller's own figures leave the server — no clinic revenue, no rate.
+    // Every money figure is the practitioner's share so the cards reconcile.
     return {
       earnedShare: stats.earnedShare,
       collectedShare: stats.collectedShare,
+      outstandingShare: Math.round((stats.earnedShare - stats.collectedShare) * 100) / 100,
+      bookedAheadShare: Math.round(((stats.bookedAhead * rate) / 100) * 100) / 100,
+      commissionRate: rate,
+      averageShareValue: stats.treatments
+        ? Math.round((stats.earnedShare / stats.treatments) * 100) / 100
+        : 0,
       outstanding: stats.outstanding,
       treatments: stats.treatments,
       patients: stats.patients,
@@ -5263,6 +5507,9 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         patient: t.patients ? `${t.patients.first_name} ${t.patients.last_name}` : "—",
         share:
           Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,
+        // Payout status: paid once the linked booking is paid in full; a
+        // treatment with no booking counts as paid (recorded at the desk).
+        payout: payoutFor(t.appointment_id as string | null | undefined),
       })),
     };
   });
@@ -5327,6 +5574,10 @@ export const saveMyProfile = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
     }) => parseInput(schemas.SaveMyProfile, data),
   )
   .middleware([requireSupabaseAuth])
@@ -5342,6 +5593,10 @@ export const saveMyProfile = createServerFn({ method: "POST" })
         job_title: data.jobTitle?.trim() || null,
         registration_body: data.registrationBody?.trim() || null,
         registration_number: data.registrationNumber?.trim() || null,
+        registration_expiry: data.registrationExpiry || null,
+        insurance_provider: data.insuranceProvider?.trim() || null,
+        insurance_expiry: data.insuranceExpiry || null,
+        qualifications: data.qualifications?.trim() || null,
       })
       .eq("id", ctx.userId);
     if (error) throw new Error(error.message);
@@ -5750,12 +6005,15 @@ export const createRecallTask = createServerFn({ method: "POST" })
       patient_id: string;
       note?: string;
       recipients: { id: string; label: string }[];
+      /** When the chase should be done by (defaults to a week from now). */
+      due_at?: string;
     }) => parseInput(schemas.CreateRecallTask, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "createRecallTask");
+    const dueAt = data.due_at ?? new Date(Date.now() + 7 * 86400000).toISOString();
     const requested = data.recipients.length
       ? data.recipients
       : [{ id: ctx.userId, label: identity.profile?.full_name ?? "The team" }];
@@ -5799,6 +6057,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
         created_by: ctx.userId,
         note: data.note ?? null,
         status: "open" as const,
+        due_at: dueAt,
       })),
     );
     if (error) throw new Error(error.message);
@@ -6431,10 +6690,31 @@ export const getClinicDetails = createServerFn({ method: "GET" })
     await authorize(context as Ctx, "getClinicDetails");
     const { data } = await (context as Ctx).supabase
       .from("clinics")
-      .select("id, name, address, phone, email, reminder_offsets")
+      .select("id, name, address, phone, email, reminder_offsets, deposit_lead_days, deposit_percent")
       .eq("id", clinicIdOf(context))
       .maybeSingle();
     return data ?? null;
+  });
+
+/** Payments and deposits: how many days before the visit a deposit is due, and its share of the price. */
+export const updateDepositRules = createServerFn({ method: "POST" })
+  .validator((data: { deposit_lead_days: number; deposit_percent: number }) =>
+    parseInput(schemas.UpdateDepositRules, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "updateDepositRules");
+    const { error } = await ctx.supabase
+      .from("clinics")
+      .update({ deposit_lead_days: data.deposit_lead_days, deposit_percent: data.deposit_percent })
+      .eq("id", clinicIdOf(context));
+    if (error) throw new Error(error.message);
+    await audit(ctx, "update", "clinic", clinicIdOf(context), null, {
+      deposit_lead_days: data.deposit_lead_days,
+      deposit_percent: data.deposit_percent,
+    });
+    return { ok: true };
   });
 
 /** Manager-only: update the clinic's contact details. */
@@ -6477,9 +6757,21 @@ export const listRolePermissions = createServerFn({ method: "GET" })
     const identity = await authorize(ctx, "listRolePermissions");
     const { data, error } = await ctx.supabase
       .from("role_permissions")
-      .select("role, permission, enabled");
+      .select("role, permission, enabled, updated_by, updated_at");
     if (error) throw new Error(error.message);
-    const rows = (data ?? []) as { role: string; permission: string; enabled: boolean }[];
+    const rows = (data ?? []) as {
+      role: string;
+      permission: string;
+      enabled: boolean;
+      updated_by: string | null;
+      updated_at: string;
+    }[];
+    // Names for "changed by": one lookup for everyone who touched a grant.
+    const changerIds = [...new Set(rows.map((r) => r.updated_by).filter((v): v is string => Boolean(v)))];
+    const changers: { id: string; full_name: string }[] = changerIds.length
+      ? ((await ctx.supabase.from("profiles").select("id, full_name").in("id", changerIds)).data ?? [])
+      : [];
+    const nameOf = new Map<string, string>(changers.map((p) => [p.id, p.full_name]));
     const editableRoles = ["manager", "front_desk", "practitioner", "patient"] as const;
     const grants: Record<string, Record<string, boolean>> = {
       manager: {},
@@ -6487,13 +6779,17 @@ export const listRolePermissions = createServerFn({ method: "GET" })
       practitioner: {},
       patient: {},
     };
+    const changes: Record<string, Record<string, { by: string; at: string }>> = {};
     for (const role of editableRoles) {
       for (const key of PERMISSION_KEYS) {
-        grants[role]![key] =
-          rows.find((r) => r.role === role && r.permission === key)?.enabled ?? false;
+        const row = rows.find((r) => r.role === role && r.permission === key);
+        grants[role]![key] = row?.enabled ?? false;
+        if (row?.updated_by) {
+          (changes[role] ??= {})[key] = { by: nameOf.get(row.updated_by) ?? "A manager", at: row.updated_at };
+        }
       }
     }
-    return { grants, canEdit: identity.isOwner || identity.isAdmin };
+    return { grants, changes, canEdit: identity.isOwner || identity.isAdmin };
   });
 
 /** Clinic owner: turn a single capability on or off for a staff role. */
@@ -6941,8 +7237,13 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
  * ------------------------------------------------------------------------- */
 
 export const listTreatmentPlans = createServerFn({ method: "GET" })
-  .validator((data: { practitioner_id?: string; at_risk_only?: boolean; query?: string }) =>
-    parseInput(schemas.ListTreatmentPlans, data),
+  .validator(
+    (data: {
+      practitioner_id?: string;
+      patient_id?: string;
+      at_risk_only?: boolean;
+      query?: string;
+    }) => parseInput(schemas.ListTreatmentPlans, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -6957,6 +7258,7 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
       .eq("status", "active")
       .order("started_at", { ascending: true });
     if (data.practitioner_id) planQuery = planQuery.eq("practitioner_id", data.practitioner_id);
+    if (data.patient_id) planQuery = planQuery.eq("patient_id", data.patient_id);
     const { data: plans, error } = await planQuery;
     if (error) throw new Error(error.message);
 
@@ -6982,6 +7284,12 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
 
     const todayISO = clinicDayKey(new Date());
     const hasUpcoming = new Set((upcomingAppts ?? []).map((a: any) => a.patient_id));
+    // Earliest live booking per patient, for the card's "Booked 28 Sep" label.
+    const nextBookingByPatient = new Map<string, string>();
+    for (const a of (upcomingAppts ?? []) as { patient_id: string; starts_at: string }[]) {
+      const cur = nextBookingByPatient.get(a.patient_id);
+      if (!cur || a.starts_at < cur) nextBookingByPatient.set(a.patient_id, a.starts_at);
+    }
     const needle = (data.query ?? "").trim().toLowerCase();
 
     let rows = (plans ?? []).map((p: any) => {
@@ -7011,6 +7319,7 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
           : !hasUpcoming.has(p.patient_id)
             ? "No upcoming booking"
             : null,
+        nextBookingAt: nextBookingByPatient.get(p.patient_id) ?? null,
       };
     });
 
@@ -7776,7 +8085,9 @@ async function offerCohortInput(ctx: Ctx) {
       .from("treatment_plans")
       .select("id, patient_id, status, started_at, duration_days, total_sessions")
       .eq("status", "active"),
-    supabase.from("patient_offers").select("patient_id, stage, status, source"),
+    supabase
+      .from("patient_offers")
+      .select("patient_id, stage, status, source, template_id, expires_at"),
   ]);
   for (const r of [patients, appointments, treatments, catalogue, plans, offers]) {
     if (r.error) throw new Error(r.error.message);
@@ -7827,6 +8138,30 @@ async function offerStoreFor(ctx: Ctx, origin: string | null | undefined) {
       if (error) throw new Error(error.message);
     },
     enqueue: (input) => enqueue(ctx.supabase, input),
+    async listOffers(ids) {
+      const { data, error } = await ctx.supabase
+        .from("patient_offers")
+        .select("patient_id, template_id, status, expires_at")
+        .in("patient_id", ids);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    async catalogueNames(ids) {
+      const { data, error } = await ctx.supabase
+        .from("treatment_catalogue")
+        .select("name")
+        .in("id", ids);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((c: { name: string }) => String(c.name));
+    },
+    // A sent offer is the chase: the patient's open recall tasks close with it.
+    async closeRecallTasks(patientId) {
+      await ctx.supabase
+        .from("recall_tasks")
+        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .eq("patient_id", patientId)
+        .in("status", ["open", "contacted"]);
+    },
   };
   return store;
 }
@@ -7842,10 +8177,15 @@ export const listOfferTemplates = createServerFn({ method: "GET" })
       .is("archived_at", null)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    const { data: sends } = await ctx.supabase
-      .from("patient_offers")
-      .select("template_id, status, expires_at");
+    const [{ data: sends }, { data: bookings }, { data: performed }] = await Promise.all([
+      ctx.supabase
+        .from("patient_offers")
+        .select("template_id, patient_id, status, expires_at, claimed_at"),
+      ctx.supabase.from("appointments").select("patient_id, created_at, status"),
+      ctx.supabase.from("treatments").select("patient_id, performed_at, price"),
+    ]);
     const { effectiveOfferStatus } = await import("./offers/shape");
+    const { offerResults, EMPTY_RESULTS } = await import("./offers/results");
     const now = new Date();
     const counts = new Map<string, Record<string, number>>();
     for (const s of (sends ?? []) as any[]) {
@@ -7854,9 +8194,11 @@ export const listOfferTemplates = createServerFn({ method: "GET" })
       bucket[effectiveOfferStatus(s, now)] = (bucket[effectiveOfferStatus(s, now)] ?? 0) + 1;
       counts.set(s.template_id, bucket);
     }
+    const results = offerResults(sends ?? [], bookings ?? [], performed ?? []);
     return (data ?? []).map((t: any) => ({
       ...t,
       counts: counts.get(t.id) ?? { sent: 0, viewed: 0, claimed: 0, expired: 0, cancelled: 0 },
+      results: results.get(t.id) ?? EMPTY_RESULTS,
     }));
   });
 
@@ -7878,6 +8220,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       show_in_portal: boolean;
       image_url?: string | null;
       image_placement?: "background" | "top" | "left" | "right" | "bottom" | null;
+      applies_to_catalogue_ids?: string[];
+      one_per_patient?: boolean;
+      no_stacking?: boolean;
     }) => parseInput(schemas.SaveOfferTemplate, data),
   )
   .middleware([requireSupabaseAuth])
@@ -7900,6 +8245,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       show_in_portal: data.show_in_portal,
       image_url: data.image_url?.trim() || null,
       image_placement: data.image_url?.trim() ? data.image_placement ?? "top" : null,
+      applies_to_catalogue_ids: data.applies_to_catalogue_ids ?? [],
+      one_per_patient: data.one_per_patient ?? true,
+      no_stacking: data.no_stacking ?? true,
     };
     if (data.stage !== "custom") {
       // One live template per stage: a second one for the same stage would
@@ -8012,18 +8360,22 @@ export const previewOfferStage = createServerFn({ method: "GET" })
     const { STAGE_META } = await import("./offers/stages");
     const input = await offerCohortInput(ctx);
     const members = buildStageCohorts(input);
-    let delay: number | undefined = data.delay_days;
-    if (delay == null) {
-      const { data: tmpl } = await ctx.supabase
-        .from("offer_templates")
-        .select("automation_delay_days")
-        .eq("stage", data.stage)
-        .is("archived_at", null)
-        .maybeSingle();
-      delay = Number(tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays);
-    }
+    const { data: tmpl } = await ctx.supabase
+      .from("offer_templates")
+      .select("id, automation_delay_days, one_per_patient, no_stacking, show_in_portal")
+      .eq("stage", data.stage)
+      .is("archived_at", null)
+      .maybeSingle();
+    const delay = Number(
+      data.delay_days ?? tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays,
+    );
     return {
-      ...previewStage(members, input.patients, input.offers, data.stage, delay),
+      ...previewStage(members, input.patients, input.offers, data.stage, delay, new Date(), {
+        templateId: tmpl?.id ?? null,
+        onePerPatient: tmpl?.one_per_patient ?? true,
+        noStacking: tmpl?.no_stacking ?? true,
+        showInPortal: tmpl?.show_in_portal ?? true,
+      }),
       counts: stageCounts(members),
       delay_days: delay,
     };

@@ -66,6 +66,51 @@ describe("previewStage", () => {
     expect(waiting.willSend).toEqual([]);
     expect(waiting.skipped.map((r) => r.reason).sort()).toEqual(["already_offered", "waiting_for_delay"]);
   });
+
+  it("puts no-consent patients on the portal-only list when the template shows a card", () => {
+    const members = buildStageCohorts(input);
+    const pre = previewStage(members, patients, input.offers, "pre_consultation", 0, NOW, {
+      showInPortal: true,
+    });
+    expect(pre.willSend.map((r) => r.name)).toEqual(["Isla Hartley"]);
+    expect(pre.portalOnly.map((r) => r.name)).toEqual(["Maya Quayle"]);
+    expect(pre.skipped).toEqual([]);
+  });
+
+  it("applies one-per-patient and no-stacking to the preview", () => {
+    const members = buildStageCohorts(input);
+    const offers = [
+      ...input.offers,
+      {
+        patient_id: "p1",
+        stage: "custom",
+        status: "expired",
+        source: "one_off",
+        template_id: "tpre",
+        expires_at: daysAgo(3),
+      },
+      {
+        patient_id: "p2",
+        stage: "custom",
+        status: "sent",
+        source: "one_off",
+        template_id: "t9",
+        expires_at: new Date(NOW.getTime() + 86400000).toISOString(),
+      },
+    ];
+    const pre = previewStage(members, patients, offers, "pre_consultation", 0, NOW, {
+      templateId: "tpre",
+      onePerPatient: true,
+      noStacking: true,
+      showInPortal: true,
+    });
+    expect(pre.willSend).toEqual([]);
+    expect(pre.portalOnly).toEqual([]);
+    expect(pre.skipped.map((r) => [r.name, r.reason])).toEqual([
+      ["Isla Hartley", "already_offered"],
+      ["Maya Quayle", "has_live_offer"],
+    ]);
+  });
 });
 
 const template: SendableTemplate = {
@@ -153,6 +198,57 @@ describe("sendOfferToPatients", () => {
     expect(r2.sent).toEqual([]);
     expect(r2.skipped[0]).toMatchObject({ patient_id: "p2", reason: "This patient has not opted in to marketing messages." });
     expect(auto.offers).toHaveLength(0);
+  });
+
+  it("enforces one per patient and no stacking, and names the treatments it applies to", async () => {
+    const { store, offers, queued } = fakeStore();
+    const existing = [
+      // p1 already had this template; p3 holds a live offer from another template; p4 has only an expired one.
+      { patient_id: "p1", template_id: "t1", status: "expired", expires_at: daysAgo(2) },
+      {
+        patient_id: "p3",
+        template_id: "t9",
+        status: "viewed",
+        expires_at: new Date(NOW.getTime() + 5 * 86400000).toISOString(),
+      },
+      { patient_id: "p4", template_id: "t9", status: "sent", expires_at: daysAgo(1) },
+    ];
+    store.listOffers = async (ids) => existing.filter((o) => ids.includes(o.patient_id));
+    store.catalogueNames = async (ids) =>
+      ids.map((id) => ({ c1: "Chemical peel", c2: "Microneedling" })[id] ?? id);
+    const ruled: SendableTemplate = {
+      ...template,
+      applies_to_catalogue_ids: ["c1", "c2"],
+      one_per_patient: true,
+      no_stacking: true,
+    };
+    const result = await sendOfferToPatients(store, ruled, ["p1", "p3", "p4"], {
+      source: "bulk",
+      sentBy: "u1",
+      portalOnlyWhenNoConsent: true,
+      now: NOW,
+    });
+    expect(result.skipped.map((s) => [s.patient_id, s.reason])).toEqual([
+      ["p1", "Already had this offer (one per patient)."],
+      ["p3", "Has a live offer already (no stacking)."],
+    ]);
+    expect(result.sent.map((s) => s.patient_id)).toEqual(["p4"]);
+    expect(offers[0].body).toBe("Book a peel.\n\nApplies to: Chemical peel, Microneedling.");
+    expect(queued[0].body).toContain("Applies to: Chemical peel, Microneedling.");
+  });
+
+  it("lets the rules be switched off", async () => {
+    const { store } = fakeStore();
+    store.listOffers = async () => [
+      { patient_id: "p1", template_id: "t1", status: "claimed", expires_at: null },
+    ];
+    const result = await sendOfferToPatients(
+      store,
+      { ...template, one_per_patient: false, no_stacking: false },
+      ["p1"],
+      { source: "one_off", sentBy: "u1", portalOnlyWhenNoConsent: true, now: NOW },
+    );
+    expect(result.sent).toHaveLength(1);
   });
 
   it("skips archived and unknown patients", async () => {

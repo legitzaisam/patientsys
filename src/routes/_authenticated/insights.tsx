@@ -10,7 +10,6 @@ import { AppShell } from "@/components/app-shell";
 import { CURRENT_YEAR, PeriodPicker, periodHeading, periodRange, type PeriodSelection } from "@/components/period-picker";
 import { PatientMetrics } from "@/components/patients/patient-metrics";
 import { ActionList } from "@/components/insights/action-list";
-import { Bestsellers } from "@/components/insights/bestsellers";
 import { FunnelChart } from "@/components/insights/funnel-chart";
 import { FunnelTiles } from "@/components/insights/funnel-tiles";
 import { SourceMix } from "@/components/insights/source-mix";
@@ -63,7 +62,7 @@ function InsightsPage() {
   const tabs = (
     [
       ...(canSee(identity, "insights-pipeline") ? [{ key: "pipeline" as const, label: "Pipeline" }] : []),
-      ...(canSee(identity, "insights-book") ? [{ key: "book" as const, label: "Book" }] : []),
+      ...(canSee(identity, "insights-book") ? [{ key: "book" as const, label: "Patient base" }] : []),
     ] as { key: InsightsTab; label: string }[]
   );
 
@@ -74,8 +73,8 @@ function InsightsPage() {
           <h1 className="page-title">Insights</h1>
           <p className="page-subtitle">
             {tab === "book"
-              ? "List size, mix and quality — not a recall list."
-              : `${periodHeading(period)}. Sign-ups, bookings, consultations and first treatments.`}
+              ? `${periodHeading(period)}. How big the patient base is, how it is made up and how well it comes back.`
+              : `${periodHeading(period)}. Online enquiries, bookings, consultations and first treatments.`}
           </p>
         </div>
         <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
@@ -97,12 +96,12 @@ function InsightsPage() {
                   ))}
                 </div>
               ) : null}
-              {tab === "pipeline" ? <PeriodPicker value={period} onChange={setPeriod} /> : null}
+          <PeriodPicker value={period} onChange={setPeriod} />
         </div>
       </div>
 
       {tab === "book" ? (
-        <PatientMetrics />
+        <PatientMetrics period={period} />
       ) : (
         <div className="space-y-8">
           <section>
@@ -117,10 +116,7 @@ function InsightsPage() {
             <div className="mb-3">
               <h2 className="section-title">Needs a next step</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                People who signed up in this window and still need a first booking or a first treatment.
-                {canSendOffers
-                  ? " Send offer uses the Pre-consultation and Post-consultation templates from Offers, or any one-off template."
-                  : ""}
+                New enquiries in this window who have not yet booked or had a first treatment.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -128,7 +124,7 @@ function InsightsPage() {
                 title="Waiting for a first booking"
                 subtitle="Signed up in this window and have no appointment yet. Maps to the Pre-consultation offer."
                 rows={data?.waiting ?? []}
-                empty="Everyone who signed up in this window has a booking."
+                empty="Every enquiry in this window has a booking."
                 kind="waiting"
                 canSendOffers={canSendOffers}
               />
@@ -141,14 +137,6 @@ function InsightsPage() {
                 canSendOffers={canSendOffers}
               />
             </div>
-          </section>
-
-          <section>
-            <div className="mb-3">
-              <h2 className="section-title">What sold</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Treatments and retail products in this window.</p>
-            </div>
-            <Bestsellers data={data?.bestsellers} />
           </section>
         </div>
       )}

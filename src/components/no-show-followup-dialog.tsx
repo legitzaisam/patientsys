@@ -41,6 +41,7 @@ export function NoShowFollowUpDialog({
 }) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"ask" | "reschedule" | "task">("ask");
+  const [taskDue, setTaskDue] = useState(() => new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   const [handled, setHandled] = useState(false);
   const base = new Date(a.starts_at);
   const [date, setDate] = useState(
@@ -186,6 +187,12 @@ export function NoShowFollowUpDialog({
                 This appears in “My tasks” on the dashboard so the patient can be contacted by chat, phone or email.
               </p>
             </div>
+            <div className="field-stack">
+              <Label htmlFor="no-show-due" className="text-2xs uppercase tracking-wide text-muted-foreground">
+                Due by
+              </Label>
+              <Input id="no-show-due" type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} />
+            </div>
             <div className="flex justify-end gap-2" data-slot="dialog-footer">
               <Button type="button" variant="outline" onClick={() => setMode("ask")}>
                 Back
@@ -202,6 +209,7 @@ export function NoShowFollowUpDialog({
                       recipients: a.practitioner_id
                         ? [{ id: a.practitioner_id, label: a.profiles?.full_name ?? "Practitioner" }]
                         : [],
+                      due_at: new Date(`${taskDue}T12:00:00`).toISOString(),
                     },
                   })
                 }

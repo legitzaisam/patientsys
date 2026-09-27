@@ -1,0 +1,33 @@
+---
+// Segmented pill control. Sits to the right of a page or section title.
+// Clicking a segment presses it and dispatches "pill:change" on the group
+// with { name, value }; pages listen for that and update their content.
+interface Props {
+  name: string;
+  label: string; // accessible name for the group
+  value: string;
+  options: { id: string; label: string }[];
+  class?: string;
+}
+const { name, label, value, options, class: cls = "" } = Astro.props;
+---
+
+<div class={`pill ${cls}`} role="group" aria-label={label} data-pill={name}>
+  {options.map((o) => (
+    <button type="button" class="pill__seg" aria-pressed={o.id === value ? "true" : "false"} data-value={o.id}>
+      {o.label}
+    </button>
+  ))}
+</div>
+
+<script>
+  document.addEventListener("click", (e) => {
+    const seg = (e.target as HTMLElement).closest<HTMLButtonElement>(".pill__seg");
+    const group = seg?.closest<HTMLElement>("[data-pill]");
+    if (!seg || !group) return;
+    group.querySelectorAll<HTMLButtonElement>(".pill__seg").forEach((b) => b.setAttribute("aria-pressed", String(b === seg)));
+    group.dispatchEvent(
+      new CustomEvent("pill:change", { bubbles: true, detail: { name: group.dataset.pill, value: seg.dataset.value } }),
+    );
+  });
+</script>

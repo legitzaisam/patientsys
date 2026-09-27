@@ -1,0 +1,215 @@
+---
+// Safety by design: a signature writes itself, a gold ring closes into a
+// padlock, then three facts count up. Every figure is true of the product.
+const facts = [
+  { n: 161, suffix: "", label: "server actions, each checked against the signed-in role before it runs" },
+  { n: 8, suffix: " yrs", label: "record retention, with legal hold for complaints and claims" },
+  { n: 100, suffix: "%", label: "of signed consents locked against edits in the database" },
+];
+---
+
+<section class="safety section" id="safety" aria-labelledby="safety-title" data-inview data-safety>
+  <div class="wrap safety__grid">
+    <div class="seal" aria-hidden="true">
+      <svg viewBox="0 0 320 320">
+        <circle cx="160" cy="160" r="140" class="seal__track"></circle>
+        <circle cx="160" cy="160" r="140" class="seal__ring" pathLength="1" transform="rotate(-90 160 160)"></circle>
+        <path class="seal__sig" pathLength="1" d="M70 190 C 90 150, 100 140, 110 170 S 125 205, 138 160 S 150 120, 160 168 C 166 196, 176 196, 184 170 S 196 140, 206 172 S 228 190, 250 150"></path>
+        <g class="seal__lock">
+          <rect x="128" y="150" width="64" height="52" rx="10"></rect>
+          <path d="M140 150 v-14 a20 20 0 0 1 40 0 v14" fill="none" stroke-width="7" stroke-linecap="round"></path>
+          <circle cx="160" cy="174" r="6" class="seal__key"></circle>
+        </g>
+      </svg>
+      <p class="seal__words"><span>Signed.</span> <span>Witnessed.</span> <span>Locked.</span></p>
+    </div>
+
+    <div class="safety__copy">
+      <p class="eyebrow">Safety by design</p>
+      <h2 id="safety-title" class="display" data-lines>
+        <span class="line-mask"><span>Ready for the rules</span></span>
+        <span class="line-mask"><span>that are <em>coming.</em></span></span>
+      </h2>
+      <p class="lede">
+        A named practitioner on every record, an audit trail of every action, clinic data kept apart, and the records a
+        UK licensing scheme will ask for, kept without extra work.
+      </p>
+      <dl class="facts">
+        {facts.map((f) => (
+          <div class="fact">
+            <dt><span data-count={f.n}>{f.n}</span>{f.suffix}</dt>
+            <dd>{f.label}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  </div>
+</section>
+
+<style>
+  .safety__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: clamp(2rem, 6vw, 6rem);
+    align-items: center;
+  }
+  .seal {
+    display: grid;
+    justify-items: center;
+    gap: 1rem;
+  }
+  .seal svg {
+    width: min(100%, 22rem);
+    height: auto;
+    overflow: visible;
+  }
+  .seal__track {
+    fill: rgba(255, 255, 255, 0.5);
+    stroke: rgba(47, 63, 102, 0.08);
+    stroke-width: 2;
+  }
+  .seal__ring {
+    fill: none;
+    stroke: var(--butter-deep);
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    filter: drop-shadow(0 0 10px rgba(226, 196, 107, 0.55));
+  }
+  .seal__sig {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  .seal__lock {
+    opacity: 0;
+    transform-origin: 160px 170px;
+    transform: scale(0.6);
+  }
+  .seal__lock rect {
+    fill: var(--butter);
+  }
+  .seal__lock path {
+    stroke: var(--butter-deep);
+    transform-origin: 180px 150px;
+    transform: rotate(-24deg) translateY(-6px);
+  }
+  .seal__key {
+    fill: var(--ink);
+  }
+  .safety.is-in .seal__sig {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1.6s var(--ease-peel) 0.2s;
+  }
+  .safety.is-in .seal__sig {
+    animation: fadeSig 0.6s ease 2.3s forwards;
+  }
+  @keyframes fadeSig {
+    to {
+      opacity: 0.12;
+    }
+  }
+  .safety.is-in .seal__ring {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1.4s var(--ease-dew) 1.4s;
+  }
+  .safety.is-in .seal__lock {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 500ms ease 2.4s,
+      transform 800ms var(--ease-dew) 2.4s;
+  }
+  .safety.is-in .seal__lock path {
+    transform: none;
+    transition: transform 500ms var(--ease-dew) 3s;
+  }
+  .seal__words {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.7rem;
+  }
+  .seal__words span {
+    opacity: 0;
+    display: inline-block;
+    transform: translateY(8px);
+  }
+  .safety.is-in .seal__words span {
+    opacity: 1;
+    transform: none;
+    transition: all 600ms var(--ease-dew);
+  }
+  .safety.is-in .seal__words span:nth-child(1) {
+    transition-delay: 1.8s;
+  }
+  .safety.is-in .seal__words span:nth-child(2) {
+    transition-delay: 2.4s;
+  }
+  .safety.is-in .seal__words span:nth-child(3) {
+    transition-delay: 3s;
+    color: var(--butter-ink);
+  }
+  .safety__copy {
+    display: grid;
+    gap: 1.2rem;
+  }
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin: 1rem 0 0;
+  }
+  .fact {
+    padding-top: 1rem;
+    border-top: 1px solid var(--butter-line);
+  }
+  .fact dt {
+    font-family: var(--font-display);
+    font-size: clamp(2.4rem, 4vw, 3.4rem);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .fact dd {
+    margin: 0.5rem 0 0;
+    font-size: 0.88rem;
+    color: var(--ink-2);
+  }
+  @media (max-width: 900px) {
+    .safety__grid {
+      grid-template-columns: 1fr;
+    }
+    .facts {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<script>
+  import { reducedMotion } from "../scripts/motion";
+  const root = document.querySelector<HTMLElement>("[data-safety]")!;
+  const nums = [...root.querySelectorAll<HTMLElement>("[data-count]")];
+  if (!reducedMotion()) {
+    nums.forEach((el) => (el.textContent = "0"));
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (!e.isIntersecting) return;
+        io.disconnect();
+        const start = performance.now() + 500;
+        const tick = (now: number) => {
+          const k = Math.min(1, Math.max(0, (now - start) / 1600));
+          const ease = 1 - Math.pow(1 - k, 4);
+          nums.forEach((el) => (el.textContent = String(Math.round(Number(el.dataset.count) * ease))));
+          if (k < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      },
+      { threshold: 0.3 },
+    );
+    io.observe(root);
+  }
+</script>

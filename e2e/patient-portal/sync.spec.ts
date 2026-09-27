@@ -25,7 +25,19 @@ async function openStaffRecord(page: import("@playwright/test").Page) {
   await link.waitFor({ timeout: 15_000 });
   await link.click();
   await page.waitForURL(/\/patients\/[^/]+$/);
-  await page.locator("#patient-chat").waitFor({ timeout: 15_000 });
+  await page.locator('[data-qc="open-chat"]').waitFor({ timeout: 15_000 });
+}
+
+/**
+ * The record no longer docks a chat panel: "Open chat" opens the floating
+ * window on this patient. The fixture hides the dock to keep page corners
+ * clear, so show it for these crossings.
+ */
+async function openStaffChat(page: import("@playwright/test").Page) {
+  await page.addStyleTag({ content: '[data-qc="floating-dock"] { display: flex !important; }' });
+  await page.locator('[data-qc="open-chat"]').click();
+  await page.locator('[data-qc="chat-window"] textarea').waitFor({ timeout: 15_000 });
+  return page.locator('[data-qc="chat-window"]');
 }
 
 test("a message the clinic sends appears in the patient's thread", async ({ page }) => {
@@ -33,9 +45,10 @@ test("a message the clinic sends appears in the patient's thread", async ({ page
 
   await becomeStaff(page);
   await openStaffRecord(page);
-  await page.locator("#patient-chat textarea").fill(probe);
-  await page.locator('#patient-chat [aria-label="Send message"]').click();
-  await expect(page.locator("#patient-chat").getByText(probe)).toBeVisible();
+  const chat = await openStaffChat(page);
+  await chat.locator("textarea").fill(probe);
+  await chat.locator('[aria-label="Send message"]').click();
+  await expect(chat.getByText(probe)).toBeVisible();
 
   await becomePatient(page);
   await page.goto("/my-record");
@@ -55,7 +68,8 @@ test("a message the patient sends appears on the staff record", async ({ page })
 
   await becomeStaff(page);
   await openStaffRecord(page);
-  await expect(page.locator("#patient-chat").getByText(probe)).toBeVisible();
+  const chat = await openStaffChat(page);
+  await expect(chat.getByText(probe)).toBeVisible();
 });
 
 test("a patient's message also reaches their clinician's bell", async ({ page, context, baseURL }) => {

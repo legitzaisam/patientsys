@@ -1,4 +1,6 @@
 import { Link } from "@tanstack/react-router";
+import { LoadError, LoadingCard, type LoadStatus } from "@/components/dashboard/load-state";
+import { JOURNEY_PHASE_META } from "@/lib/journey-phases";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -31,16 +33,8 @@ export type Journeys = {
   phases: JourneyPhase[];
 };
 
-/**
- * Each phase says what it holds and what the clinic should be doing about the
- * patients in it, so the column reads as a to-do rather than a label.
- */
-const PHASE_META: Record<JourneyPhase["phase"], { label: string; sub: string }> = {
-  consult: { label: "Consultation & prep", sub: "Not yet in treatment — book the consultation or first session." },
-  foundation: { label: "Foundation", sub: "Early sessions — keep the next booking in the diary." },
-  build: { label: "Build & support", sub: "Mid-course — watch progress and check in between visits." },
-  results: { label: "Results & confidence", sub: "Finishing — take results photos and agree maintenance." },
-};
+/** Shared with the Patients journey board, so both surfaces name the phases the same way. */
+const PHASE_META: Record<JourneyPhase["phase"], { label: string; sub: string }> = JOURNEY_PHASE_META;
 
 /** Non-clinical plans say what they are; a treatment course needs no chip. */
 const KIND_CHIP: Record<string, string> = {
@@ -60,7 +54,15 @@ function dueLabel(nextDue: string, overdue: boolean) {
  * plan phase; each row is a patient with their plan, the step that is up next
  * and how many steps are done. Rows open the patient record.
  */
-export function TreatmentJourneys({ journeys }: { journeys: Journeys | undefined }) {
+export function TreatmentJourneys({
+  journeys,
+  status = "ready",
+  onRetry,
+}: {
+  journeys: Journeys | undefined;
+  status?: LoadStatus;
+  onRetry?: () => void;
+}) {
   const phases = (journeys?.phases ?? []).filter((p) => p.count > 0);
   return (
     <section className="mt-8">
@@ -68,8 +70,9 @@ export function TreatmentJourneys({ journeys }: { journeys: Journeys | undefined
         <div className="min-w-0 flex-1">
           <h2 className="section-title">Active treatment journeys</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {journeys?.activeCount ?? 0} patient{(journeys?.activeCount ?? 0) === 1 ? "" : "s"} on a phased plan,
-            grouped by where they are. Each row shows the next step; late steps are flagged. Open a row to act on it.
+            {status === "ready"
+              ? `${journeys?.activeCount ?? 0} patient${(journeys?.activeCount ?? 0) === 1 ? "" : "s"} on a phased plan, grouped by where they are. Each row shows the next step; late steps are flagged. Open a row to act on it.`
+              : "Patients on a phased plan, grouped by where they are."}
           </p>
         </div>
         <Link
@@ -80,7 +83,16 @@ export function TreatmentJourneys({ journeys }: { journeys: Journeys | undefined
           View journey board →
         </Link>
       </div>
-      {phases.length === 0 ? (
+      {status === "error" ? (
+        <LoadError what="the treatment journeys" onRetry={onRetry} />
+      ) : status === "loading" ? (
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-4" data-qc="journeys-loading">
+          <LoadingCard lines={3} />
+          <LoadingCard lines={3} />
+          <LoadingCard lines={3} />
+          <LoadingCard lines={3} />
+        </div>
+      ) : phases.length === 0 ? (
         <Card className="p-6">
           <p className="text-center text-sm text-muted-foreground">
             No active treatment plans yet — start one from a patient record or the journey board.
@@ -110,9 +122,13 @@ export function TreatmentJourneys({ journeys }: { journeys: Journeys | undefined
                     const pct = plan.total ? Math.round((plan.done / plan.total) * 100) : 0;
                     return (
                       <li key={plan.id}>
+                        {/* Straight to the plan card on the record's Treatments tab. */}
                         <Link
                           to="/patients/$id"
                           params={{ id: plan.patientId }}
+                          search={{ tab: "treatments" }}
+                          hash="plan"
+                          data-qc="plan-link"
                           className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 transition-colors hover:bg-[rgba(47,63,102,0.08)]"
                         >
                           <PatientAvatar
@@ -123,14 +139,16 @@ export function TreatmentJourneys({ journeys }: { journeys: Journeys | undefined
                           />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-semibold text-foreground">{plan.patientName}</p>
-                            <p className="flex items-center gap-1.5 text-2xs text-muted-foreground">
-                              <span className="truncate">{plan.name}</span>
-                              {KIND_CHIP[plan.kind ?? ""] ? (
-                                <span className="shrink-0 rounded-full bg-sky-bg px-1.5 py-px text-[10px] font-semibold text-sky-ink shadow-inset-hi">
-                                  {KIND_CHIP[plan.kind ?? ""]}
-                                </span>
-                              ) : null}
+                            {/* Name over up to two lines, kind chip beneath so a narrow
+                                column never squeezes the name into a sliver. */}
+                            <p className="line-clamp-2 break-words text-2xs text-muted-foreground">
+                              {plan.name}
                             </p>
+                            {KIND_CHIP[plan.kind ?? ""] ? (
+                              <span className="mt-0.5 inline-block rounded-full bg-sky-bg px-1.5 py-px text-[10px] font-semibold text-sky-ink shadow-inset-hi">
+                                {KIND_CHIP[plan.kind ?? ""]}
+                              </span>
+                            ) : null}
                             {plan.nextStep ? (
                               <p className="mt-0.5 min-w-0 truncate text-2xs text-ink-2">
                                 Next: {plan.nextStep}

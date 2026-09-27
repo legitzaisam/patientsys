@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { dateTime } from "@/lib/format";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { drainCommunications, listCommunications } from "@/lib/clinic.functions";
@@ -36,6 +37,12 @@ const ABOUT: Record<string, string> = {
   offer: "offer",
 };
 
+function channelLabel(channel: string) {
+  if (channel === "sms") return "Text";
+  if (channel === "call") return "Call";
+  return "Email";
+}
+
 function rowTitle(row: Row) {
   if (row.subject) return row.subject;
   if (row.channel === "call") return "Phone call";
@@ -50,10 +57,14 @@ export function CommsLogCard({
   patientId,
   enabled,
   canDrain = false,
+  showDiagnostics = false,
 }: {
   patientId: string;
   enabled: boolean;
+  /** May run the outbox drain (needs showDiagnostics as well to see the button). */
   canDrain?: boolean;
+  /** Software-admin view: outbox controls, provider, purpose and attempt counts. */
+  showDiagnostics?: boolean;
 }) {
   const queryClient = useQueryClient();
   const fetchRows = useServerFn(listCommunications);
@@ -82,11 +93,12 @@ export function CommsLogCard({
         <div>
           <h2 className="section-title">Email and text</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Queued until the outbox runs. Demo and sandbox mark them sent without leaving the
-            clinic.
+            {showDiagnostics
+              ? "Queued until the outbox runs. Demo and sandbox mark them sent without leaving the clinic."
+              : "Everything sent to this patient, and anything still waiting to go."}
           </p>
         </div>
-        {canDrain ? (
+        {canDrain && showDiagnostics ? (
           <Button
             size="sm"
             variant="outline"
@@ -104,13 +116,13 @@ export function CommsLogCard({
               <div>
                 <p className="text-sm text-foreground">{rowTitle(row)}</p>
                 <p className="text-xs text-muted-foreground">
-                  {row.channel.toUpperCase()} · {row.purpose}
+                  {showDiagnostics ? `${row.channel.toUpperCase()} · ${row.purpose}` : channelLabel(row.channel)}
                   {row.template_key && ABOUT[row.template_key]
                     ? ` · ${ABOUT[row.template_key]}`
                     : ""}
                   {` · ${row.to_address}`}
-                  {row.provider ? ` · ${row.provider}` : ""}
-                  {row.attempts > 0
+                  {showDiagnostics && row.provider ? ` · ${row.provider}` : ""}
+                  {showDiagnostics && row.attempts > 0
                     ? ` · ${row.attempts} attempt${row.attempts === 1 ? "" : "s"}`
                     : ""}
                 </p>
@@ -122,8 +134,8 @@ export function CommsLogCard({
             {row.error ? <p className="mt-1 text-xs text-destructive">{row.error}</p> : null}
             <p className="mt-1 text-2xs text-muted-foreground">
               {row.sent_at
-                ? `Sent ${new Date(row.sent_at).toLocaleString("en-GB")}`
-                : `Queued ${new Date(row.created_at).toLocaleString("en-GB")}`}
+                ? `Sent ${dateTime(row.sent_at)}`
+                : `Queued ${dateTime(row.created_at)}`}
             </p>
           </li>
         ))}

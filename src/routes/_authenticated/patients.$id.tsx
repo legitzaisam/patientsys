@@ -1,16 +1,18 @@
 import { RiskBadge } from "@/components/retention/risk-badge";
+import { dateTime, daysAgoLabel, displayName, moneyWhole } from "@/lib/format";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft, MessageCircle, MoreHorizontal, Upload } from "lucide-react";
 import {
   addPhoto,
   addTreatment,
   archivePatient,
   getCatalogue,
   getPatient,
+  getUnreadMessages,
   markMessagesRead,
   resendDocument,
   reviewHistory,
@@ -19,8 +21,13 @@ import {
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
-import { PatientChatPanel } from "@/components/patient-chat-panel";
-import { useRegisterChatPage } from "@/components/floating-dock/dock-context";
+import { useFloatingDock, useRegisterChatPage } from "@/components/floating-dock/dock-context";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { Card } from "@/components/ui/card";
@@ -29,9 +36,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { usePanelWidth } from "@/hooks/use-panel-width";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RecallTasksPanel } from "@/components/retention/recall-tasks-panel";
+import { RecallTasksPanel, type RecallExtraItem } from "@/components/retention/recall-tasks-panel";
+import { TreatmentPlanCard } from "@/components/patients/treatment-plan-card";
 import { CommsPreferencesCard } from "@/components/comms/comms-preferences";
 import { CommsLogCard } from "@/components/comms/comms-log";
 import { SendOfferDialog } from "@/components/offers/send-offer-dialog";
@@ -47,7 +54,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/patients/$id")({
@@ -140,74 +146,38 @@ function PatientRecord() {
   const [photoTreatmentId, setPhotoTreatmentId] = useState<string>("");
   const [treatmentPhotoId, setTreatmentPhotoId] = useState<string>("");
 
-  const [chatWidth, setChatWidth] = usePanelWidth("patient-messages", 340);
-  const [chatCollapsed, setChatCollapsed] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("aetheria.patient-chat-collapsed") === "1",
-  );
-  function setChatCollapsedPersisted(next: boolean) {
-    setChatCollapsed(next);
-    localStorage.setItem("aetheria.patient-chat-collapsed", next ? "1" : "0");
-  }
-
-  // Tell the floating dock which patient this page is about: while the docked
-  // panel is open the chat bubble hides; when minimised, the bubble opens the
-  // floating window on this patient, and its dock-back action lands here.
+  // The chat bubble shows on every page; this record tells the dock which
+  // patient it is about so the bubble (and "Open chat") land in their thread.
   const registerChatPage = useRegisterChatPage();
+  const { requestChat } = useFloatingDock();
   const patientName = `${data?.patient?.first_name ?? ""} ${data?.patient?.last_name ?? ""}`.trim();
   useEffect(() => {
     if (!data?.patient) return;
-    registerChatPage({
-      patientId: id,
-      patientName: patientName || "Patient",
-      docked: !chatCollapsed,
-      restoreDock: () => setChatCollapsedPersisted(false),
-    });
+    registerChatPage({ patientId: id, patientName: patientName || "Patient" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, patientName, chatCollapsed, !!data?.patient]);
+  }, [id, patientName, !!data?.patient]);
   useEffect(() => () => registerChatPage(null), [registerChatPage]);
 
-  // Arriving with ?chat=1 (e.g. Contact on a dashboard card): make sure the
-  // docked panel is open and put the cursor in the composer.
+  // Arriving with ?chat=1 (e.g. Contact on a dashboard card) opens the
+  // floating window on this patient.
   useEffect(() => {
     if (!chatFocus || !data?.patient) return;
-    setChatCollapsedPersisted(false);
-    const timer = window.setTimeout(() => {
-      document.querySelector<HTMLTextAreaElement>("#patient-chat textarea")?.focus();
-    }, 150);
-    return () => window.clearTimeout(timer);
+    requestChat({ patientId: id, patientName: patientName || "Patient" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatFocus, !!data?.patient]);
-  const [resizing, setResizing] = useState(false);
-  const resizeStart = useRef({ x: 0, width: 340 });
 
-  function startResize(e: React.MouseEvent | React.TouchEvent) {
-    const clientX = "touches" in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
-    resizeStart.current = { x: clientX, width: chatWidth };
-    setResizing(true);
-  }
-
-  useEffect(() => {
-    if (!resizing) return;
-    function onMove(e: MouseEvent | TouchEvent) {
-      const clientX = "touches" in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
-      const delta = resizeStart.current.x - clientX;
-      const next = Math.max(280, Math.min(520, resizeStart.current.width + delta));
-      setChatWidth(next);
-    }
-    function onUp() {
-      setResizing(false);
-    }
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    window.addEventListener("touchmove", onMove);
-    window.addEventListener("touchend", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("touchend", onUp);
-    };
-  }, [resizing, setChatWidth]);
+  // Unread patient messages on this record, for the Open chat badge.
+  const fetchUnread = useServerFn(getUnreadMessages);
+  const { data: unread } = useQuery({
+    queryKey: ["unread-messages"],
+    queryFn: () => fetchUnread(),
+    enabled: !!identity?.isStaff,
+    refetchInterval: 60_000,
+  });
+  const unreadHere =
+    (unread?.items as { patient_id: string; count: number }[] | undefined)?.find(
+      (i) => i.patient_id === id,
+    )?.count ?? 0;
 
   useEffect(() => {
     if (tabSearch === "bookings" || tabSearch === "visit-notes" || chaseFocus) setActiveTab("treatments");
@@ -218,6 +188,18 @@ function PatientRecord() {
     if (activeTab !== "treatments" || !chaseFocus) return;
     bookingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [activeTab, chaseFocus, data]);
+
+  // Deep links from the list pill (#recall) and the journey cards (#plan):
+  // the anchors render once the tab has data, so scroll then.
+  useEffect(() => {
+    if (activeTab !== "treatments" || !data) return;
+    const hash = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
+    if (hash !== "recall" && hash !== "plan") return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, data]);
 
   const createTreatment = useMutation({
     mutationFn: useServerFn(addTreatment),
@@ -399,6 +381,51 @@ function PatientRecord() {
     bookingNote: string;
   }>;
   const history = historyWithVisitNotes(data.treatments ?? [], data.visitNotes ?? []);
+  // Owner-only: what this patient has spent with the clinic, from recorded treatments.
+  const lifetimeSpend = ((data.treatments ?? []) as { price?: number | null }[]).reduce(
+    (sum, t) => sum + Number(t.price ?? 0),
+    0,
+  );
+  // The list's open-items pill counts recall tasks plus these derived items;
+  // the Recall tasks card lists the same so the two never disagree.
+  const awaitingSignature = ((data.documents ?? []) as { status?: string }[]).filter(
+    (d) => d.status === "sent" || d.status === "viewed",
+  ).length;
+  const overdueTreatment =
+    data.retention?.risk === "overdue"
+      ? (
+          (data.treatments ?? []) as {
+            name?: string;
+            next_due_at?: string | null;
+            performed_at: string;
+          }[]
+        )
+          .filter((t) => t.next_due_at)
+          .sort(
+            (a, b) => new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime(),
+          )[0]
+      : null;
+  const recallExtras: RecallExtraItem[] = [
+    ...(awaitingSignature > 0
+      ? [
+          {
+            id: `docs-${id}`,
+            label: `${awaitingSignature} form${awaitingSignature === 1 ? "" : "s"} awaiting signature`,
+            kind: "Paperwork",
+            onOpen: () => setActiveTab("documents"),
+          },
+        ]
+      : []),
+    ...(overdueTreatment
+      ? [
+          {
+            id: `due-${id}`,
+            label: `${overdueTreatment.name ?? "Treatment"} overdue`,
+            kind: "Treatment due",
+          },
+        ]
+      : []),
+  ];
 
   return (
     <AppShell identity={identity}>
@@ -407,20 +434,12 @@ function PatientRecord() {
         <ArrowLeft className="h-4 w-4" /> All patients
       </Link>
 
-      <div
-        className={`relative grid items-start gap-5 md:gap-[26px] ${
-          chatCollapsed ? "md:grid-cols-[minmax(0,1fr)]" : "md:grid-cols-[minmax(0,1fr)_var(--chat-width)]"
-        }`}
-        style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties}
-      >
+      <div className="relative grid items-start gap-5 md:grid-cols-[minmax(0,1fr)] md:gap-[26px]">
         <div className="space-y-6">
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h1 className="page-title">
-                  {p.last_name}, {p.title ? `${p.title} ` : ""}
-                  {p.first_name}
-                </h1>
+                <h1 className="page-title">{displayName(p, { withTitle: true })}</h1>
                 <p className="page-subtitle">
                   {p.reference} · {p.date_of_birth ? new Date(p.date_of_birth).toLocaleDateString("en-GB") : "DOB not set"} ·{" "}
                   {p.email ?? "no email"} · {p.phone ?? "no phone"}
@@ -428,20 +447,98 @@ function PatientRecord() {
                 {data?.retention && (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {data.retention.risk && <RiskBadge risk={data.retention.risk} />}
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground" data-qc="record-visits">
                       {data.retention.visits} visit{data.retention.visits === 1 ? "" : "s"}
                       {data.retention.daysSince !== null
-                        ? ` · last seen ${data.retention.daysSince} days ago`
+                        ? ` · last seen ${daysAgoLabel(data.retention.daysSince)}`
                         : ""}
+                      {identity.isOwner ? (
+                        <span data-qc="record-lifetime-spend">
+                          {" · "}
+                          {moneyWhole(lifetimeSpend)} lifetime spend
+                        </span>
+                      ) : null}
                     </span>
                   </div>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
+                {/* Record treatment stays a button; Open chat sits beside it; the rest live in ⋯. */}
+                {canSee(identity, "patient-record-treatment") ? (
+                  <Button onClick={() => setTreatmentOpen(true)}>Record treatment</Button>
+                ) : null}
+                <Button
+                  variant="outline"
+                  data-qc="open-chat"
+                  aria-label={`Open chat${unreadHere ? ` (${unreadHere} unread)` : ""}`}
+                  onClick={() =>
+                    requestChat({ patientId: id, patientName: patientName || "Patient" })
+                  }
+                  className="relative"
+                >
+                  <MessageCircle className="h-4 w-4" aria-hidden />
+                  Open chat
+                  {unreadHere > 0 ? (
+                    <span
+                      data-qc="open-chat-unread"
+                      className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-bold text-white shadow-lift"
+                    >
+                      {unreadHere > 9 ? "9+" : unreadHere}
+                    </span>
+                  ) : null}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      aria-label="More actions"
+                      data-qc="record-more"
+                      className="px-2.5"
+                    >
+                      <MoreHorizontal className="h-4 w-4" aria-hidden />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48 rounded-2xl">
+                    {canSee(identity, "patient-send-documents") ? (
+                      <DropdownMenuItem onSelect={() => setDocOpen(true)} data-qc="menu-send-form">
+                        Send form
+                      </DropdownMenuItem>
+                    ) : null}
+                    {can(identity, "comms.send") && !p.deleted_at ? (
+                      <DropdownMenuItem
+                        onSelect={() => setOfferOpen(true)}
+                        data-qc="send-offer-open"
+                      >
+                        Send offer
+                      </DropdownMenuItem>
+                    ) : null}
+                    {identity.isManager ? (
+                      p.deleted_at ? (
+                        <DropdownMenuItem
+                          disabled={archive.isPending}
+                          onSelect={() =>
+                            void stepUp.run(
+                              () => archive.mutateAsync({ data: { id, archived: false } }),
+                              "restore",
+                            )
+                          }
+                          data-qc="menu-restore"
+                        >
+                          Restore patient
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem
+                          onSelect={() => setArchiveOpen(true)}
+                          data-qc="menu-archive"
+                          className="text-destructive-ink focus:text-destructive-ink"
+                        >
+                          Archive
+                        </DropdownMenuItem>
+                      )
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Dialog open={treatmentOpen} onOpenChange={setTreatmentOpen}>
-                  <DialogTrigger asChild>
-                    <Button>Record treatment</Button>
-                  </DialogTrigger>
                   <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
                     <DialogHeader>
                       <DialogTitle>Record treatment</DialogTitle>
@@ -504,11 +601,6 @@ function PatientRecord() {
                 </Dialog>
 
                 {canSee(identity, "patient-send-documents") && <Dialog open={docOpen} onOpenChange={setDocOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">
-                      Send form
-                    </Button>
-                  </DialogTrigger>
                   <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
                     <DialogHeader>
                       <DialogTitle>Send to patient</DialogTitle>
@@ -562,75 +654,54 @@ function PatientRecord() {
                 </Dialog>}
 
                 {can(identity, "comms.send") && !p.deleted_at ? (
-                  <>
-                    <Button variant="outline" onClick={() => setOfferOpen(true)} data-qc="send-offer-open">
-                      Send offer
-                    </Button>
-                    <SendOfferDialog open={offerOpen} onOpenChange={setOfferOpen} patients={[p]} source="one_off" />
-                  </>
+                  <SendOfferDialog open={offerOpen} onOpenChange={setOfferOpen} patients={[p]} source="one_off" />
                 ) : null}
 
-                {identity?.isOwner &&
-                  (p.deleted_at ? (
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        void stepUp.run(
-                          () => archive.mutateAsync({ data: { id, archived: false } }),
-                          "restore",
-                        )
-                      }
-                      disabled={archive.isPending}
-                    >
-                      Restore patient
-                    </Button>
-                  ) : (
-                    <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline">Archive</Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
-                        <DialogHeader>
-                          <DialogTitle>Archive this patient</DialogTitle>
-                        </DialogHeader>
-                        <form
-                          id="archive-form"
-                          className="space-y-4"
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            const f = new FormData(e.currentTarget as HTMLFormElement);
-                            void stepUp.run(
-                              () =>
-                                archive.mutateAsync({
-                                  data: { id, archived: true, reason: String(f.get("reason") ?? "") },
-                                }),
-                              "archive",
-                            );
-                          }}
-                        >
-                          <p className="text-sm text-muted-foreground">
-                            They will drop out of the patient list and the diary. Nothing is
-                            deleted: the clinical record is kept for 8 years after their last
-                            treatment, and you can restore them at any time.
-                          </p>
-                          <div className="field-stack">
-                            <Label htmlFor="reason">Reason (optional)</Label>
-                            <Input
-                              id="reason"
-                              name="reason"
-                              placeholder="Moved away, duplicate record, requested removal…"
-                              className="rounded-xl"
-                            />
-                          </div>
-                        </form>
-                        <DialogFooter>
-                          <Button type="submit" form="archive-form" disabled={archive.isPending}>
-                            Archive patient
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  ))}
+                {identity.isManager && !p.deleted_at ? (
+                  <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+                    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
+                      <DialogHeader>
+                        <DialogTitle>Archive this patient</DialogTitle>
+                      </DialogHeader>
+                      <form
+                        id="archive-form"
+                        className="space-y-4"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const f = new FormData(e.currentTarget as HTMLFormElement);
+                          void stepUp.run(
+                            () =>
+                              archive.mutateAsync({
+                                data: { id, archived: true, reason: String(f.get("reason") ?? "") },
+                              }),
+                            "archive",
+                          );
+                        }}
+                      >
+                        <p className="text-sm text-muted-foreground">
+                          They will drop out of the patient list and the diary, and this starts the
+                          8-year retention clock. Nothing is deleted: the clinical record is kept
+                          for 8 years after their last treatment, and you can restore them at any
+                          time.
+                        </p>
+                        <div className="field-stack">
+                          <Label htmlFor="reason">Reason (optional)</Label>
+                          <Input
+                            id="reason"
+                            name="reason"
+                            placeholder="Moved away, duplicate record, requested removal…"
+                            className="rounded-xl"
+                          />
+                        </div>
+                      </form>
+                      <DialogFooter>
+                        <Button type="submit" form="archive-form" disabled={archive.isPending}>
+                          Archive patient
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                ) : null}
               </div>
             </div>
 
@@ -656,7 +727,11 @@ function PatientRecord() {
                 <TabsTrigger value="treatments" className="items-center pr-2.5">
                   Treatments
                   {bookingChase.length > 0 ? (
-                    <span className="ml-1.5 inline-flex h-[15px] min-w-[15px] shrink-0 items-center justify-center rounded-full bg-destructive-bg px-0.5 text-[10px] font-semibold leading-none text-destructive-ink tabular-nums">
+                    <span
+                      data-qc="treatments-badge"
+                      title={`${bookingChase.length} upcoming booking${bookingChase.length === 1 ? "" : "s"} still need${bookingChase.length === 1 ? "s" : ""} chasing (deposit, balance or consent)`}
+                      className="ml-1.5 inline-flex h-[15px] min-w-[15px] shrink-0 items-center justify-center rounded-full bg-destructive-bg px-0.5 text-[10px] font-semibold leading-none text-destructive-ink tabular-nums"
+                    >
                       {bookingChase.length}
                     </span>
                   ) : null}
@@ -664,7 +739,7 @@ function PatientRecord() {
               )}
               {canSee(identity, "patient-photos") && <TabsTrigger value="photos">Before and after</TabsTrigger>}
               {canSee(identity, "patient-documents") && <TabsTrigger value="documents">Documents</TabsTrigger>}
-              {canSee(identity, "patient-history") && <TabsTrigger value="history">History updates</TabsTrigger>}
+              {canSee(identity, "patient-history") && <TabsTrigger value="history">Medical history</TabsTrigger>}
               {canSee(identity, "patient-from-patient") && <TabsTrigger value="portal">From the patient</TabsTrigger>}
               {canSee(identity, "patient-contact") && <TabsTrigger value="contact">Contact</TabsTrigger>}
             </TabsList>
@@ -672,14 +747,6 @@ function PatientRecord() {
             {/* How we may reach this patient, and what has been sent. Lives in
                 a tab so the record opens on clinical content, not admin. */}
             <TabsContent value="contact" className="space-y-4">
-              <CommsPreferencesCard
-                patientId={id}
-                patient={p}
-                onSaved={() => {
-                  invalidate();
-                  void queryClient.invalidateQueries({ queryKey: ["communications", id] });
-                }}
-              />
               <PatientOffersCard
                 patientId={id}
                 action={
@@ -690,12 +757,26 @@ function PatientRecord() {
                   ) : null
                 }
               />
+              <CommsPreferencesCard
+                patientId={id}
+                patient={p}
+                onSaved={() => {
+                  invalidate();
+                  void queryClient.invalidateQueries({ queryKey: ["communications", id] });
+                }}
+              />
               {can(identity, "comms.send") ? (
-                <CommsLogCard patientId={id} enabled canDrain={can(identity, "comms.send")} />
+                <CommsLogCard
+                  patientId={id}
+                  enabled
+                  canDrain={can(identity, "comms.send")}
+                  showDiagnostics={Boolean(identity.isAdmin)}
+                />
               ) : null}
             </TabsContent>
 
             <TabsContent value="treatments" className="space-y-4">
+              <TreatmentPlanCard patientId={id} />
               {(data as any).todayVisit && (data as any).todayVisit.stage !== "complete" ? (
                 <Card className="flex flex-wrap items-center gap-3 p-4" data-qc="today-visit">
                   <div className="min-w-0 flex-1">
@@ -737,7 +818,7 @@ function PatientRecord() {
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm text-foreground">{t.name}</p>
                         <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {t.hasRecord ? (
+                          {t.hasRecord && canSee(identity, "patient-edit-clinical") ? (
                             <button
                               type="button"
                               data-qc="view-treatment-record"
@@ -783,6 +864,7 @@ function PatientRecord() {
                     {bookingChase.map((booking) => (
                       <li
                         key={booking.id}
+                        data-qc="booking-chase-item"
                         className="rounded-xl border border-edge bg-glass-2/70 px-4 py-3 shadow-inset-hi"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -830,7 +912,12 @@ function PatientRecord() {
                   </Link>
                 </div>
               </Card>
-              <RecallTasksPanel patientId={id} />
+              <RecallTasksPanel
+                patientId={id}
+                patientName={patientName || "this patient"}
+                practitionerId={(history[0] as any)?.practitioner_id ?? null}
+                extraItems={recallExtras}
+              />
             </TabsContent>
 
             <TabsContent value="photos">
@@ -1112,9 +1199,16 @@ function PatientRecord() {
                               {t.profiles?.full_name ? ` · ${t.profiles.full_name}` : ""}
                             </p>
                           </div>
-                          <Button type="button" size="sm" variant="outline" onClick={() => setRecordOpen(t.id)}>
-                            View
-                          </Button>
+                          {/* Receptionists see that a record exists and its date; the form itself is clinical. */}
+                          {canSee(identity, "patient-edit-clinical") ? (
+                            <Button type="button" size="sm" variant="outline" onClick={() => setRecordOpen(t.id)}>
+                              View
+                            </Button>
+                          ) : (
+                            <Badge variant="outline" className="rounded-xl text-2xs uppercase">
+                              Recorded
+                            </Badge>
+                          )}
                         </li>
                       ))}
                   </ul>
@@ -1248,7 +1342,7 @@ function PatientRecord() {
                           .join("\n")}
                       </pre>
                       <p className="mt-1 text-2xs text-muted-foreground">
-                        {new Date(h.created_at).toLocaleString("en-GB")} · {h.source}
+                        {dateTime(h.created_at)} · {h.source}
                       </p>
                     </li>
                   ))}
@@ -1269,20 +1363,6 @@ function PatientRecord() {
           onShowTreatments={showTreatments}
         />
         <TreatmentRecordDialog treatmentId={recordOpen} open={Boolean(recordOpen)} onOpenChange={(o) => !o && closeRecord()} />
-
-        {chatCollapsed ? null : (
-          <PatientChatPanel
-            patientId={id}
-            patientName={`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "Patient"}
-            messages={data.messages}
-            as="staff"
-            templates
-            canDeleteTemplates={!!identity?.isManager}
-            onResizeStart={startResize}
-            onCollapse={() => setChatCollapsedPersisted(true)}
-            onSent={invalidate}
-          />
-        )}
       </div>
     </AppShell>
   );

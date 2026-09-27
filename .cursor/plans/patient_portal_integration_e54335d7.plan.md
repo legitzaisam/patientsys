@@ -88,7 +88,7 @@ todos:
     status: completed
   - id: d6-checks-commit
     content: "Phase D: Fix findings; run policy/validators/tenancy, unit, full e2e, tsc delta, lints; fill work logs; commit and push the e2e branch"
-    status: in_progress
+    status: completed
 isProject: false
 ---
 

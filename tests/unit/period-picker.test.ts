@@ -74,10 +74,21 @@ describe("custom dates", () => {
     const range = periodRange({ key: "week", offset: 0, preset: "1w" }, NOW);
     expect(new Date(range.from).getDate()).toBe(14);
     expect(new Date(range.to).getDate()).toBe(20);
-    expect(periodHeading({ key: "week", offset: 0, preset: "1w" }, NOW)).toBe("This week");
-    expect(periodHeading({ key: "month", offset: 0, preset: "1m" }, NOW)).toBe("This month");
+    expect(periodHeading({ key: "week", offset: 0, preset: "1w" }, NOW)).toBe("Last 7 days");
+    expect(periodHeading({ key: "month", offset: 0, preset: "1m" }, NOW)).toBe("Last month");
     expect(periodHeading({ key: "month", offset: 0, preset: "6m" }, NOW)).toBe("Last 6 months");
-    expect(periodHeading({ key: "year", offset: 0, preset: "1y" }, NOW)).toBe("This year");
+    expect(periodHeading({ key: "year", offset: 0, preset: "1y" }, NOW)).toBe("Last 12 months");
+  });
+
+  it("reads 12 months as a rolling window ending today, not the calendar year", () => {
+    const range = periodRange({ key: "year", offset: 0, preset: "1y" }, NOW);
+    expect(new Date(range.from)).toEqual(new Date(2025, 8, 20));
+    expect(new Date(range.to).getDate()).toBe(20);
+    expect(new Date(range.to).getMonth()).toBe(8);
+    expect(new Date(range.to).getFullYear()).toBe(2026);
+    expect(periodWindowLabel({ key: "year", offset: 0, preset: "1y" }, NOW)).toMatch(/20 Sept? 2025 – 20 Sept? 2026/);
+    // The bare calendar year is still available for anyone who asks for it by key.
+    expect(new Date(periodRange({ key: "year", offset: 0 }, NOW).from)).toEqual(new Date(2026, 0, 1));
   });
 });
 

@@ -1,0 +1,419 @@
+---
+import Base from "../layouts/Base.astro";
+import Pill from "../components/Pill.astro";
+import { tiers, everyPlan, market, faq, perMonthAnnual, perYear } from "../lib/pricing";
+const gbp = (n: number) => `£${n.toLocaleString("en-GB")}`;
+const clinic = tiers.find((t) => t.id === "clinic")!;
+---
+
+<Base
+  title="Pricing · SQINOS"
+  description="Flat monthly plans for aesthetics clinics. Front desk is free, patients pay nothing, and there are no per-patient or booking fees."
+>
+  <section class="page wrap pricing" data-pricing data-billing="monthly">
+    <div class="page-header">
+      <div class="page-header__text">
+        <p class="eyebrow">Pricing</p>
+        <h1 class="page-title">One price per clinic, <em>not per login.</em></h1>
+      </div>
+      <Pill name="billing" label="Billing period" value="monthly" options={[{ id: "monthly", label: "Monthly" }, { id: "annually", label: "Annually" }]} />
+      <p class="page-subtitle">Pay for the practitioners who treat. Front desk is free, patients pay nothing, and the whole platform is in every plan.</p>
+    </div>
+
+    <div class="tiers">
+      {tiers.map((t, i) => (
+        <article class={`tier glass ${t.featured ? "tier--featured" : ""}`} data-light data-reveal style={`--d: ${i * 70}ms`}>
+          <header class="tier__head">
+            <h2 class="tier__name">{t.name}</h2>
+            {t.featured && <span class="tier__tag">Most popular</span>}
+          </header>
+          <p class="tier__who">{t.who}</p>
+
+          {t.monthly === null ? (
+            <p class="tier__price"><span class="tier__num">Custom</span></p>
+          ) : (
+            <>
+              <p class="tier__price" data-when="monthly">
+                <span class="tier__num">{gbp(t.monthly)}</span><span class="tier__per">/ month</span>
+                <small>or {gbp(perMonthAnnual(t.monthly))} a month billed annually</small>
+              </p>
+              <p class="tier__price" data-when="annually">
+                <span class="tier__num">{gbp(perMonthAnnual(t.monthly))}</span><span class="tier__per">/ month</span>
+                <small>{gbp(perYear(t.monthly))} a year · two months free</small>
+              </p>
+            </>
+          )}
+
+          <p class="tier__seats">{t.seats}</p>
+          {t.lead && <p class="tier__lead">{t.lead}</p>}
+          <ul class="tier__list">
+            {t.features.map((f) => <li>{f}</li>)}
+          </ul>
+          <a class={`btn ${t.featured ? "btn--butter" : "btn--glass"} tier__cta`} href={t.cta.href}>{t.cta.label}</a>
+        </article>
+      ))}
+    </div>
+    <p class="fineprint">Prices exclude VAT. Practitioner counts are per plan; front desk and managers are unlimited on every plan.</p>
+
+    <section class="every" aria-labelledby="every-title">
+      <div class="section-head">
+        <p class="eyebrow">On every plan</p>
+        <h2 id="every-title" class="display">Nothing hidden on the <em>second invoice.</em></h2>
+      </div>
+      <ul class="every__list">
+        {everyPlan.map((line, i) => (
+          <li data-reveal style={`--d: ${i * 50}ms`}><span class="every__tick" aria-hidden="true"></span>{line}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="compare glass" aria-labelledby="compare-title" data-light data-reveal>
+      <div class="compare__col">
+        <p class="eyebrow">What clinics usually pay</p>
+        <p class="compare__num">{gbp(market.low)}–{market.high}</p>
+        <p class="compare__sub">a month, once logins and add-ons are counted</p>
+      </div>
+      <div class="compare__vs" aria-hidden="true">vs</div>
+      <div class="compare__col compare__col--us">
+        <p class="eyebrow">SQINOS {clinic.name}</p>
+        <p class="compare__num"><em>{gbp(clinic.monthly!)}</em></p>
+        <p class="compare__sub">a month, with the patient portal, automation and retention included</p>
+      </div>
+      <h2 id="compare-title" class="sr-only">How SQINOS compares</h2>
+      <p class="compare__note">
+        Based on published UK prices in September 2026 for a clinic with four practitioners and two front desk staff on the most
+        common aesthetics platforms, including the add-ons needed for a patient portal, automation and retention. Excludes VAT,
+        text messages and card fees.
+      </p>
+    </section>
+
+    <section class="faq" aria-labelledby="faq-title">
+      <div class="section-head">
+        <p class="eyebrow">Questions</p>
+        <h2 id="faq-title" class="display">Asked <em>before signing.</em></h2>
+      </div>
+      <div class="faq__list">
+        {faq.map((item) => (
+          <details class="faq__item">
+            <summary>{item.q}</summary>
+            <p>{item.a}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+
+    <div class="pricing__cta">
+      <a class="btn btn--butter" href="/contact?topic=sales" data-magnetic>Talk to sales</a>
+      <a class="btn btn--glass" href="/demo" data-magnetic>See the demo</a>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .tiers {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.1rem;
+    align-items: stretch;
+  }
+  .tier {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1.5rem 1.4rem 1.4rem;
+  }
+  .tier--featured {
+    background: linear-gradient(170deg, var(--butter-hi), var(--glass-2) 55%);
+    border-color: var(--butter-line);
+  }
+  .tier__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+  .tier__name {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 1.8rem;
+    line-height: 1;
+  }
+  .tier__tag {
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: var(--butter);
+    color: var(--butter-ink);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .tier__who {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 0.92rem;
+    min-height: 2.8em;
+  }
+  .tier__price {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    column-gap: 0.4rem;
+    margin: 0.4rem 0 0;
+  }
+  .tier__num {
+    font-family: var(--font-display);
+    font-size: clamp(2.4rem, 3vw, 3rem);
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .tier__per {
+    color: var(--ink-3);
+    font-size: 0.9rem;
+  }
+  .tier__price small {
+    grid-column: 1 / -1;
+    margin-top: 0.35rem;
+    color: var(--ink-3);
+    font-size: 0.82rem;
+    min-height: 1.3em;
+  }
+  /* The pill switches which price block is shown. Without JS, monthly. */
+  .pricing[data-billing="monthly"] .tier__price[data-when="annually"],
+  .pricing[data-billing="annually"] .tier__price[data-when="monthly"] {
+    display: none;
+  }
+  .tier__seats {
+    margin: 0.4rem 0 0;
+    padding: 0.45rem 0.7rem;
+    border-radius: 10px;
+    background: rgba(47, 63, 102, 0.05);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .tier__lead {
+    margin: 0.6rem 0 -0.2rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--butter-ink);
+  }
+  .tier__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.45rem;
+    font-size: 0.92rem;
+    color: var(--ink-2);
+  }
+  .tier__list li {
+    position: relative;
+    padding-left: 1.4rem;
+  }
+  .tier__list li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.5em;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--success);
+    opacity: 0.85;
+  }
+  .tier__cta {
+    margin-top: auto;
+    padding-top: 0.8rem;
+  }
+  .tier .btn {
+    margin-top: auto;
+    align-self: stretch;
+  }
+  .fineprint {
+    margin: 1.2rem 0 0;
+    color: var(--ink-3);
+    font-size: 0.85rem;
+  }
+
+  .every {
+    margin-top: clamp(4rem, 8vw, 7rem);
+  }
+  .every__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem 2rem;
+    color: var(--ink-2);
+  }
+  .every__list li {
+    display: flex;
+    gap: 0.8rem;
+    align-items: flex-start;
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    background: var(--glass-2);
+    border: 1px solid var(--edge);
+    box-shadow: var(--shadow-glass);
+  }
+  .every__tick {
+    flex: none;
+    width: 1.35rem;
+    height: 1.35rem;
+    margin-top: 0.1rem;
+    border-radius: 50%;
+    background: var(--butter);
+    position: relative;
+  }
+  .every__tick::after {
+    content: "";
+    position: absolute;
+    left: 0.42rem;
+    top: 0.22rem;
+    width: 0.3rem;
+    height: 0.6rem;
+    border: solid var(--butter-ink);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  .compare {
+    margin-top: clamp(4rem, 8vw, 7rem);
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 1.5rem 2rem;
+    align-items: center;
+    background: var(--glass);
+  }
+  .compare__col {
+    display: grid;
+    gap: 0.5rem;
+    text-align: center;
+  }
+  .compare__num {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(2.6rem, 5vw, 4.4rem);
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .compare__num em {
+    font-style: italic;
+    color: var(--butter-ink);
+  }
+  .compare__sub {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 0.92rem;
+    max-width: 22rem;
+    justify-self: center;
+  }
+  .compare__vs {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 1.6rem;
+    color: var(--ink-3);
+  }
+  .compare__note {
+    grid-column: 1 / -1;
+    margin: 0.5rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--edge-2);
+    color: var(--ink-3);
+    font-size: 0.82rem;
+  }
+
+  .faq {
+    margin-top: clamp(4rem, 8vw, 7rem);
+  }
+  .faq__list {
+    display: grid;
+    gap: 0.6rem;
+    max-width: 52rem;
+  }
+  .faq__item {
+    border-radius: 14px;
+    border: 1px solid var(--edge);
+    background: var(--glass-2);
+    box-shadow: var(--shadow-glass);
+    padding: 0 1.1rem;
+  }
+  .faq__item summary {
+    cursor: pointer;
+    padding: 0.95rem 0;
+    font-weight: 600;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+  }
+  .faq__item summary::-webkit-details-marker {
+    display: none;
+  }
+  .faq__item summary::after {
+    content: "+";
+    flex: none;
+    width: 1.6rem;
+    height: 1.6rem;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--butter-wash);
+    color: var(--butter-ink);
+    font-weight: 400;
+    transition: transform var(--t-ui) var(--ease-dew);
+  }
+  .faq__item[open] summary::after {
+    transform: rotate(45deg);
+  }
+  .faq__item p {
+    margin: 0 0 1rem;
+    color: var(--ink-2);
+  }
+
+  .pricing__cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    justify-content: center;
+    margin-top: clamp(3rem, 6vw, 5rem);
+  }
+
+  @media (max-width: 1100px) {
+    .tiers {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 860px) {
+    .compare {
+      grid-template-columns: 1fr;
+    }
+    .compare__vs {
+      text-align: center;
+    }
+    .every__list {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 600px) {
+    .tiers {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<script>
+  const root = document.querySelector<HTMLElement>("[data-pricing]")!;
+  root.addEventListener("pill:change", (e) => {
+    const { name, value } = (e as CustomEvent<{ name: string; value: string }>).detail;
+    if (name === "billing") root.dataset.billing = value;
+  });
+</script>

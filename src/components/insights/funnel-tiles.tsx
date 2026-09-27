@@ -19,10 +19,10 @@ export function FunnelTiles({ funnel }: { funnel: InsightsResult["funnel"] | und
   const empty = funnel != null && funnel.signUps === 0;
   const tiles = [
     {
-      label: "Sign-ups",
+      label: "Online enquiries",
       target: FUNNEL_SECTION.signUps,
       value: funnel?.signUps ?? "—",
-      hint: empty ? "No new enquiries in this window" : "Website leads and website-sourced records",
+      hint: empty ? "No new enquiries in this window" : "Website, Instagram and referral enquiries plus website-sourced records",
     },
     {
       label: "Booked",

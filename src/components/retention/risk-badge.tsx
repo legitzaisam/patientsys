@@ -1,15 +1,17 @@
 import { cn } from "@/lib/utils";
 
-export type RiskLevel = "overdue" | "lapsing" | "lost";
+export type RiskLevel = "overdue" | "due_soon" | "lapsing" | "lost";
 
 const LABEL: Record<RiskLevel, string> = {
   overdue: "Overdue",
+  due_soon: "Due soon",
   lapsing: "Lapsing",
   lost: "Lost",
 };
 
 const STYLE: Record<RiskLevel, string> = {
   overdue: "bg-destructive-bg text-destructive-ink",
+  due_soon: "bg-accent-soft text-accent-ink",
   lapsing: "bg-warning-bg text-warning-ink",
   lost: "border border-edge-2 bg-glass-2 text-muted-foreground",
 };

@@ -107,6 +107,15 @@ export function SendOfferDialog({
     return null;
   }, [template, single]);
 
+  // Bulk sends: say up front how many will only see the card in their portal.
+  const bulkPortalOnly = useMemo(() => {
+    if (!template || single) return null;
+    const known = patients.filter(hasConsentFields);
+    if (known.length === 0) return null;
+    const portalOnly = known.filter((p) => describeOfferChannels(p, template).portalOnly).length;
+    return { portalOnly, total: patients.length };
+  }, [template, single, patients]);
+
   const send = useMutation({
     mutationFn: useServerFn(sendOffer),
     onSuccess: (raw) => {
@@ -229,6 +238,15 @@ export function SendOfferDialog({
                           .join(", ")
                           .replace(/^./, (c) => c.toUpperCase())}
                         . Anyone who cannot receive it is listed afterwards.
+                        {bulkPortalOnly && bulkPortalOnly.portalOnly > 0 ? (
+                          <span
+                            className="mt-1 block font-medium text-foreground"
+                            data-qc="offer-portal-only-warning"
+                          >
+                            {bulkPortalOnly.portalOnly} of {bulkPortalOnly.total} haven't opted into
+                            marketing, so they'll see it in their portal only.
+                          </span>
+                        ) : null}
                       </p>
                     )}
                   </div>

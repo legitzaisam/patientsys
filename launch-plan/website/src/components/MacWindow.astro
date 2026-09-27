@@ -1,0 +1,66 @@
+---
+// A Mac-style window: traffic lights, a URL pill and a 16:10 screen. The
+// screen is position: relative, so children can fill it with inset: 0.
+interface Props {
+  url?: string;
+  class?: string;
+}
+const { url = "app.sqinos", class: cls = "" } = Astro.props;
+---
+
+<div class={`mac ${cls}`}>
+  <div class="mac__bar">
+    <span class="mac__lights" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="mac__url">{url}</span>
+  </div>
+  <div class="mac__screen"><slot /></div>
+</div>
+
+<style>
+  .mac {
+    overflow: hidden;
+    border-radius: 18px;
+    background: var(--glass);
+    border: 1px solid var(--edge);
+    box-shadow: var(--shadow-deep), 0 0 0 1px rgba(47, 63, 102, 0.05);
+  }
+  .mac__bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 0.7rem 0.95rem;
+    border-bottom: 1px solid var(--edge-2);
+    background: rgba(255, 255, 255, 0.7);
+  }
+  .mac__lights {
+    display: flex;
+    gap: 7px;
+  }
+  .mac__lights i {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #ff5f57;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  }
+  .mac__lights i:nth-child(2) {
+    background: #febc2e;
+  }
+  .mac__lights i:nth-child(3) {
+    background: #28c840;
+  }
+  .mac__url {
+    padding: 0.25rem 1rem;
+    border-radius: 999px;
+    background: rgba(47, 63, 102, 0.05);
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .mac__screen {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    background: #fff;
+    overflow: hidden;
+  }
+</style>

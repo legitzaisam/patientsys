@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /demo/
+Disallow: /auth
+Disallow: /dashboard
+Disallow: /my-record

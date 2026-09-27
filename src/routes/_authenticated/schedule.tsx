@@ -37,6 +37,15 @@ import { useStaffPresence } from "@/lib/use-staff-presence";
 import { cn } from "@/lib/utils";
 import { manualStageOptions, stageHeldForConsent, type ConsentState } from "@/lib/visit-stage";
 import { AppShell } from "@/components/app-shell";
+import { ColourKey } from "@/components/schedule/colour-key";
+import {
+  needsActionCardClass,
+  needsActionHint,
+  useNeedsAction,
+  type NeedsActionSelection,
+  type NeedsActionType,
+} from "@/components/schedule/needs-action";
+import { NeedsActionControl, NeedsActionTags } from "@/components/schedule/needs-action-control";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,7 +89,7 @@ import { initialsOf, laneFor, toneForTreatment } from "@/lib/practitioner-colour
 import { PractitionerHoverCard } from "@/components/practitioner-hovercard";
 import { VisitNoteChip, isPreAppointmentNote } from "@/components/visit-note-chip";
 import { useTreatmentColours } from "@/lib/use-treatment-colours";
-import { resendDocument, sendMessage, sendPaymentRequest } from "@/lib/clinic.functions";
+import { getClinicDetails, resendDocument, sendMessage, sendPaymentRequest } from "@/lib/clinic.functions";
 import { bookingNotifyDescription, formatMoney } from "@/lib/payment-link";
 
 export const Route = createFileRoute("/_authenticated/schedule")({
@@ -325,8 +334,28 @@ function SchedulePage() {
   const [anchor, setAnchor] = useState(() => new Date());
   const [open, setOpen] = useState(false);
   const [dayPractitioner, setDayPractitioner] = useState<string[]>(["all"]);
+  // A practitioner opens the diary on their own column; "All practitioners"
+  // stays one click away in View by. Seeded once, so their later choice sticks.
+  const seededOwnDiary = useRef(false);
+  useEffect(() => {
+    if (seededOwnDiary.current || !identity) return;
+    seededOwnDiary.current = true;
+    if (!identity.isManager && identity.roles.includes("practitioner")) {
+      setDayPractitioner([identity.userId]);
+    }
+  }, [identity]);
+  // One "Needs action" selection shared by the day and week planners.
+  const [needsAction, setNeedsAction] = useState<NeedsActionSelection>(null);
 
   const fetchAppointments = useServerFn(listAppointments);
+  const fetchClinic = useServerFn(getClinicDetails);
+  const { data: clinicDetails } = useQuery({
+    queryKey: ["clinic-details"],
+    queryFn: () => fetchClinic(),
+    enabled: !!identity?.isStaff,
+    staleTime: 5 * 60_000,
+  });
+  const depositLeadDays = Number((clinicDetails as { deposit_lead_days?: number | null } | null)?.deposit_lead_days ?? 3);
   const fetchPatients = useServerFn(listPatients);
   const fetchPractitioners = useServerFn(listPractitioners);
   const fetchCatalogue = useServerFn(getCatalogue);
@@ -934,6 +963,9 @@ function SchedulePage() {
           catalogue={(catalogue ?? []) as any[]}
           selected={dayPractitioner}
           onSelect={setDayPractitioner}
+          needsAction={needsAction}
+          onNeedsAction={setNeedsAction}
+          depositLeadDays={depositLeadDays}
         />
       )}
       {view === "week" && (
@@ -947,6 +979,9 @@ function SchedulePage() {
           date={anchor}
           selected={dayPractitioner}
           onSelect={setDayPractitioner}
+          needsAction={needsAction}
+          onNeedsAction={setNeedsAction}
+          depositLeadDays={depositLeadDays}
         />
       )}
       {view === "month" && (
@@ -960,6 +995,7 @@ function SchedulePage() {
           catalogue={(catalogue ?? []) as any[]}
           selected={dayPractitioner}
           onSelect={setDayPractitioner}
+          depositLeadDays={depositLeadDays}
         />
       )}
       </div>
@@ -1425,6 +1461,16 @@ function PractitionerFilter({
 const SLOT_MINUTES = 30;
 const SLOT_PX = 64;
 
+/** Now, refreshed once a minute, so "running late" moves with the clock. */
+function useMinuteTick() {
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setTick(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  return tick;
+}
+
 /** Shared "View by" filter logic for day, week and month planners. */
 function filterByPractitioner(rows: any[], selected: string[]): any[] {
   if (!selected.length || selected.includes("all")) return rows;
@@ -1449,6 +1495,9 @@ function DayPlanner({
   catalogue,
   selected,
   onSelect,
+  needsAction,
+  onNeedsAction,
+  depositLeadDays,
 }: {
   rows: any[];
   date: Date;
@@ -1458,6 +1507,9 @@ function DayPlanner({
   catalogue: any[];
   selected: string[];
   onSelect: (v: string[]) => void;
+  needsAction: NeedsActionSelection;
+  onNeedsAction: (v: NeedsActionSelection) => void;
+  depositLeadDays: number;
 }) {
   const queryClient = useQueryClient();
   const { data: identity } = useIdentity();
@@ -1501,6 +1553,10 @@ function DayPlanner({
   const visible = selected.includes("all")
     ? rows
     : rows.filter((a) => selected.includes(a.practitioner_id ?? "unassigned"));
+
+  // ---- Needs action: flags from metrics/appointment-flags on the minute tick.
+  const needs = useNeedsAction(visible, { nowMs: tick, depositLeadDays });
+  const filtering = needsAction !== null;
 
   // ---- Columns: only practitioners with a booking today (plus any selected empty ones).
   const columnMap = new Map<string, { id: string; name: string; items: any[] }>();
@@ -1686,15 +1742,26 @@ function DayPlanner({
           <span aria-hidden>·</span>
           <span className="tabular-nums">{label(startMin)}–{label(endMin)}</span>
         </div>
-        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
-          <PractitionerFilter
-            practitioners={practitioners}
-            selected={selected}
-            onSelect={onSelect}
-          />
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
+          <NeedsActionControl counts={needs.counts} value={needsAction} onChange={onNeedsAction} />
+          <div className="flex items-center gap-2">
+            <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
+            <PractitionerFilter
+              practitioners={practitioners}
+              selected={selected}
+              onSelect={onSelect}
+            />
+          </div>
         </div>
       </div>
+      {(filtering || needs.counts.any > 0) && (
+        <p
+          data-qc="needs-action-hint"
+          className="shrink-0 border-b border-glass-line px-5 py-1.5 text-2xs text-muted-foreground"
+        >
+          {needsActionHint(needsAction, needs.counts, "today")}
+        </p>
+      )}
 
       {/* Now / next strip */}
       {(current || next) && (
@@ -1858,19 +1925,22 @@ function DayPlanner({
                       if (dragging && drag!.colId !== col.id) return null;
                       const top = yFor(startAt);
                       const durationHeight = yFor(startAt + duration) - top - 6;
-                      const height = Math.max(80, durationHeight);
+                      const match = needs.matches(a.id, needsAction);
+                      // A highlighted card grows a little so its tag chips fit.
+                      const height = Math.max(filtering && match ? 100 : 80, durationHeight);
                       const isCurrent = current?.id === a.id;
                       const treatmentTone = toneForTreatment(a.treatment_name, treatmentColours);
                       return (
                         <div
                           key={a.id}
+                          data-needs-action={filtering ? (match ? "match" : "faded") : undefined}
                           style={{ top, height, ...treatmentTone.style }}
                           onPointerDown={(ev) => beginDrag(ev, a, col.id)}
                           onPointerMove={moveDrag}
                           onPointerUp={() => endDrag(a)}
-                          className={`diary-event glass-card group absolute inset-x-1.5 z-[2] flex cursor-grab flex-col overflow-hidden !rounded-xl px-3 py-2.5 transition-shadow hover:shadow-lift ${
+                          className={`diary-event glass-card group absolute inset-x-1.5 z-[2] flex cursor-grab flex-col overflow-hidden !rounded-xl px-3 py-2.5 transition-[shadow,opacity,filter] hover:shadow-lift ${
                             dragging ? "!z-30 cursor-grabbing opacity-90 shadow-lift" : ""
-                          } ${isCurrent ? "shadow-lift" : ""}`}
+                          } ${isCurrent ? "shadow-lift" : ""} ${needsActionCardClass(filtering, match)}`}
                         >
                           <div
                             className={`pointer-events-none absolute inset-0 rounded-[inherit] ${treatmentTone.bg}`}
@@ -1897,6 +1967,11 @@ function DayPlanner({
                           <p className="relative mt-0.5 truncate text-2xs text-muted-foreground">
                             {a.treatment_name} · #{a.treatment_number}
                           </p>
+                          {filtering && match ? (
+                            <NeedsActionTags types={needs.byId.get(a.id) ?? []} />
+                          ) : a.details_incomplete ? (
+                            <DetailsIncompleteChip />
+                          ) : null}
                         </div>
                       );
                     })}
@@ -1950,6 +2025,7 @@ function DayPlanner({
       )}
       </div>
 
+      <ColourKey appointments={visible} colours={treatmentColours} />
       <div className="border-t border-glass-line bg-glass-2 px-5 py-2 text-2xs text-muted-foreground">
         Drag an appointment to move it · click an empty slot to book · Esc cancels a drag
       </div>
@@ -2030,11 +2106,35 @@ function ChipRow({ a, onState }: { a: any; onState: (v: any) => Promise<unknown>
       ? "bg-warning-bg text-warning-ink"
       : "bg-destructive-bg text-destructive";
   const consentTone = signed ? "bg-success-bg text-success-ink" : "bg-warning-bg text-consent-ink";
+  // HoverCard ignores touch; on a tablet a tap on the status glyphs opens the
+  // same card as a controlled popover (the pattern the stage badge uses).
+  const [open, setOpen] = useState(false);
+  const lastPointerType = useRef<string>("");
 
   return (
-    <HoverCard openDelay={120} closeDelay={140}>
+    <HoverCard open={open} onOpenChange={setOpen} openDelay={120} closeDelay={140}>
       <HoverCardTrigger asChild>
-        <button type="button" className="-my-1 flex min-h-6 shrink-0 items-center gap-1 py-1" aria-label="Appointment status">
+        <button
+          type="button"
+          className="-my-1 flex min-h-6 shrink-0 items-center gap-1 py-1"
+          aria-label="Appointment status"
+          aria-expanded={open}
+          data-qc="appointment-status"
+          onPointerDown={(event) => {
+            lastPointerType.current = event.pointerType;
+            // Keep the day planner from reading this as the start of a drag.
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            const touch =
+              lastPointerType.current === "touch" ||
+              (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches);
+            if (touch) {
+              event.stopPropagation();
+              setOpen((v) => !v);
+            }
+          }}
+        >
           <span className={`grid h-3.5 w-3.5 place-items-center rounded-full ${paymentTone}`} title="Payment">
             <CreditCard className="h-2 w-2" />
           </span>
@@ -2113,6 +2213,9 @@ function WeekView({
   date,
   selected,
   onSelect,
+  needsAction,
+  onNeedsAction,
+  depositLeadDays,
 }: {
   rows: any[];
   start: Date;
@@ -2123,11 +2226,18 @@ function WeekView({
   date: Date;
   selected: string[];
   onSelect: (v: string[]) => void;
+  needsAction: NeedsActionSelection;
+  onNeedsAction: (v: NeedsActionSelection) => void;
+  depositLeadDays: number;
 }) {
   const rows = filterByPractitioner(allRows, selected);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const today = new Date().toDateString();
   const [quickAdd, setQuickAdd] = useState<null | { top: number; left: number; day: Date }>(null);
+  const tick = useMinuteTick();
+  const needs = useNeedsAction(rows, { nowMs: tick, depositLeadDays });
+  const filtering = needsAction !== null;
+  const weekColours = useTreatmentColours();
 
   function openQuickAdd(event: { currentTarget: EventTarget & Element; clientX: number; clientY: number }, day: Date) {
     const root = event.currentTarget.closest("#week-planner");
@@ -2148,11 +2258,22 @@ function WeekView({
           <span aria-hidden>·</span>
           <span className="tabular-nums">{rows.length} booked</span>
         </div>
-        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
-          <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
+          <NeedsActionControl counts={needs.counts} value={needsAction} onChange={onNeedsAction} />
+          <div className="flex items-center gap-2">
+            <span className="text-2xs tracking-[0.02em] text-muted-foreground">View by</span>
+            <PractitionerFilter practitioners={practitioners} selected={selected} onSelect={onSelect} />
+          </div>
         </div>
       </div>
+      {(filtering || needs.counts.any > 0) && (
+        <p
+          data-qc="needs-action-hint"
+          className="shrink-0 border-b border-glass-line px-5 py-1.5 text-2xs text-muted-foreground"
+        >
+          {needsActionHint(needsAction, needs.counts, "this week")}
+        </p>
+      )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col p-5">
         <div className="scroll-x-shadows min-h-0 min-w-0 flex-1 overflow-auto" data-qc="week-planner-scroll">
           <div className="grid min-h-0 min-w-0 auto-rows-auto grid-cols-1 divide-y divide-glass-line md:h-full md:min-w-[1820px] md:auto-rows-fr md:grid-cols-7 md:divide-y-0">
@@ -2194,7 +2315,16 @@ function WeekView({
               </div>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-3">
                 {items.map((a) => (
-                  <WeekAppointmentCard key={a.id} a={a} onState={onState} />
+                  <WeekAppointmentCard
+                    key={a.id}
+                    a={a}
+                    onState={onState}
+                    needsAction={
+                      filtering
+                        ? { match: needs.matches(a.id, needsAction), types: needs.byId.get(a.id) ?? [] }
+                        : null
+                    }
+                  />
                 ))}
                 <button
                   type="button"
@@ -2222,6 +2352,7 @@ function WeekView({
           </div>
         </div>
       </div>
+      <ColourKey appointments={rows} colours={weekColours} />
       {quickAdd && (
         <div className="absolute z-50" style={{ top: quickAdd.top, left: quickAdd.left }}>
           <QuickAddAppointment
@@ -2247,9 +2378,12 @@ function WeekView({
 function WeekAppointmentCard({
   a,
   onState,
+  needsAction = null,
 }: {
   a: any;
   onState: (v: any) => Promise<unknown>;
+  /** Set while the Needs action filter is on: does this card match, and which tags to show. */
+  needsAction?: { match: boolean; types: NeedsActionType[] } | null;
 }) {
   const treatmentColours = useTreatmentColours();
   const tone = toneForTreatment(a.treatment_name, treatmentColours);
@@ -2264,7 +2398,11 @@ function WeekAppointmentCard({
 
   return (
     <div
-      className="diary-event glass-card group relative overflow-hidden !rounded-xl px-3 py-2.5 transition-shadow hover:shadow-lift"
+      data-needs-action={needsAction ? (needsAction.match ? "match" : "faded") : undefined}
+      className={`diary-event glass-card group relative overflow-hidden !rounded-xl px-3 py-2.5 transition-[shadow,opacity,filter] hover:shadow-lift ${needsActionCardClass(
+        needsAction !== null,
+        needsAction?.match ?? false,
+      )}`}
       style={tone.style}
     >
       <div className={`pointer-events-none absolute inset-0 rounded-[inherit] ${tone.bg}`} aria-hidden />
@@ -2293,7 +2431,25 @@ function WeekAppointmentCard({
         {a.treatment_name} · #{a.treatment_number}
       </p>
       <p className="relative truncate text-2xs text-muted-foreground/80">{practitioner}</p>
+      {needsAction?.match ? (
+        <NeedsActionTags types={needsAction.types} />
+      ) : a.details_incomplete ? (
+        <DetailsIncompleteChip />
+      ) : null}
     </div>
+  );
+}
+
+/** A Quick book booking still missing its details; cleared when the booking is edited. */
+function DetailsIncompleteChip() {
+  return (
+    <span
+      data-qc="details-incomplete-chip"
+      title="Booked from Quick book; open the booking to complete its details"
+      className="relative mt-1.5 inline-flex w-fit rounded-full bg-accent-soft px-2 py-[3px] text-[10.5px] font-semibold leading-none text-accent-ink"
+    >
+      Details incomplete
+    </span>
   );
 }
 
@@ -2307,6 +2463,7 @@ function MonthView({
   catalogue,
   selected,
   onSelect,
+  depositLeadDays,
 }: {
   rows: any[];
   anchor: Date;
@@ -2317,11 +2474,15 @@ function MonthView({
   catalogue: any[];
   selected: string[];
   onSelect: (v: string[]) => void;
+  depositLeadDays: number;
 }) {
   const rows = filterByPractitioner(allRows, selected);
   const treatmentColours = useTreatmentColours();
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   const today = new Date().toDateString();
+  // Month cells only count what needs action; the day and week views highlight it.
+  const tick = useMinuteTick();
+  const needs = useNeedsAction(rows, { nowMs: tick, depositLeadDays });
   return (
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl p-0">
       <div className="relative z-30 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-glass-line bg-glass-2 px-5 py-3">
@@ -2375,11 +2536,25 @@ function MonthView({
                 >
                   {day.getDate()}
                 </span>
-                {items.length > 0 && (
-                  <span className="inline-grid size-6 shrink-0 place-items-center rounded-full bg-[rgba(47,63,102,0.08)] text-2xs font-semibold tabular-nums text-muted-foreground">
-                    {items.length}
-                  </span>
-                )}
+                <span className="flex items-center gap-1">
+                  {(() => {
+                    const attention = items.filter((a) => (needs.byId.get(a.id) ?? []).length > 0).length;
+                    return attention > 0 ? (
+                      <span
+                        data-qc="month-needs-action-count"
+                        title={`${attention} need${attention === 1 ? "s" : ""} action`}
+                        className="inline-grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-destructive-bg px-1.5 text-2xs font-semibold tabular-nums text-destructive-ink"
+                      >
+                        {attention}
+                      </span>
+                    ) : null;
+                  })()}
+                  {items.length > 0 && (
+                    <span className="inline-grid size-6 shrink-0 place-items-center rounded-full bg-[rgba(47,63,102,0.08)] text-2xs font-semibold tabular-nums text-muted-foreground">
+                      {items.length}
+                    </span>
+                  )}
+                </span>
               </span>
               <span className="relative mt-1.5 flex min-h-0 flex-1 flex-col gap-1 overflow-hidden max-sm:hidden">
                 {items.slice(0, 3).map((a) => {

@@ -5,6 +5,7 @@
  */
 import { assertCanSend, prefsFromPatient, type CommsChannel, type CommsPrefs } from "@/lib/comms/preferences";
 import type { EnqueueInput } from "@/lib/comms/enqueue.server";
+import { isLiveOffer } from "./cohorts";
 import { offerClaimUrl, offerExpiry, renderOffer, type OfferSource, type TemplateStage } from "./stages";
 
 export type SendableTemplate = {
@@ -22,6 +23,17 @@ export type SendableTemplate = {
   show_in_portal: boolean;
   image_url?: string | null;
   image_placement?: string | null;
+  /** Rules: catalogue items it applies to (empty = any), once per patient, no stacking with a live offer. */
+  applies_to_catalogue_ids?: string[] | null;
+  one_per_patient?: boolean | null;
+  no_stacking?: boolean | null;
+};
+
+export type ExistingOffer = {
+  patient_id: string;
+  template_id: string | null;
+  status: string;
+  expires_at: string | null;
 };
 
 export type SendablePatient = {
@@ -67,7 +79,22 @@ export type OfferStore = {
   linkCommunication(offerId: string, communicationId: string): Promise<void>;
   /** Throws with the PECR reason when the send is not allowed. */
   enqueue(input: EnqueueInput & { bodyHtml?: string | null }): Promise<{ id: string }>;
+  /**
+   * Optional: close the patient's open recall tasks once an offer has gone
+   * out, so the chase is not listed twice. Reached from the list and the
+   * record; the automation leaves tasks alone.
+   */
+  closeRecallTasks?(patientId: string): Promise<void>;
+  /** Offers these patients already have, for the one-per-patient and no-stacking rules. */
+  listOffers?(patientIds: string[]): Promise<ExistingOffer[]>;
+  /** Names of the catalogue items an offer applies to, for the "Applies to" line. */
+  catalogueNames?(ids: string[]): Promise<string[]>;
 };
+
+/** The rule line added to the body when the offer is limited to certain treatments. */
+export function appliesToLine(names: string[]) {
+  return names.length > 0 ? `Applies to: ${names.join(", ")}.` : null;
+}
 
 type Decision = { ok: true } | { ok: false; reason: string };
 
@@ -101,6 +128,27 @@ export async function sendOfferToPatients(
   const patients = await store.getPatients(ids);
   const byId = new Map(patients.map((p) => [p.id, p]));
 
+  // The template's rules. Existing offers are read once for the whole batch.
+  const checkRules =
+    Boolean(template.one_per_patient || template.no_stacking) && Boolean(store.listOffers);
+  const existing = checkRules ? await store.listOffers!(ids) : [];
+  const hadThisTemplate = new Set(
+    template.one_per_patient
+      ? existing.filter((o) => o.template_id === template.id).map((o) => o.patient_id)
+      : [],
+  );
+  const hasLiveOffer = new Set(
+    template.no_stacking
+      ? existing.filter((o) => isLiveOffer(o, now)).map((o) => o.patient_id)
+      : [],
+  );
+  const appliesIds = template.applies_to_catalogue_ids ?? [];
+  const appliesTo =
+    appliesIds.length > 0 && store.catalogueNames ? await store.catalogueNames(appliesIds) : [];
+  const ruleLine = appliesToLine(appliesTo);
+  const body = ruleLine ? `${template.body.trimEnd()}\n\n${ruleLine}` : template.body;
+  const sendable: SendableTemplate = { ...template, body };
+
   for (const patientId of ids) {
     const patient = byId.get(patientId);
     if (!patient) {
@@ -110,6 +158,22 @@ export async function sendOfferToPatients(
     const name = `${patient.first_name ?? ""} ${patient.last_name ?? ""}`.trim() || "Patient";
     if (patient.status === "archived") {
       result.skipped.push({ patient_id: patientId, name, reason: "This patient is archived." });
+      continue;
+    }
+    if (hadThisTemplate.has(patientId)) {
+      result.skipped.push({
+        patient_id: patientId,
+        name,
+        reason: "Already had this offer (one per patient).",
+      });
+      continue;
+    }
+    if (hasLiveOffer.has(patientId)) {
+      result.skipped.push({
+        patient_id: patientId,
+        name,
+        reason: "Has a live offer already (no stacking).",
+      });
       continue;
     }
     const prefs = prefsFromPatient(patient as Partial<CommsPrefs>);
@@ -135,7 +199,7 @@ export async function sendOfferToPatients(
       template_id: template.id,
       stage: template.stage,
       headline: template.headline,
-      body: template.body,
+      body: sendable.body,
       value_text: template.value_text,
       code: template.code,
       cta_label: template.cta_label,
@@ -148,7 +212,7 @@ export async function sendOfferToPatients(
       image_placement: template.image_placement ?? null,
     });
 
-    const rendered = renderOffer(template, patient, {
+    const rendered = renderOffer(sendable, patient, {
       clinicName: store.clinicName,
       claimUrl: offerClaimUrl(store.origin, offerId),
       personalLine: opts.personalLine ?? null,
@@ -201,6 +265,7 @@ export async function sendOfferToPatients(
       channels,
       note: channels.length === 0 ? `Portal only — ${blockedReason ?? "no channel available."}` : null,
     });
+    if (store.closeRecallTasks) await store.closeRecallTasks(patientId);
   }
   return result;
 }

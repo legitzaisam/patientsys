@@ -154,8 +154,33 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     permission: "documents.send",
     defaults: staff(),
   }),
-  node({ id: "patient-history", parentId: "patient-record", kind: "tab", label: "History updates", route: "/patients/$id", permission: "view.patients.history" }),
-  node({ id: "patient-from-patient", parentId: "patient-record", kind: "tab", label: "From the patient", route: "/patients/$id", permission: "view.patients.from_patient" }),
+  node({
+    id: "patient-history",
+    parentId: "patient-record",
+    kind: "tab",
+    label: "Medical history",
+    route: "/patients/$id",
+    permission: "view.patients.history",
+    defaults: staff({ front_desk: false }),
+  }),
+  node({
+    id: "patient-from-patient",
+    parentId: "patient-record",
+    kind: "tab",
+    label: "From the patient",
+    route: "/patients/$id",
+    permission: "view.patients.from_patient",
+    defaults: staff({ front_desk: false }),
+  }),
+  node({
+    id: "patient-edit-clinical",
+    parentId: "patient-record",
+    kind: "component",
+    label: "Edit clinical record",
+    route: "/patients/$id",
+    permission: "patients.edit_clinical",
+    defaults: staff({ front_desk: false }),
+  }),
   node({ id: "patient-contact", parentId: "patient-record", kind: "tab", label: "Contact", route: "/patients/$id", permission: "view.patients.contact" }),
 
   node({
@@ -189,7 +214,7 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     label: "Edit treatments and clinic details",
     route: "/settings",
     permission: "settings.treatments",
-    defaults: staff({ practitioner: false, front_desk: true }),
+    defaults: staff({ practitioner: false, front_desk: false }),
   }),
 
   node({
@@ -199,7 +224,7 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     label: "Insights",
     route: "/insights",
     permission: "reports.insights",
-    defaults: staff({ practitioner: false, front_desk: true }),
+    defaults: staff({ practitioner: true, front_desk: false }),
   }),
   node({
     id: "insights-pipeline",
@@ -208,16 +233,16 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     label: "Pipeline",
     route: "/insights",
     permission: "view.insights.pipeline",
-    defaults: staff({ practitioner: false, front_desk: true }),
+    defaults: staff({ practitioner: true, front_desk: false }),
   }),
   node({
     id: "insights-book",
     parentId: "insights",
     kind: "tab",
-    label: "Book",
+    label: "Patient base",
     route: "/insights",
     permission: "view.insights.book",
-    defaults: staff({ practitioner: false, front_desk: true }),
+    defaults: staff({ practitioner: true, front_desk: false }),
   }),
 
   node({
@@ -239,6 +264,15 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     defaults: staff({ manager: true, practitioner: false, front_desk: false }),
   }),
   node({
+    id: "performance-commission",
+    parentId: "performance",
+    kind: "component",
+    label: "Commission and payouts",
+    route: "/performance",
+    permission: "reports.commission",
+    defaults: staff({ manager: false, practitioner: false, front_desk: false }),
+  }),
+  node({
     id: "earnings",
     parentId: null,
     kind: "page",
@@ -254,7 +288,7 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     label: "Offers",
     route: "/offers",
     permission: "offers.manage",
-    defaults: staff({ manager: false, practitioner: false, front_desk: false }),
+    defaults: staff({ manager: true, practitioner: false, front_desk: false }),
   }),
 
   node({ id: "shell", parentId: null, kind: "page", label: "Clinic chrome", route: "/dashboard", permission: "view.shell" }),

@@ -16,7 +16,9 @@ async function openOliviaDocuments(page: import("@playwright/test").Page) {
 test("issues a consent form to the patient", async ({ page }) => {
   await openOliviaDocuments(page);
 
-  await page.getByRole("button", { name: "Send form" }).click();
+  // Send form lives in the record header's ⋯ menu.
+  await page.locator('[data-qc="record-more"]').click();
+  await page.getByRole("menuitem", { name: "Send form" }).click();
   const dialog = page.getByRole("dialog", { name: "Send to patient" });
   await expect(dialog).toBeVisible();
 

@@ -17,10 +17,14 @@ import {
 import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
+import { dateTime, daysAgoLabel } from "@/lib/format";
+import { complianceStatus } from "@/lib/staff-doc-compliance";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
 import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
 import { InviteStaffDialog } from "@/components/invite-staff-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AccessControlSettings } from "@/components/access-control-settings";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -182,6 +186,73 @@ function StaffSearch({
   );
 }
 
+/** Last active, compliance and (for the owner) commission, under the email line. */
+function MemberMeta({
+  member,
+  todayKey,
+}: {
+  member: {
+    lastActiveAt?: string | null;
+    commissionRate?: number | null;
+    role: string;
+    compliance?: {
+      docsOnFile: number;
+      docsTotal: number;
+      registrationExpiry: string | null;
+      insuranceExpiry: string | null;
+    } | null;
+    accessChanged?: { by: string; at: string } | null;
+  };
+  todayKey: string;
+}) {
+  const lastActive = member.lastActiveAt
+    ? daysAgoLabel(clinicDayDiff(clinicDayKey(new Date(member.lastActiveAt)), todayKey))
+    : null;
+  const status = member.compliance
+    ? complianceStatus(
+        {
+          docsMissing: member.compliance.docsTotal - member.compliance.docsOnFile,
+          registrationExpiry: member.compliance.registrationExpiry,
+          insuranceExpiry: member.compliance.insuranceExpiry,
+        },
+        todayKey,
+      )
+    : null;
+  const showCommission =
+    member.commissionRate !== null &&
+    member.commissionRate !== undefined &&
+    member.role !== "front_desk";
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span data-qc="member-last-active">
+        {lastActive ? `Last active ${lastActive}` : "Not signed in yet"}
+      </span>
+      {status && (
+        <span
+          data-qc="member-compliance"
+          data-tone={status.tone}
+          className={cn(
+            "inline-flex h-5 items-center rounded-full px-2 text-2xs font-medium",
+            status.tone === "ok" && "bg-success-bg text-success-ink",
+            status.tone === "warn" && "bg-warning-bg text-warning-ink",
+            status.tone === "bad" && "bg-destructive-bg text-destructive-ink",
+          )}
+        >
+          {status.label}
+        </span>
+      )}
+      {showCommission && (
+        <span data-qc="member-commission">{member.commissionRate}% commission</span>
+      )}
+      {member.accessChanged && (
+        <span data-qc="member-changed-by" className="text-ink-3">
+          Access set by {member.accessChanged.by} · {dateTime(member.accessChanged.at)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function RoleSelect({
   value,
   onChange,
@@ -236,6 +307,14 @@ function TeamPage() {
 
   const [staffTab, setStaffTab] = useState<"current" | "former">("current");
   const [staffQuery, setStaffQuery] = useState("");
+  // Role changes and access removal confirm first; the pending action waits here.
+  const [confirm, setConfirm] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    destructive: boolean;
+    run: () => void;
+  } | null>(null);
 
   const restoreEx = useMutation({
     mutationFn: useServerFn(restoreExTeamMember),
@@ -340,6 +419,7 @@ function TeamPage() {
   const canViewTeam = can(identity, "team.view");
   const canApprove = can(identity, "team.approve_changes");
   const canAdmin = Boolean(identity.isOwner);
+  const todayKey = clinicDayKey();
   const members = (team ?? []).filter((m: { isSelf?: boolean; fullName?: string; email?: string }) => {
     if (m.isSelf) return true;
     return Boolean(String(m.fullName ?? "").trim() || String(m.email ?? "").trim());
@@ -366,7 +446,8 @@ function TeamPage() {
           <div>
             <h1 className="page-title">Team &amp; access</h1>
             <p className="page-subtitle">
-              {members.length} staff accounts{canAdmin ? " · you hold manager access" : ""}
+              {members.length} staff accounts
+              {identity.isOwner ? " · You're the clinic owner" : identity.isManager ? " · You hold manager access" : ""}
             </p>
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -402,7 +483,7 @@ function TeamPage() {
                 </Card>
               ) : (
                 visibleMembers.map((m: any) => (
-                <Card key={m.userId} className="p-4">
+                  <Card key={m.userId} className="p-4" data-qc="team-member">
                   <div className="flex flex-wrap items-center gap-4">
                     <div className="min-w-56 flex-1 space-y-0.5">
                       <Link
@@ -424,24 +505,34 @@ function TeamPage() {
                           Never signed in — set a password
                         </p>
                       )}
+                        <MemberMeta member={m} todayKey={todayKey} />
                     </div>
                     {canAdmin && (
                     <div className="w-32">
                       <RoleSelect
                         value={m.role}
                         className="h-8 w-full rounded-xl border border-edge-2 bg-glass-2 px-2 text-xs text-foreground shadow-inset-hi"
-                        onChange={(role) =>
-                          update.mutate({
-                            data: {
-                              userId: m.userId,
-                              role: role as "owner" | "practitioner" | "front_desk",
-                              fullName: m.fullName,
-                              jobTitle: m.jobTitle,
-                              registrationBody: m.registrationBody,
-                              registrationNumber: m.registrationNumber,
-                            },
-                          })
-                        }
+                        onChange={(role) => {
+                          if (role === m.role) return;
+                          const label = ROLES.find((r) => r.value === role)?.label ?? role;
+                          setConfirm({
+                            title: `Change ${m.fullName || m.email || "this person"} to ${label}?`,
+                            description: `Their access changes straight away to what a ${label.toLowerCase()} can see and do.`,
+                            confirmLabel: "Change role",
+                            destructive: false,
+                            run: () =>
+                              update.mutate({
+                                data: {
+                                  userId: m.userId,
+                                  role: role as "owner" | "practitioner" | "front_desk",
+                                  fullName: m.fullName,
+                                  jobTitle: m.jobTitle,
+                                  registrationBody: m.registrationBody,
+                                  registrationNumber: m.registrationNumber,
+                                },
+                              }),
+                          });
+                        }}
                       />
                     </div>
                     )}
@@ -453,15 +544,23 @@ function TeamPage() {
                           aria-label="Revoke access"
                           disabled={m.isSelf || revoke.isPending}
                           onClick={() =>
-                            requestRevoke({
-                              userId: m.userId,
-                              role: m.role,
-                              fullName: m.fullName,
-                              email: m.email,
-                              jobTitle: m.jobTitle,
-                              registrationBody: m.registrationBody,
-                              registrationNumber: m.registrationNumber,
-                              isSelf: m.isSelf,
+                            setConfirm({
+                              title: `Remove ${m.fullName || m.email || "this person"} from the team?`,
+                              description:
+                                "They lose access to Aetheria straight away. Their record stays under Former staff and can be restored.",
+                              confirmLabel: "Remove access",
+                              destructive: true,
+                              run: () =>
+                                requestRevoke({
+                                  userId: m.userId,
+                                  role: m.role,
+                                  fullName: m.fullName,
+                                  email: m.email,
+                                  jobTitle: m.jobTitle,
+                                  registrationBody: m.registrationBody,
+                                  registrationNumber: m.registrationNumber,
+                                  isSelf: m.isSelf,
+                                }),
                             })
                           }
                         >
@@ -576,6 +675,21 @@ function TeamPage() {
           )}
         </TabsContent>
       </Tabs>
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+        title={confirm?.title ?? ""}
+        description={confirm?.description}
+        confirmLabel={confirm?.confirmLabel ?? "Confirm"}
+        destructive={confirm?.destructive ?? false}
+        qc="team-confirm"
+        onConfirm={() => {
+          confirm?.run();
+          setConfirm(null);
+        }}
+      />
     </AppShell>
   );
 }

@@ -10,7 +10,10 @@ import { invalidateRecallTasks, useRecallTasksLiveSync } from "@/lib/use-recall-
 import { useIdentity } from "@/lib/use-identity";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PaginationBar, usePagination } from "@/components/pagination-bar";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 10;
 
 type Channel = "phone" | "email" | "message";
 
@@ -26,6 +29,31 @@ function readChannels(): Record<string, Channel> {
 }
 
 /** Outstanding patient follow-ups (e.g. after a no show) for the signed-in user. */
+/** "Due 4 Oct · Dr Nadia Rahman" under a task; overdue reads in rose. */
+function TaskMeta({ dueAt, assignee }: { dueAt: string | null; assignee: string | null }) {
+  if (!dueAt && !assignee) return null;
+  const due = dueAt ? new Date(dueAt) : null;
+  const today = new Date();
+  const overdue =
+    !!due &&
+    due.getTime() < new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  return (
+    <p
+      className="mt-1 flex flex-wrap items-center gap-x-1.5 text-2xs text-muted-foreground"
+      data-qc="task-meta"
+    >
+      {due ? (
+        <span className={overdue ? "font-semibold text-destructive-ink" : undefined}>
+          {overdue ? "Overdue since" : "Due"}{" "}
+          {due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+        </span>
+      ) : null}
+      {due && assignee ? <span aria-hidden>·</span> : null}
+      {assignee ? <span>{assignee}</span> : null}
+    </p>
+  );
+}
+
 export function FollowUpTasks() {
   const queryClient = useQueryClient();
   const fetchTasks = useServerFn(listOpenRecallTasks);
@@ -115,6 +143,7 @@ export function FollowUpTasks() {
   };
 
   const visible = (tasks ?? []).filter((t: any) => !pending.includes(t.id));
+  const paging = usePagination(visible, PAGE_SIZE);
 
   const contactVia = (taskId: string, channel: Channel, status: string) => {
     markChannel(taskId, channel);
@@ -135,8 +164,8 @@ export function FollowUpTasks() {
           <p className="mt-2 text-sm text-muted-foreground">Nothing on your list right now.</p>
         </div>
       ) : (
-        <Card className="max-h-[22rem] divide-y divide-glass-line overflow-y-auto p-0">
-        {visible.map((t: any) => {
+        <Card className="divide-y divide-glass-line p-0" data-qc="my-tasks">
+        {paging.rows.map((t: any) => {
           const name = `${t.patients?.first_name ?? ""} ${t.patients?.last_name ?? ""}`.trim() || "Patient";
           const contacted = t.status === "contacted" || t.status === "completed";
           const used = channels[t.id];
@@ -158,6 +187,7 @@ export function FollowUpTasks() {
                 <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">
                   {t.note ?? "Follow-up required"}
                 </p>
+                <TaskMeta dueAt={t.due_at ?? null} assignee={t.assigned_label ?? null} />
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 {t.patients?.phone && (
@@ -235,6 +265,16 @@ export function FollowUpTasks() {
         })}
       </Card>
       )}
+      <PaginationBar
+        page={paging.page}
+        pageCount={paging.pageCount}
+        total={paging.total}
+        from={paging.from}
+        to={paging.to}
+        onPage={paging.setPage}
+        noun="tasks"
+        qc="my-tasks-pagination"
+      />
     </section>
   );
 }

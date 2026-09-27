@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SQINOS mock-up: Attention needed chase</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --fg:#2f3f66;--ink2:#46557a;--ink3:#6a7390;
+  --card:rgba(255,255,255,.88);--edge:rgba(47,63,102,.08);
+  --accent:#eed488;--accent-soft:rgba(238,212,136,.35);--accent-ink:#7a6220;
+  --rose-bg:rgba(250,204,226,.55);--rose:#a3456e;
+  --mint-bg:rgba(179,232,196,.55);--mint:#2d6a4c;
+  --lilac-bg:rgba(224,213,248,.6);--lilac:#5c4a94;
+  --sky-bg:rgba(190,224,244,.55);--sky:#3d6f96;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Space Grotesk",system-ui,sans-serif;color:var(--fg);
+  background:linear-gradient(160deg,#fbf6ea 0%,#f6f7f8 40%,#f3f4f8 100%);padding:28px 16px 60px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:26px;margin:0 0 4px;font-weight:600;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 18px;font-size:14px;line-height:1.5;max-width:860px}
+.roles{display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:rgba(255,255,255,.7);border:1px solid var(--edge);margin-bottom:22px}
+.roles button{border:0;background:none;font:inherit;font-size:13px;padding:7px 16px;border-radius:999px;color:var(--ink2);cursor:pointer}
+.roles button.on{background:var(--accent-soft);color:var(--fg);font-weight:600;box-shadow:inset 0 0 0 1px rgba(122,98,32,.15)}
+.sec h2{font-size:21px;font-weight:600;margin:0}
+.sec p{font-size:13.5px;color:var(--ink2);margin:3px 0 16px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.card{background:var(--card);border-radius:24px;padding:18px 20px 10px;box-shadow:0 10px 30px rgba(47,63,102,.07);border:1px solid rgba(255,255,255,.85)}
+.ch{display:flex;align-items:center;gap:9px;font-weight:600;font-size:16px;padding:2px 2px 12px}
+.ch.urgent{color:var(--rose)}.ch .tot{margin-left:auto;font-size:13.5px;color:var(--fg)}
+.grp{border-radius:14px}
+.gh{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;font:inherit;color:var(--fg);padding:11px 6px;cursor:pointer;border-radius:12px;text-align:left}
+.gh:hover{background:rgba(47,63,102,.04)}
+.gh .chev{color:var(--ink3);font-size:13px;width:12px;transition:transform .2s;display:inline-block}
+.grp.open > .gh .chev{transform:rotate(90deg)}
+.gh .lbl{font-size:14px;font-weight:500}
+.gh .meta{font-size:12px;color:var(--ink3);font-weight:400}
+.pill{margin-left:auto;font-size:11.5px;font-weight:600;min-width:26px;height:22px;padding:0 8px;border-radius:999px;display:inline-grid;place-items:center}
+.p-rose{background:var(--rose-bg);color:var(--rose)}.p-lilac{background:var(--lilac-bg);color:var(--lilac)}.p-gold{background:var(--accent-soft);color:var(--accent-ink)}.p-sky{background:var(--sky-bg);color:var(--sky)}.p-mint{background:var(--mint-bg);color:var(--mint)}
+.body{display:none;padding:2px 0 10px 28px}
+.grp.open .body{display:block}
+.summary{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;color:var(--ink3);margin:0 0 8px}
+.summary b{color:var(--fg);font-weight:600}
+.owner-only{display:none}
+body.owner .owner-only{display:inline}
+.item{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.75);border:1px solid var(--edge);margin-bottom:7px;transition:opacity .25s, background .25s}
+.item .nm{font-size:13.5px;font-weight:600}
+.item .nm .tm{font-weight:500;color:var(--ink3);font-size:12px;margin-left:6px}
+.item .ln{font-size:12px;color:var(--ink2);margin-top:2px}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tag{font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:999px}
+.t-rose{background:var(--rose-bg);color:var(--rose)}.t-lilac{background:var(--lilac-bg);color:var(--lilac)}.t-sky{background:var(--sky-bg);color:var(--sky)}.t-done{background:var(--mint-bg);color:var(--mint)}
+.acts{display:flex;gap:6px;align-items:center}
+.btn{border:0;font:inherit;font-size:12px;font-weight:600;padding:7px 12px;border-radius:999px;background:var(--accent);color:#3d3210;cursor:pointer;white-space:nowrap}
+.btn:hover{filter:brightness(.97)}
+.mw{position:relative}.more{border:0;background:rgba(47,63,102,.06);width:30px;height:30px;border-radius:50%;cursor:pointer;color:var(--fg);font-size:15px;line-height:1}
+.mm{position:absolute;right:0;top:36px;background:#fff;border-radius:14px;box-shadow:0 14px 34px rgba(47,63,102,.16);border:1px solid var(--edge);padding:5px;width:190px;display:none;z-index:10;text-align:left}
+.mm.show{display:block}
+.mm button{display:block;width:100%;border:0;background:none;font:inherit;font-size:12.5px;color:var(--fg);padding:8px 10px;border-radius:9px;cursor:pointer;text-align:left}
+.mm button:hover{background:rgba(47,63,102,.05)}
+.item.done{background:rgba(179,232,196,.18)}
+.item.done .btn{background:var(--mint-bg);color:var(--mint);cursor:default}
+.item.gone{opacity:0;height:0;padding:0 12px;margin:0;border-width:0;overflow:hidden}
+.bodyfoot{display:flex;justify-content:space-between;font-size:12px;color:var(--ink3);padding:4px 2px 0}
+.bodyfoot a{color:var(--accent-ink);font-weight:600;text-decoration:none}
+.allclear{display:none;font-size:13px;color:var(--mint);padding:10px 2px}
+.static .gh{cursor:default}
+.notes{margin-top:26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.note{background:rgba(255,255,255,.6);border-radius:18px;padding:14px 16px;font-size:13px;line-height:1.5;color:var(--ink2);border:1px solid var(--edge)}
+.note b{color:var(--fg);display:block;margin-bottom:3px;font-size:13.5px}
+@media (max-width:860px){.cols{grid-template-columns:1fr}.body{padding-left:8px}.item{grid-template-columns:1fr}}
+</style>
+</head>
+<body class="owner">
+<div class="wrap">
+  <h1>Chase list inside Attention needed</h1>
+  <p class="sub">The “Due today” group is open. Each patient shows what's outstanding and one main action, with other actions under the ⋯ button. Click an action and the row turns green, then clears itself. Switch the role to see what front desk gets.</p>
+
+  <div class="roles" id="roles">
+    <button data-r="owner" class="on">Owner / Manager</button>
+    <button data-r="fd">Front desk</button>
+  </div>
+
+  <div class="sec">
+    <h2>Attention needed</h2>
+    <p>Outstanding items that need action. Deposits must be paid at least 3 days before the appointment.</p>
+  </div>
+
+  <div class="cols">
+    <div class="card">
+      <div class="ch urgent">⚠ Urgent <span class="tot" id="urgTot"></span></div>
+
+      <div class="grp open" id="today">
+        <button class="gh" data-toggle><span class="chev">›</span><span class="lbl">Due today</span><span class="meta">from today's diary</span><span class="pill p-rose" id="todayCount"></span></button>
+        <div class="body">
+          <div class="summary" id="summary"></div>
+          <div id="items"></div>
+          <div class="allclear" id="allclear">✓ Everything for today is sorted.</div>
+          <div class="bodyfoot"><span id="doneTxt"></span><a href="#">Show in diary →</a></div>
+        </div>
+      </div>
+
+      <div class="grp static"><button class="gh"><span class="chev">›</span><span class="lbl">No show</span><span class="pill p-rose">1</span></button></div>
+      <div class="grp static"><button class="gh"><span class="chev">›</span><span class="lbl">Deposit due</span><span class="meta">next 3 days</span><span class="pill p-rose">17</span></button></div>
+      <div class="grp static"><button class="gh"><span class="chev">›</span><span class="lbl">Consent due</span><span class="pill p-lilac">3</span></button></div>
+      <div class="grp static"><button class="gh"><span class="chev">›</span><span class="lbl">Balance due</span><span class="pill p-lilac">2</span></button></div>
+    </div>
+
+    <div class="card">
+      <div class="ch">🔔 This week <span class="tot">124</span></div>
+      <div class="grp static"><button class="gh"><span class="chev">›</span><span class="lbl">Deposit due</span><span class="pill p-rose">101</span></button></div>
+      <div class="grp static"><button class="gh"><span class="chev">›</span><span class="lbl">Treatment due</span><span class="pill p-gold">12</span></button></div>
+      <div class="grp static"><button class="gh"><span class="chev">›</span><span class="lbl">Message</span><span class="pill p-sky">7</span></button></div>
+      <div class="grp static"><button class="gh"><span class="chev">›</span><span class="lbl">Incomplete profile</span><span class="pill p-lilac">4</span></button></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><b>Ordered by appointment time</b>Whoever is in soonest is at the top, so front desk always works on the most urgent patient first.</div>
+    <div class="note"><b>One main action per row</b>The button matches the most pressing problem. Everything else (call, open record, mark as paid in clinic) sits under ⋯.</div>
+    <div class="note"><b>Rows clear themselves</b>Once the link or form is sent, the row turns green and drops off. The count goes down, so progress is visible.</div>
+    <div class="note"><b>Owner sees the money</b>Owner and manager see the £ outstanding for the day. Front desk sees the same list without the total.</div>
+  </div>
+</div>
+
+<script>
+const data = [
+  {nm:"Grace Adeyemi",tm:"10:15",who:"Dr Nadia Rahman",tx:"Microneedling with PRP · Session 1",f:["consent"],amt:0},
+  {nm:"Leila Farouk",tm:"11:00",who:"Dr Tom Whitfield",tx:"Lip Filler · Session 2",f:["unpaid"],amt:320},
+  {nm:"Zara Haddad",tm:"11:30",who:"Dr Amara Osei",tx:"Anti-Wrinkle Injections · Session 2",f:["unpaid","consent"],amt:280},
+  {nm:"Hannah Ormshurst",tm:"11:45",who:"Dr Nadia Rahman",tx:"Cheek Filler · Session 3",f:["late","unpaid"],amt:420},
+  {nm:"Orla Kesfield",tm:"13:00",who:"Dr Nadia Rahman",tx:"Polynucleotides · Session 1",f:["deposit"],amt:90},
+];
+const T = {
+  late:   ["Running late","t-rose","Message practitioner","Message sent"],
+  unpaid: ["Unpaid","t-rose","Send payment link","Link sent"],
+  consent:["Consent due","t-sky","Send consent form","Form sent"],
+  deposit:["Deposit due","t-lilac","Request deposit","Request sent"],
+};
+const MORE = ["Call patient","Open patient record","Mark as paid in clinic","Snooze until tomorrow"];
+let done = 0;
+const itemsEl = document.getElementById("items");
+
+function renderItems(){
+  itemsEl.innerHTML = data.map((d,i)=>{
+    const k = d.f[0];
+    return `<div class="item" data-i="${i}">
+      <div>
+        <div class="nm">${d.nm}<span class="tm">${d.tm}</span></div>
+        <div class="ln">${d.tx} · ${d.who}</div>
+        <div class="tags">${d.f.map(x=>`<span class="tag ${T[x][1]}">${T[x][0]}</span>`).join("")}${d.amt?`<span class="tag owner-only" style="background:rgba(47,63,102,.06);color:var(--ink2)">£${d.amt}</span>`:""}</div>
+      </div>
+      <div class="acts">
+        <button class="btn" data-act="${k}">${T[k][2]}</button>
+        <div class="mw"><button class="more" aria-label="More actions">⋯</button><div class="mm">${MORE.map(m=>`<button>${m}</button>`).join("")}</div></div>
+      </div></div>`;
+  }).join("");
+}
+function counts(){
+  const left = itemsEl.querySelectorAll(".item:not(.done):not(.gone)").length;
+  document.getElementById("todayCount").textContent = left;
+  document.getElementById("urgTot").textContent = 23 + left;
+  const owed = data.filter((d,i)=>{const el=itemsEl.querySelector(`[data-i="${i}"]`);return el && !el.classList.contains("done") && !el.classList.contains("gone") && (d.f.includes("unpaid")||d.f.includes("deposit"));}).reduce((s,d)=>s+d.amt,0);
+  const n = k => data.filter((d,i)=>{const el=itemsEl.querySelector(`[data-i="${i}"]`);return el && !el.classList.contains("done") && !el.classList.contains("gone") && d.f.includes(k);}).length;
+  document.getElementById("summary").innerHTML =
+    `<span><b>${n("unpaid")}</b> unpaid</span>·<span><b>${n("consent")}</b> consent</span>·<span><b>${n("deposit")}</b> deposit</span>·<span><b>${n("late")}</b> running late</span>` +
+    `<span class="owner-only">· <b>£${owed.toLocaleString()}</b> outstanding today</span>`;
+  document.getElementById("doneTxt").textContent = done ? `${done} sorted so far today` : "";
+  document.getElementById("allclear").style.display = left ? "none" : "block";
+}
+itemsEl.addEventListener("click",e=>{
+  const more = e.target.closest(".more");
+  if(more){ e.stopPropagation(); const mm = more.nextElementSibling;
+    itemsEl.querySelectorAll(".mm").forEach(m=>{ if(m!==mm) m.classList.remove("show"); });
+    mm.classList.toggle("show"); return; }
+  if(e.target.closest(".mm")) return;
+  const b = e.target.closest(".btn"); if(!b) return;
+  const row = b.closest(".item"); if(row.classList.contains("done")) return;
+  const k = b.dataset.act, d = data[row.dataset.i];
+  // If the patient has another problem, move on to that one instead of clearing.
+  const rest = d.f.filter(x=>x!==k);
+  b.textContent = "✓ " + T[k][3]; row.classList.add("done");
+  setTimeout(()=>{
+    if(rest.length){
+      d.f = rest; row.classList.remove("done");
+      row.querySelector(".tags").innerHTML = d.f.map(x=>`<span class="tag ${T[x][1]}">${T[x][0]}</span>`).join("") + (d.amt&&d.f.some(x=>x==="unpaid"||x==="deposit")?`<span class="tag owner-only" style="background:rgba(47,63,102,.06);color:var(--ink2)">£${d.amt}</span>`:"");
+      b.dataset.act = d.f[0]; b.textContent = T[d.f[0]][2];
+    } else { row.classList.add("gone"); done++; }
+    counts();
+  }, 1100);
+  counts();
+});
+document.addEventListener("click",()=>itemsEl.querySelectorAll(".mm").forEach(m=>m.classList.remove("show")));
+document.querySelector("[data-toggle]").onclick=()=>document.getElementById("today").classList.toggle("open");
+document.getElementById("roles").onclick=e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  document.querySelectorAll("#roles button").forEach(x=>x.classList.toggle("on",x===b));
+  document.body.classList.toggle("owner", b.dataset.r==="owner");
+};
+renderItems(); counts();
+</script>
+</body>
+</html>

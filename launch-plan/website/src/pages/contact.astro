@@ -1,0 +1,388 @@
+---
+import Base from "../layouts/Base.astro";
+import Pill from "../components/Pill.astro";
+import { links } from "../lib/links";
+// Topic and plan come from the URL (?topic=sales&plan=clinic) and are applied
+// in the browser, since this page is static. "General enquiry" is the default.
+const topics = [
+  { id: "sales", label: "Talk to sales" },
+  { id: "general", label: "General enquiry" },
+];
+const practitioners = ["1", "2 to 5", "6 to 15", "16 or more"];
+const locations = ["1", "2 or 3", "4 or more"];
+---
+
+<Base title="Contact · SQINOS" description="Talk to the SQINOS team about your clinic, or ask us anything. We reply within one working day.">
+  <section
+    class="page wrap contact"
+    data-contact
+    data-topic="general"
+    data-form-key={links.contactFormKey}
+    data-form-endpoint={links.contactFormEndpoint}
+    data-email={links.contactEmail}
+  >
+    <div class="page-header">
+      <div class="page-header__text">
+        <p class="eyebrow">Contact</p>
+        <h1 class="page-title">Talk to a person, <em>not a queue.</em></h1>
+      </div>
+      <Pill name="topic" label="What is this about" value="general" options={topics} />
+      <p class="page-subtitle">Tell us about your clinic, or ask anything about SQINOS. A person replies within one working day.</p>
+    </div>
+
+    <div class="contact__grid">
+      <form class="form glass" data-light data-reveal novalidate data-contact-form>
+        <input type="text" name="botcheck" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <input type="hidden" name="topic" value="general" data-field-topic />
+        <input type="hidden" name="plan" value="" data-field-plan />
+
+        <div class="form__row form__row--2">
+          <label class="field">
+            <span>Your name</span>
+            <input type="text" name="name" required autocomplete="name" />
+          </label>
+          <label class="field">
+            <span>Email</span>
+            <input type="email" name="email" required autocomplete="email" inputmode="email" />
+          </label>
+        </div>
+
+        <fieldset class="form__sales" data-sales-fields>
+          <legend class="sr-only">About your clinic</legend>
+          <div class="form__row form__row--2">
+            <label class="field">
+              <span>Clinic name</span>
+              <input type="text" name="clinic" autocomplete="organization" />
+            </label>
+            <label class="field">
+              <span>Current software <small>(optional)</small></span>
+              <input type="text" name="current_software" placeholder="Paper, spreadsheets, another system…" />
+            </label>
+          </div>
+          <div class="form__row form__row--2">
+            <label class="field">
+              <span>Practitioners who treat</span>
+              <select name="practitioners">
+                {practitioners.map((p) => <option value={p}>{p}</option>)}
+              </select>
+            </label>
+            <label class="field">
+              <span>Locations</span>
+              <select name="locations">
+                {locations.map((l) => <option value={l}>{l}</option>)}
+              </select>
+            </label>
+          </div>
+        </fieldset>
+
+        <label class="field">
+          <span data-message-label>How can we help?</span>
+          <textarea name="message" rows="5" required></textarea>
+        </label>
+
+        <p class="form__error" role="alert" hidden data-form-error></p>
+        <div class="form__foot">
+          <button class="btn btn--butter" type="submit" data-submit>Send message</button>
+          <small>We only use your details to reply. No newsletters.</small>
+        </div>
+      </form>
+
+      <div class="form__done glass" hidden data-form-done tabindex="-1">
+        <p class="eyebrow">Sent</p>
+        <h2 class="display">Thank you. <em>We will be in touch.</em></h2>
+        <p>A person reads every message and replies within one working day. In the meantime, the demo is open.</p>
+        <a class="btn btn--glass" href="/demo">See the demo</a>
+      </div>
+
+      <aside class="side">
+        <div class="side__block" data-reveal style="--d: 80ms">
+          <h2>What happens next</h2>
+          <ol>
+            <li>A reply within one working day.</li>
+            <li>A 30-minute walkthrough on your own clinic's treatments and roles.</li>
+            <li>Migration and go-live, usually within two weeks.</li>
+          </ol>
+        </div>
+        {links.contactEmail && (
+          <div class="side__block" data-reveal style="--d: 160ms">
+            <h2>Prefer email?</h2>
+            <a class="side__mail" href={`mailto:${links.contactEmail}`}>{links.contactEmail}</a>
+          </div>
+        )}
+        <div class="side__block" data-reveal style="--d: 240ms">
+          <h2>Want to look first?</h2>
+          <p>The demo runs the real product on a fictional clinic. Nothing you do reaches a real patient.</p>
+          <a class="side__link" href="/demo">Open the demo →</a>
+        </div>
+      </aside>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .contact__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: 2rem clamp(1.5rem, 4vw, 4rem);
+    align-items: start;
+  }
+  .form {
+    padding: clamp(1.3rem, 2.5vw, 2rem);
+    display: grid;
+    gap: 1rem;
+    background: var(--glass);
+  }
+  .hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+  .form__row--2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .form__sales {
+    display: grid;
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  .contact[data-topic="general"] .form__sales {
+    display: none;
+  }
+  .field {
+    display: grid;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+  .field > span {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .field small {
+    font-weight: 400;
+    color: var(--ink-3);
+  }
+  .field input,
+  .field select,
+  .field textarea {
+    font: inherit;
+    color: var(--ink);
+    width: 100%;
+    min-height: 2.9rem;
+    padding: 0.65rem 0.9rem;
+    border-radius: 12px;
+    border: 1px solid rgba(47, 63, 102, 0.14);
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: inset 0 1px 0 var(--edge-hi);
+    transition:
+      border-color var(--t-micro),
+      box-shadow var(--t-micro);
+  }
+  .field textarea {
+    resize: vertical;
+    min-height: 8rem;
+  }
+  .field input:focus-visible,
+  .field select:focus-visible,
+  .field textarea:focus-visible {
+    outline: none;
+    border-color: var(--butter-deep);
+    box-shadow: 0 0 0 3px var(--butter-soft);
+  }
+  .field input:user-invalid,
+  .field textarea:user-invalid {
+    border-color: #d46a6a;
+  }
+  .form__error {
+    margin: 0;
+    padding: 0.7rem 0.9rem;
+    border-radius: 12px;
+    background: rgba(239, 155, 196, 0.18);
+    color: var(--aftercare-ink);
+    font-size: 0.92rem;
+  }
+  .form__error a {
+    color: inherit;
+    font-weight: 600;
+  }
+  .form__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+  }
+  .form__foot small {
+    color: var(--ink-3);
+    font-size: 0.85rem;
+  }
+  .btn[aria-busy="true"] {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+  .form__done {
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    display: grid;
+    gap: 1rem;
+    justify-items: start;
+    background: var(--glass);
+  }
+  .form__done h2 {
+    font-size: clamp(2rem, 3.4vw, 3rem);
+  }
+  .form__done p {
+    margin: 0;
+    color: var(--ink-2);
+  }
+  .side {
+    display: grid;
+    gap: 1.2rem;
+    padding-top: 0.4rem;
+  }
+  .side__block h2 {
+    margin: 0 0 0.5rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--butter-ink);
+  }
+  .side__block p,
+  .side__block ol {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 0.98rem;
+  }
+  .side__block ol {
+    padding-left: 1.2rem;
+    display: grid;
+    gap: 0.35rem;
+  }
+  .side__mail {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    text-decoration: none;
+    word-break: break-all;
+  }
+  .side__mail:hover,
+  .side__link:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  .side__link {
+    display: inline-block;
+    margin-top: 0.5rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  @media (max-width: 860px) {
+    .contact__grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 560px) {
+    .form__row--2 {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<script>
+  const root = document.querySelector<HTMLElement>("[data-contact]")!;
+  const form = root.querySelector<HTMLFormElement>("[data-contact-form]")!;
+  const done = root.querySelector<HTMLElement>("[data-form-done]")!;
+  const error = root.querySelector<HTMLElement>("[data-form-error]")!;
+  const submit = root.querySelector<HTMLButtonElement>("[data-submit]")!;
+  const topicField = root.querySelector<HTMLInputElement>("[data-field-topic]")!;
+  const planField = root.querySelector<HTMLInputElement>("[data-field-plan]")!;
+  const messageLabel = root.querySelector<HTMLElement>("[data-message-label]")!;
+  const pill = root.querySelector<HTMLElement>('[data-pill="topic"]')!;
+  const key = root.dataset.formKey || "";
+  const endpoint = root.dataset.formEndpoint || "";
+  const email = root.dataset.email || "";
+
+  function setTopic(topic: string) {
+    root.dataset.topic = topic;
+    topicField.value = topic;
+    messageLabel.textContent = topic === "sales" ? "Anything else we should know?" : "How can we help?";
+    pill.querySelectorAll<HTMLButtonElement>(".pill__seg").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === topic)));
+  }
+
+  // ?topic=sales&plan=clinic from the pricing page.
+  const params = new URLSearchParams(location.search);
+  if (params.get("topic") === "sales") setTopic("sales");
+  planField.value = params.get("plan") || "";
+
+  root.addEventListener("pill:change", (e) => {
+    const { name, value } = (e as CustomEvent<{ name: string; value: string }>).detail;
+    if (name === "topic") setTopic(value);
+  });
+
+  function showError(html: string) {
+    error.innerHTML = html;
+    error.hidden = false;
+  }
+
+  function summary(data: Record<string, string>) {
+    const lines = [`Name: ${data.name}`, `Email: ${data.email}`];
+    if (data.topic === "sales") {
+      lines.push(
+        `Clinic: ${data.clinic || "-"}`,
+        `Practitioners: ${data.practitioners}`,
+        `Locations: ${data.locations}`,
+        `Current software: ${data.current_software || "-"}`,
+      );
+      if (data.plan) lines.push(`Plan of interest: ${data.plan}`);
+    }
+    lines.push("", data.message);
+    return lines.join("\n");
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    error.hidden = true;
+    if (!form.reportValidity()) return;
+    const data = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
+    if (data.botcheck) return; // a bot filled the hidden field
+
+    const subject = data.topic === "sales" ? `SQINOS sales enquiry from ${data.clinic || data.name}` : `SQINOS enquiry from ${data.name}`;
+
+    // No form service configured: hand the message to the visitor's email app.
+    if (!key) {
+      if (!email) {
+        showError("Sending is not set up on this preview yet. Please try again later.");
+        return;
+      }
+      location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(summary(data))}`;
+      return;
+    }
+
+    submit.setAttribute("aria-busy", "true");
+    submit.textContent = "Sending…";
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ ...data, access_key: key, subject, from_name: "SQINOS website", replyto: data.email }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.success === false) throw new Error(body.message || `HTTP ${res.status}`);
+      form.hidden = true;
+      done.hidden = false;
+      done.focus();
+    } catch {
+      const fallback = email
+        ? ` You can also <a href="mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(summary(data))}">send it by email</a>.`
+        : "";
+      showError(`That did not send. Please try again in a moment.${fallback}`);
+    } finally {
+      submit.removeAttribute("aria-busy");
+      submit.textContent = "Send message";
+    }
+  });
+</script>

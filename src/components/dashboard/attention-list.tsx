@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { LoadError, LoadingCard, type LoadStatus } from "@/components/dashboard/load-state";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Bell, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ const KIND_ORDER = [
   "treatment_due",
   "message",
   "incomplete_profile",
+  "compliance_due",
 ] as const;
 
 const PREVIEW_LIMIT = 4;
@@ -61,6 +63,10 @@ const CHIP_META: Record<string, { label: string; className: string }> = {
   treatment_due: { label: "Treatment due", className: "bg-accent-soft text-accent-ink" },
   message: { label: "Message", className: "bg-sky-bg text-sky-ink" },
   incomplete_profile: { label: "Incomplete profile", className: "bg-warning-bg text-warning-ink" },
+  compliance_due: {
+    label: "Registration or insurance",
+    className: "bg-warning-bg text-warning-ink",
+  },
 };
 
 function nameFromTitle(title: string) {
@@ -210,9 +216,27 @@ function groupByTask(items: AttentionRaw[]): TaskGroup[] {
   });
 }
 
-export function AttentionList({ items }: { items: any[] }) {
+export function AttentionList({
+  items,
+  status = "ready",
+  onRetry,
+}: {
+  items: any[];
+  status?: LoadStatus;
+  onRetry?: () => void;
+}) {
   const urgent = items.filter((i) => i.urgency === "urgent");
   const thisWeek = items.filter((i) => i.urgency === "this_week");
+
+  if (status === "error") return <LoadError what="the attention list" onRetry={onRetry} />;
+  if (status === "loading") {
+    return (
+      <div className="grid gap-4 lg:grid-cols-2" data-qc="attention-loading">
+        <LoadingCard lines={3} />
+        <LoadingCard lines={3} />
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -450,6 +474,7 @@ function railFor(kind: string) {
     case "message":
       return "bg-sky";
     case "incomplete_profile":
+    case "compliance_due":
       return "bg-warning";
     default:
       return "bg-bar";

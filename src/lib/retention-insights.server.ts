@@ -36,11 +36,13 @@ export type RetentionInsight = {
 };
 
 export type RetentionSignals = {
-  counts: { overdue: number; lapsing: number; lost: number };
+  counts: { overdue: number; dueSoon?: number; lapsing: number; lost: number };
   /** Rolling 12-month retention rate per month, oldest first. */
   monthly: { rate: number }[];
   /** New-patient cohorts with their second-visit conversion. */
-  cohorts: { patients: number; secondRate: number }[];
+  cohorts: { patients: number; secondRate: number; tooEarly?: boolean }[];
+  /** The shared first-to-second rate (same figure as Insights), null when no cohort has matured. */
+  firstToSecondRate?: number | null;
 };
 
 export function deriveRetentionInsights(signals: RetentionSignals): RetentionInsight[] {
@@ -84,17 +86,20 @@ export function deriveRetentionInsights(signals: RetentionSignals): RetentionIns
     });
   }
 
-  const lastCohort = cohorts[cohorts.length - 1];
-  const secondCohort = cohorts.filter((c) => c.patients >= 3).slice(-3);
-  const avgSecond = secondCohort.length
-    ? Math.round(secondCohort.reduce((s, c) => s + c.secondRate, 0) / secondCohort.length)
-    : (lastCohort?.secondRate ?? 0);
-  if (secondCohort.length && avgSecond < 60) {
+  // One first-to-second figure for the whole portal: the shared rate when the
+  // caller has it, else the mature cohorts' average.
+  const matured = cohorts.filter((c) => c.patients >= 3 && !c.tooEarly).slice(-3);
+  const avgSecond =
+    signals.firstToSecondRate ??
+    (matured.length
+      ? Math.round(matured.reduce((s, c) => s + c.secondRate, 0) / matured.length)
+      : null);
+  if (avgSecond !== null && avgSecond < 60) {
     insights.push({
       id: "second-visit",
       severity: "opportunity",
       icon: "repeat",
-      title: `Only ${avgSecond}% of new patients return for a second treatment`,
+      title: `Only ${avgSecond}% of new patients return for a second treatment within 6 months`,
       detail: "Book the follow-up before they leave the clinic, and send an aftercare message at two weeks.",
       filter: "all",
       target: { section: "breakdown", tab: "cohorts" },

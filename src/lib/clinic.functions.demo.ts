@@ -21,6 +21,14 @@ import {
 } from "@/lib/demo/data";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
+import {
+  dueState,
+  nextDueFor,
+  upcomingBookingSet,
+  visitsByPatient,
+} from "@/lib/metrics/definitions";
+import { complianceReminders } from "@/lib/metrics/compliance";
+import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
@@ -51,6 +59,7 @@ import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { assertCanSend, nextUnsubscribedAt, prefsFromPatient } from "@/lib/comms/preferences";
 import { buildStageCohorts, previewStage, stageCounts } from "@/lib/offers/cohorts";
 import { sendOfferToPatients, type OfferStore } from "@/lib/offers/send";
+import { EMPTY_RESULTS, offerResults } from "@/lib/offers/results";
 import { effectiveOfferStatus, liveClaimedOffer, patientOfferView } from "@/lib/offers/shape";
 import { STAGE_LABEL, STAGE_META } from "@/lib/offers/stages";
 import {
@@ -231,6 +240,7 @@ type Identity = {
   canDelete: boolean;
   isPatient: boolean;
   permissions: string[];
+  treatsPatients: boolean;
   profile: any;
   patient: any;
   mustChangePassword: boolean;
@@ -266,6 +276,12 @@ function identity(): Identity {
     canDelete: isOwner,
     isPatient: !isStaff,
     permissions,
+    // Has recorded a treatment as the practitioner in the last 12 months.
+    treatsPatients:
+      isStaff &&
+      treatments.some(
+        (t) => t.practitioner_id === account.userId && t.performed_at >= isoDaysAgo(365),
+      ),
     profile,
     mustChangePassword: mustChangePasswordByUser.has(account.userId),
     welcomePending: isStaff && welcomePendingByUser.has(account.userId),
@@ -295,6 +311,13 @@ function requireAccessAdmin() {
   const me = identity();
   // Owner saves the Team staff-access grid. Admin saves the /access catalogue.
   if (!me.isOwner && !me.isAdmin) throw new Error("Admin access required");
+  return me;
+}
+
+/** Owner or manager, as production's POLICY kind "manager". */
+function requireManager() {
+  const me = identity();
+  if (!me.isManager) throw new Error("Manager access required");
   return me;
 }
 
@@ -366,7 +389,6 @@ export const getMe = createServerFn({ method: "GET" }).handler(async () => ident
 export const getDashboard = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireCapability("view.dashboard");
   const today = new Date();
-  const in30 = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
   const weekAhead = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
   const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString();
@@ -383,15 +405,24 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   const isFrontDesk = me.roles.includes("front_desk");
 
   const all = patients;
-  // Mirrors production: one due date per patient, from their most recent
-  // treatment that carries one.
-  const latestDueByPatient = new Map<string, (typeof treatments)[number]>();
-  for (const t of treatments) {
-    if (!t.next_due_at) continue;
-    const cur = latestDueByPatient.get(t.patient_id);
-    if (!cur || t.performed_at > cur.performed_at) latestDueByPatient.set(t.patient_id, t);
+  // Shared definition (metrics/definitions), same as production: next due is
+  // the most recent treatment carrying a date, and only an active patient with
+  // no upcoming booking can be overdue or due soon.
+  const todayISO = clinicDayKey(today);
+  const statusById = new Map(all.map((p) => [p.id, p.status ?? "active"]));
+  const upcomingSet = upcomingBookingSet(appointments, today.getTime());
+  let dueAll: ((typeof treatments)[number] & { state: "overdue" | "due_soon" })[] = [];
+  for (const [pid, visits] of visitsByPatient(treatments)) {
+    const state = dueState({
+      patient: { id: pid, status: statusById.get(pid) ?? "archived" },
+      visits,
+      hasUpcoming: upcomingSet.has(pid),
+      nowMs: today.getTime(),
+      todayKey: todayISO,
+    });
+    if (state !== "overdue" && state !== "due_soon") continue;
+    dueAll.push({ ...nextDueFor(visits)!, state });
   }
-  let dueAll = [...latestDueByPatient.values()].filter((t) => t.next_due_at <= in30);
   let monthTreats = treatments.filter((t) => t.performed_at >= monthStart);
   let prevMonthTreats = treatments.filter(
     (t) => t.performed_at >= prevMonthStart && t.performed_at < prevMonthEnd,
@@ -408,9 +439,8 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     todayAppts = todayAppts.filter((a) => a.practitioner_id === me.userId);
   }
 
-  const todayISO = clinicDayKey(today);
-  const treatmentsOverdue = dueAll.filter((t) => t.next_due_at && t.next_due_at < todayISO).length;
-  const treatmentsDueSoon = dueAll.filter((t) => t.next_due_at && t.next_due_at >= todayISO).length;
+  const treatmentsOverdue = dueAll.filter((t) => t.state === "overdue").length;
+  const treatmentsDueSoon = dueAll.filter((t) => t.state === "due_soon").length;
   let due = sortAsc(dueAll, "next_due_at")
     .slice(0, 12)
     .map((t) => ({ ...t, patients: patientJoin(t.patient_id) }));
@@ -522,7 +552,8 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     }
   }
 
-  const DEPOSIT_LEAD_DAYS = 3;
+  // Settings → Payments and deposits.
+  const DEPOSIT_LEAD_DAYS = Number(db.clinic["deposit_lead_days"] ?? 3);
   let unpaidDeposits = sortAsc(
     appointments.filter(
       (a) =>
@@ -579,6 +610,10 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
       patientId: m.patient_id,
     });
   }
+  // Owner reminder: registrations and insurance expiring within 60 days.
+  if (isManager) {
+    for (const item of complianceReminders(profiles, todayISO)) attentionItems.push(item);
+  }
 
   // ---- Journeys: active plans grouped by phase (dashboard bottom section).
   let activePlans = treatmentPlans.filter((p) => p.status === "active");
@@ -632,10 +667,20 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     const claimed = liveClaimedOffer(
       patientOffers.filter((o) => o.patient_id === a.patient_id && o.status === "claimed"),
     );
+    // An offer limited to certain treatments only flags a booking for one of them.
+    const appliesTo = claimed
+      ? ((offerTemplates.find((t) => t.id === claimed.template_id)?.applies_to_catalogue_ids ??
+          []) as string[])
+      : [];
+    const applies =
+      !claimed || appliesTo.length === 0 || !a.catalogue_id || appliesTo.includes(a.catalogue_id);
     return {
       ...a,
       plan: planByPatient.get(a.patient_id) ?? null,
-      claimedOffer: claimed ? { id: claimed.id, headline: claimed.headline, code: claimed.code } : null,
+      claimedOffer:
+        claimed && applies
+          ? { id: claimed.id, headline: claimed.headline, code: claimed.code }
+          : null,
     };
   });
 
@@ -702,6 +747,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     safeToProceed,
     safeReadyCount,
     due,
+    depositLeadDays: DEPOSIT_LEAD_DAYS,
     pendingDocuments: pendingDocs,
     historyFlags,
     role: { isManager, isPractitioner, isFrontDesk },
@@ -713,19 +759,29 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
 /* ---------------------------------------------------------------- */
 
 export const listPatients = createServerFn({ method: "GET" }).handler(async () => {
-  const nowIso = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const todayKey = clinicDayKey(now);
+  // Shared definitions (metrics/definitions), same as production.
+  const visits = visitsByPatient(treatments);
+  const upcomingSet = upcomingBookingSet(appointments, now.getTime());
   return [...patients]
     .sort(
       (a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name),
     )
     .map((p) => {
-      const mine = treatments.filter((t) => t.patient_id === p.id);
-      const last = sortDesc(mine, "performed_at")[0] ?? null;
-      const dueRow =
-        sortAsc(
-          mine.filter((t) => t.next_due_at),
-          "next_due_at",
-        )[0] ?? null;
+      const mine = visits.get(p.id) ?? [];
+      const last = mine[mine.length - 1] ?? null;
+      // Next due is the most recent treatment carrying a date, not the
+      // earliest date on file (which showed Finn Thornhurst a 2025 date).
+      const dueRow = nextDueFor(mine);
+      const state = dueState({
+        patient: { id: p.id, status: p.status ?? "active" },
+        visits: mine,
+        hasUpcoming: upcomingSet.has(p.id),
+        nowMs: now.getTime(),
+        todayKey,
+      });
       const next =
         sortAsc(
           appointments.filter(
@@ -748,7 +804,6 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
       const practitionerNames = practitionerIds.map((pid) => profileName(pid)).filter(Boolean);
 
       // Open items: assigned recall tasks plus derived chase items.
-      const todayKey = clinicDayKey(new Date());
       const openTasks: { id: string; label: string; kind: string }[] = recallTasks
         .filter((t) => t.patient_id === p.id && (t.status === "open" || t.status === "contacted"))
         .map((t) => ({
@@ -763,7 +818,7 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
           kind: "paperwork",
         });
       }
-      if (dueRow?.next_due_at && dueRow.next_due_at < todayKey) {
+      if (state === "overdue" && dueRow) {
         openTasks.push({ id: `due-${p.id}`, label: `${dueRow.name} overdue`, kind: "treatment_due" });
       }
 
@@ -778,6 +833,14 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
         last_visit_at: p.last_visit_at,
         allergies: p.allergies,
         avatar_url: p.avatar_url,
+        // Contact and consent fields, so a bulk offer can say who is portal-only.
+        email: p.email ?? null,
+        phone: p.phone ?? null,
+        marketing_opt_in: p.marketing_opt_in ?? null,
+        email_opt_in: p.email_opt_in ?? null,
+        sms_opt_in: p.sms_opt_in ?? null,
+        reminders_opt_in: p.reminders_opt_in ?? null,
+        unsubscribed_at: p.unsubscribed_at ?? null,
         lastTreatment: last
           ? { name: last.name, performed_at: last.performed_at, next_due_at: last.next_due_at }
           : null,
@@ -798,23 +861,31 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
           : null,
         outstandingDocuments: outstanding,
         practitioners: practitionerNames,
+        practitionerIds,
         openTasks,
+        dueState: state,
       };
     });
 });
 
-export const getPatientMetrics = createServerFn({ method: "GET" }).handler(async () => {
-  const me = requireStaff();
-  if (!me.isOwner && !me.permissions.includes("reports.insights")) {
-    throw new Error("You do not have access to insights reports");
-  }
-  const { buildBookMetrics } = await import("./insights.server");
-  return buildBookMetrics({
-    patients,
-    treatments,
-    appointments,
+export const getPatientMetrics = createServerFn({ method: "GET" })
+  .validator((data: { from?: string; to?: string }) =>
+    parseInput(schemas.GetPatientMetrics, data ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!me.isOwner && !me.permissions.includes("reports.insights")) {
+      throw new Error("You do not have access to insights reports");
+    }
+    const { buildBookMetrics } = await import("./insights.server");
+    return buildBookMetrics({
+      ...(data.from ? { from: data.from } : {}),
+      ...(data.to ? { to: data.to } : {}),
+      patients,
+      treatments,
+      appointments,
+    });
   });
-});
 
 export const getPatient = createServerFn({ method: "GET" })
   .validator((data: { id: string }) => parseInput(schemas.GetPatient, data))
@@ -1012,6 +1083,7 @@ export const archivePatient = createServerFn({ method: "POST" })
     parseInput(schemas.ArchivePatient, data),
   )
   .handler(async ({ data }) => {
+    requireManager();
     const row = patientById(data.id) as Record<string, unknown> | undefined;
     if (row) {
       row["deleted_at"] = data.archived ? new Date().toISOString() : null;
@@ -1082,10 +1154,17 @@ export const listPractitioners = createServerFn({ method: "GET" }).handler(async
 });
 
 export const listAppointments = createServerFn({ method: "GET" })
-  .validator((data: { from: string; to: string }) => parseInput(schemas.ListAppointments, data))
+  .validator((data: { from: string; to: string; practitioner_id?: string }) =>
+    parseInput(schemas.ListAppointments, data),
+  )
   .handler(async ({ data }) =>
     sortAsc(
-      appointments.filter((a) => a.starts_at >= data.from && a.starts_at < data.to),
+      appointments.filter(
+        (a) =>
+          a.starts_at >= data.from &&
+          a.starts_at < data.to &&
+          (!data.practitioner_id || a.practitioner_id === data.practitioner_id),
+      ),
       "starts_at",
     ).map(appointmentView),
   );
@@ -1107,6 +1186,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       notes?: string;
       app_origin?: string;
       pay_kind?: PaymentLinkKind;
+      details_incomplete?: boolean;
     }) => parseInput(schemas.SaveAppointment, data),
   )
   .handler(async ({ data }) => {
@@ -1127,6 +1207,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       payment_status: data.payment_status ?? "unpaid",
       consent_document_id: data.consent_document_id || null,
       notes: data.notes || null,
+      details_incomplete: data.details_incomplete ?? false,
       created_by: me.userId,
       status: "booked",
       stage: "booked",
@@ -3432,10 +3513,28 @@ function effectiveCapabilities(userId: string) {
 export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
   if (!me.isStaff) throw new Error("Staff access only");
+  const showCommission = me.isOwner || me.permissions.includes("reports.commission");
+  const essential = new Set<string>(ESSENTIAL_DOC_CATEGORIES.map((c) => c.value));
+  const latestChange = (userId: string) => {
+    const row = db.auditLog
+      .filter((a) => a["action"] === "staff.update" && a["entity_id"] === userId)
+      .sort((a, b) => String(b["created_at"]).localeCompare(String(a["created_at"])))[0];
+    if (!row) return null;
+    const who = profiles.find((p) => p.id === row["actor_id"]);
+    return {
+      by: (who?.full_name as string | undefined) ?? (row["actor_label"] as string) ?? "A manager",
+      at: String(row["created_at"]),
+    };
+  };
   return userRoles
     .filter((r) => r.role !== "patient" && r.role !== "admin")
     .map((r) => {
       const profile = profiles.find((p) => p.id === r.user_id);
+      const docsOnFile = new Set(
+        db.staffDocuments
+          .filter((d) => d["user_id"] === r.user_id && essential.has(String(d["category"])))
+          .map((d) => String(d["category"])),
+      ).size;
       return {
         userId: r.user_id,
         role: r.role,
@@ -3446,6 +3545,15 @@ export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
         registrationNumber: profile?.registration_number ?? "",
         isSelf: r.user_id === me.userId,
         hasSignedIn: true,
+        lastActiveAt: db.staffLastActive[r.user_id] ?? null,
+        commissionRate: showCommission ? Number(profile?.commission_rate ?? 0) : null,
+        compliance: {
+          docsOnFile,
+          docsTotal: ESSENTIAL_DOC_CATEGORIES.length,
+          registrationExpiry: (profile?.registration_expiry as string | null) ?? null,
+          insuranceExpiry: (profile?.insurance_expiry as string | null) ?? null,
+        },
+        accessChanged: latestChange(r.user_id),
       };
     })
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -3497,6 +3605,10 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
       commissionRate?: number;
     }) => parseInput(schemas.UpdateStaffMember, data),
   )
@@ -3512,11 +3624,16 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       profile.job_title = data.jobTitle ?? null;
       profile.registration_body = data.registrationBody ?? null;
       profile.registration_number = data.registrationNumber ?? null;
+      profile.registration_expiry = data.registrationExpiry || null;
+      profile.insurance_provider = data.insuranceProvider?.trim() || null;
+      profile.insurance_expiry = data.insuranceExpiry || null;
+      profile.qualifications = data.qualifications?.trim() || null;
       if (data.commissionRate !== undefined) {
         profile.commission_rate = Math.min(100, Math.max(0, Number(data.commissionRate) || 0));
       }
     }
     const role = userRoles.find((r) => r.user_id === data.userId && r.role !== "patient");
+    const previousRole = role?.role ?? null;
     if (role) role.role = data.role;
     else
       userRoles.push({
@@ -3526,6 +3643,22 @@ export const updateStaffMember = createServerFn({ method: "POST" })
         created_at: new Date().toISOString(),
       });
     clearExTeamArchiveDemo(data.userId);
+    db.auditLog.push({
+      id: newId("g9"),
+      clinic_id: CLINIC_ID,
+      actor_id: me.userId,
+      actor_label: me.profile?.full_name ?? me.email ?? null,
+      action: "staff.update",
+      entity: "user_roles",
+      entity_id: data.userId,
+      patient_id: null,
+      meta: {
+        role: data.role,
+        previous_role: previousRole,
+        ...(data.commissionRate !== undefined ? { commission_rate: data.commissionRate } : {}),
+      },
+      created_at: new Date().toISOString(),
+    });
     return { ok: true };
   });
 
@@ -3733,7 +3866,9 @@ export const revokeOtherSessions = createServerFn({ method: "POST" }).handler(as
   return { ok: true as const };
 });
 
-export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handler(async () => ({
+export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handler(async () => {
+  requireManager();
+  return {
   patients: patients
     .filter((p) => p.status !== "archived" && (!p.email || !p.phone || !p.date_of_birth))
     .map((p) => ({
@@ -3758,7 +3893,8 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handle
         jobTitle: profile?.job_title ?? "",
       };
     }),
-}));
+  };
+});
 
 export const setPatientEmail = createServerFn({ method: "POST" })
   .validator((data: { patientId: string; email: string }) => parseInput(schemas.SetPatientEmail, data))
@@ -3782,7 +3918,10 @@ export const setStaffEmail = createServerFn({ method: "POST" })
 /* ---------------------------------------------------------------- */
 
 function earningsInputs(from: string, to: string) {
+  const nowIso = new Date().toISOString();
   return {
+    // The clinic's deposit share and the clock, for the shared money model.
+    money: { depositPercent: Number(db.clinic["deposit_percent"] ?? 30), nowMs: Date.now() },
     treatments: treatments
       .filter((t) => t.performed_at >= from && t.performed_at <= to)
       .map((t) => ({
@@ -3793,10 +3932,17 @@ function earningsInputs(from: string, to: string) {
         price: t.price,
         performed_at: t.performed_at,
         commission_rate_snapshot: t.commission_rate_snapshot,
+        appointment_id: t.appointment_id ?? null,
       })),
+    // Period bookings plus every live future booking (booked ahead).
     appointments: appointments
-      .filter((a) => a.starts_at >= from && a.starts_at <= to)
+      .filter(
+        (a) =>
+          (a.starts_at >= from && a.starts_at <= to) ||
+          (a.starts_at >= nowIso && a.status !== "cancelled"),
+      )
       .map((a) => ({
+        id: a.id,
         practitioner_id: a.practitioner_id,
         price: a.price,
         payment_status: a.payment_status,
@@ -3819,11 +3965,12 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = requireCapability("reports.performance");
     if (!me.isStaff) throw new Error("Staff access only");
-    const { buildStats, buildTrend, moneyChanges, moneyTotals, trendViewWindows } = await import("./earnings.server");
+    // Money and commission need reports.commission (owners always have it).
+    const showMoney = me.isOwner || me.permissions.includes("reports.commission");
+    const { buildStats, buildTrend, moneyChanges, moneyTotals, whatSold, withoutMoney } =
+      await import("./earnings.server");
     const inputs = earningsInputs(data.from, data.to);
     const prevInputs = earningsInputs(data.previousFrom, data.previousTo);
-    const windows = trendViewWindows();
-    const yearInputs = earningsInputs(windows.year.from, windows.year.to);
 
     const staffIds = [
       ...new Set(
@@ -3849,6 +3996,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       inputs.yearTreatments as never,
       inputs.firstSeen,
       { from: data.from, to: data.to },
+      inputs.money,
     ).sort((a, b) => b.earned - a.earned);
 
     const prevRows = buildStats(
@@ -3858,6 +4006,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       prevInputs.yearTreatments as never,
       prevInputs.firstSeen,
       { from: data.previousFrom, to: data.previousTo },
+      inputs.money,
     );
 
     const totals = rows.reduce(
@@ -3874,6 +4023,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         noShows: acc.noShows + r.noShows,
         cancelled: acc.cancelled + r.cancelled,
         outstanding: acc.outstanding + r.outstanding,
+        bookedAhead: acc.bookedAhead + r.bookedAhead,
       }),
       {
         earned: 0,
@@ -3888,6 +4038,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         noShows: 0,
         cancelled: 0,
         outstanding: 0,
+        bookedAhead: 0,
       },
     );
 
@@ -3906,25 +4057,50 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         : 0,
     };
 
-    const trend = buildTrend(staff, inputs.treatments as never, inputs.appointments as never, {
-      from: data.from,
-      to: data.to,
-    });
+    const trend = buildTrend(
+      staff,
+      inputs.treatments as never,
+      inputs.appointments as never,
+      { from: data.from, to: data.to },
+      inputs.money,
+    );
 
-    const trendViews = {
-      month: buildTrend(staff, yearInputs.treatments as never, yearInputs.appointments as never, windows.month),
-      six: buildTrend(staff, yearInputs.treatments as never, yearInputs.appointments as never, windows.six),
-      year: buildTrend(staff, yearInputs.treatments as never, yearInputs.appointments as never, windows.year),
-    };
-
+    // One period per page: the trend follows the picker (Phase 10, bullet 097).
+    const changes = moneyChanges(moneyTotals(rows), moneyTotals(prevRows));
+    const sold = whatSold(
+      inputs.treatments as never,
+      productSales as never,
+      retailProducts.map((p) => ({ id: p.id, name: p.name, sku: p.sku ?? null })),
+      { from: data.from, to: data.to },
+    );
+    if (!showMoney) {
+      const strip = (points: import("./earnings.server").TrendPoint[]) => points.map(withoutMoney);
+      return {
+        rows: rows.map(withoutMoney),
+        previousRows: prevRows.map(withoutMoney),
+        totals: withoutMoney(totals),
+        clinic: withoutMoney(clinic),
+        trend: {
+          ...trend,
+          clinic: strip(trend.clinic),
+          byPractitioner: Object.fromEntries(
+            Object.entries(trend.byPractitioner).map(([k, v]) => [k, strip(v)]),
+          ),
+        },
+        changes: withoutMoney(changes),
+        showMoney,
+        sold: null,
+      };
+    }
     return {
       rows,
       previousRows: prevRows,
       totals,
       clinic,
       trend,
-      trendViews,
-      changes: moneyChanges(moneyTotals(rows), moneyTotals(prevRows)),
+      changes,
+      showMoney,
+      sold,
     };
   });
 
@@ -3952,11 +4128,19 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       inputs.yearTreatments.filter((t) => t.practitioner_id === me.userId) as never,
       inputs.firstSeen,
       { from: data.from, to: data.to },
+      inputs.money,
     )[0]!;
 
+    // Every money figure is the practitioner's share so the cards reconcile.
     return {
       earnedShare: stats.earnedShare,
       collectedShare: stats.collectedShare,
+      outstandingShare: Math.round((stats.earnedShare - stats.collectedShare) * 100) / 100,
+      bookedAheadShare: Math.round(((stats.bookedAhead * rate) / 100) * 100) / 100,
+      commissionRate: rate,
+      averageShareValue: stats.treatments
+        ? Math.round((stats.earnedShare / stats.treatments) * 100) / 100
+        : 0,
       outstanding: stats.outstanding,
       treatments: stats.treatments,
       patients: stats.patients,
@@ -3977,6 +4161,12 @@ export const getMyEarnings = createServerFn({ method: "POST" })
           return p ? `${p.first_name} ${p.last_name}` : "—";
         })(),
         share: Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,
+        // Payout status: paid once the linked booking is paid in full.
+        payout: (() => {
+          if (!t.appointment_id) return "paid" as const;
+          const appt = appointments.find((a) => a.id === t.appointment_id);
+          return appt?.payment_status === "paid" ? ("paid" as const) : ("pending" as const);
+        })(),
       })),
     };
   });
@@ -4033,6 +4223,10 @@ export const saveMyProfile = createServerFn({ method: "POST" })
       jobTitle?: string;
       registrationBody?: string;
       registrationNumber?: string;
+      registrationExpiry?: string;
+      insuranceProvider?: string;
+      insuranceExpiry?: string;
+      qualifications?: string;
     }) => parseInput(schemas.SaveMyProfile, data),
   )
   .handler(async ({ data }) => {
@@ -4044,6 +4238,10 @@ export const saveMyProfile = createServerFn({ method: "POST" })
     profile.job_title = data.jobTitle?.trim() || null;
     profile.registration_body = data.registrationBody?.trim() || null;
     profile.registration_number = data.registrationNumber?.trim() || null;
+    profile.registration_expiry = data.registrationExpiry || null;
+    profile.insurance_provider = data.insuranceProvider?.trim() || null;
+    profile.insurance_expiry = data.insuranceExpiry || null;
+    profile.qualifications = data.qualifications?.trim() || null;
     return { ok: true };
   });
 
@@ -4324,7 +4522,7 @@ export const sendRecall = createServerFn({ method: "POST" })
 
 export const createRecallTask = createServerFn({ method: "POST" })
   .validator(
-    (data: { patient_id: string; note?: string; recipients: { id: string; label: string }[] }) =>
+    (data: { patient_id: string; note?: string; recipients: { id: string; label: string }[]; due_at?: string }) =>
       parseInput(schemas.CreateRecallTask, data),
   )
   .handler(async ({ data }) => {
@@ -4370,6 +4568,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
         created_at: now,
         updated_at: now,
         reassigned_at: null,
+        due_at: data.due_at ?? new Date(Date.now() + 7 * 86400000).toISOString(),
       });
     }
     return { ok: true, group_id: groupId };
@@ -4748,7 +4947,20 @@ export const getClinicDetails = createServerFn({ method: "GET" }).handler(async 
   phone: db.clinic["phone"],
   email: db.clinic["email"],
   reminder_offsets: db.clinic["reminder_offsets"] ?? [168, 24],
+  deposit_lead_days: db.clinic["deposit_lead_days"] ?? 3,
+  deposit_percent: db.clinic["deposit_percent"] ?? 30,
 }));
+
+export const updateDepositRules = createServerFn({ method: "POST" })
+  .validator((data: { deposit_lead_days: number; deposit_percent: number }) =>
+    parseInput(schemas.UpdateDepositRules, data),
+  )
+  .handler(async ({ data }) => {
+    requireSettings();
+    db.clinic["deposit_lead_days"] = data.deposit_lead_days;
+    db.clinic["deposit_percent"] = data.deposit_percent;
+    return { ok: true };
+  });
 
 export const updateClinicDetails = createServerFn({ method: "POST" })
   .validator(
@@ -4780,13 +4992,21 @@ export const listRolePermissions = createServerFn({ method: "GET" }).handler(asy
     practitioner: {},
     patient: {},
   };
+  const changes: Record<string, Record<string, { by: string; at: string }>> = {};
   for (const role of ["manager", "front_desk", "practitioner", "patient"]) {
     for (const key of PERMISSION_KEYS) {
-      grants[role]![key] =
-        rolePermissions.find((r) => r.role === role && r.permission === key)?.enabled ?? false;
+      const row = rolePermissions.find((r) => r.role === role && r.permission === key);
+      grants[role]![key] = row?.enabled ?? false;
+      if (row?.updated_by) {
+        const who = profiles.find((p) => p.id === row.updated_by);
+        (changes[role] ??= {})[key] = {
+          by: (who?.full_name as string | undefined) ?? "A manager",
+          at: String(row.updated_at ?? ""),
+        };
+      }
     }
   }
-  return { grants, canEdit: me.isOwner || me.isAdmin };
+  return { grants, changes, canEdit: me.isOwner || me.isAdmin };
 });
 
 export const setRolePermission = createServerFn({ method: "POST" })
@@ -4801,16 +5021,32 @@ export const setRolePermission = createServerFn({ method: "POST" })
     const row = rolePermissions.find(
       (r) => r.role === data.role && r.permission === data.permission,
     );
-    if (row) row.enabled = data.enabled;
-    else
+    const now = new Date().toISOString();
+    if (row) {
+      row.enabled = data.enabled;
+      row.updated_by = me.userId;
+      row.updated_at = now;
+    } else
       rolePermissions.push({
         id: newId("b9"),
         role: data.role,
         permission: data.permission,
         enabled: data.enabled,
         updated_by: me.userId,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       });
+    db.auditLog.push({
+      id: newId("g9"),
+      clinic_id: CLINIC_ID,
+      actor_id: me.userId,
+      actor_label: me.profile?.full_name ?? me.email ?? null,
+      action: "access.update",
+      entity: "role_permissions",
+      entity_id: null,
+      patient_id: null,
+      meta: { role: data.role, permission: data.permission, enabled: data.enabled },
+      created_at: now,
+    });
     return { ok: true };
   });
 
@@ -5020,8 +5256,13 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
 /* ---------------------------------------------------------------- */
 
 export const listTreatmentPlans = createServerFn({ method: "GET" })
-  .validator((data: { practitioner_id?: string; at_risk_only?: boolean; query?: string }) =>
-    parseInput(schemas.ListTreatmentPlans, data),
+  .validator(
+    (data: {
+      practitioner_id?: string;
+      patient_id?: string;
+      at_risk_only?: boolean;
+      query?: string;
+    }) => parseInput(schemas.ListTreatmentPlans, data),
   )
   .handler(async ({ data }) => {
     const todayISO = clinicDayKey(new Date());
@@ -5029,11 +5270,22 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
     const hasUpcoming = new Set(
       appointments.filter((a) => a.status === "booked" && a.starts_at >= nowISO).map((a) => a.patient_id),
     );
+    // Earliest live booking per patient, for the card's "Booked 28 Sep" label.
+    const nextBookingByPatient = new Map<string, string>();
+    for (const a of sortAsc(
+      appointments.filter((a) => a.status === "booked" && a.starts_at >= nowISO),
+      "starts_at",
+    )) {
+      if (!nextBookingByPatient.has(a.patient_id)) {
+        nextBookingByPatient.set(a.patient_id, a.starts_at);
+      }
+    }
     const needle = (data.query ?? "").trim().toLowerCase();
 
     let rows = treatmentPlans
       .filter((p) => p.status === "active")
       .filter((p) => !data.practitioner_id || p.practitioner_id === data.practitioner_id)
+      .filter((p) => !data.patient_id || p.patient_id === data.patient_id)
       .map((p) => {
         const patient = patientById(p.patient_id);
         const mine = sortAsc(
@@ -5066,6 +5318,7 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
             : !hasUpcoming.has(p.patient_id)
               ? "No upcoming booking"
               : null,
+          nextBookingAt: nextBookingByPatient.get(p.patient_id) ?? null,
         };
       });
 
@@ -5653,14 +5906,14 @@ export const setRetailProductActive = createServerFn({ method: "POST" })
 
 export const getInsightsIngestKeyStatus = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
-  if (!me.isOwner) throw new Error("Clinic owner access only");
+  if (!me.isOwner && !me.isAdmin) throw new Error("Admin access required");
   const last4 = (db.clinic["insights_ingest_key_last4"] as string | null) ?? null;
   return { configured: Boolean(last4), last4 };
 });
 
 export const rotateInsightsIngestKey = createServerFn({ method: "POST" }).handler(async () => {
   const me = identity();
-  if (!me.isOwner) throw new Error("Clinic owner access only");
+  if (!me.isOwner && !me.isAdmin) throw new Error("Admin access required");
   const { generateInsightsIngestKey } = await import("./insights-ingest.server");
   const generated = generateInsightsIngestKey();
   db.clinic["insights_ingest_key_hash"] = generated.hash;
@@ -5686,9 +5939,24 @@ function demoOfferCohortInput() {
   };
 }
 
-function demoOfferStore(origin?: string | null): OfferStore {
+function demoOfferStore(origin?: string | null, opts: { closeTasks?: boolean } = {}): OfferStore {
   const resolvedOrigin = (origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(/\/$/, "");
   return {
+    // Manual sends close the patient's open recall tasks; the automation does not.
+    ...(opts.closeTasks
+      ? {
+          async closeRecallTasks(patientId: string) {
+            const now = new Date().toISOString();
+            for (const t of recallTasks) {
+              if (t.patient_id === patientId && (t.status === "open" || t.status === "contacted")) {
+                t.status = "completed";
+                t.completed_at = now;
+                t.updated_at = now;
+              }
+            }
+          },
+        }
+      : {}),
     clinicId: CLINIC_ID,
     clinicName: db.clinic["name"] ?? "Your clinic",
     origin: resolvedOrigin,
@@ -5711,6 +5979,21 @@ function demoOfferStore(origin?: string | null): OfferStore {
     async linkCommunication(offerId, communicationId) {
       const row = patientOffers.find((o) => o.id === offerId);
       if (row) row.communication_id = communicationId;
+    },
+    async listOffers(ids) {
+      const wanted = new Set(ids);
+      return patientOffers
+        .filter((o) => wanted.has(o.patient_id))
+        .map((o) => ({
+          patient_id: o.patient_id,
+          template_id: o.template_id ?? null,
+          status: o.status,
+          expires_at: o.expires_at ?? null,
+        }));
+    },
+    async catalogueNames(ids) {
+      const wanted = new Set(ids);
+      return catalogue.filter((c) => wanted.has(c.id)).map((c) => String(c.name));
     },
     async enqueue(input) {
       return queueCommunication({
@@ -5742,13 +6025,27 @@ async function runDemoOfferAutomation() {
   const now = new Date();
   for (const tmpl of enabled) {
     summary.templates += 1;
-    const preview = previewStage(members, patients, patientOffers, tmpl.stage, Number(tmpl.automation_delay_days ?? 0), now);
+    const preview = previewStage(
+      members,
+      patients,
+      patientOffers,
+      tmpl.stage,
+      Number(tmpl.automation_delay_days ?? 0),
+      now,
+      {
+        templateId: tmpl.id,
+        onePerPatient: tmpl.one_per_patient,
+        noStacking: tmpl.no_stacking,
+        showInPortal: tmpl.show_in_portal,
+      },
+    );
     summary.skipped += preview.skipped.length;
-    if (preview.willSend.length > 0) {
-      const result = await sendOfferToPatients(store, tmpl, preview.willSend.map((r) => r.patient_id), {
+    const recipients = [...preview.willSend, ...preview.portalOnly].map((r) => r.patient_id);
+    if (recipients.length > 0) {
+      const result = await sendOfferToPatients(store, tmpl, recipients, {
         source: "automation",
         sentBy: null,
-        portalOnlyWhenNoConsent: false,
+        portalOnlyWhenNoConsent: Boolean(tmpl.show_in_portal),
         now,
       });
       summary.sent += result.sent.length;
@@ -5768,6 +6065,7 @@ function requireOffersManage() {
 export const listOfferTemplates = createServerFn({ method: "GET" }).handler(async () => {
   requireStaff();
   const now = new Date();
+  const results = offerResults(patientOffers, appointments, treatments);
   return sortAsc(
     offerTemplates.filter((t) => !t.archived_at),
     "created_at",
@@ -5777,7 +6075,7 @@ export const listOfferTemplates = createServerFn({ method: "GET" }).handler(asyn
       const status = effectiveOfferStatus(o, now);
       counts[status] = (counts[status] ?? 0) + 1;
     }
-    return { ...t, counts };
+    return { ...t, counts, results: results.get(t.id) ?? EMPTY_RESULTS };
   });
 });
 
@@ -5799,6 +6097,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       show_in_portal: boolean;
       image_url?: string | null;
       image_placement?: "background" | "top" | "left" | "right" | "bottom" | null;
+      applies_to_catalogue_ids?: string[];
+      one_per_patient?: boolean;
+      no_stacking?: boolean;
     }) => parseInput(schemas.SaveOfferTemplate, data),
   )
   .handler(async ({ data }) => {
@@ -5822,6 +6123,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       show_in_portal: data.show_in_portal,
       image_url: data.image_url?.trim() || null,
       image_placement: data.image_url?.trim() ? data.image_placement ?? "top" : null,
+      applies_to_catalogue_ids: data.applies_to_catalogue_ids ?? [],
+      one_per_patient: data.one_per_patient ?? true,
+      no_stacking: data.no_stacking ?? true,
       updated_at: new Date().toISOString(),
     };
     if (data.id) {
@@ -5900,7 +6204,12 @@ export const previewOfferStage = createServerFn({ method: "GET" })
     const tmpl = offerTemplates.find((t) => t.stage === data.stage && !t.archived_at);
     const delay = Number(data.delay_days ?? tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays);
     return {
-      ...previewStage(members, patients, patientOffers, data.stage, delay),
+      ...previewStage(members, patients, patientOffers, data.stage, delay, new Date(), {
+        templateId: tmpl?.id ?? null,
+        onePerPatient: tmpl?.one_per_patient ?? true,
+        noStacking: tmpl?.no_stacking ?? true,
+        showInPortal: tmpl?.show_in_portal ?? true,
+      }),
       counts: stageCounts(members),
       delay_days: delay,
     };
@@ -5933,7 +6242,8 @@ export const sendOffer = createServerFn({ method: "POST" })
     if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
     const tmpl = offerTemplates.find((t) => t.id === data.template_id);
     if (!tmpl) throw new Error("Template not found");
-    return sendOfferToPatients(demoOfferStore(data.app_origin), tmpl, data.patient_ids, {
+    const store = demoOfferStore(data.app_origin, { closeTasks: true });
+    return sendOfferToPatients(store, tmpl, data.patient_ids, {
       source: data.source,
       sentBy: me.userId,
       personalLine: data.message ?? null,

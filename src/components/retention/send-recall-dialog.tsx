@@ -31,6 +31,7 @@ import {
   saveMessageTemplate,
 } from "@/lib/clinic.functions";
 import { renderTemplate, TEMPLATE_VARIABLES } from "@/lib/comms/templates";
+import { StaffTaskHoverCard } from "./staff-task-hovercard";
 
 type Channel = "message" | "email" | "sms";
 
@@ -65,6 +66,9 @@ export function SendRecallDialog({
   treatment,
   dueDate,
   clinicName = "the clinic",
+  practitionerId = null,
+  practitionerName = null,
+  canAssign = false,
 }: {
   patientId: string;
   patientName: string;
@@ -74,6 +78,10 @@ export function SendRecallDialog({
   treatment?: string | null;
   dueDate?: string | null;
   clinicName?: string;
+  practitionerId?: string | null;
+  practitionerName?: string | null;
+  /** Owners and managers can hand the recall to the team as a task instead. */
+  canAssign?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -313,6 +321,33 @@ export function SendRecallDialog({
         {channel === "sms" && !phone && (
           <p className="text-xs text-destructive">No mobile number on file for this patient.</p>
         )}
+
+        {canAssign ? (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-edge bg-glass-2 px-3.5 py-3 shadow-inset-hi"
+            data-qc="recall-assign-section"
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-foreground">Or hand it to the team</p>
+              <p className="text-2xs text-muted-foreground">
+                Assign this recall as a task to {practitionerName ?? "their practitioner"} or the
+                front desk instead of sending it yourself.
+              </p>
+            </div>
+            <StaffTaskHoverCard
+              patientId={patientId}
+              patientName={patientName}
+              practitionerId={practitionerId}
+              practitionerName={practitionerName}
+              treatment={treatment ?? null}
+              openOnClick
+            >
+              <Button type="button" variant="outline" size="sm" data-qc="recall-assign-to">
+                Assign to…
+              </Button>
+            </StaffTaskHoverCard>
+          </div>
+        ) : null}
 
         <DialogFooter className="gap-2 sm:justify-between">
           <Button

@@ -31,6 +31,12 @@ export const nullableText = (max: number) => text(max).nullable().optional();
 
 /** Dates stay format-free; see the note at the top of this file. */
 export const dateString = z.string().trim().min(1).max(64);
+/** Calendar date as YYYY-MM-DD (or empty to clear). */
+export const optionalDateOnly = z
+  .string()
+  .trim()
+  .regex(/^(\d{4}-\d{2}-\d{2})?$/)
+  .optional();
 /** Blank allowed, for the same reason as `optionalId`. */
 export const optionalDateString = z.string().trim().max(64).optional();
 

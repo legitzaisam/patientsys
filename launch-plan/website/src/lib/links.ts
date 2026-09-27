@@ -15,4 +15,8 @@ export const links = {
   frontDesk: demo("/demo/enter?role=front_desk"),
   showPersonas: (env.PUBLIC_DEMO_PERSONAS ?? "true") !== "false",
   contactEmail: env.PUBLIC_CONTACT_EMAIL || "",
+  // /contact posts to a form service (Web3Forms by default). Without a key the
+  // form falls back to a prefilled email to contactEmail.
+  contactFormKey: env.PUBLIC_CONTACT_FORM_KEY || "",
+  contactFormEndpoint: env.PUBLIC_CONTACT_FORM_ENDPOINT || "https://api.web3forms.com/submit",
 };

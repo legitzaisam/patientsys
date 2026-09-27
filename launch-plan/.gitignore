@@ -11,3 +11,4 @@ dist/
 .env.*.local
 dist-preview/
 artifact/
+standalone/

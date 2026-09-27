@@ -42,8 +42,9 @@ describe("POLICY invariants", () => {
     expect(POLICY.createStaffAccount).toEqual({ kind: "owner" });
     expect(POLICY.inviteStaffMember).toEqual({ kind: "owner" });
     expect(POLICY.revokeStaffAccess).toEqual({ kind: "owner" });
-    expect(POLICY.setRolePermission).toEqual({ kind: "owner" });
-    expect(POLICY.archivePatient).toEqual({ kind: "owner" });
+    // The access grid is saved by the owner or the software admin; managers may archive patients.
+    expect(POLICY.setRolePermission).toEqual({ kind: "accessAdmin" });
+    expect(POLICY.archivePatient).toEqual({ kind: "manager" });
   });
 
   it("keeps patient-owned actions off the capability system", () => {

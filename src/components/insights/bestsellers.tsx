@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { money } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import type { InsightsResult } from "@/lib/insights.server";
 
 function RankedList({
@@ -37,7 +37,7 @@ function RankedList({
               </div>
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-sm font-semibold tabular-nums text-foreground">{money(row.revenue)}</p>
+              <p className="text-sm font-semibold tabular-nums text-foreground">{moneyWhole(row.revenue)}</p>
               <p className="text-2xs tabular-nums text-muted-foreground">
                 {row.count} {row.count === 1 ? unit : `${unit}s`}
               </p>

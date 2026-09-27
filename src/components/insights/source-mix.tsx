@@ -8,7 +8,7 @@ export function SourceMix({ sources }: { sources: InsightsResult["sources"] | un
   return (
     <Card className="p-5">
       <h2 className="section-title">Source mix</h2>
-      <p className="mt-1 text-xs text-muted-foreground">Where people who signed up in this window came from.</p>
+      <p className="mt-1 text-xs text-muted-foreground">Where the enquiries in this window came from.</p>
       <ul className="mt-4 space-y-2.5">
         {rows.map((row) => (
           <li key={row.source} className="glass-item flex items-center gap-3 p-3">

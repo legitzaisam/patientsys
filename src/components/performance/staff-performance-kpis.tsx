@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { getPractitionerPerformance } from "@/lib/clinic.functions";
 import { PeriodPicker, periodRange, previousPeriodRange, money, type PeriodSelection } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +39,7 @@ function Change({
       )}
     >
       <Icon className="h-3 w-3 shrink-0" />
-      {moneyValue ? money(Math.abs(value)) : Math.abs(value)}
+      {moneyValue ? moneyWhole(Math.abs(value)) : Math.abs(value)}
     </span>
   );
 }
@@ -185,7 +186,7 @@ export function StaffPerformanceKpis({
             <div className="min-w-0">
               <p className="text-2xs font-medium tracking-[0.02em] text-ink-3">Earned this period</p>
               <p className="mt-1 text-[28px] font-semibold tabular-nums tracking-[-0.03em] text-foreground">
-                {money(row.earned)}
+                {moneyWhole(row.earned)}
               </p>
               <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                 {prev ? <Change value={row.earned - prev.earned} moneyValue /> : null}
@@ -213,19 +214,19 @@ export function StaffPerformanceKpis({
           <div className="grid border-t border-edge @lg:grid-cols-3">
             <SplitCell
               label="Their share"
-              value={money(row.earnedShare)}
+              value={moneyWhole(row.earnedShare)}
               hint={`${row.commissionRate}% commission`}
               change={prev ? row.earnedShare - prev.earnedShare : undefined}
             />
             <SplitCell
               label="Clinic keeps"
-              value={money(row.clinicEarnedShare)}
+              value={moneyWhole(row.clinicEarnedShare)}
               hint="After their commission"
               change={prev ? row.clinicEarnedShare - prev.clinicEarnedShare : undefined}
             />
             <SplitCell
               label="Outstanding"
-              value={row.outstanding > 0 ? money(row.outstanding) : "—"}
+              value={row.outstanding > 0 ? moneyWhole(row.outstanding) : "—"}
               hint={row.outstanding > 0 ? "Unpaid or deposit only" : "All settled"}
               tone={row.outstanding > 0 ? "danger" : undefined}
               invertChange
@@ -257,7 +258,7 @@ export function StaffPerformanceKpis({
                 />
                 <StatRow
                   label="Collected"
-                  value={money(row.collected)}
+                  value={moneyWhole(row.collected)}
                   hint="Bookings marked paid"
                   change={prev ? row.collected - prev.collected : undefined}
                   moneyChange

@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RiskBadge, type RiskLevel } from "./risk-badge";
 import { SendRecallDialog } from "./send-recall-dialog";
-import { StaffTaskHoverCard } from "./staff-task-hovercard";
-import { money } from "@/components/period-picker";
+import { moneyWhole } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export type AtRiskRow = {
@@ -31,6 +30,7 @@ export type AtRiskRow = {
 const FILTERS: { key: RiskLevel | "all"; label: string }[] = [
   { key: "all", label: "All" },
   { key: "overdue", label: "Overdue" },
+  { key: "due_soon", label: "Due soon" },
   { key: "lapsing", label: "Lapsing" },
   { key: "lost", label: "Lost" },
 ];
@@ -40,14 +40,13 @@ type SortColumn =
   | "lastTreatment"
   | "lastSeen"
   | "nextDue"
-  | "practitioner"
   | "visits"
   | "lifetimeValue"
   | "risk"
   | "action";
 type SortDirection = "asc" | "desc";
 
-const RISK_ORDER: Record<RiskLevel, number> = { overdue: 0, lapsing: 1, lost: 2 };
+const RISK_ORDER: Record<RiskLevel, number> = { overdue: 0, due_soon: 1, lapsing: 2, lost: 3 };
 const LIST_UNLOCK_MS = 1800;
 const LIST_MAX_H = "max-h-[calc(45px+7*65px)]";
 
@@ -222,9 +221,6 @@ export function AtRiskTable({
         case "nextDue":
           cmp = compareDate(a.nextDue, b.nextDue);
           break;
-        case "practitioner":
-          cmp = compareText(a.practitioner, b.practitioner);
-          break;
         case "visits":
           cmp = a.visits - b.visits;
           break;
@@ -249,7 +245,7 @@ export function AtRiskTable({
       <div className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="min-w-0 section-title">Patients at risk</h2>
-          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
             <div
               className={cn(
                 "relative h-9 overflow-hidden rounded-full border border-edge bg-glass-2 shadow-inset-hi transition-[width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -274,7 +270,10 @@ export function AtRiskTable({
                 }}
                 placeholder={searching ? "Search by name" : ""}
                 tabIndex={searching ? 0 : -1}
-                className="h-9 w-[180px] rounded-full border-0 bg-transparent pl-[34px] pr-8 shadow-none focus-visible:border-transparent focus-visible:ring-0"
+                className={cn(
+                  "h-9 rounded-full border-0 bg-transparent pl-[34px] pr-8 shadow-none focus-visible:border-transparent focus-visible:ring-0",
+                  searching ? "w-[180px]" : "w-9",
+                )}
                 aria-label="Search patients at risk"
                 aria-expanded={searching}
               />
@@ -300,9 +299,10 @@ export function AtRiskTable({
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
+            {/* Five bands no longer fit a phone: the track scrolls sideways instead of overflowing. */}
             <div
               role="tablist"
-              className="inline-flex h-9 items-center justify-center gap-0.5 rounded-full border border-edge bg-glass-2 p-1 text-ink-2 shadow-inset-hi"
+              className="scroll-x-plain inline-flex h-9 max-w-full items-center justify-start gap-0.5 rounded-full border border-edge bg-glass-2 p-1 text-ink-2 shadow-inset-hi"
             >
               {FILTERS.map((f) => (
                 <button
@@ -325,7 +325,8 @@ export function AtRiskTable({
           </div>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Overdue for a treatment, or not seen recently, with nothing booked in the diary.
+          Existing patients drifting away: overdue for a treatment or not seen recently, with nothing booked in the
+          diary.
         </p>
       </div>
 
@@ -350,11 +351,17 @@ export function AtRiskTable({
         <table className="glass-table w-max min-w-full text-sm">
         <thead>
           <tr>
-            <SortHeader column="patient" label="Patient" sort={sort} onSort={onSort} className="min-w-[11rem]" />
+            {/* The patient column stays pinned while the rest scrolls sideways. */}
+            <SortHeader
+              column="patient"
+              label="Patient"
+              sort={sort}
+              onSort={onSort}
+              className="sticky left-0 z-20 min-w-[11rem] shadow-[1px_0_0_0_var(--glass-line)]"
+            />
             <SortHeader column="lastTreatment" label="Last treatment" sort={sort} onSort={onSort} className="min-w-[10.5rem]" />
             <SortHeader column="lastSeen" label="Last seen" sort={sort} onSort={onSort} className="min-w-[9rem]" />
             <SortHeader column="nextDue" label="Next due" sort={sort} onSort={onSort} className="min-w-[8rem]" />
-            <SortHeader column="practitioner" label="Practitioner" sort={sort} onSort={onSort} className="min-w-[10rem]" />
             <SortHeader column="visits" label="Visits" sort={sort} onSort={onSort} className="min-w-[6rem]" />
             <SortHeader column="lifetimeValue" label="Lifetime value" sort={sort} onSort={onSort} className="min-w-[10rem]" />
             <SortHeader column="risk" label="Risk" sort={sort} onSort={onSort} className="min-w-[6.5rem]" />
@@ -371,7 +378,7 @@ export function AtRiskTable({
         <tbody>
           {visible.map((r) => (
             <tr key={r.patientId} className="border-b border-glass-line last:border-0">
-              <td className="whitespace-nowrap px-5 py-3">
+              <td className="sticky left-0 z-[1] whitespace-nowrap bg-glass px-5 py-3 shadow-[1px_0_0_0_var(--glass-line)] backdrop-blur-glass">
                 <div className="flex items-center gap-2.5">
                   <PatientAvatar patientId={r.patientId} name={r.name} size="xs" />
                   <Link
@@ -389,45 +396,8 @@ export function AtRiskTable({
                 {r.daysSince !== null && <span className="ml-1 text-2xs">({r.daysSince}d)</span>}
               </td>
               <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{date(r.nextDue)}</td>
-              <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">
-                {canAssign ? (
-                  <StaffTaskHoverCard
-                    patientId={r.patientId}
-                    patientName={r.name}
-                    practitionerId={r.practitionerId}
-                    practitionerName={r.practitioner}
-                    treatment={r.lastTreatment}
-                  >
-                    {r.practitionerId ? (
-                      <Link
-                        to="/team/$id"
-                        search={{}}
-                        params={{ id: r.practitionerId }}
-                        className="underline-offset-4 hover:underline"
-                      >
-                        {r.practitioner ?? "—"}
-                      </Link>
-                    ) : (
-                      <span className="cursor-default underline-offset-4 hover:underline">
-                        {r.practitioner ?? "—"}
-                      </span>
-                    )}
-                  </StaffTaskHoverCard>
-                ) : r.practitionerId ? (
-                  <Link
-                    to="/team/$id"
-                    search={{}}
-                    params={{ id: r.practitionerId }}
-                    className="underline-offset-4 hover:underline"
-                  >
-                    {r.practitioner ?? "—"}
-                  </Link>
-                ) : (
-                  (r.practitioner ?? "—")
-                )}
-              </td>
               <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{r.visits}</td>
-              <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{money(r.lifetimeValue)}</td>
+              <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{moneyWhole(r.lifetimeValue)}</td>
               <td className="whitespace-nowrap px-5 py-3">
                 <RiskBadge risk={r.risk} />
               </td>
@@ -441,6 +411,9 @@ export function AtRiskTable({
                     phone={r.phone ?? null}
                     treatment={r.lastTreatment}
                     dueDate={r.nextDue}
+                    practitionerId={r.practitionerId}
+                    practitionerName={r.practitioner}
+                    canAssign={canAssign}
                   />
                   <Button
                     size="sm"
@@ -457,7 +430,7 @@ export function AtRiskTable({
           ))}
           {visible.length === 0 && (
             <tr className="hover:bg-transparent">
-              <td colSpan={9} className="p-2">
+              <td colSpan={8} className="p-2">
                 <div className="rounded-2xl p-8 text-center text-sm text-muted-foreground transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground">
                   Nobody to chase here — everyone is booked in or recently seen.
                 </div>

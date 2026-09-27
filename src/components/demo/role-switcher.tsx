@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 const ROLES = [
   { value: "owner", label: "Clinic owner", who: "Dr Amara Osei" },
   { value: "practitioner", label: "Practitioner", who: "Dr Nadia Rahman" },
-  { value: "front_desk", label: "Front desk", who: "Sofia Marchetti" },
+  { value: "front_desk", label: "Receptionist", who: "Sofia Marchetti" },
   { value: "patient", label: "Patient", who: "Olivia Bennett" },
   { value: "admin", label: "Software admin", who: "Software developer" },
 ] as const;
@@ -43,7 +43,10 @@ export function DemoRoleSwitcher() {
   // On a phone the bottom corners are full, so the pill sits in the toolbar
   // row next to the sidebar button and its menu opens downwards.
   return (
-    <div className="fixed z-40 print:hidden max-sm:left-[3.75rem] max-sm:top-2 max-sm:flex max-sm:flex-col-reverse max-sm:items-start sm:bottom-5 sm:left-5">
+    <div
+      className="fixed z-40 print:hidden max-sm:left-[3.75rem] max-sm:top-2 max-sm:flex max-sm:flex-col-reverse max-sm:items-start sm:bottom-5 sm:left-5"
+      data-qc="demo-role-switcher"
+    >
       {open && (
         <div className="glass-card w-56 overflow-hidden max-sm:mt-2 sm:mb-2">
           <p className="border-b border-edge px-3 py-2 text-2xs tracking-[0.02em] text-muted-foreground">

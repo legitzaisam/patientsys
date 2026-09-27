@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { AccessCatalogueEditor } from "@/components/access-catalogue-editor";
 import { AppShell } from "@/components/app-shell";
+import { InsightsIntegrationsSettings } from "@/components/insights-integrations-settings";
 import { isAccessAdmin } from "@/lib/access-catalogue";
 import { useIdentity } from "@/lib/use-identity";
 
@@ -32,6 +33,10 @@ function AccessPage() {
   return (
     <AppShell identity={identity}>
       <AccessCatalogueEditor />
+      {/* Website integration (endpoint and ingest key) is engineering setup, kept off the clinic's Settings page. */}
+      <div className="mt-6">
+        <InsightsIntegrationsSettings />
+      </div>
     </AppShell>
   );
 }

@@ -9,6 +9,8 @@ export type CohortRow = {
   third: number;
   secondRate: number;
   thirdRate: number;
+  /** Younger than the 180-day horizon: the rate is "so far", not final. */
+  tooEarly?: boolean;
 };
 
 export type TreatmentRetentionRow = {
@@ -19,15 +21,56 @@ export type TreatmentRetentionRow = {
   averageGapDays: number | null;
 };
 
-function Bar({ value }: { value: number }) {
+function Bar({ value, muted = false }: { value: number; muted?: boolean }) {
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-glass-2">
-      <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, value)}%` }} />
+      <div
+        className={muted ? "h-full rounded-full bg-accent/50" : "h-full rounded-full bg-accent"}
+        style={{ width: `${Math.min(100, value)}%` }}
+      />
     </div>
   );
 }
 
+/**
+ * One cohort cell. The current month has had no time to return, so it reads
+ * "Too early"; a cohort younger than the 180-day horizon reads "N% so far" in
+ * a quieter tone; a matured cohort reads as a final rate.
+ */
+function CohortCell({
+  count,
+  rate,
+  current,
+  tooEarly,
+}: {
+  count: number;
+  rate: number;
+  current: boolean;
+  tooEarly: boolean;
+}) {
+  if (current) {
+    return (
+      <p className="text-muted-foreground" data-qc="cohort-too-early">
+        Too early
+      </p>
+    );
+  }
+  return (
+    <>
+      <p
+        className={tooEarly ? "text-ink-3" : "text-muted-foreground"}
+        data-qc={tooEarly ? "cohort-so-far" : "cohort-final"}
+      >
+        {count} · {rate}%{tooEarly ? " so far" : ""}
+      </p>
+      <Bar value={rate} muted={tooEarly} />
+    </>
+  );
+}
+
 export function CohortTable({ cohorts }: { cohorts: CohortRow[] }) {
+  const now = new Date();
+  const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   return (
     <div className="-mx-5 overflow-x-auto">
       <table className="glass-table w-full text-sm">
@@ -45,16 +88,20 @@ export function CohortTable({ cohorts }: { cohorts: CohortRow[] }) {
               <td className="px-5 py-3 text-foreground">{c.label}</td>
               <td className="px-5 py-3 text-muted-foreground">{c.patients}</td>
               <td className="px-5 py-3">
-                <p className="text-muted-foreground">
-                  {c.second} · {c.secondRate}%
-                </p>
-                <Bar value={c.secondRate} />
+                <CohortCell
+                  count={c.second}
+                  rate={c.secondRate}
+                  current={c.key === currentKey}
+                  tooEarly={Boolean(c.tooEarly)}
+                />
               </td>
               <td className="px-5 py-3">
-                <p className="text-muted-foreground">
-                  {c.third} · {c.thirdRate}%
-                </p>
-                <Bar value={c.thirdRate} />
+                <CohortCell
+                  count={c.third}
+                  rate={c.thirdRate}
+                  current={c.key === currentKey}
+                  tooEarly={Boolean(c.tooEarly)}
+                />
               </td>
             </tr>
           ))}

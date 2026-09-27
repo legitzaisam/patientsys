@@ -41,6 +41,7 @@ import {
   requiredText,
   staffRole,
   text,
+  optionalDateOnly,
 } from "./primitives";
 
 const optionalCount = z.number().int().min(0).max(100_000).nullable().optional();
@@ -51,7 +52,12 @@ const percentage = z.number().min(0).max(100);
 
 export const GetPatient = z.object({ id });
 
-export const ListAppointments = z.object({ from: dateString, to: dateString });
+export const ListAppointments = z.object({
+  from: dateString,
+  to: dateString,
+  /** Narrow to one practitioner's column (the dashboard week view for practitioners). */
+  practitioner_id: optionalId,
+});
 
 export const SaveAppointment = z.object({
   id: optionalId,
@@ -68,6 +74,8 @@ export const SaveAppointment = z.object({
   notes: optionalText(20_000),
   app_origin: optionalText(500),
   pay_kind: paymentLinkKind.optional(),
+  /** Set by Quick book and cleared by a save from the full booking dialog. */
+  details_incomplete: z.boolean().optional(),
 });
 
 export const UpdateAppointmentState = z.object({
@@ -253,6 +261,10 @@ export const UpdateStaffMember = z.object({
   jobTitle: optionalText(200),
   registrationBody: optionalText(200),
   registrationNumber: optionalText(100),
+  registrationExpiry: optionalDateOnly,
+  insuranceProvider: optionalText(200),
+  insuranceExpiry: optionalDateOnly,
+  qualifications: optionalText(2_000),
   commissionRate: percentage.optional(),
 });
 
@@ -303,6 +315,8 @@ export const GetPractitionerPerformance = z.object({
 export const GetMyEarnings = z.object({ from: dateString, to: dateString });
 
 export const GetInsights = z.object({ from: dateString, to: dateString });
+/** Empty means the last 12 months. */
+export const GetPatientMetrics = z.object({ from: dateString.optional(), to: dateString.optional() });
 
 /** Empty means "this year to date", which is what the dashboard asks for. */
 export const GetRetention = z.object({
@@ -338,6 +352,10 @@ export const SaveMyProfile = z.object({
   jobTitle: optionalText(200),
   registrationBody: optionalText(200),
   registrationNumber: optionalText(100),
+  registrationExpiry: optionalDateOnly,
+  insuranceProvider: optionalText(200),
+  insuranceExpiry: optionalDateOnly,
+  qualifications: optionalText(2_000),
 });
 
 export const ReviewProfileChange = z.object({
@@ -388,6 +406,8 @@ export const CreateRecallTask = z.object({
   patient_id: id,
   note: optionalText(4_000),
   recipients,
+  /** When the chase should be done by (defaults to a week from now). */
+  due_at: dateString.optional(),
 });
 
 export const UpdateRecallTask = z.object({
@@ -469,6 +489,12 @@ export const UpdateClinicDetails = z.object({
   email: nullableEmail,
   /** Hours before an appointment when reminders go out (max 90 days). */
   reminder_offsets: z.array(z.number().int().min(1).max(2160)).max(6).optional(),
+});
+
+/** Payments and deposits settings: lead days before the visit, deposit share of the price. */
+export const UpdateDepositRules = z.object({
+  deposit_lead_days: z.number().int().min(0).max(30),
+  deposit_percent: z.number().int().min(0).max(100),
 });
 
 export const SetRolePermission = z.object({
@@ -569,6 +595,7 @@ export const GetVoiceCallTarget = z.object({ patient_id: id });
 
 export const ListTreatmentPlans = z.object({
   practitioner_id: optionalId,
+  patient_id: optionalId,
   at_risk_only: z.boolean().optional(),
   query: optionalText(200),
 });
@@ -661,8 +688,12 @@ export const SaveOfferTemplate = z.object({
   send_email: z.boolean(),
   send_sms: z.boolean(),
   show_in_portal: z.boolean(),
-  image_url: optionalText(1_500_000),
+  image_url: nullableText(1_500_000),
   image_placement: z.enum(["background", "top", "left", "right", "bottom"]).nullable().optional(),
+  /** Catalogue items the offer can be redeemed against (empty = any). */
+  applies_to_catalogue_ids: z.array(id).max(50).optional(),
+  one_per_patient: z.boolean().optional(),
+  no_stacking: z.boolean().optional(),
 });
 
 export const ArchiveOfferTemplate = z.object({ id });

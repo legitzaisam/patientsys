@@ -6,6 +6,7 @@ import { CheckCircle2, MoreHorizontal, Pencil, PhoneCall, Send, Undo2 } from "lu
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { StaffTaskHoverCard } from "@/components/retention/staff-task-hovercard";
 import {
   Dialog,
   DialogContent,
@@ -340,7 +341,22 @@ function RetractRecallDialog({
 }
 
 /** Recall tasks for a patient, with an open → contacted → completed tracker. */
-export function RecallTasksPanel({ patientId }: { patientId: string }) {
+/** An open item that is not a recall task (paperwork, an overdue treatment), so the card matches the list's pill. */
+export type RecallExtraItem = { id: string; label: string; kind: string; onOpen?: () => void };
+
+export function RecallTasksPanel({
+  patientId,
+  patientName = "this patient",
+  practitionerId = null,
+  practitionerName = null,
+  extraItems = [],
+}: {
+  patientId: string;
+  patientName?: string;
+  practitionerId?: string | null;
+  practitionerName?: string | null;
+  extraItems?: RecallExtraItem[];
+}) {
   const queryClient = useQueryClient();
   const { data: identity } = useIdentity();
   const fetchTasks = useServerFn(listRecallTasks);
@@ -515,25 +531,83 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
         taskId: g.id as string,
       }));
 
+  // Owners and managers can assign a task from here as well as from Retention.
+  const canAssign = Boolean(identity?.isManager);
+  const openCount = groups.length + extraItems.length;
+  const assignButton = canAssign ? (
+    <StaffTaskHoverCard
+      patientId={patientId}
+      patientName={patientName}
+      practitionerId={practitionerId}
+      practitionerName={practitionerName}
+      openOnClick
+    >
+      <Button variant="outline" size="sm" data-qc="recall-assign">
+        Assign task
+      </Button>
+    </StaffTaskHoverCard>
+  ) : null;
+  const extras =
+    extraItems.length > 0 ? (
+      <ul className="mt-3 space-y-1.5" data-qc="recall-extra-items">
+        {extraItems.map((item) => (
+          <li key={item.id} className="flex items-center justify-between gap-3 text-xs">
+            <span className="text-foreground">{item.label}</span>
+            {item.onOpen ? (
+              <button
+                type="button"
+                onClick={item.onOpen}
+                className="-my-1 inline-flex min-h-6 shrink-0 cursor-pointer items-center px-1 font-semibold text-accent-ink hover:underline"
+              >
+                Open
+              </button>
+            ) : (
+              <span className="shrink-0 text-2xs text-muted-foreground">{item.kind}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    ) : null;
+
   if (groups.length === 0 && pendingIds.length === 0) {
     return (
-      <Card className="mt-4 p-5">
-        <h3 className="section-title">Recall tasks</h3>
-        <p className="text-xs text-muted-foreground">
-          No recall tasks yet. Assign one from the Retention page by hovering a patient's
-          practitioner.
-        </p>
+      <Card
+        id="recall"
+        className="mt-4 scroll-mt-20 p-5"
+        data-qc="recall-tasks"
+        data-open={openCount}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="section-title">Recall tasks</h3>
+            <p className="text-xs text-muted-foreground">
+              {extraItems.length > 0
+                ? "No recall tasks yet. These items are still open for this patient."
+                : "No recall tasks yet."}
+            </p>
+          </div>
+          {assignButton}
+        </div>
+        {extras}
       </Card>
     );
   }
 
   return (
-    <Card className="mt-4 p-5">
-      <div className="mb-3">
-        <h3 className="section-title">Recall tasks</h3>
-        <p className="text-xs text-muted-foreground">
-          Mark contacted or completed — status syncs live for the whole team.
-        </p>
+    <Card
+      id="recall"
+      className="mt-4 scroll-mt-20 p-5"
+      data-qc="recall-tasks"
+      data-open={openCount}
+    >
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="section-title">Recall tasks</h3>
+          <p className="text-xs text-muted-foreground">
+            Mark contacted or completed — status syncs live for the whole team.
+          </p>
+        </div>
+        {assignButton}
       </div>
       <ul className="space-y-2">
         {groups.map((group) => {
@@ -701,6 +775,8 @@ export function RecallTasksPanel({ patientId }: { patientId: string }) {
           );
         })}
       </ul>
+
+      {extras}
 
       {editing ? (
         <EditRecallDialog

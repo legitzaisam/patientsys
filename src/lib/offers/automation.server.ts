@@ -4,11 +4,13 @@
  * one clinic) — so switching a stage on means "goes out on the next run".
  *
  * For each enabled template: today's cohort for its stage, minus anyone
- * already offered that stage, minus anyone still inside the delay, minus
- * anyone without marketing consent (automation never creates a portal-only
- * card; that is a decision a person makes). Then the shared send path with
- * `source: automation`. The partial unique index on `patient_offers` makes a
- * concurrent second run a no-op rather than a double send.
+ * already offered that stage, minus anyone the template's rules exclude (one
+ * per patient, no stacking), minus anyone still inside the delay. Patients
+ * with marketing consent get the email; when the template shows a portal
+ * card, patients without consent get that card only — the preview says "N
+ * now, M by portal only" and this is what it means. Then the shared send path
+ * with `source: automation`. The partial unique index on `patient_offers`
+ * makes a concurrent second run a no-op rather than a double send.
  */
 import { enqueueCommunication } from "@/lib/comms/enqueue.server";
 import { buildStageCohorts, previewStage } from "./cohorts";
@@ -73,6 +75,22 @@ export async function runOfferAutomation(
         if (e) throw new Error(e.message);
       },
       enqueue: (i) => enqueueCommunication(db, i),
+      async listOffers(ids) {
+        const { data, error: e } = await db
+          .from("patient_offers")
+          .select("patient_id, template_id, status, expires_at")
+          .in("patient_id", ids);
+        if (e) throw new Error(e.message);
+        return data ?? [];
+      },
+      async catalogueNames(ids) {
+        const { data, error: e } = await db
+          .from("treatment_catalogue")
+          .select("name")
+          .in("id", ids);
+        if (e) throw new Error(e.message);
+        return (data ?? []).map((c: { name: string }) => String(c.name));
+      },
     };
 
     for (const tmpl of clinicTemplates) {
@@ -84,21 +102,35 @@ export async function runOfferAutomation(
         tmpl.stage as OfferStage,
         Number(tmpl.automation_delay_days ?? 0),
         now,
+        {
+          templateId: tmpl.id,
+          onePerPatient: tmpl.one_per_patient,
+          noStacking: tmpl.no_stacking,
+          showInPortal: tmpl.show_in_portal,
+        },
       );
       summary.skipped += preview.skipped.length;
-      if (preview.willSend.length > 0) {
-        const result = await sendOfferToPatients(
-          store,
-          tmpl,
-          preview.willSend.map((r) => r.patient_id),
-          { source: "automation", sentBy: null, portalOnlyWhenNoConsent: false, now },
-        );
+      const recipients = [...preview.willSend, ...preview.portalOnly].map((r) => r.patient_id);
+      if (recipients.length > 0) {
+        const result = await sendOfferToPatients(store, tmpl, recipients, {
+          source: "automation",
+          sentBy: null,
+          portalOnlyWhenNoConsent: Boolean(tmpl.show_in_portal),
+          now,
+        });
         summary.sent += result.sent.length;
         summary.skipped += result.skipped.length;
         // Keep the in-memory list current so a second template in the same
         // run does not re-offer the same patient for the same stage.
         for (const s of result.sent) {
-          input.offers.push({ patient_id: s.patient_id, stage: tmpl.stage, status: "sent", source: "automation" });
+          input.offers.push({
+            patient_id: s.patient_id,
+            stage: tmpl.stage,
+            status: "sent",
+            source: "automation",
+            template_id: tmpl.id,
+            expires_at: null,
+          });
         }
       }
       await db
@@ -124,7 +156,10 @@ async function cohortInput(db: Db, clinicId: string) {
       .select("id, patient_id, status, started_at, duration_days, total_sessions")
       .eq("clinic_id", clinicId)
       .eq("status", "active"),
-    db.from("patient_offers").select("patient_id, stage, status, source").eq("clinic_id", clinicId),
+    db
+      .from("patient_offers")
+      .select("patient_id, stage, status, source, template_id, expires_at")
+      .eq("clinic_id", clinicId),
   ]);
   for (const r of [patients, appointments, treatments, catalogue, plans, offers]) {
     if (r.error) throw new Error(r.error.message);
