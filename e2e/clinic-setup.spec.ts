@@ -64,5 +64,39 @@ test.describe("as manager", () => {
     await expect(dialog.getByRole("radio", { checked: true })).toHaveCount(1);
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("heading", { name: "Staff access" })).toHaveCount(0);
+    await expect(page.locator("#profile-change-requests")).toHaveCount(0);
+  });
+});
+
+test.describe("owner can hand profile-change approval to a manager", () => {
+  test.use({ role: "owner" });
+
+  test("the grant starts off; turning it on shows the queue to the manager", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    const base = baseURL ?? "http://localhost:8091";
+    await page.goto("/team");
+    await expect(page.locator("#profile-change-requests")).toBeVisible();
+    const grant = page.getByRole("switch", { name: "Approve profile change requests for Manager" });
+    await grant.scrollIntoViewIfNeeded();
+    await expect(grant).not.toBeChecked();
+
+    await context.addCookies([{ name: "demo_role", value: "manager", url: base }]);
+    await page.goto("/team");
+    await expect(page.locator("#profile-change-requests")).toHaveCount(0);
+
+    await context.addCookies([{ name: "demo_role", value: "owner", url: base }]);
+    await page.goto("/team");
+    await page.getByRole("switch", { name: "Approve profile change requests for Manager" }).click();
+    await expect(
+      page.getByRole("switch", { name: "Approve profile change requests for Manager" }),
+    ).toBeChecked();
+
+    await context.addCookies([{ name: "demo_role", value: "manager", url: base }]);
+    await page.goto("/team");
+    await expect(page.locator("#profile-change-requests")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Staff access" })).toHaveCount(0);
   });
 });

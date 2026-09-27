@@ -56,6 +56,7 @@ import { assertPhone } from "@/lib/phone";
 import {
   canSelfApplyIdentityChanges,
   clinicHasSeparateManager,
+  profileChangeApproverIds,
   profileChangeRequiresOwner,
 } from "@/lib/profile-change-policy";
 // Re-exported rather than redeclared: a second copy of the key list silently
@@ -4320,10 +4321,25 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       created_at: now,
       updated_at: now,
     });
-    const wanted = requiresOwner ? ["owner"] : ["owner", "manager"];
-    const recipients = [
-      ...new Set(userRoles.filter((r) => wanted.includes(r.role) && r.user_id !== me.userId).map((r) => r.user_id)),
-    ];
+    const recipients = profileChangeApproverIds({
+      requesterId: me.userId,
+      requiresOwner,
+      roleRows: userRoles.map((r) => ({ user_id: r.user_id as string, role: r.role as string })),
+      profiles: profiles.map((p) => ({
+        id: p.id as string,
+        clinic_role_id: (p.clinic_role_id as string | null | undefined) ?? null,
+      })),
+      roleGrants: rolePermissions.map((r) => ({
+        role: r.role as string,
+        permission: r.permission as string,
+        enabled: Boolean(r.enabled),
+      })),
+      namedGrants: clinicRolePermissions.map((r) => ({
+        clinic_role_id: r.clinic_role_id as string,
+        permission: r.permission as string,
+        enabled: Boolean(r.enabled),
+      })),
+    });
     const from = me.profile?.full_name || me.email || "A colleague";
     const summary = [
       data.jobTitle ? "job title" : null,

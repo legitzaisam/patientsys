@@ -117,8 +117,9 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
       "Open the Team page and read colleagues' profiles and compliance status. Staff documents, profile edits and access changes stay with managers and the owner.",
   },
   "team.approve_changes": {
-    label: "Approve profile changes",
-    description: "Review and approve profile change requests from staff.",
+    label: "Approve profile change requests",
+    description:
+      "Review staff requests to change name, job title, registration, work email or working arrangement. Off for managers unless the clinic owner hands this over.",
   },
   "settings.treatments": {
     label: "Treatments & colours",

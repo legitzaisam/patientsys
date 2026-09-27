@@ -198,10 +198,10 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     id: "team-approve",
     parentId: "team",
     kind: "component",
-    label: "Approve profile changes",
+    label: "Approve profile change requests",
     route: "/team",
     permission: "team.approve_changes",
-    defaults: staff({ manager: true, practitioner: false, front_desk: false }),
+    defaults: staff({ manager: false, practitioner: false, front_desk: false }),
   }),
 
   node({ id: "profile", parentId: null, kind: "page", label: "My profile", route: "/profile", permission: "view.profile" }),

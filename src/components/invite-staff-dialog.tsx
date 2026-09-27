@@ -9,7 +9,6 @@ import { Copy, Mail, Plus, Shield } from "lucide-react";
 import { createClinicRole, inviteStaffMember, listRolePermissions } from "@/lib/clinic.functions";
 import { useIdentity } from "@/lib/use-identity";
 import { checkEmail } from "@/lib/email";
-import { cn } from "@/lib/utils";
 import { PERMISSION_KEYS, PERMISSION_META, type PermissionKey } from "@/lib/permissions";
 import { InviteStaffMember } from "@/lib/validation/schemas";
 import { Button } from "@/components/ui/button";
@@ -105,20 +104,16 @@ function RoleChip({
   onSelect: () => void;
 }) {
   return (
-    <button
+    <Button
       type="button"
       role="radio"
       aria-checked={checked}
+      size="sm"
+      variant={checked ? "selected" : "outline"}
       onClick={onSelect}
-      className={cn(
-        "h-8 rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors",
-        checked
-          ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
-          : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground",
-      )}
     >
       {label}
-    </button>
+    </Button>
   );
 }
 

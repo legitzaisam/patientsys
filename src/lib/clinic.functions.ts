@@ -61,6 +61,7 @@ import { generateInsightsIngestKey } from "@/lib/insights-ingest.server";
 import {
   canSelfApplyIdentityChanges,
   clinicHasSeparateManager,
+  profileChangeApproverIds,
   profileChangeRequiresOwner,
 } from "@/lib/profile-change-policy";
 
@@ -5633,11 +5634,27 @@ async function notifyProfileChangeApprovers(
   opts: { requiresOwner: boolean; fromName: string; summary: string },
 ) {
   const supabaseAdmin = await adminClient(ctx);
-  const wanted = opts.requiresOwner ? ["owner"] : ["owner", "manager"];
-  const { data: roles } = await supabaseAdmin.from("user_roles").select("user_id").in("role", wanted);
-  const recipients = [
-    ...new Set(((roles ?? []) as { user_id: string }[]).map((r) => r.user_id).filter((id) => id !== ctx.userId)),
-  ];
+  const [{ data: roles }, { data: grants }, { data: namedGrants }, { data: staffProfiles }] = await Promise.all([
+    supabaseAdmin.from("user_roles").select("user_id, role"),
+    supabaseAdmin.from("role_permissions").select("role, permission, enabled").eq("permission", "team.approve_changes"),
+    supabaseAdmin
+      .from("clinic_role_permissions")
+      .select("clinic_role_id, permission, enabled")
+      .eq("permission", "team.approve_changes"),
+    supabaseAdmin.from("profiles").select("id, clinic_role_id"),
+  ]);
+  const recipients = profileChangeApproverIds({
+    requesterId: ctx.userId,
+    requiresOwner: opts.requiresOwner,
+    roleRows: (roles ?? []) as { user_id: string; role: string }[],
+    profiles: (staffProfiles ?? []) as { id: string; clinic_role_id?: string | null }[],
+    roleGrants: (grants ?? []) as { role: string; permission: string; enabled: boolean }[],
+    namedGrants: (namedGrants ?? []) as {
+      clinic_role_id: string;
+      permission: string;
+      enabled: boolean;
+    }[],
+  });
   if (recipients.length === 0) return;
   await supabaseAdmin.from("staff_notifications").insert(
     recipients.map((recipient_id) => ({
@@ -5651,7 +5668,7 @@ async function notifyProfileChangeApprovers(
   );
 }
 
-/** Staff submit changes to their own profile; a manager or the owner must approve them. */
+/** Staff submit changes to their own profile; the owner, or a granted manager, must approve them. */
 export const submitProfileChange = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -5820,7 +5837,7 @@ export const getMyProfile = createServerFn({ method: "GET" })
     };
   });
 
-/** Manager-only: every profile change request awaiting or past review. */
+/** Owner, or staff granted Approve profile change requests. */
 export const listProfileChangeRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -5857,7 +5874,7 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
     });
   });
 
-/** Manager-only: approve (applies the change) or decline a request. */
+/** Owner, or staff granted Approve profile change requests. */
 export const reviewProfileChange = createServerFn({ method: "POST" })
   .validator((data: { id: string; approve: boolean; reviewerNote?: string }) => parseInput(schemas.ReviewProfileChange, data))
   .middleware([requireSupabaseAuth])

@@ -18,6 +18,7 @@ describe("generic staff defaults", () => {
     expect(GENERIC_STAFF_DEFAULTS["view.earnings"]).toBe(false);
     expect(GENERIC_STAFF_DEFAULTS["offers.manage"]).toBe(false);
     expect(GENERIC_STAFF_DEFAULTS["settings.treatments"]).toBe(false);
+    expect(GENERIC_STAFF_DEFAULTS["team.approve_changes"]).toBe(false);
   });
 
   it("keeps a named pack off the diary until treatments.record is granted", () => {

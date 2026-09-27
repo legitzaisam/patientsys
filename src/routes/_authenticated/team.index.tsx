@@ -641,8 +641,8 @@ function TeamPage() {
                     )}
                   </div>
                   <p className="shrink-0 text-xs text-muted-foreground">
-                    Staff updates wait here. A manager changing their own details needs the clinic
-                    owner.
+                    Staff updates wait here. The clinic owner can hand this queue to a manager
+                    under Staff access. A manager changing their own details still needs the owner.
                   </p>
                   <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
                     {(requests ?? []).length === 0 && (

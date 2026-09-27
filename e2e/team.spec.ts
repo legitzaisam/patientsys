@@ -56,13 +56,21 @@ test.describe("as owner", () => {
     );
     await expect(sofia.locator('[data-qc="member-commission"]')).toHaveCount(0);
 
-    // Who changed which permission and when, under the Staff access grid.
+    // Who changed which permission and when, from the Staff access header.
+    await expect(page.getByRole("heading", { name: "Staff access" })).toBeVisible();
+    await expect(page.getByRole("switch").first()).toBeVisible();
+    await page.getByRole("button", { name: "Recent changes" }).click();
     const changes = page.locator('[data-qc="access-changes"]');
-    await changes.scrollIntoViewIfNeeded();
-    await expect(changes).toContainText("Recent changes");
+    await expect(changes).toBeVisible();
     await expect(changes.locator("li").first()).toContainText(
       /turned .+ (on|off) for (managers|receptionists|practitioners)/,
     );
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: "Collapse all" }).click();
+    await expect(page.getByRole("switch", { name: "Patient records for Manager" })).toBeHidden();
+    await page.getByRole("button", { name: "Clinical record" }).click();
+    await expect(page.getByRole("switch", { name: "Patient records for Manager" })).toBeVisible();
   });
 
   test("the invite dialog opens for the owner", async ({ page }) => {

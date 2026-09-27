@@ -283,7 +283,7 @@ export const rolePermissions: Row[] = [
   { role: "manager", permission: "reports.retention", enabled: true },
   { role: "manager", permission: "reports.performance", enabled: true },
   { role: "manager", permission: "team.view", enabled: true },
-  { role: "manager", permission: "team.approve_changes", enabled: true },
+  { role: "manager", permission: "team.approve_changes", enabled: false },
   { role: "manager", permission: "settings.treatments", enabled: true },
   { role: "manager", permission: "notifications.delete", enabled: true },
   { role: "manager", permission: "tasks.delete", enabled: true },
