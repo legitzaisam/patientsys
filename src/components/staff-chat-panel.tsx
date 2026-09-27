@@ -89,11 +89,14 @@ export function StaffChatPanel({
   peerName,
   autoFocus = false,
   onResizeStart,
+  embedded = false,
 }: {
   peerUserId: string;
   peerName?: string;
   autoFocus?: boolean;
   onResizeStart?: (e: MouseEvent | TouchEvent) => void;
+  /** Inside the floating chat window: no card, header or resize handle of its own. */
+  embedded?: boolean;
 }) {
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
@@ -177,6 +180,7 @@ export function StaffChatPanel({
     void markRead({ data: { peerUserId } }).then(() => {
       void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
+      void queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
     });
   }, [data?.messages, enabled, markRead, peerUserId, queryClient]);
 
@@ -235,6 +239,117 @@ export function StaffChatPanel({
     void queryClient.invalidateQueries({ queryKey: ["staff-chat", peerUserId] });
     void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
     void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
+    void queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
+  }
+
+  const thread = (
+    <div
+      ref={threadRef}
+      className="staff-chat-thread min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3"
+      style={{ ["--staff-chat-fs" as string]: `${fontSize}px` }}
+    >
+      {isLoading && <p className="px-2 text-sm text-muted-foreground">Loading conversation…</p>}
+      {!isLoading && timeline.length === 0 && (
+        <div className="flex h-full min-h-40 items-center justify-center px-4">
+          <p className="staff-chat-day max-w-[16rem] text-center">
+            No messages yet. Say hello, or send an alert from their profile.
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-col">
+        {renderItems.map((item) => {
+          if (item.type === "day") {
+            return (
+              <div key={item.key} className="my-[0.85em] flex justify-center" style={{ fontSize: `${fontSize}px` }}>
+                <span className="staff-chat-day font-medium">{item.label}</span>
+              </div>
+            );
+          }
+
+          if (item.type === "message") {
+            const m = item.message;
+            return (
+              <div
+                key={item.key}
+                className={cn("staff-chat-item", item.stacked ? "staff-chat-item--stack" : "staff-chat-item--break")}
+              >
+                <div className={cn("staff-chat-bubble", m.mine ? "staff-chat-bubble--out" : "staff-chat-bubble--in")}>
+                  {m.body ? <p className="whitespace-pre-wrap break-words pr-[0.15em]">{m.body}</p> : null}
+                  <MessageAttachments attachments={(m.attachments ?? []) as Attachment[]} />
+                  <div className="staff-chat-meta">
+                    <span>{timeLabel(m.created_at)}</span>
+                    {m.mine ? (
+                      m.readByPeer ? (
+                        <CheckCheck aria-label="Read" className="text-sky-ink" />
+                      ) : (
+                        <Check aria-label="Sent" className="text-ink-3/70" />
+                      )
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          const a = item.alert;
+          return (
+            <div
+              key={item.key}
+              className={cn("staff-chat-item", item.stacked ? "staff-chat-item--stack" : "staff-chat-item--break")}
+            >
+              <div
+                className={cn(
+                  "staff-chat-alert",
+                  a.mine ? "staff-chat-alert--out" : "staff-chat-alert--in",
+                  a.urgent && "staff-chat-alert--urgent",
+                )}
+              >
+                <p className={cn("staff-chat-alert__label", a.urgent ? "text-destructive-ink" : "text-sky-ink")}>
+                  {a.urgent ? "Urgent" : "Alert"}
+                  <span className="staff-chat-alert__label-name">{a.mine ? " · You" : ` · ${firstName}`}</span>
+                </p>
+                {a.body ? (
+                  <p className="whitespace-pre-wrap break-words text-foreground/90">{a.body}</p>
+                ) : null}
+                <div className="staff-chat-meta">
+                  <span>{timeLabel(a.created_at)}</span>
+                  {a.mine ? (
+                    a.read_at ? (
+                      <CheckCheck aria-label="Seen" className="text-sky-ink" />
+                    ) : (
+                      <Check aria-label="Waiting" className="text-ink-3/70" />
+                    )
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const composer = (
+    <MessageComposer
+      peerUserId={peerUserId}
+      templates
+      canDeleteTemplates={Boolean(identity?.isManager)}
+      patientFirstName={firstName}
+      placeholder={`Message ${firstName}…`}
+      variant="chat"
+      autoFocus={autoFocus}
+      onSent={invalidateChat}
+    />
+  );
+
+  if (embedded) {
+    return (
+      <div data-qc="staff-chat-embedded" className="flex min-h-0 flex-1 flex-col">
+        {thread}
+        {composer}
+      </div>
+    );
   }
 
   return (
@@ -297,102 +412,8 @@ export function StaffChatPanel({
         </div>
       </header>
 
-      <div
-        ref={threadRef}
-        className="staff-chat-thread min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3"
-        style={{ ["--staff-chat-fs" as string]: `${fontSize}px` }}
-      >
-        {isLoading && <p className="px-2 text-sm text-muted-foreground">Loading conversation…</p>}
-        {!isLoading && timeline.length === 0 && (
-          <div className="flex h-full min-h-40 items-center justify-center px-4">
-            <p className="staff-chat-day max-w-[16rem] text-center">
-              No messages yet. Say hello, or send an alert from their profile.
-            </p>
-          </div>
-        )}
-
-        <div className="flex flex-col">
-          {renderItems.map((item) => {
-            if (item.type === "day") {
-              return (
-                <div key={item.key} className="my-[0.85em] flex justify-center" style={{ fontSize: `${fontSize}px` }}>
-                  <span className="staff-chat-day font-medium">{item.label}</span>
-                </div>
-              );
-            }
-
-            if (item.type === "message") {
-              const m = item.message;
-              return (
-                <div
-                  key={item.key}
-                  className={cn("staff-chat-item", item.stacked ? "staff-chat-item--stack" : "staff-chat-item--break")}
-                >
-                  <div className={cn("staff-chat-bubble", m.mine ? "staff-chat-bubble--out" : "staff-chat-bubble--in")}>
-                    {m.body ? <p className="whitespace-pre-wrap break-words pr-[0.15em]">{m.body}</p> : null}
-                    <MessageAttachments attachments={(m.attachments ?? []) as Attachment[]} />
-                    <div className="staff-chat-meta">
-                      <span>{timeLabel(m.created_at)}</span>
-                      {m.mine ? (
-                        m.readByPeer ? (
-                          <CheckCheck aria-label="Read" className="text-sky-ink" />
-                        ) : (
-                          <Check aria-label="Sent" className="text-ink-3/70" />
-                        )
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            const a = item.alert;
-            return (
-              <div
-                key={item.key}
-                className={cn("staff-chat-item", item.stacked ? "staff-chat-item--stack" : "staff-chat-item--break")}
-              >
-                <div
-                  className={cn(
-                    "staff-chat-alert",
-                    a.mine ? "staff-chat-alert--out" : "staff-chat-alert--in",
-                    a.urgent && "staff-chat-alert--urgent",
-                  )}
-                >
-                  <p className={cn("staff-chat-alert__label", a.urgent ? "text-destructive-ink" : "text-sky-ink")}>
-                    {a.urgent ? "Urgent" : "Alert"}
-                    <span className="staff-chat-alert__label-name">{a.mine ? " · You" : ` · ${firstName}`}</span>
-                  </p>
-                  {a.body ? (
-                    <p className="whitespace-pre-wrap break-words text-foreground/90">{a.body}</p>
-                  ) : null}
-                  <div className="staff-chat-meta">
-                    <span>{timeLabel(a.created_at)}</span>
-                    {a.mine ? (
-                      a.read_at ? (
-                        <CheckCheck aria-label="Seen" className="text-sky-ink" />
-                      ) : (
-                        <Check aria-label="Waiting" className="text-ink-3/70" />
-                      )
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <MessageComposer
-        peerUserId={peerUserId}
-        templates
-        canDeleteTemplates={Boolean(identity?.isManager)}
-        patientFirstName={firstName}
-        placeholder={`Message ${firstName}…`}
-        variant="chat"
-        autoFocus={autoFocus}
-        onSent={invalidateChat}
-      />
+      {thread}
+      {composer}
     </Card>
   );
 }

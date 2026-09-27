@@ -15,19 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { parseStaffAlertTitle, formatTeamAlertToast } from "@/lib/staff-alert-title";
 import { cn } from "@/lib/utils";
 import { showChatQuickReplyToast } from "@/components/chat-quick-reply-toast";
-
-const TEAM_KINDS = new Set(["urgent", "staff_message", "staff_chat"]);
-
-function openTeamChat(
-  navigate: ReturnType<typeof useNavigate>,
-  senderId: string,
-) {
-  navigate({
-    to: "/team/$id",
-    params: { id: senderId },
-    search: { chat: true },
-  });
-}
+import { useOpenTeamChat } from "@/components/floating-dock/dock-context";
 
 function showTeamAlertToast(opts: {
   id: string;
@@ -36,17 +24,22 @@ function showTeamAlertToast(opts: {
   body?: string | null;
   kind?: string | null;
   urgent?: boolean | null;
-  navigate: ReturnType<typeof useNavigate>;
+  openTeamChat: (peer: { userId: string; name: string }) => void;
 }) {
   if (opts.senderId) {
+    const senderId = opts.senderId;
     showChatQuickReplyToast({
       notificationId: opts.id,
-      senderId: opts.senderId,
+      senderId,
       title: opts.title,
       body: opts.body,
       kind: opts.kind,
       urgent: opts.urgent,
-      onOpen: () => openTeamChat(opts.navigate, opts.senderId!),
+      onOpen: () =>
+        opts.openTeamChat({
+          userId: senderId,
+          name: opts.title.replace(/^(Message|Urgent) from /i, "").split(":")[0]!.trim() || "Teammate",
+        }),
     });
     return;
   }
@@ -71,6 +64,7 @@ export function NotificationBell({
   const canClear = can(identity, "notifications.delete");
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const openTeamChat = useOpenTeamChat();
   const sessionReady = useAuthSessionReady();
   const fetchUnread = useServerFn(getUnreadMessages);
   const fetchAlerts = useServerFn(listStaffNotifications);
@@ -139,6 +133,7 @@ export function NotificationBell({
           };
           queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
           queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
+          if (row.kind === "staff_chat") queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
           // A patient reaching "waiting" changes the diary and the dock too.
           if (row.kind === "patient_waiting") {
             queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -155,7 +150,7 @@ export function NotificationBell({
               body: row.body,
               kind: row.kind,
               urgent: row.urgent,
-              navigate,
+              openTeamChat,
             });
           }
         },
@@ -164,7 +159,7 @@ export function NotificationBell({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [identity?.userId, isStaff, navigate, queryClient]);
+  }, [identity?.userId, isStaff, openTeamChat, queryClient]);
 
   const alertList = isStaff
     ? (alerts ?? []).filter(
@@ -202,10 +197,10 @@ export function NotificationBell({
         body: alert.body,
         kind: alert.kind,
         urgent: alert.urgent,
-        navigate,
+        openTeamChat,
       });
     }
-  }, [alerts, identity?.userId, isStaff, navigate, queryClient]);
+  }, [alerts, identity?.userId, isStaff, openTeamChat, queryClient]);
 
   return (
     <Popover>

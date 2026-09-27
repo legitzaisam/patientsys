@@ -85,8 +85,10 @@ test("a patient's message reaches their clinician in the chat box, not the bell"
   // Olivia's plan is run by Dr Nadia Rahman, the demo practitioner.
   await context.addCookies([{ name: "demo_role", value: "practitioner", url: baseURL ?? "http://localhost:8091" }]);
   await page.goto("/dashboard");
+  await page.addStyleTag({ content: '[data-qc="floating-dock"] { display: flex !important; }' });
   await page.locator('[data-qc="chat-bubble"]').click();
   const chat = page.locator('[data-qc="chat-window"]');
+  await chat.locator('[data-qc="chat-tab-patients"]').click();
   await chat.getByRole("button", { name: /Olivia Bennett/ }).click();
   await expect(chat.getByText(probe)).toBeVisible();
 

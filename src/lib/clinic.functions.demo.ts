@@ -5608,6 +5608,48 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
     return { ok: true, lastReadAt: now, conversationId: conversation.id as string };
   });
 
+/** Every teammate, with the latest message and unread count of your chat with them. */
+export const listStaffThreads = createServerFn({ method: "GET" }).handler(async () => {
+  const me = requireStaff();
+  const staffRoles = new Set(["owner", "manager", "practitioner", "front_desk"]);
+  const peerIds = [
+    ...new Set(userRoles.filter((r) => staffRoles.has(r.role)).map((r) => r.user_id as string)),
+  ].filter((id) => id !== me.userId);
+
+  return peerIds
+    .map((peerId) => {
+      const profile = profiles.find((p) => p.id === peerId);
+      const [userLow, userHigh] = chatPair(me.userId, peerId);
+      const conversation = staffConversations.find(
+        (c) => c.clinic_id === CLINIC_ID && c.user_low === userLow && c.user_high === userHigh,
+      );
+      const thread = conversation
+        ? sortDesc(
+            staffChatMessages.filter((m) => m.conversation_id === conversation.id),
+            "created_at",
+          )
+        : [];
+      const readAt = conversation
+        ? staffConversationReads.find((r) => r.conversation_id === conversation.id && r.user_id === me.userId)
+            ?.last_read_at
+        : null;
+      const latest = thread[0];
+      return {
+        userId: peerId,
+        name: (profile?.full_name as string | undefined) || "Teammate",
+        jobTitle: (profile?.job_title as string | null | undefined) ?? null,
+        avatarUrl: (profile?.avatar_url as string | null | undefined) ?? null,
+        last: (latest?.body as string | undefined) ?? null,
+        lastAt: (latest?.created_at as string | undefined) ?? null,
+        lastMine: latest?.sender_id === me.userId,
+        unread: thread.filter(
+          (m) => m.sender_id !== me.userId && (!readAt || String(m.created_at) > String(readAt)),
+        ).length,
+      };
+    })
+    .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? "") || a.name.localeCompare(b.name));
+});
+
 /* ---------------------------------------------------------------- */
 /* treatment plans (journeys)                                        */
 /* ---------------------------------------------------------------- */

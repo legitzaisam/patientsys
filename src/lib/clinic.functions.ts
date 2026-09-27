@@ -7688,6 +7688,87 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
     return { ok: true, lastReadAt: now, conversationId };
   });
 
+/** Every teammate, with the latest message and unread count of your chat with them. */
+export const listStaffThreads = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "listStaffThreads");
+    const [{ data: roles }, { data: conversations }] = await Promise.all([
+      ctx.supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["owner", "manager", "practitioner", "front_desk"]),
+      ctx.supabase
+        .from("staff_conversations")
+        .select("id, user_low, user_high")
+        .or(`user_low.eq.${ctx.userId},user_high.eq.${ctx.userId}`),
+    ]);
+    const peerIds = [
+      ...new Set(((roles ?? []) as { user_id: string }[]).map((r) => r.user_id)),
+    ].filter((id) => id !== ctx.userId);
+    if (peerIds.length === 0) return [];
+
+    const convs = (conversations ?? []) as { id: string; user_low: string; user_high: string }[];
+    const peerOf = new Map(convs.map((c) => [c.id, c.user_low === ctx.userId ? c.user_high : c.user_low]));
+    const convIds = convs.map((c) => c.id);
+    const [{ data: profiles }, { data: messages }, { data: reads }] = await Promise.all([
+      ctx.supabase.from("profiles").select("id, full_name, job_title, avatar_url").in("id", peerIds),
+      convIds.length
+        ? ctx.supabase
+            .from("staff_chat_messages")
+            .select("conversation_id, sender_id, body, created_at")
+            .in("conversation_id", convIds)
+            .order("created_at", { ascending: false })
+            .limit(400)
+        : Promise.resolve({ data: [] as never[] }),
+      convIds.length
+        ? ctx.supabase
+            .from("staff_conversation_reads")
+            .select("conversation_id, last_read_at")
+            .eq("user_id", ctx.userId)
+            .in("conversation_id", convIds)
+        : Promise.resolve({ data: [] as never[] }),
+    ]);
+
+    const myReadAt = new Map(
+      ((reads ?? []) as { conversation_id: string; last_read_at: string }[]).map((r) => [
+        r.conversation_id,
+        r.last_read_at,
+      ]),
+    );
+    const latest = new Map<string, { last: string; lastAt: string; lastMine: boolean; unread: number }>();
+    for (const m of (messages ?? []) as {
+      conversation_id: string;
+      sender_id: string;
+      body: string;
+      created_at: string;
+    }[]) {
+      const peer = peerOf.get(m.conversation_id);
+      if (!peer) continue;
+      let row = latest.get(peer);
+      if (!row) {
+        row = { last: m.body, lastAt: m.created_at, lastMine: m.sender_id === ctx.userId, unread: 0 };
+        latest.set(peer, row);
+      }
+      const readAt = myReadAt.get(m.conversation_id);
+      if (m.sender_id !== ctx.userId && (!readAt || m.created_at > readAt)) row.unread += 1;
+    }
+
+    return ((profiles ?? []) as { id: string; full_name: string; job_title: string | null; avatar_url: string | null }[])
+      .map((p) => ({
+        userId: p.id,
+        name: p.full_name || "Teammate",
+        jobTitle: p.job_title,
+        avatarUrl: p.avatar_url,
+        last: latest.get(p.id)?.last ?? null,
+        lastAt: latest.get(p.id)?.lastAt ?? null,
+        lastMine: latest.get(p.id)?.lastMine ?? false,
+        unread: latest.get(p.id)?.unread ?? 0,
+      }))
+      .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? "") || a.name.localeCompare(b.name));
+  });
+
 /* ---------------------------------------------------------------------------
  * Treatment plans (journeys)
  *

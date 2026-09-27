@@ -1,5 +1,4 @@
 import { useMemo, useState, type MouseEvent } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -18,10 +17,12 @@ import { useIdentity } from "@/lib/use-identity";
 import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useOpenTeamChat } from "@/components/floating-dock/dock-context";
 import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
 import { cn } from "@/lib/utils";
 
-const TEAM_KINDS = new Set(["urgent", "staff_message", "staff_chat"]);
+/** Team chat lives in the chat window's Team tab; this inbox is alerts only. */
+const ALERT_KINDS = new Set(["urgent", "staff_message"]);
 
 /** ~5 peer stacks visible before scroll inside the toolbar popover. */
 const INBOX_LIST_MAX_H = "max-h-80";
@@ -104,7 +105,7 @@ function StatusChip({ row }: { row: InboxRow }) {
 function DismissButton({
   onDismiss,
   dismissing,
-  label = "Dismiss message",
+  label = "Dismiss alert",
 }: {
   onDismiss: (e: MouseEvent) => void;
   dismissing: boolean;
@@ -159,7 +160,7 @@ function MessageRow({
           "min-w-0 flex-1 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-70",
           compact ? "px-2 py-2" : "px-3.5 py-3",
         )}
-        aria-label={`Open chat with ${row.peerName}`}
+        aria-label={`Open alert with ${row.peerName}`}
       >
         <div className="min-w-0">
           <p className="truncate text-xs font-medium text-ink-2">
@@ -173,11 +174,7 @@ function MessageRow({
           >
             {rowPreview(row)}
           </p>
-          <p className="mt-1 text-2xs text-muted-foreground">
-            {formatWhen(row.created_at)}
-            <span className="text-ink-3"> · </span>
-            {row.kind === "staff_chat" ? "Chat" : "Alert"}
-          </p>
+          <p className="mt-1 text-2xs text-muted-foreground">{formatWhen(row.created_at)}</p>
         </div>
       </button>
       <div className="flex shrink-0 items-center gap-2 pt-1.5 pr-1.5">
@@ -265,8 +262,8 @@ function PeerMessageStack({
           aria-expanded={expanded}
           aria-label={
             expanded
-              ? `Collapse messages with ${group.peerName}`
-              : `Expand ${count} messages with ${group.peerName}`
+              ? `Collapse alerts with ${group.peerName}`
+              : `Expand ${count} alerts with ${group.peerName}`
           }
           className={cn(
             "flex cursor-pointer items-start gap-2 px-2 pr-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -280,7 +277,7 @@ function PeerMessageStack({
                 {group.peerName}
               </p>
               <p className="shrink-0 text-2xs text-ink-2">
-                {count} {count === 1 ? "Message" : "Messages"}
+                {count} {count === 1 ? "Alert" : "Alerts"}
                 {unreadInGroup > 0 ? ` · ${unreadInGroup} New` : ""}
               </p>
               <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-2xs font-medium text-ink-3">
@@ -302,7 +299,7 @@ function PeerMessageStack({
                   onKeyDown={(e) => e.stopPropagation()}
                 >
                   <span className="shrink-0 text-2xs font-semibold tabular-nums leading-none text-ink-2">
-                    {count} {count === 1 ? "Message" : "Messages"}
+                    {count} {count === 1 ? "Alert" : "Alerts"}
                   </span>
                   {unreadInGroup > 0 ? (
                     <span className={cn(CHIP, "bg-sky-bg text-sky-ink")}>
@@ -312,7 +309,7 @@ function PeerMessageStack({
                   <DismissButton
                     onDismiss={onDismissStack}
                     dismissing={dismissingStack}
-                    label={`Dismiss all messages with ${group.peerName}`}
+                    label={`Dismiss all alerts with ${group.peerName}`}
                   />
                 </div>
               </div>
@@ -340,7 +337,7 @@ function PeerMessageStack({
               <DismissButton
                 onDismiss={onDismissStack}
                 dismissing={dismissingStack}
-                label={`Dismiss all messages with ${group.peerName}`}
+                label={`Dismiss all alerts with ${group.peerName}`}
               />
             </div>
           ) : null}
@@ -400,7 +397,7 @@ function PeerMessageStack({
   );
 }
 
-/** Toolbar inbox: team alerts and chat you received or sent. */
+/** Toolbar inbox: team alerts you received or sent. */
 export function SentStaffAlerts({
   className,
 }: {
@@ -410,7 +407,7 @@ export function SentStaffAlerts({
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [dismissingStackKey, setDismissingStackKey] = useState<string | null>(null);
   const [expandedPeers, setExpandedPeers] = useState<Set<string>>(() => new Set());
-  const navigate = useNavigate();
+  const openTeamChat = useOpenTeamChat();
   const queryClient = useQueryClient();
   const sessionReady = useAuthSessionReady();
   const fetchIncoming = useServerFn(listIncomingTeamAlerts);
@@ -442,11 +439,11 @@ export function SentStaffAlerts({
   });
 
   const isLoading = loadingIn || loadingOut;
-  const unreadCount = (unreadAlerts ?? []).filter((a) => TEAM_KINDS.has(a.kind)).length;
+  const unreadCount = (unreadAlerts ?? []).filter((a) => ALERT_KINDS.has(a.kind)).length;
 
   const groups = useMemo(() => {
     const merged: InboxRow[] = [
-      ...((incoming ?? []).map((row) => ({
+      ...((incoming ?? []).filter((row) => ALERT_KINDS.has(row.kind)).map((row) => ({
         id: row.id,
         direction: "in" as const,
         title: row.title,
@@ -458,7 +455,7 @@ export function SentStaffAlerts({
         peerId: row.sender_id,
         peerName: row.sender_name,
       })) ?? []),
-      ...((sent ?? []).map((row) => ({
+      ...((sent ?? []).filter((row) => ALERT_KINDS.has(row.kind)).map((row) => ({
         id: row.id,
         direction: "out" as const,
         title: row.title,
@@ -524,11 +521,7 @@ export function SentStaffAlerts({
       void queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
     }
     if (!row.peerId) return;
-    void navigate({
-      to: "/team/$id",
-      params: { id: row.peerId },
-      search: { chat: true },
-    });
+    openTeamChat({ userId: row.peerId, name: row.peerName });
   }
 
   async function dismissRow(row: InboxRow, e: MouseEvent) {
@@ -573,7 +566,7 @@ export function SentStaffAlerts({
           variant="ghost"
           size="icon"
           className={cn("relative h-9 w-9", className)}
-          aria-label={unreadCount ? `Team messages, ${unreadCount} unread` : "Team messages"}
+          aria-label={unreadCount ? `Team alerts, ${unreadCount} unread` : "Team alerts"}
         >
           <Inbox className="h-4 w-4" />
           {unreadCount > 0 ? (
@@ -585,7 +578,7 @@ export function SentStaffAlerts({
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 overflow-hidden rounded-2xl p-0">
         <div className="rounded-t-2xl bg-glass-2 px-4 py-3">
-          <p className="text-sm font-medium text-foreground">Team messages</p>
+          <p className="text-sm font-medium text-foreground">Team alerts</p>
           <p className="text-xs text-muted-foreground">Last 7 days · tap a stack to expand</p>
         </div>
         <ul
@@ -599,7 +592,7 @@ export function SentStaffAlerts({
           )}
           {!isLoading && groups.length === 0 && (
             <li className="py-6 text-center text-sm text-muted-foreground">
-              No team messages this week.
+              No team alerts this week.
             </li>
           )}
           {groups.map((group) => (

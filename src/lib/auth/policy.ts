@@ -163,6 +163,7 @@ export const POLICY = {
   getStaffChat: { kind: "staff" },
   sendStaffChatMessage: { kind: "staff" },
   markStaffChatRead: { kind: "staff" },
+  listStaffThreads: { kind: "staff" },
 
   /* Team directory and administration */
   listTeam: { kind: "staff" },
