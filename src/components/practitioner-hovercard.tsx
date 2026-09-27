@@ -2,7 +2,8 @@ import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, CalendarClock, MessageSquare } from "lucide-react";
+import { AlertTriangle, CalendarClock, ChevronRight, MessageSquare } from "lucide-react";
+import { useOpenTeamChat } from "@/components/floating-dock/dock-context";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ type CardProps = {
 export function PractitionerHoverCard({ practitionerId, name, date, children }: CardProps) {
   const [open, setOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
+  const openTeamChat = useOpenTeamChat();
   const lane = laneFor(practitionerId);
 
   return (
@@ -51,6 +53,10 @@ export function PractitionerHoverCard({ practitionerId, name, date, children }: 
             onMessage={() => {
               setOpen(false);
               setMessageOpen(true);
+            }}
+            onOpenAlert={(alertId) => {
+              setOpen(false);
+              openTeamChat({ userId: practitionerId, name, focusAlertId: alertId });
             }}
           />
         </HoverCardContent>
@@ -81,6 +87,7 @@ export function PractitionerPressCard({
 }: CardProps & { side?: "top" | "right" | "bottom" | "left" }) {
   const [open, setOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
+  const openTeamChat = useOpenTeamChat();
   const lane = laneFor(practitionerId);
 
   return (
@@ -105,6 +112,10 @@ export function PractitionerPressCard({
               setOpen(false);
               setMessageOpen(true);
             }}
+            onOpenAlert={(alertId) => {
+              setOpen(false);
+              openTeamChat({ userId: practitionerId, name, focusAlertId: alertId });
+            }}
           />
         </PopoverContent>
       </Popover>
@@ -124,12 +135,14 @@ function PractitionerDayCard({
   date,
   enabled,
   onMessage,
+  onOpenAlert,
 }: {
   practitionerId: string;
   name: string;
   date: string;
   enabled: boolean;
   onMessage: () => void;
+  onOpenAlert: (alertId: string) => void;
 }) {
   const fetchDay = useServerFn(getPractitionerDay);
   const lane = laneFor(practitionerId);
@@ -218,13 +231,46 @@ function PractitionerDayCard({
               <AlertTriangle className="h-3.5 w-3.5" />
               Urgent
             </p>
-            <ul className="mt-1.5 space-y-1.5">
-              {alerts.map((a) => (
-                <li key={a.id} className="text-2xs leading-snug text-foreground">
-                  <span className="font-semibold">{a.title}</span>
-                  {a.body ? <span className="text-muted-foreground"> — {a.body}</span> : null}
-                </li>
-              ))}
+            <ul className="mt-1.5 space-y-1">
+              {alerts.map((a) => {
+                const text = (
+                  <>
+                    <span className="font-semibold">{a.title}</span>
+                    {a.body ? <span className="text-muted-foreground"> — {a.body}</span> : null}
+                  </>
+                );
+                if (!a.forMe) {
+                  return (
+                    <li key={a.id} className="px-1.5 py-1 text-2xs leading-snug text-foreground">
+                      {text}
+                    </li>
+                  );
+                }
+                return (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      data-qc="day-card-alert"
+                      onClick={() => onOpenAlert(a.id)}
+                      className="group flex w-full cursor-pointer items-start gap-1.5 rounded-[11px] px-1.5 py-1 text-left text-2xs leading-snug text-foreground transition-colors hover:bg-[rgba(47,63,102,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`Open alert: ${a.title}${a.acknowledged ? " (acknowledged)" : ""}`}
+                    >
+                      <span className="min-w-0 flex-1">{text}</span>
+                      <span
+                        className={cn(
+                          "mt-px inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] font-semibold",
+                          a.acknowledged
+                            ? "bg-glass-2 text-ink-3"
+                            : "bg-destructive/10 text-destructive-ink group-hover:bg-destructive/15",
+                        )}
+                      >
+                        {a.acknowledged ? "Seen" : "Open"}
+                        <ChevronRight className="h-3 w-3" aria-hidden />
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ) : null}

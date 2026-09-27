@@ -5,6 +5,7 @@ import { ArrivalAlerts } from "@/components/arrival-alerts";
 import { UrgentStaffAlerts } from "@/components/urgent-staff-alerts";
 import type { ArrivalAlertPhase } from "@/lib/arrival-alert-snooze";
 import { cn } from "@/lib/utils";
+import { useFloatingDock } from "./dock-context";
 
 const PEEK_MS = 8_000;
 /** Highest alert count already peeked this session — the shell remounts on
@@ -69,6 +70,7 @@ const TEAM_PILL = {
  * alerts still peek the panel for a few seconds (paused while hovered).
  */
 export function AlertBubble({ roles }: { roles: string[] }) {
+  const { chatOpen } = useFloatingDock();
   const [open, setOpen] = useState(false);
   const [peeking, setPeeking] = useState(false);
   // null until each source has loaded — a fresh mount must not read as
@@ -114,7 +116,8 @@ export function AlertBubble({ roles }: { roles: string[] }) {
     [],
   );
 
-  const showPanel = (open || peeking) && total > 0;
+  // A peek must not cover the chat window; opening the pill on purpose still does.
+  const showPanel = (open || (peeking && !chatOpen)) && total > 0;
   const pill =
     arrivalCount && arrivalCount > 0 && arrivalPhase
       ? ARRIVAL_PILL[arrivalPhase]

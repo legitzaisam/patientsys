@@ -40,6 +40,22 @@ test("the chat window opens on Team, and Patients holds the patient threads", as
   await expect(chat.getByText("Leila Farouk")).toBeVisible();
 });
 
+test("an urgent alert on a teammate's day card opens where it lives, ready to act on", async ({ page }) => {
+  await page.getByRole("button", { name: /^Sofia Marchetti.*Show today’s availability/ }).click();
+  const card = page.locator('[data-qc="team-member-card"]');
+  // A team-wide alert is one entry, not one per recipient.
+  await expect(card.locator('[data-qc="day-card-alert"]')).toHaveCount(1);
+  await card.locator('[data-qc="day-card-alert"]').click();
+
+  const chat = page.locator('[data-qc="chat-window"]');
+  await expect(chat.locator("header")).toContainText("Sofia Marchetti");
+  const alert = chat.locator('[data-qc="staff-chat-alert"]', { hasText: "autoclave in room 2 failed its cycle this morning" });
+  await expect(alert.locator('[data-qc="staff-chat-alert-ack"]')).toBeVisible();
+  await expect(alert.getByRole("button", { name: "Dismiss alert" })).toBeVisible();
+  await alert.locator('[data-qc="staff-chat-alert-reply"]').click();
+  await expect(chat.locator("textarea")).toBeFocused();
+});
+
 test("opening an alert jumps to that teammate in the Team tab", async ({ page }) => {
   await page.getByRole("button", { name: /^Team alerts/ }).click();
   await page.getByRole("button", { name: /^Expand \d+ alerts with Sofia Marchetti/ }).click();

@@ -409,10 +409,7 @@ function SidebarChrome({
             {teamMembers.map((member) => {
               const name = member.fullName || "Team member";
               const tone = laneFor(member.id);
-              const isSelf = member.id === identity.userId;
-              const active = isSelf
-                ? pathname.startsWith("/profile")
-                : pathname === `/team/${member.id}`;
+              const active = pathname === `/team/${member.id}`;
               const online = onlineIds.has(member.id);
               const className = cn(
                 "flex items-center gap-2.5 rounded-[11px] px-2.5 py-2.5 text-[13px] font-medium transition-colors",
@@ -425,20 +422,6 @@ function SidebarChrome({
                 tone.edge,
                 online && "ring-2 ring-[#4a9d75] ring-offset-2 ring-offset-[var(--sidebar)]",
               );
-              if (isSelf) {
-                return (
-                  <Link key={member.id} to="/profile" onClick={onNavigate} className={className}>
-                    <span
-                      className={avatarClass}
-                      title={online ? "Online" : undefined}
-                      aria-label={online ? `${name}, online` : name}
-                    >
-                      {initialsOf(name)}
-                    </span>
-                    <span className="truncate">{name}</span>
-                  </Link>
-                );
-              }
               return (
                 <PractitionerPressCard key={member.id} practitionerId={member.id} name={name} date={todayKey}>
                   <div className={cn("relative", className)}>
@@ -555,13 +538,15 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   const onlineIds = useStaffPresence(Boolean(identity.isStaff && sessionReady), identity.userId);
 
   const teamMembersForNav = useMemo(() => {
-    return [...teamMembers].sort((a, b) => {
-      const aOnline = onlineIds.has(a.id);
-      const bOnline = onlineIds.has(b.id);
-      if (aOnline !== bOnline) return aOnline ? -1 : 1;
-      return a.fullName.localeCompare(b.fullName);
-    });
-  }, [teamMembers, onlineIds]);
+    return teamMembers
+      .filter((member) => member.id !== identity.userId)
+      .sort((a, b) => {
+        const aOnline = onlineIds.has(a.id);
+        const bOnline = onlineIds.has(b.id);
+        if (aOnline !== bOnline) return aOnline ? -1 : 1;
+        return a.fullName.localeCompare(b.fullName);
+      });
+  }, [teamMembers, onlineIds, identity.userId]);
 
   const canTeam = canSee(identity, "team");
   const canOffers = canSee(identity, "offers");

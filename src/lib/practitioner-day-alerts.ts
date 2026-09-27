@@ -28,13 +28,16 @@ export function practitionerDayAlerts(
   viewerId: string,
   limit = 3,
 ): PractitionerDayAlert[] {
+  const keyOf = (row: PractitionerDayAlertRow) => `${row.title}|${row.body ?? ""}|${row.created_at.slice(0, 16)}`;
+  const dismissed = new Set(
+    rows.filter((row) => row.recipient_id === viewerId && row.recipient_dismissed_at).map(keyOf),
+  );
   const groups = new Map<string, PractitionerDayAlertRow>();
   for (const row of rows) {
-    const mine = row.recipient_id === viewerId;
-    if (mine && row.recipient_dismissed_at) continue;
-    const key = `${row.title}|${row.body ?? ""}|${row.created_at.slice(0, 16)}`;
+    const key = keyOf(row);
+    if (dismissed.has(key)) continue;
     const held = groups.get(key);
-    if (!held || (mine && held.recipient_id !== viewerId)) groups.set(key, row);
+    if (!held || (row.recipient_id === viewerId && held.recipient_id !== viewerId)) groups.set(key, row);
   }
   return [...groups.values()].slice(0, limit).map((row) => ({
     id: row.id,
