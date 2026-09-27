@@ -64,3 +64,14 @@ Statuses 017, 133 and 137 closed (done in P1/P6 and P2; the rest of 137 is follo
 ## Follow-on (not in this plan)
 
 Unchanged from the plan: working hours, breaks and leave with diary shading and real `getPractitionerDay` hours; the medical-update review workflow; server-side enforcement of the record role table and the front-desk clinical seed defaults; the missing Settings (hours, cancellation and no-show policy, rooms, templates, VAT, payment provider, retention period, subscription, audit log view); retail sales against a visit with stock; more offer stages; the `listUsers` 200-account limit; the Attention-needed "Due today" chase list (deferred at review).
+
+## Review corrections (27 Sep, after the push)
+
+Four dashboard changes on the owner's instruction, in one commit after `81fd858`:
+
+1. Toolbar butter ring (010): it rang the icons always and, being an outline under the glass layer, read as absent once scrolled — the opposite of the ask. The ring now lives on the chip's `::before` glass layer, so it fades in with the glass on scroll and is absent at the top.
+2. Active treatment journeys close the page for everyone (below My tasks), as before P8; the manager-first placement is gone.
+3. My tasks pages ten at a time with the shared `PaginationBar` (`my-tasks`, `my-tasks-pagination`); the scroll-contained card is gone.
+4. The Attention summary bar (021) and the week summary strip (022) are removed and their components deleted; both are marked "reverted at review" in the README.
+
+`feedback-corrections.spec.ts`: the dashboard test asserts the new order, the absence of both cards and the paging; a new test asserts the ring's glass opacity is 0 at the top and >0.9 once scrolled.

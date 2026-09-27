@@ -10,7 +10,10 @@ import { invalidateRecallTasks, useRecallTasksLiveSync } from "@/lib/use-recall-
 import { useIdentity } from "@/lib/use-identity";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PaginationBar, usePagination } from "@/components/pagination-bar";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 10;
 
 type Channel = "phone" | "email" | "message";
 
@@ -140,6 +143,7 @@ export function FollowUpTasks() {
   };
 
   const visible = (tasks ?? []).filter((t: any) => !pending.includes(t.id));
+  const paging = usePagination(visible, PAGE_SIZE);
 
   const contactVia = (taskId: string, channel: Channel, status: string) => {
     markChannel(taskId, channel);
@@ -160,8 +164,8 @@ export function FollowUpTasks() {
           <p className="mt-2 text-sm text-muted-foreground">Nothing on your list right now.</p>
         </div>
       ) : (
-        <Card className="max-h-[22rem] divide-y divide-glass-line overflow-y-auto p-0">
-        {visible.map((t: any) => {
+        <Card className="divide-y divide-glass-line p-0" data-qc="my-tasks">
+        {paging.rows.map((t: any) => {
           const name = `${t.patients?.first_name ?? ""} ${t.patients?.last_name ?? ""}`.trim() || "Patient";
           const contacted = t.status === "contacted" || t.status === "completed";
           const used = channels[t.id];
@@ -261,6 +265,16 @@ export function FollowUpTasks() {
         })}
       </Card>
       )}
+      <PaginationBar
+        page={paging.page}
+        pageCount={paging.pageCount}
+        total={paging.total}
+        from={paging.from}
+        to={paging.to}
+        onPage={paging.setPage}
+        noun="tasks"
+        qc="my-tasks-pagination"
+      />
     </section>
   );
 }

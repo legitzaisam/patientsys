@@ -13,8 +13,6 @@ import { QuickAddAppointment } from "@/components/quick-add-appointment";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TodaySnapshot } from "@/components/dashboard/today-snapshot";
 import { AttentionList } from "@/components/dashboard/attention-list";
-import { AttentionSummary } from "@/components/dashboard/attention-summary";
-import { WeekSummaryStrip } from "@/components/dashboard/week-summary-strip";
 import { FollowUpTasks } from "@/components/dashboard/follow-up-tasks";
 import { PauseRequests } from "@/components/dashboard/pause-requests";
 import { TreatmentJourneys } from "@/components/dashboard/treatment-journeys";
@@ -179,7 +177,7 @@ function DashboardPage() {
         </div>
       </div>
 
-      <section className={isManager ? "mb-4" : "mb-8"}>
+      <section className="mb-8">
             <KpiGrid
               kpis={{
                 ...data?.kpis,
@@ -199,13 +197,6 @@ function DashboardPage() {
               onRetry={retryAll}
             />
       </section>
-
-      {/* Owners and managers: numbers, then a short Attention summary, then the diary. */}
-      {isManager && canSee(identity, "dashboard-attention") ? (
-        <section className="mb-8">
-          <AttentionSummary items={attentionItems} status={dashboardStatus} />
-        </section>
-      ) : null}
 
       {canSee(identity, "dashboard-diary") && <section className="mb-2">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -241,12 +232,6 @@ function DashboardPage() {
             </QuickAddAppointment>}
           </div>
         </div>
-        {diarySpan === "week" && isManager && weekAppointments ? (
-          <WeekSummaryStrip
-            rows={weekAppointments as any[]}
-            weekStartISO={weekRange.startISO}
-          />
-        ) : null}
         <TodaySnapshot
           appointments={diaryAppointments}
           isManager={isManager}
@@ -256,16 +241,7 @@ function DashboardPage() {
         />
       </section>}
 
-      {/* Owners and managers see the journeys before the lists; everyone else after. */}
-      {isManager && canSee(identity, "dashboard-journeys") && (
-        <TreatmentJourneys
-          journeys={(data as any)?.journeys}
-          status={dashboardStatus}
-          onRetry={retryAll}
-        />
-      )}
-
-      <section className={`flex flex-1 flex-col gap-6 ${isManager ? "mt-8" : ""}`} id="attention">
+      <section className="flex flex-1 flex-col gap-6" id="attention">
         {canSee(identity, "dashboard-attention") && (
           <div className="scroll-mt-20">
             <div className="mb-4">
@@ -285,7 +261,7 @@ function DashboardPage() {
         </div>
       </section>
 
-      {!isManager && canSee(identity, "dashboard-journeys") && (
+      {canSee(identity, "dashboard-journeys") && (
         <TreatmentJourneys
           journeys={(data as any)?.journeys}
           status={dashboardStatus}

@@ -132,27 +132,24 @@ test.describe("as the owner", () => {
     expect(Math.min(...heights)).toBeGreaterThanOrEqual(240);
   });
 
-  test("owner dashboard: numbers, Attention summary, diary, journeys, then the lists; week strip; linked numbers", async ({
+  test("owner dashboard: numbers, diary, Attention needed, My tasks, then journeys; linked numbers", async ({
     page,
   }) => {
     await page.goto("/dashboard");
-    await page.locator('[data-qc="attention-summary"]').waitFor();
-    // Order of the sections for an owner.
+    await page.locator('[data-qc="my-tasks"]').waitFor();
+    // Order of the sections for an owner: the journeys close the page.
     const order = await page.evaluate(() =>
-      [...document.querySelectorAll('[data-qc="attention-summary"], h2.section-title')].map(
-        (e) => e.getAttribute("data-qc") ?? e.textContent?.trim() ?? "",
-      ),
-    );
-    expect(order[0]).toBe("attention-summary");
-    expect(order.findIndex((t) => t.startsWith("Active treatment journeys"))).toBeLessThan(
-      order.findIndex((t) => t.startsWith("Attention needed")),
+      [...document.querySelectorAll("h2.section-title")].map((e) => e.textContent?.trim() ?? ""),
     );
     expect(order.findIndex((t) => t.startsWith("Attention needed"))).toBeLessThan(
       order.findIndex((t) => t.startsWith("My tasks")),
     );
-    await expect(page.locator('[data-qc="attention-summary"]')).toContainText(
-      /\d+ urgent · \d+ this week/,
+    expect(order.findIndex((t) => t.startsWith("My tasks"))).toBeLessThan(
+      order.findIndex((t) => t.startsWith("Active treatment journeys")),
     );
+    // No summary bar above the diary, no strip inside it.
+    await expect(page.locator('[data-qc="attention-summary"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="week-summary"]')).toHaveCount(0);
 
     // The deposit rule reads the lead days from Settings (3 in the demo).
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toContainText(
@@ -177,17 +174,36 @@ test.describe("as the owner", () => {
       "href",
       /\/patients\/[^?]+\?tab=treatments#plan/,
     );
-    // Tasks carry a due date and an assignee.
+    // Tasks carry a due date and an assignee, and page ten at a time.
     await expect(page.locator('[data-qc="task-meta"]').first()).toBeVisible();
+    const taskRows = page.locator('[data-qc="my-tasks"] > div');
+    expect(await taskRows.count()).toBeLessThanOrEqual(10);
+    const pagination = page.locator('[data-qc="my-tasks-pagination"]');
+    if (await pagination.isVisible()) {
+      await expect(pagination).toContainText(/Showing 1–10 of \d+ tasks/);
+      await pagination.getByRole("button", { name: "Next page" }).click();
+      await expect(pagination.locator('[data-qc="my-tasks-pagination-page"]')).toContainText(
+        "Page 2 of",
+      );
+    }
+  });
 
-    // Week view: the summary strip sits above the cards.
-    await page.getByRole("button", { name: "week" }).click();
-    const strip = page.locator('[data-qc="week-summary"]');
-    await expect(strip).toBeVisible();
-    await expect(strip).toContainText("Bookings this week");
-    await expect(strip).toContainText("Booked value");
-    await expect(strip.locator('[data-qc="week-fullness"]').first()).toBeVisible();
-    await page.getByRole("button", { name: "day" }).click();
+  test("toolbar icons: no butter ring at the top of the page, a ring once scrolled", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    await page.locator('[data-qc="my-tasks"]').waitFor();
+    // The ring sits on the chip's glass layer, whose opacity follows the scroll blend.
+    const ring = page.locator(".toolbar-icon-ring").first();
+    const glassOpacity = () =>
+      ring.evaluate((el) => Number(getComputedStyle(el, "::before").opacity));
+    expect(await glassOpacity()).toBe(0);
+    await page.locator("main").evaluate((el) => el.scrollTo({ top: 400 }));
+    await page.waitForTimeout(300);
+    expect(await glassOpacity()).toBeGreaterThan(0.9);
+    await expect
+      .poll(() => ring.evaluate((el) => getComputedStyle(el, "::before").borderTopColor))
+      .not.toBe("rgba(0, 0, 0, 0)");
   });
 
   test("performance: one period, both series, retail share and What sold; the trend hint names the window", async ({
