@@ -37,3 +37,35 @@ test("a recall email respects the patient's marketing opt-out", async ({ page })
   await dialog.getByRole("button", { name: "Send email" }).click();
   await expect(page.getByText("has not opted in to marketing messages")).toBeVisible();
 });
+
+test("the at-risk table pins the patient column, drops practitioner, and the dialog can hand the recall to the team", async ({
+  page,
+}) => {
+  await page.goto("/retention");
+  await expect(page.getByRole("button", { name: "Sort by Practitioner" })).toHaveCount(0);
+  const patientHeader = page.getByRole("button", { name: "Sort by Patient" });
+  await expect(patientHeader).toBeVisible();
+  const sticky = await patientHeader.evaluate((el) => getComputedStyle(el.closest("th")!).position);
+  expect(sticky).toBe("sticky");
+
+  await page.getByRole("button", { name: "Send recall" }).first().click();
+  const dialog = page.getByRole("dialog", { name: /Send recall to / });
+  await expect(dialog.locator('[data-qc="recall-assign-section"]')).toContainText(
+    "hand it to the team",
+  );
+  await dialog.locator('[data-qc="recall-assign-to"]').click();
+  await expect(page.getByText("Ask the team to recall")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send recall task" })).toBeVisible();
+  await page.keyboard.press("Escape");
+});
+
+test("cohorts read Too early for this month and 'so far' while young; the trend axis is in %", async ({
+  page,
+}) => {
+  await page.goto("/retention");
+  await expect(page.locator('[data-qc="cohort-too-early"]').first()).toBeVisible();
+  // Young cohorts say the rate is provisional; matured ones read as final.
+  expect(await page.locator('[data-qc="cohort-so-far"]').count()).toBeGreaterThan(0);
+  await expect(page.locator('[data-qc="cohort-so-far"]').first()).toContainText("so far");
+  await expect(page.locator("#retention-trend").getByText("100%")).toBeVisible();
+});

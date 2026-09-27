@@ -844,18 +844,24 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
     });
 });
 
-export const getPatientMetrics = createServerFn({ method: "GET" }).handler(async () => {
-  const me = requireStaff();
-  if (!me.isOwner && !me.permissions.includes("reports.insights")) {
-    throw new Error("You do not have access to insights reports");
-  }
-  const { buildBookMetrics } = await import("./insights.server");
-  return buildBookMetrics({
-    patients,
-    treatments,
-    appointments,
+export const getPatientMetrics = createServerFn({ method: "GET" })
+  .validator((data: { from?: string; to?: string }) =>
+    parseInput(schemas.GetPatientMetrics, data ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    if (!me.isOwner && !me.permissions.includes("reports.insights")) {
+      throw new Error("You do not have access to insights reports");
+    }
+    const { buildBookMetrics } = await import("./insights.server");
+    return buildBookMetrics({
+      ...(data.from ? { from: data.from } : {}),
+      ...(data.to ? { to: data.to } : {}),
+      patients,
+      treatments,
+      appointments,
+    });
   });
-});
 
 export const getPatient = createServerFn({ method: "GET" })
   .validator((data: { id: string }) => parseInput(schemas.GetPatient, data))

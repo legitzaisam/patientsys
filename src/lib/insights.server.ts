@@ -371,12 +371,21 @@ export function buildInsights(input: {
     if (consultAt) consulted += 1;
     if (consultAt && convertedPerson) converted += 1;
     if (consultAt && !convertedPerson) {
-      consultedNoTreatment.push({ ...person, lastConsultAt: consultAt });
+      // Same "days waiting" as the other list, counted from the consultation.
+      consultedNoTreatment.push({
+        ...person,
+        lastConsultAt: consultAt,
+        daysWaiting: Math.max(
+          0,
+          Math.floor((now.getTime() - new Date(consultAt).getTime()) / 86400000),
+        ),
+      });
     }
   }
 
+  // Longest wait first on both lists; the page paginates the full sets.
   waiting.sort((a, b) => (b.daysWaiting ?? 0) - (a.daysWaiting ?? 0));
-  consultedNoTreatment.sort((a, b) => (b.lastConsultAt ?? "").localeCompare(a.lastConsultAt ?? ""));
+  consultedNoTreatment.sort((a, b) => (b.daysWaiting ?? 0) - (a.daysWaiting ?? 0));
 
   const signUps = cohort.length;
   const bookedCount = signUps - notBooked;
@@ -452,8 +461,8 @@ export function buildInsights(input: {
     },
     monthly,
     sources,
-    waiting: waiting.slice(0, 12),
-    consultedNoTreatment: consultedNoTreatment.slice(0, 12),
+    waiting,
+    consultedNoTreatment,
     bestsellers: { treatments, products },
   };
 }
@@ -553,6 +562,8 @@ export type BookMetrics = {
    * never-treated count and sits outside the window.
    */
   composition: { neverTreated: number; treatedOnce: number; multiTreatment: number; seen: number };
+  /** Every patient by months since their last visit, as of the window's end. */
+  lastVisit: { under3: number; from3to6: number; from6to12: number; over12: number; never: number };
   /** Shared first-to-second on the 180-day horizon. */
   secondVisit: {
     cohort: number;
@@ -582,7 +593,11 @@ export function buildBookMetrics(input: {
     now.getTime(),
   );
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  // "Dormant" keeps its fixed meaning (no visit in 12 months); the spend, visit
+  // value and new-vs-returning figures follow the page's window.
   const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString();
+  const windowFromIso = new Date(windowFromMs).toISOString();
+  const windowToIso = new Date(windowToMs).toISOString();
   const ninetyDaysAgo = new Date(now.getTime() - 90 * MS_DAY).toISOString();
 
   const all = input.patients;
@@ -607,6 +622,7 @@ export function buildBookMetrics(input: {
 
   let dormant = 0;
   let neverTreated = 0;
+  const lastVisit = { under3: 0, from3to6: 0, from6to12: 0, over12: 0, never: 0 };
   let treatedOnce = 0;
   let multiTreatment = 0;
   let rebookedCohort = 0;
@@ -622,7 +638,21 @@ export function buildBookMetrics(input: {
     if (visits.length === 0) {
       neverTreated++;
       dormant++;
+      lastVisit.never++;
       continue;
+    }
+    // Months since the last visit before the window's end.
+    const lastBefore = [...visits]
+      .reverse()
+      .find((visit) => new Date(visit.performed_at).getTime() <= windowToMs);
+    if (!lastBefore) lastVisit.never++;
+    else {
+      const months =
+        (windowToMs - new Date(lastBefore.performed_at).getTime()) / (30.44 * 86400000);
+      if (months < 3) lastVisit.under3++;
+      else if (months < 6) lastVisit.from3to6++;
+      else if (months < 12) lastVisit.from6to12++;
+      else lastVisit.over12++;
     }
     // Composition over the patients seen in the window, counting visits (any
     // treatment), so once + two or more = seen.
@@ -648,14 +678,16 @@ export function buildBookMetrics(input: {
       if (futureBooked.has(patient.id)) rebooked++;
     }
 
-    const inWindow = visits.filter((visit) => visit.performed_at >= twelveMonthsAgo);
+    const inWindow = visits.filter(
+      (visit) => visit.performed_at >= windowFromIso && visit.performed_at <= windowToIso,
+    );
     if (inWindow.length === 0) continue;
     treatedLast12m.add(patient.id);
     for (const visit of inWindow) {
       treatmentsLast12m++;
       revenueLast12m += Number(visit.price ?? 0);
     }
-    if (first.performed_at >= twelveMonthsAgo) firstTimers++;
+    if (first.performed_at >= windowFromIso) firstTimers++;
     else returning++;
   }
 
@@ -716,6 +748,7 @@ export function buildBookMetrics(input: {
     treatedMix: { firstTimers, returning },
     sources,
     composition: { neverTreated, treatedOnce, multiTreatment, seen: treatedOnce + multiTreatment },
+    lastVisit,
     secondVisit,
   };
 }

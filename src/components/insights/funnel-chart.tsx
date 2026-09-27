@@ -1,10 +1,10 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui/card";
+import { CHART_SERIES } from "@/lib/chart-palette";
 import type { InsightsResult } from "@/lib/insights.server";
 
-const SIGNUPS = "var(--accent-line)";
-const BOOKINGS = "rgba(47, 63, 102, 0.45)";
-const CONSULTS = "rgba(214, 105, 137, 0.75)";
+// Brand pastels with projector-safe contrast: butter, sky, pink.
+const [SIGNUPS, BOOKINGS, CONSULTS] = CHART_SERIES;
 
 function tooltipStyle() {
   return {

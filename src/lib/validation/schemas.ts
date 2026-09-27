@@ -315,6 +315,8 @@ export const GetPractitionerPerformance = z.object({
 export const GetMyEarnings = z.object({ from: dateString, to: dateString });
 
 export const GetInsights = z.object({ from: dateString, to: dateString });
+/** Empty means the last 12 months. */
+export const GetPatientMetrics = z.object({ from: dateString.optional(), to: dateString.optional() });
 
 /** Empty means "this year to date", which is what the dashboard asks for. */
 export const GetRetention = z.object({

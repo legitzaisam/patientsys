@@ -3,12 +3,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CalendarCheck, Moon, Receipt, Repeat2, UserPlus, UserRound, Users, Wallet } from "lucide-react";
 import { getPatientMetrics } from "@/lib/clinic.functions";
-import { money } from "@/components/period-picker";
+import { money, periodPhrase, periodRange, type PeriodSelection } from "@/components/period-picker";
 import { Card } from "@/components/ui/card";
+import { CHART_MUTED, CHART_PAIR, CHART_SERIES } from "@/lib/chart-palette";
 import { focusSection } from "@/lib/focus-section";
 
-const ACCENT = "var(--accent-line)";
-const MUTED = "rgba(47, 63, 102, 0.22)";
+const [ACCENT, SECOND] = CHART_PAIR;
+const MUTED = CHART_MUTED;
 
 function tooltipStyle() {
   return {
@@ -25,10 +26,15 @@ function pct(value: number | null | undefined) {
   return `${Math.round(value * 100)}%`;
 }
 
-/** Insights → Book: list size, mix and quality. */
-export function PatientMetrics() {
+/** Insights → Patient base: list size, mix and quality, over the page's period. */
+export function PatientMetrics({ period }: { period: PeriodSelection }) {
   const fetchMetrics = useServerFn(getPatientMetrics);
-  const { data } = useQuery({ queryKey: ["patient-metrics"], queryFn: () => fetchMetrics() });
+  const range = periodRange(period);
+  const phrase = periodPhrase(period);
+  const { data } = useQuery({
+    queryKey: ["patient-metrics", range.from, range.to],
+    queryFn: () => fetchMetrics({ data: range }),
+  });
 
   const rowOne = [
     // Each tile points at the card below that explains it.
@@ -71,8 +77,8 @@ export function PatientMetrics() {
       // Shared definition: first visits in the window that are at least six
       // months old, and whether a second visit followed within six months.
       hint: data?.secondVisit
-        ? `${data.secondVisit.returned} of ${data.secondVisit.cohort} first visits, last 12 months · second within 6 months`
-        : "Second visit within 6 months of the first, last 12 months",
+        ? `${data.secondVisit.returned} of ${data.secondVisit.cohort} first visits ${phrase} · second within 6 months`
+        : `Second visit within 6 months of the first, ${phrase}`,
       icon: Repeat2,
       target: "book-mix",
     },
@@ -86,23 +92,28 @@ export function PatientMetrics() {
     {
       label: "Spend per patient",
       value: data?.quality.spendPerPatient != null ? money(data.quality.spendPerPatient) : "—",
-      hint: "Last 12 months",
+      hint: `Per patient seen ${phrase}`,
       icon: Wallet,
       target: "book-mix",
     },
     {
       label: "Visit value",
       value: data?.quality.visitValue != null ? money(data.quality.visitValue) : "—",
-      hint: "Last 12 months",
+      hint: `Per visit ${phrase}`,
       icon: Receipt,
       target: "book-mix",
     },
   ];
 
-  const statusData = [
-    { name: "Active", value: data?.totals.active ?? 0 },
-    { name: "Inactive", value: data?.totals.inactive ?? 0 },
+  // Patients by months since their last visit (replaces the active / inactive donut).
+  const lastVisitData = [
+    { name: "Under 3 months", value: data?.lastVisit.under3 ?? 0 },
+    { name: "3–6 months", value: data?.lastVisit.from3to6 ?? 0 },
+    { name: "6–12 months", value: data?.lastVisit.from6to12 ?? 0 },
+    { name: "12+ months", value: data?.lastVisit.over12 ?? 0 },
+    { name: "Never treated", value: data?.lastVisit.never ?? 0 },
   ];
+  const lastVisitColours = [...CHART_SERIES.slice(0, 4), MUTED];
 
   const mixData = [
     { name: "New", value: data?.treatedMix.firstTimers ?? 0 },
@@ -127,9 +138,8 @@ export function PatientMetrics() {
       <Card id="book-composition" className="scroll-mt-20 p-5">
         <h2 className="section-title">Composition</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Of the {data?.composition.seen ?? 0} patients seen in the last 12 months, how many have
-          had one visit and how many two or more, any treatment. Never treated counts the whole
-          list.
+          Of the {data?.composition.seen ?? 0} patients seen {phrase}, how many have had one visit
+          and how many two or more, any treatment. Never treated counts the whole list.
         </p>
         <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <CompositionItem label="Never treated" value={data?.composition.neverTreated ?? 0} />
@@ -163,17 +173,17 @@ export function PatientMetrics() {
           </div>
         </Card>
 
-        <Card id="book-status" className="scroll-mt-20 p-5">
-          <h2 className="section-title">Active vs inactive</h2>
+        <Card id="book-status" className="scroll-mt-20 p-5" data-qc="last-visit-card">
+          <h2 className="section-title">Patients by last visit</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Current status split across the whole book.
+            Everyone on the list, by how long since they were last seen.
           </p>
           <div className="mt-4 flex h-56 items-center gap-6">
             <div className="h-full flex-1">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={statusData}
+                    data={lastVisitData}
                     dataKey="value"
                     nameKey="name"
                     innerRadius="58%"
@@ -181,33 +191,35 @@ export function PatientMetrics() {
                     paddingAngle={3}
                     strokeWidth={0}
                   >
-                    <Cell fill={ACCENT} />
-                    <Cell fill={MUTED} />
+                    {lastVisitData.map((entry, i) => (
+                      <Cell key={entry.name} fill={lastVisitColours[i]!} />
+                    ))}
                   </Pie>
                   <Tooltip contentStyle={tooltipStyle()} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <ul className="shrink-0 space-y-2 pr-2 text-sm">
-              <li className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: ACCENT }} />
-                Active ·{" "}
-                <span className="font-semibold tabular-nums">{data?.totals.active ?? 0}</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: MUTED }} />
-                Inactive ·{" "}
-                <span className="font-semibold tabular-nums">{data?.totals.inactive ?? 0}</span>
-              </li>
+            <ul className="shrink-0 space-y-1.5 pr-2 text-sm">
+              {lastVisitData.map((entry, i) => (
+                <li
+                  key={entry.name}
+                  className="flex items-center gap-2"
+                  data-qc="last-visit-bucket"
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ background: lastVisitColours[i] }}
+                  />
+                  {entry.name} · <span className="font-semibold tabular-nums">{entry.value}</span>
+                </li>
+              ))}
             </ul>
           </div>
         </Card>
 
         <Card id="book-mix" className="scroll-mt-20 p-5">
           <h2 className="section-title">New vs returning</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Of people treated in the last 12 months.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Of people treated {phrase}.</p>
           <div className="mt-4 flex h-56 items-center gap-6">
             <div className="h-full flex-1">
               <ResponsiveContainer width="100%" height="100%">
@@ -222,7 +234,7 @@ export function PatientMetrics() {
                     strokeWidth={0}
                   >
                     <Cell fill={ACCENT} />
-                    <Cell fill={MUTED} />
+                    <Cell fill={SECOND} />
                   </Pie>
                   <Tooltip contentStyle={tooltipStyle()} />
                 </PieChart>
@@ -239,7 +251,7 @@ export function PatientMetrics() {
                 )}
               </li>
               <li className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: MUTED }} />
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: SECOND }} />
                 Returning · <span className="font-semibold tabular-nums">{mixData[1]!.value}</span>
                 {mixTotal > 0 && (
                   <span className="text-muted-foreground">

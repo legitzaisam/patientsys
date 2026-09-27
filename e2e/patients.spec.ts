@@ -220,3 +220,27 @@ test.describe("record: what the list promises, the record shows", () => {
     );
   });
 });
+
+test.describe("insights", () => {
+  test("Patient base follows the period picker and shows patients by last visit; next-step lists paginate", async ({
+    page,
+  }) => {
+    await page.goto("/insights?tab=book");
+    await expect(page.locator(".page-subtitle")).toContainText("Last 12 months.");
+    const buckets = page.locator('[data-qc="last-visit-bucket"]');
+    await expect(buckets).toHaveCount(5);
+    await expect(buckets.first()).toContainText("Under 3 months");
+    await expect(page.getByText("Active vs inactive")).toHaveCount(0);
+    await page.getByRole("tab", { name: "1 month" }).click();
+    await expect(page.locator(".page-subtitle")).toContainText("Last month.");
+
+    await page.goto("/insights");
+    await expect(page.getByText("What sold")).toHaveCount(0);
+    // Whichever next-step list runs past ten rows paginates; the consulted list
+    // offers Schedule and the same "days waiting" wording as the waiting list.
+    await expect(page.locator('[data-qc$="-pagination"]').first()).toContainText("Showing 1–10 of");
+    const consulted = page.locator("#insights-consulted");
+    await expect(consulted.locator('[data-qc="insights-schedule"]').first()).toBeVisible();
+    await expect(consulted.getByText(/\d+d waiting · consulted/).first()).toBeVisible();
+  });
+});

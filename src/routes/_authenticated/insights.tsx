@@ -10,7 +10,6 @@ import { AppShell } from "@/components/app-shell";
 import { CURRENT_YEAR, PeriodPicker, periodHeading, periodRange, type PeriodSelection } from "@/components/period-picker";
 import { PatientMetrics } from "@/components/patients/patient-metrics";
 import { ActionList } from "@/components/insights/action-list";
-import { Bestsellers } from "@/components/insights/bestsellers";
 import { FunnelChart } from "@/components/insights/funnel-chart";
 import { FunnelTiles } from "@/components/insights/funnel-tiles";
 import { SourceMix } from "@/components/insights/source-mix";
@@ -74,7 +73,7 @@ function InsightsPage() {
           <h1 className="page-title">Insights</h1>
           <p className="page-subtitle">
             {tab === "book"
-              ? "How big the patient base is, how it is made up and how well it comes back."
+              ? `${periodHeading(period)}. How big the patient base is, how it is made up and how well it comes back.`
               : `${periodHeading(period)}. Online enquiries, bookings, consultations and first treatments.`}
           </p>
         </div>
@@ -97,12 +96,12 @@ function InsightsPage() {
                   ))}
                 </div>
               ) : null}
-              {tab === "pipeline" ? <PeriodPicker value={period} onChange={setPeriod} /> : null}
+          <PeriodPicker value={period} onChange={setPeriod} />
         </div>
       </div>
 
       {tab === "book" ? (
-        <PatientMetrics />
+        <PatientMetrics period={period} />
       ) : (
         <div className="space-y-8">
           <section>
@@ -138,16 +137,6 @@ function InsightsPage() {
                 canSendOffers={canSendOffers}
               />
             </div>
-          </section>
-
-          <section>
-            <div className="mb-3">
-              <h2 className="section-title">What sold</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Treatments and retail products in this window, ranked by revenue.
-              </p>
-            </div>
-            <Bestsellers data={data?.bestsellers} />
           </section>
         </div>
       )}

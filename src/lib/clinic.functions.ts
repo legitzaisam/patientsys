@@ -895,8 +895,11 @@ export const listPatients = createServerFn({ method: "GET" })
   });
 
 export const getPatientMetrics = createServerFn({ method: "GET" })
+  .validator((data: { from?: string; to?: string }) =>
+    parseInput(schemas.GetPatientMetrics, data ?? {}),
+  )
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "getPatientMetrics");
     const supabase = (context as Ctx).supabase;
     const { buildBookMetrics } = await import("./insights.server");
@@ -907,6 +910,8 @@ export const getPatientMetrics = createServerFn({ method: "GET" })
     ]);
 
     return buildBookMetrics({
+      ...(data.from ? { from: data.from } : {}),
+      ...(data.to ? { to: data.to } : {}),
       patients: (patients ?? []) as any,
       treatments: (treatments ?? []) as any,
       appointments: (appointments ?? []) as any,

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Send } from "lucide-react";
+import { PaginationBar, usePagination } from "@/components/pagination-bar";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,6 +31,8 @@ export function ActionList({
   const [offerFor, setOfferFor] = useState<SendOfferPatient[] | null>(null);
 
   const patientRows = rows.filter((r) => r.patientId);
+  // Ten a page; "All" still selects every patient on the list, not just the page.
+  const paging = usePagination(rows, 10);
   const toPatient = (row: InsightsListRow): SendOfferPatient => ({
     id: row.patientId!,
     first_name: row.firstName,
@@ -72,12 +75,15 @@ export function ActionList({
         ) : null}
       </div>
       <ul className="mt-3">
-        {rows.map((row) => {
+        {paging.rows.map((row) => {
           const name = `${row.firstName} ${row.lastName}`.trim();
+          // One format for both lists: how long they have waited, then where they came from.
           const meta =
             kind === "waiting"
               ? `${row.daysWaiting ?? 0}d waiting · ${SOURCE_LABEL[row.source]}${row.interest ? ` · ${row.interest}` : ""}`
-              : `${row.lastConsultAt ? new Date(row.lastConsultAt).toLocaleDateString("en-GB") : "Consulted"} · ${SOURCE_LABEL[row.source]}`;
+              : `${row.daysWaiting ?? 0}d waiting · consulted ${
+                  row.lastConsultAt ? new Date(row.lastConsultAt).toLocaleDateString("en-GB") : ""
+                } · ${SOURCE_LABEL[row.source]}`;
           return (
             <li key={`${row.patientId ?? row.leadId}-${row.email ?? row.firstName}`}>
               <div className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-[rgba(47,63,102,0.08)]">
@@ -132,22 +138,36 @@ export function ActionList({
                     Send offer
                   </button>
                 ) : null}
-                {row.patientId &&
-                  (kind === "waiting" ? (
-                    <Link to="/schedule" className={CHIP}>
+                {row.patientId ? (
+                  <>
+                    {/* Both lists offer Schedule; the consulted list keeps Open as well. */}
+                    <Link to="/schedule" className={CHIP} data-qc="insights-schedule">
                       Schedule
                     </Link>
-                  ) : (
-                    <Link to="/patients/$id" params={{ id: row.patientId }} className={CHIP}>
-                      Open
-                    </Link>
-                  ))}
+                    {kind === "consulted" ? (
+                      <Link to="/patients/$id" params={{ id: row.patientId }} className={CHIP}>
+                        Open
+                      </Link>
+                    ) : null}
+                  </>
+                ) : null}
               </div>
             </li>
           );
         })}
         {rows.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">{empty}</li>}
       </ul>
+      <PaginationBar
+        page={paging.page}
+        pageCount={paging.pageCount}
+        total={paging.total}
+        from={paging.from}
+        to={paging.to}
+        onPage={paging.setPage}
+        noun="patients"
+        qc={`${kind}-pagination`}
+        className="mt-3 border-t border-glass-line pt-3"
+      />
       {canSendOffers ? (
         <SendOfferDialog
           open={Boolean(offerFor)}

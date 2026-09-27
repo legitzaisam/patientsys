@@ -92,6 +92,7 @@ export function RetentionTrend({ points, subtitle }: { points: MonthPoint[]; sub
                 width={48}
                 fontSize={11}
                 stroke="var(--muted-foreground)"
+                tickFormatter={(v: number) => `${v}%`}
               />
               <Tooltip
                 contentStyle={{
