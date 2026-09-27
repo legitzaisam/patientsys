@@ -27,6 +27,7 @@ import {
   upcomingBookingSet,
   visitsByPatient,
 } from "@/lib/metrics/definitions";
+import { complianceReminders } from "@/lib/metrics/compliance";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
@@ -237,6 +238,7 @@ type Identity = {
   canDelete: boolean;
   isPatient: boolean;
   permissions: string[];
+  treatsPatients: boolean;
   profile: any;
   patient: any;
   mustChangePassword: boolean;
@@ -272,6 +274,12 @@ function identity(): Identity {
     canDelete: isOwner,
     isPatient: !isStaff,
     permissions,
+    // Has recorded a treatment as the practitioner in the last 12 months.
+    treatsPatients:
+      isStaff &&
+      treatments.some(
+        (t) => t.practitioner_id === account.userId && t.performed_at >= isoDaysAgo(365),
+      ),
     profile,
     mustChangePassword: mustChangePasswordByUser.has(account.userId),
     welcomePending: isStaff && welcomePendingByUser.has(account.userId),
@@ -599,6 +607,10 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
       subtitle: m.body.slice(0, 60) + (m.body.length > 60 ? "…" : ""),
       patientId: m.patient_id,
     });
+  }
+  // Owner reminder: registrations and insurance expiring within 60 days.
+  if (isManager) {
+    for (const item of complianceReminders(profiles, todayISO)) attentionItems.push(item);
   }
 
   // ---- Journeys: active plans grouped by phase (dashboard bottom section).
@@ -3897,11 +3909,12 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = requireCapability("reports.performance");
     if (!me.isStaff) throw new Error("Staff access only");
-    const { buildStats, buildTrend, moneyChanges, moneyTotals, trendViewWindows } = await import("./earnings.server");
+    // Money and commission need reports.commission (owners always have it).
+    const showMoney = me.isOwner || me.permissions.includes("reports.commission");
+    const { buildStats, buildTrend, moneyChanges, moneyTotals, whatSold, withoutMoney } =
+      await import("./earnings.server");
     const inputs = earningsInputs(data.from, data.to);
     const prevInputs = earningsInputs(data.previousFrom, data.previousTo);
-    const windows = trendViewWindows();
-    const yearInputs = earningsInputs(windows.year.from, windows.year.to);
 
     const staffIds = [
       ...new Set(
@@ -3996,38 +4009,42 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       inputs.money,
     );
 
-    const trendViews = {
-      month: buildTrend(
-        staff,
-        yearInputs.treatments as never,
-        yearInputs.appointments as never,
-        windows.month,
-        inputs.money,
-      ),
-      six: buildTrend(
-        staff,
-        yearInputs.treatments as never,
-        yearInputs.appointments as never,
-        windows.six,
-        inputs.money,
-      ),
-      year: buildTrend(
-        staff,
-        yearInputs.treatments as never,
-        yearInputs.appointments as never,
-        windows.year,
-        inputs.money,
-      ),
-    };
-
+    // One period per page: the trend follows the picker (Phase 10, bullet 097).
+    const changes = moneyChanges(moneyTotals(rows), moneyTotals(prevRows));
+    const sold = whatSold(
+      inputs.treatments as never,
+      productSales as never,
+      retailProducts.map((p) => ({ id: p.id, name: p.name, sku: p.sku ?? null })),
+      { from: data.from, to: data.to },
+    );
+    if (!showMoney) {
+      const strip = (points: import("./earnings.server").TrendPoint[]) => points.map(withoutMoney);
+      return {
+        rows: rows.map(withoutMoney),
+        previousRows: prevRows.map(withoutMoney),
+        totals: withoutMoney(totals),
+        clinic: withoutMoney(clinic),
+        trend: {
+          ...trend,
+          clinic: strip(trend.clinic),
+          byPractitioner: Object.fromEntries(
+            Object.entries(trend.byPractitioner).map(([k, v]) => [k, strip(v)]),
+          ),
+        },
+        changes: withoutMoney(changes),
+        showMoney,
+        sold: null,
+      };
+    }
     return {
       rows,
       previousRows: prevRows,
       totals,
       clinic,
       trend,
-      trendViews,
-      changes: moneyChanges(moneyTotals(rows), moneyTotals(prevRows)),
+      changes,
+      showMoney,
+      sold,
     };
   });
 
@@ -4088,6 +4105,12 @@ export const getMyEarnings = createServerFn({ method: "POST" })
           return p ? `${p.first_name} ${p.last_name}` : "—";
         })(),
         share: Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,
+        // Payout status: paid once the linked booking is paid in full.
+        payout: (() => {
+          if (!t.appointment_id) return "paid" as const;
+          const appt = appointments.find((a) => a.id === t.appointment_id);
+          return appt?.payment_status === "paid" ? ("paid" as const) : ("pending" as const);
+        })(),
       })),
     };
   });

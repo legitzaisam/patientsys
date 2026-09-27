@@ -7,6 +7,7 @@ import {
   clinicDayRangeForKey,
   clinicMinutesOfDay,
 } from "@/lib/clinic-time";
+import { complianceReminders } from "@/lib/metrics/compliance";
 import {
   dueState,
   nextDueFor,
@@ -648,6 +649,19 @@ export const getDashboard = createServerFn({ method: "GET" })
         subtitle: m.body.slice(0, 60) + (m.body.length > 60 ? "…" : ""),
         patientId: m.patient_id,
       });
+    }
+
+    // Owner reminder: a team member's registration or insurance runs out within
+    // 60 days (or has already). Managers see the row; it links to the profile.
+    if (isManager) {
+      const { data: staffRows } = await supabase
+        .from("profiles")
+        .select(
+          "id, full_name, registration_body, registration_expiry, insurance_provider, insurance_expiry",
+        );
+      for (const item of complianceReminders((staffRows ?? []) as any[], todayISO)) {
+        attentionItems.push(item);
+      }
     }
 
     // ---- Journeys: active plans grouped by phase (dashboard bottom section).
@@ -5109,12 +5123,15 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "getPractitionerPerformance");
+    const identity = await authorize(ctx, "getPractitionerPerformance");
+    // Money and commission need reports.commission (owners always have it); a
+    // manager without it gets counts, attendance and retention only.
+    const showMoney = identity.isOwner || identity.permissions.includes("reports.commission");
     const supabaseAdmin = await adminClient(context);
-    const { buildStats, buildTrend, moneyChanges, moneyTotals, trendViewWindows } = await import("./earnings.server");
+    const { buildStats, buildTrend, moneyChanges, moneyTotals, whatSold, withoutMoney } =
+      await import("./earnings.server");
     const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
     const previous = { from: data.previousFrom, to: data.previousTo };
-    const windows = trendViewWindows();
 
     const [
       { data: profiles },
@@ -5125,10 +5142,10 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       { data: prevAppointments },
       { data: yearTreatments },
       { data: firstSeen },
-      { data: yearTrendTreatments },
-      { data: yearTrendAppointments },
       { data: futureAppointments },
       { data: clinicRow },
+      { data: periodSales },
+      { data: products },
     ] =
       await Promise.all([
         supabaseAdmin.from("profiles").select("id, full_name, job_title, commission_rate"),
@@ -5155,16 +5172,6 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
           .lte("starts_at", previous.to),
         supabaseAdmin.from("treatments").select("practitioner_id, patient_id").gte("performed_at", yearAgo),
         supabaseAdmin.from("patients").select("id, created_at"),
-        supabaseAdmin
-          .from("treatments")
-          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id")
-          .gte("performed_at", windows.year.from)
-          .lte("performed_at", windows.year.to),
-        supabaseAdmin
-          .from("appointments")
-          .select("id, practitioner_id, price, payment_status, status, starts_at")
-          .gte("starts_at", windows.year.from)
-          .lte("starts_at", windows.year.to),
         // Booked ahead: live bookings from now on, whatever the period.
         supabaseAdmin
           .from("appointments")
@@ -5172,6 +5179,13 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
           .gte("starts_at", new Date().toISOString())
           .neq("status", "cancelled"),
         supabaseAdmin.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
+        // Retail in the period, for its share of revenue and What sold.
+        supabaseAdmin
+          .from("product_sales")
+          .select("product_id, qty, amount, occurred_at")
+          .gte("occurred_at", data.from)
+          .lte("occurred_at", data.to),
+        supabaseAdmin.from("retail_products").select("id, name, sku"),
       ]);
     const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
     // Period bookings plus the live future ones, once each.
@@ -5275,29 +5289,34 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       money,
     );
 
-    const trendSourceTreatments = (yearTrendTreatments ?? []) as never;
-    const trendSourceAppointments = (yearTrendAppointments ?? []) as never;
-    const trendViews = {
-      month: buildTrend(
-        staff,
-        trendSourceTreatments,
-        trendSourceAppointments,
-        windows.month,
-        money,
-      ),
-      six: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.six, money),
-      year: buildTrend(staff, trendSourceTreatments, trendSourceAppointments, windows.year, money),
-    };
-
-    return {
-      rows,
-      previousRows: prevRows,
-      totals,
-      clinic,
-      trend,
-      trendViews,
-      changes: moneyChanges(moneyTotals(rows), moneyTotals(prevRows)),
-    };
+    // One period per page: the trend follows the picker (Phase 10, bullet 097).
+    const changes = moneyChanges(moneyTotals(rows), moneyTotals(prevRows));
+    const sold = whatSold(
+      (treatments ?? []) as never,
+      (periodSales ?? []) as never,
+      (products ?? []) as never,
+      { from: data.from, to: data.to },
+    );
+    if (!showMoney) {
+      const strip = (points: import("./earnings.server").TrendPoint[]) => points.map(withoutMoney);
+      return {
+        rows: rows.map(withoutMoney),
+        previousRows: prevRows.map(withoutMoney),
+        totals: withoutMoney(totals),
+        clinic: withoutMoney(clinic),
+        trend: {
+          ...trend,
+          clinic: strip(trend.clinic),
+          byPractitioner: Object.fromEntries(
+            Object.entries(trend.byPractitioner).map(([k, v]) => [k, strip(v)]),
+          ),
+        },
+        changes: withoutMoney(changes),
+        showMoney,
+        sold: null,
+      };
+    }
+    return { rows, previousRows: prevRows, totals, clinic, trend, changes, showMoney, sold };
   });
 
 /** The caller's own earnings and KPIs. Never returns clinic figures or the split percentage. */
@@ -5350,6 +5369,16 @@ export const getMyEarnings = createServerFn({ method: "POST" })
 
     const rate = Number(profile?.commission_rate ?? 0);
     const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
+    const paymentById = new Map(
+      ((appointments ?? []) as { id: string; payment_status: string | null }[]).map((a) => [
+        a.id,
+        a.payment_status,
+      ]),
+    );
+    const payoutFor = (appointmentId: string | null | undefined): "paid" | "pending" => {
+      if (!appointmentId) return "paid";
+      return paymentById.get(appointmentId) === "paid" ? "paid" : "pending";
+    };
     const stats = buildStats(
       [
         {
@@ -5398,6 +5427,9 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         patient: t.patients ? `${t.patients.first_name} ${t.patients.last_name}` : "—",
         share:
           Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,
+        // Payout status: paid once the linked booking is paid in full; a
+        // treatment with no booking counts as paid (recorded at the desk).
+        payout: payoutFor(t.appointment_id as string | null | undefined),
       })),
     };
   });

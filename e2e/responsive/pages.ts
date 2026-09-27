@@ -301,6 +301,22 @@ const needsActionOpen: PageState = {
   },
 };
 
+/** My profile's Security / Documents tabs, now on the page header. */
+function profileTab(key: "security" | "documents"): PageState {
+  return {
+    id: `profile-${key}`,
+    open: async (page) => {
+      if (!(await clickIfVisible(page, `[data-qc="profile-tab-${key}"]`, 3_000))) return false;
+      await wait(page, 500);
+      return true;
+    },
+    close: async (page) => {
+      await clickIfVisible(page, '[data-qc="profile-tab-profile"]', 2_000);
+      await wait(page, 300);
+    },
+  };
+}
+
 const newBooking: PageState = {
   id: "new-booking",
   open: async (page) => {
@@ -627,7 +643,7 @@ export const PAGES: PageEntry[] = [
     path: "/profile",
     roles: STAFF,
     settle: ".page-title",
-    states: [sidebarClosed],
+    states: [sidebarClosed, profileTab("security"), profileTab("documents")],
     coreStates: ["sidebar-closed"],
   },
   {

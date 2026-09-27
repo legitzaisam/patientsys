@@ -17,6 +17,7 @@ const KIND_LABEL: Record<string, string> = {
   treatment_due: "Treatment due",
   message: "Message",
   incomplete_profile: "Incomplete profile",
+  compliance_due: "Registration or insurance",
 };
 
 export function AttentionSummary({

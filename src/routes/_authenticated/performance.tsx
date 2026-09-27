@@ -19,6 +19,7 @@ import {
 } from "@/components/period-picker";
 import { PerformanceTrends } from "@/components/performance-trends";
 import { PerformanceTable } from "@/components/performance/performance-table";
+import { Bestsellers } from "@/components/insights/bestsellers";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
 import { InfoHint } from "@/components/info-hint";
 import { moneyWhole } from "@/lib/format";
@@ -32,7 +33,10 @@ export const Route = createFileRoute("/_authenticated/performance")({
         content: "Earnings, retention and commission split for every practitioner in the clinic.",
       },
       { property: "og:title", content: "Performance — Aetheria" },
-      { property: "og:description", content: "Earnings, KPIs and commission split per practitioner." },
+      {
+        property: "og:description",
+        content: "Earnings, KPIs and commission split per practitioner.",
+      },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -60,7 +64,8 @@ function PerformancePage() {
   });
 
   useEffect(() => {
-    if (identity && !can(identity, "reports.performance")) navigate({ to: "/dashboard", replace: true });
+    if (identity && !can(identity, "reports.performance"))
+      navigate({ to: "/dashboard", replace: true });
   }, [identity, navigate]);
 
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
@@ -68,6 +73,10 @@ function PerformancePage() {
 
   const totals = data?.totals;
   const phrase = periodPhrase(period);
+  // Money and commission need reports.commission (owners always have it); the
+  // server strips the figures for anyone else, so this only decides the layout.
+  const showMoney = can(identity, "reports.commission");
+  const sold = data?.sold ?? null;
 
   return (
     <AppShell identity={identity}>
@@ -88,49 +97,65 @@ function PerformancePage() {
             </InfoHint>
           </div>
           <p className="page-subtitle">
-            Earnings and collections for the clinic, then a breakdown by practitioner.
+            {showMoney
+              ? "Earnings and collections for the clinic, then a breakdown by practitioner."
+              : "Activity, attendance and retention by practitioner. Money figures need the commission permission."}
           </p>
         </div>
         <PeriodPicker value={period} onChange={setPeriod} />
       </div>
 
-      <div className="mb-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Total
-          label="Earned"
-          value={totals?.earned}
-          hint={`Treatments performed ${phrase}`}
-          change={data?.changes?.earned}
-        />
-        <Total
-          label="Collected"
-          value={totals?.collected}
-          hint="Paid so far"
-          change={data?.changes?.collected}
-        />
-        <Total
-          label="To practitioners"
-          value={totals?.toPractitioners}
-          hint="Their share of Earned"
-          change={data?.changes?.toPractitioners}
-        />
-        <Total
-          label="Retained by clinic"
-          value={totals?.toClinic}
-          hint="Earned after their share"
-          change={data?.changes?.toClinic}
-        />
-      </div>
-      <p className="mb-8 text-xs text-muted-foreground" data-qc="performance-booked-ahead">
-        <span className="font-medium text-foreground">Outstanding</span>{" "}
-        {moneyWhole(totals?.outstanding ?? 0)} still to collect on treatments performed ·{" "}
-        <span className="font-medium text-foreground">Booked ahead</span>{" "}
-        {moneyWhole(totals?.bookedAhead ?? 0)} in future bookings, not counted above.
-      </p>
+      {showMoney ? (
+        <>
+          <div className="mb-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Total
+              label="Earned"
+              value={totals?.earned}
+              hint={`Treatments performed ${phrase}`}
+              change={data?.changes?.earned}
+            />
+            <Total
+              label="Collected"
+              value={totals?.collected}
+              hint="Paid so far"
+              change={data?.changes?.collected}
+            />
+            <Total
+              label="To practitioners"
+              value={totals?.toPractitioners}
+              hint="Their share of Earned"
+              change={data?.changes?.toPractitioners}
+            />
+            <Total
+              label="Retained by clinic"
+              value={totals?.toClinic}
+              hint="Earned after their share"
+              change={data?.changes?.toClinic}
+            />
+          </div>
+          <p className="mb-8 text-xs text-muted-foreground" data-qc="performance-booked-ahead">
+            <span className="font-medium text-foreground">Outstanding</span>{" "}
+            {moneyWhole(totals?.outstanding ?? 0)} still to collect on treatments performed ·{" "}
+            <span className="font-medium text-foreground">Booked ahead</span>{" "}
+            {moneyWhole(totals?.bookedAhead ?? 0)} in future bookings, not counted above
+            {sold ? (
+              <span data-qc="performance-retail-share">
+                {" · "}
+                <span className="font-medium text-foreground">Retail</span>{" "}
+                {moneyWhole(sold.retail.revenue)} ({sold.retail.share}% of treatment and retail
+                revenue {phrase})
+              </span>
+            ) : null}
+            .
+          </p>
+        </>
+      ) : null}
 
       <PerformanceTrends
         trend={data?.trend}
-        {...(data?.trendViews ? { trendViews: data.trendViews } : {})}
+        periodPhrase={phrase}
         practitioners={(data?.rows ?? []).map((r) => ({ userId: r.userId, fullName: r.fullName }))}
+        showMoney={showMoney}
       />
 
       <div className="mb-3 flex items-end justify-between gap-4">
@@ -153,7 +178,20 @@ function PerformancePage() {
         rows={data?.rows ?? []}
         {...(data?.clinic ? { clinic: data.clinic } : {})}
         trend={data?.trend}
+        showMoney={showMoney}
       />
+
+      {showMoney && sold ? (
+        <section className="mt-8" data-qc="performance-what-sold">
+          <div className="mb-3">
+            <h2 className="section-title">What sold</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Treatments and retail products {phrase}, ranked by revenue.
+            </p>
+          </div>
+          <Bestsellers data={{ treatments: sold.treatments, products: sold.products }} />
+        </section>
+      ) : null}
     </AppShell>
   );
 }

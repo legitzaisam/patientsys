@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
 import {
   Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -42,8 +41,6 @@ export type TrendPoint = {
   attendance: number;
 };
 
-export type TrendViewKey = "month" | "six" | "year";
-
 type TrendBundle = {
   monthly: boolean;
   clinic: TrendPoint[];
@@ -52,20 +49,11 @@ type TrendBundle = {
 
 type Props = {
   trend: TrendBundle | undefined;
-  trendViews?: Partial<Record<TrendViewKey, TrendBundle>>;
+  /** The page's window, e.g. "in the last 12 months"; the trends follow the page's picker. */
+  periodPhrase: string;
   practitioners: { userId: string; fullName: string }[];
-};
-
-const TREND_VIEWS: { key: TrendViewKey; label: string }[] = [
-  { key: "month", label: "1 month" },
-  { key: "six", label: "6 months" },
-  { key: "year", label: "1 year" },
-];
-
-const TREND_HINT: Record<TrendViewKey, string> = {
-  month: "By day over the last month",
-  six: "By month over the last 6 months",
-  year: "By month over the last year",
+  /** False hides the earnings chart (needs reports.commission). */
+  showMoney?: boolean;
 };
 
 const axis = {
@@ -111,11 +99,9 @@ function tooltipStyle() {
   };
 }
 
-export function PerformanceTrends({ trend, trendViews, practitioners }: Props) {
+export function PerformanceTrends({ trend, periodPhrase, practitioners, showMoney = true }: Props) {
   const [who, setWho] = useState<string>("clinic");
-  const [view, setView] = useState<TrendViewKey>("month");
-
-  const active = trendViews?.[view] ?? trend;
+  const active = trend;
 
   const data = useMemo(() => {
     if (!active) return [];
@@ -154,29 +140,6 @@ export function PerformanceTrends({ trend, trendViews, practitioners }: Props) {
           <h2 className="section-title">Trends</h2>
         </div>
         <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">
-          <div
-            role="tablist"
-            aria-label="Trend period"
-            className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi"
-          >
-            {TREND_VIEWS.map((o) => (
-              <button
-                key={o.key}
-                type="button"
-                role="tab"
-                aria-selected={view === o.key}
-                onClick={() => setView(o.key)}
-                className={cn(
-                  "h-7 cursor-pointer whitespace-nowrap rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors",
-                  view === o.key
-                    ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
-                    : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]",
-                )}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
           <Select value={who} onValueChange={setWho}>
             <SelectTrigger className="h-9 w-[240px]" aria-label="Choose whose trends to show">
               <SelectValue placeholder="Clinic total" />
@@ -197,8 +160,9 @@ export function PerformanceTrends({ trend, trendViews, practitioners }: Props) {
           </Select>
         </div>
       </div>
-      <p className="mb-4 text-sm text-muted-foreground">
-        {TREND_HINT[view]} — clinic total or a single practitioner.
+      <p className="mb-4 text-sm text-muted-foreground" data-qc="trends-hint">
+        {active?.monthly ? "By month" : "By day"} {periodPhrase} — clinic total or a single
+        practitioner. The period follows the picker above.
       </p>
 
       {empty ? (
@@ -207,38 +171,66 @@ export function PerformanceTrends({ trend, trendViews, practitioners }: Props) {
         </Card>
       ) : (
         <div className="grid gap-8 lg:grid-cols-2">
-          <ChartCard title="Earnings" hint="Treatment value earned and booking revenue collected">
-            <AreaChart data={plotted} margin={PERF_CHART_MARGIN}>
-              <defs>
-                <linearGradient id="earnedFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--edge-2)" vertical={false} />
-              <XAxis {...dateAxis} />
-              <YAxis tickLine={false} axisLine={false} width={48} {...axis} stroke="var(--muted-foreground)" />
-              <Tooltip
-                {...tooltipStyle()}
-                labelFormatter={(v) => labelAt(labels, v)}
-                formatter={(v: number, n: string) => [moneyWhole(v), n === "earned" ? "Earned" : "Collected"]}
-              />
-              <Area
-                type="monotone"
-                dataKey="earned"
-                stroke="var(--accent-deep)"
-                strokeWidth={2}
-                fill="url(#earnedFill)"
-              />
-              <Line type="monotone" dataKey="collected" stroke="var(--success-ink)" strokeWidth={2} dot={false} />
-            </AreaChart>
-          </ChartCard>
+          {showMoney ? (
+            <ChartCard
+              title="Earnings"
+              hint="Earned (treatment value) and collected (the paid part)"
+            >
+              <ComposedChart data={plotted} margin={PERF_CHART_MARGIN}>
+                <defs>
+                  <linearGradient id="earnedFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--edge-2)" vertical={false} />
+                <XAxis {...dateAxis} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={48}
+                  {...axis}
+                  stroke="var(--muted-foreground)"
+                />
+                <Tooltip
+                  {...tooltipStyle()}
+                  labelFormatter={(v) => labelAt(labels, v)}
+                  formatter={(v: number, n: string) => [
+                    moneyWhole(v),
+                    n === "earned" ? "Earned" : "Collected",
+                  ]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="earned"
+                  stroke="var(--accent-deep)"
+                  strokeWidth={2}
+                  fill="url(#earnedFill)"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="collected"
+                  name="collected"
+                  stroke="var(--sky-ink)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </ComposedChart>
+            </ChartCard>
+          ) : null}
 
           <ChartCard title="Appointments" hint="Bookings in the diary for each period">
             <BarChart data={plotted} margin={PERF_CHART_MARGIN} maxBarSize={18}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--edge-2)" vertical={false} />
               <XAxis {...dateAxis} />
-              <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={48} {...axis} stroke="var(--muted-foreground)" />
+              <YAxis
+                allowDecimals={false}
+                tickLine={false}
+                axisLine={false}
+                width={48}
+                {...axis}
+                stroke="var(--muted-foreground)"
+              />
               <Tooltip
                 {...tooltipStyle()}
                 labelFormatter={(v) => labelAt(labels, v)}
@@ -252,7 +244,14 @@ export function PerformanceTrends({ trend, trendViews, practitioners }: Props) {
             <LineChart data={plotted} margin={PERF_CHART_MARGIN}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--edge-2)" vertical={false} />
               <XAxis {...dateAxis} />
-              <YAxis domain={[0, 100]} tickLine={false} axisLine={false} width={48} {...axis} stroke="var(--muted-foreground)" />
+              <YAxis
+                domain={[0, 100]}
+                tickLine={false}
+                axisLine={false}
+                width={48}
+                {...axis}
+                stroke="var(--muted-foreground)"
+              />
               <Tooltip
                 {...tooltipStyle()}
                 labelFormatter={(v) => labelAt(labels, v)}
@@ -272,7 +271,14 @@ export function PerformanceTrends({ trend, trendViews, practitioners }: Props) {
             <BarChart data={plotted} margin={PERF_CHART_MARGIN} maxBarSize={18}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--edge-2)" vertical={false} />
               <XAxis {...dateAxis} />
-              <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={48} {...axis} stroke="var(--muted-foreground)" />
+              <YAxis
+                allowDecimals={false}
+                tickLine={false}
+                axisLine={false}
+                width={48}
+                {...axis}
+                stroke="var(--muted-foreground)"
+              />
               <Tooltip
                 {...tooltipStyle()}
                 labelFormatter={(v) => labelAt(labels, v)}

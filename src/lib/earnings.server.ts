@@ -104,18 +104,6 @@ export function moneyTotals(rows: PractitionerStats[]): MoneyTotals {
   };
 }
 
-export type TrendViewKey = "month" | "six" | "year";
-
-/** Rolling windows for Performance trend pills (1 month / 6 months / 1 year). */
-export function trendViewWindows(now = new Date()): Record<TrendViewKey, Period> {
-  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
-  return {
-    month: { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), to },
-    six: { from: new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString(), to },
-    year: { from: new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString(), to },
-  };
-}
-
 export function moneyChanges(current: MoneyTotals, previous: MoneyTotals): MoneyTotals {
   return {
     earned: round(current.earned - previous.earned),
@@ -247,6 +235,96 @@ function bucketLabel(key: string, monthly: boolean) {
 }
 
 /** Time-bucketed series for the period, per practitioner plus the clinic total. */
+/** What sold in the period: treatments and retail products ranked by revenue, plus retail's share. */
+export function whatSold(
+  treatments: { name: string; price?: number | null; performed_at: string }[],
+  sales: {
+    product_id?: string | null;
+    qty?: number | null;
+    amount?: number | null;
+    occurred_at: string;
+  }[],
+  products: { id: string; name: string; sku?: string | null }[],
+  period: Period,
+) {
+  const inPeriod = (iso: string) => iso >= period.from && iso <= period.to;
+  const byTreatment = new Map<string, { name: string; count: number; revenue: number }>();
+  let treatmentRevenue = 0;
+  for (const t of treatments) {
+    if (!inPeriod(t.performed_at)) continue;
+    const cur = byTreatment.get(t.name) ?? { name: t.name, count: 0, revenue: 0 };
+    cur.count += 1;
+    cur.revenue += Number(t.price ?? 0);
+    treatmentRevenue += Number(t.price ?? 0);
+    byTreatment.set(t.name, cur);
+  }
+  const productById = new Map(products.map((p) => [p.id, p]));
+  const byProduct = new Map<
+    string,
+    { name: string; sku: string | null; units: number; revenue: number }
+  >();
+  let retailRevenue = 0;
+  let units = 0;
+  for (const s of sales) {
+    if (!inPeriod(s.occurred_at)) continue;
+    const product = s.product_id ? productById.get(s.product_id) : undefined;
+    const key = product?.id ?? "unknown";
+    const cur = byProduct.get(key) ?? {
+      name: product?.name ?? "Product",
+      sku: product?.sku ?? null,
+      units: 0,
+      revenue: 0,
+    };
+    cur.units += Number(s.qty ?? 1);
+    cur.revenue += Number(s.amount ?? 0);
+    units += Number(s.qty ?? 1);
+    retailRevenue += Number(s.amount ?? 0);
+    byProduct.set(key, cur);
+  }
+  const total = treatmentRevenue + retailRevenue;
+  return {
+    treatments: [...byTreatment.values()]
+      .sort((a, b) => b.revenue - a.revenue || b.count - a.count)
+      .slice(0, 8),
+    products: [...byProduct.values()].sort((a, b) => b.revenue - a.revenue || b.units - a.units),
+    retail: {
+      revenue: round(retailRevenue),
+      units,
+      treatmentRevenue: round(treatmentRevenue),
+      /** Retail as a share of treatment + retail revenue in the period (0–100). */
+      share: total ? Math.round((retailRevenue / total) * 1000) / 10 : 0,
+    },
+  };
+}
+
+/**
+ * The money a manager without `reports.commission` must not see: every £
+ * figure and the commission rate, zeroed before the payload leaves the
+ * server. Counts, attendance and retention stay. Applied to rows, totals,
+ * the clinic row and the trend points alike.
+ */
+export function withoutMoney<T extends Record<string, unknown>>(row: T): T {
+  const out: Record<string, unknown> = { ...row };
+  for (const key of [
+    "earned",
+    "collected",
+    "earnedShare",
+    "collectedShare",
+    "clinicEarnedShare",
+    "clinicCollectedShare",
+    "averageValue",
+    "outstanding",
+    "bookedAhead",
+    "commissionRate",
+    "toPractitioners",
+    "toClinic",
+    "averageCommission",
+  ]) {
+    if (key in out) out[key] = 0;
+  }
+  return out as T;
+}
+
 export function buildTrend(
   staff: { userId: string }[],
   treatments: TreatmentRow[],

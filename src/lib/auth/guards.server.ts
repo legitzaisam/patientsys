@@ -99,6 +99,17 @@ async function readIdentity(context: Ctx) {
   const aal: "aal1" | "aal2" = context.claims["aal"] === "aal2" ? "aal2" : "aal1";
   const mfaRequired = (isOwner || roleList.includes("manager")) && emailMfaEnforceable();
   const mfaEnrolled = await readMfaEnrolled(context);
+  // Whether this person has treated anyone in the last 12 months: My earnings
+  // is for practitioners, so an owner who does not treat does not see it.
+  let treatsPatients = false;
+  if (isStaff) {
+    const { count } = await context.supabase
+      .from("treatments")
+      .select("id", { count: "exact", head: true })
+      .eq("practitioner_id", context.userId)
+      .gte("performed_at", new Date(Date.now() - 365 * 86400000).toISOString());
+    treatsPatients = (count ?? 0) > 0;
+  }
 
   return {
     userId: context.userId,
@@ -117,6 +128,8 @@ async function readIdentity(context: Ctx) {
     isPatient: !isStaff,
     /** Capability keys from role_permissions (owners hold every key). */
     permissions,
+    /** Has recorded a treatment as the practitioner in the last 12 months. */
+    treatsPatients,
     aal,
     mfaEnrolled,
     mfaRequired,

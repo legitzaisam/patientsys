@@ -49,6 +49,7 @@ const KIND_ORDER = [
   "treatment_due",
   "message",
   "incomplete_profile",
+  "compliance_due",
 ] as const;
 
 const PREVIEW_LIMIT = 4;
@@ -62,6 +63,10 @@ const CHIP_META: Record<string, { label: string; className: string }> = {
   treatment_due: { label: "Treatment due", className: "bg-accent-soft text-accent-ink" },
   message: { label: "Message", className: "bg-sky-bg text-sky-ink" },
   incomplete_profile: { label: "Incomplete profile", className: "bg-warning-bg text-warning-ink" },
+  compliance_due: {
+    label: "Registration or insurance",
+    className: "bg-warning-bg text-warning-ink",
+  },
 };
 
 function nameFromTitle(title: string) {
@@ -469,6 +474,7 @@ function railFor(kind: string) {
     case "message":
       return "bg-sky";
     case "incomplete_profile":
+    case "compliance_due":
       return "bg-warning";
     default:
       return "bg-bar";

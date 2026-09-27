@@ -190,6 +190,57 @@ test.describe("as the owner", () => {
     await page.getByRole("button", { name: "day" }).click();
   });
 
+  test("performance: one period, both series, retail share and What sold; the trend hint names the window", async ({
+    page,
+  }) => {
+    await page.goto("/performance");
+    await expect(page.getByRole("heading", { level: 1, name: "Performance" })).toBeVisible();
+    // The trend section no longer carries its own period pills.
+    await expect(page.getByRole("tablist", { name: "Trend period" })).toHaveCount(0);
+    await expect(page.locator('[data-qc="trends-hint"]')).toContainText("in the last 12 months");
+    await page.getByRole("tab", { name: "1 month" }).click();
+    await expect(page.locator('[data-qc="trends-hint"]')).toContainText("in the last month");
+    // Both series are drawn on the earnings chart.
+    const earnings = page.locator(".recharts-wrapper").first();
+    await expect(earnings.locator(".recharts-area-area")).toHaveCount(1);
+    await expect(earnings.locator(".recharts-line-curve")).toHaveCount(1);
+    // Retail's share and What sold live here now.
+    await expect(page.locator('[data-qc="performance-retail-share"]')).toContainText(
+      /Retail £[\d,]+ \(\d+(\.\d+)?% of/,
+    );
+    await expect(page.locator('[data-qc="performance-what-sold"]')).toContainText(
+      "ranked by revenue",
+    );
+    await expect(page.locator('[data-qc="performance-table"]')).toHaveAttribute(
+      "data-money",
+      "shown",
+    );
+  });
+
+  test("my profile: tabs above the heading, registration dropdown and expiry fields, earnings summary", async ({
+    page,
+  }) => {
+    await page.goto("/profile");
+    const tabs = page.getByRole("tablist", { name: "My profile sections" });
+    await expect(tabs.getByRole("tab", { name: "Profile" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.locator('[data-qc="registration-body"] option')).toHaveCount(7);
+    await expect(page.getByLabel("Registration expiry")).toBeVisible();
+    await expect(page.getByLabel("Insurance provider")).toBeVisible();
+    await expect(page.getByLabel("Qualifications")).toBeVisible();
+    // The performance block is a one-line summary that points at My earnings.
+    await expect(page.locator('[data-qc="profile-earnings-summary"]')).toContainText(
+      "Your share, last month",
+    );
+    await expect(page.locator('[data-qc="see-my-earnings"]')).toHaveAttribute("href", "/earnings");
+    await tabs.getByRole("tab", { name: "Security" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Security" })).toBeVisible();
+    await tabs.getByRole("tab", { name: "Documents" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Documents" })).toBeVisible();
+  });
+
   test("diary notes on upcoming appointments read as the pre-read", async ({ page }) => {
     await page.goto("/dashboard");
     const pre = page.getByRole("button", { name: "Open pre-appointment note" }).first();
@@ -204,6 +255,21 @@ test.describe("as the owner", () => {
 
 test.describe("as a practitioner", () => {
   test.use({ role: "practitioner" });
+
+  test("My earnings reads in share terms with rate, payout status and export", async ({ page }) => {
+    await page.goto("/earnings");
+    await expect(page.getByRole("heading", { level: 1, name: "My earnings" })).toBeVisible();
+    await expect(page.getByText("Your share", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Earned", { exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-qc="earnings-rate"]')).toContainText(/your rate is \d+%/);
+    await expect(page.locator('[data-qc="payout-summary"]')).toContainText(
+      /\d+ paid · \d+ pending/,
+    );
+    await expect(page.locator('[data-qc="earnings-export-csv"]')).toBeEnabled();
+    await expect(page.locator('[data-qc="earnings-print"]')).toBeVisible();
+    // Every card in the two rows carries its own icon.
+    expect(await page.locator(".glass-card svg.lucide").count()).toBeGreaterThanOrEqual(8);
+  });
 
   test("KPI cards are scoped to their own book and say so", async ({ page }) => {
     await page.goto("/dashboard");
