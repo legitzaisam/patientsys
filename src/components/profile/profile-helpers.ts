@@ -234,3 +234,15 @@ export function monthNote(
   }
   return "No invoice yet";
 }
+
+const PRESCRIBER_BODIES = new Set(["GMC", "GDC"]);
+
+/** A doctor or dentist prescribes by registration; a nurse or pharmacist needs the V300 / independent-prescriber qualification. */
+export function isPrescriber(subject: Pick<ProfileSubject, "registrationBody" | "qualifications">) {
+  const body = (subject.registrationBody ?? "").toUpperCase();
+  if (PRESCRIBER_BODIES.has(body)) return true;
+  if (body === "NMC" || body === "GPHC") {
+    return /prescriber|v300/i.test(subject.qualifications ?? "");
+  }
+  return false;
+}

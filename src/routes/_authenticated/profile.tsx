@@ -79,6 +79,7 @@ function ProfilePage() {
     patternSummary: data?.patternSummary ?? "Hours not set",
     bookable: data?.bookable ?? [],
     upcomingUnavailable: [],
+    compliance: null,
     requests: (data?.requests ?? []) as ProfileSubject["requests"],
     documents: docs,
     presentCategories: [...new Set(docs.map((d) => d.category).filter(Boolean))],

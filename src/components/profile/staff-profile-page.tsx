@@ -5,8 +5,9 @@ import type { TimeOffLike } from "@/lib/staff-schedule";
 import { Card } from "@/components/ui/card";
 import { EffectivePermissions } from "@/components/effective-permissions";
 import { SecuritySettings } from "@/components/security-settings";
-import { StaffDocuments } from "@/components/staff-files";
+import { DocumentsTab } from "./documents-tab";
 import { EarningsTab } from "./earnings-tab";
+import { FrontDeskView } from "./front-desk-view";
 import { InvoiceDialog } from "./invoice-dialog";
 import { ProfileHero } from "./profile-hero";
 import { ScheduleTab } from "./schedule-tab";
@@ -74,13 +75,17 @@ export function StaffProfilePage({
   const [timeOffOpen, setTimeOffOpen] = useState(false);
   const openTimeOff = () => setTimeOffOpen(true);
 
+  if (mode === "frontdesk") {
+    return <FrontDeskView subject={subject} treats={viewer.treats} />;
+  }
+
   return (
     <div className="flex flex-col gap-5" data-qc={`profile-page-${mode}`}>
       <ProfileHero
         mode={mode}
         subject={subject}
         todayKey={todayKey}
-        canEditPhoto={mode !== "frontdesk" && !subject.revoked}
+        canEditPhoto={!subject.revoked}
         onTab={onTabChange}
         onInvoice={() => openInvoice()}
         onTimeOff={openTimeOff}
@@ -149,16 +154,7 @@ export function StaffProfilePage({
       ) : null}
 
       {active === "documents" ? (
-        <Card className="overflow-hidden p-0" data-qc="profile-documents-tab">
-          <div className="px-5 py-5 sm:px-6">
-            <StaffDocuments
-              userId={subject.userId}
-              readOnly={mode !== "self"}
-              {...(mode === "self" ? {} : { queryKey: ["staff-documents", subject.userId] })}
-              embedded
-            />
-          </div>
-        </Card>
+        <DocumentsTab mode={mode} subject={subject} todayKey={todayKey} />
       ) : null}
 
       {active === "security" && mode === "self" ? (
@@ -177,17 +173,15 @@ export function StaffProfilePage({
         <EffectivePermissions capabilities={subject.capabilities} name={subject.fullName} />
       ) : null}
 
-      {mode !== "frontdesk" ? (
-        <TimeOffSheet
-          open={timeOffOpen}
-          onOpenChange={setTimeOffOpen}
-          mode={mode}
-          subject={subject}
-          pattern={pattern}
-          todayKey={todayKey}
-          hasSeparateManager={hasSeparateManager}
-        />
-      ) : null}
+      <TimeOffSheet
+        open={timeOffOpen}
+        onOpenChange={setTimeOffOpen}
+        mode={mode}
+        subject={subject}
+        pattern={pattern}
+        todayKey={todayKey}
+        hasSeparateManager={hasSeparateManager}
+      />
 
       {mode === "self" && viewer.treats ? (
         <InvoiceDialog

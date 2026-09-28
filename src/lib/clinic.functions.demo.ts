@@ -44,7 +44,7 @@ import {
   dropThisWeekDepositsIfUrgent,
 } from "@/lib/metrics/appointment-flags";
 import { complianceReminders } from "@/lib/metrics/compliance";
-import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
+import { ESSENTIAL_DOC_CATEGORIES, complianceStatus } from "@/lib/staff-doc-compliance";
 import { canManageProfiles, canSetCommission } from "@/lib/staff-access";
 import {
   fullPattern,
@@ -4890,6 +4890,15 @@ export const getStaffProfile = createServerFn({ method: "GET" })
       canViewPrivateDetails,
       canManage,
       canCommission,
+      compliance: complianceStatus(
+        {
+          docsMissing: ESSENTIAL_DOC_CATEGORIES.filter((c) => !presentCategories.includes(c.value))
+            .length,
+          registrationExpiry: (profile?.registration_expiry as string | null) ?? null,
+          insuranceExpiry: (profile?.insurance_expiry as string | null) ?? null,
+        },
+        todayKey,
+      ),
       pattern,
       patternSummary: patternSummary(pattern),
       bookable: demoBookable(data.userId),

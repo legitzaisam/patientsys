@@ -15,54 +15,23 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import {
+  STAFF_FILE_BUCKET,
+  STAFF_FILE_CATEGORIES,
+  STAFF_FILE_MAX_BYTES,
+  formatFileSize,
+  openStaffFile,
+  safeFileName,
+  staffFileCategoryLabel,
+} from "@/lib/staff-file-storage";
 
-const MAX_BYTES = 10 * 1024 * 1024;
-const BUCKET = "staff-files";
-
-export const CATEGORIES = [
-  { value: "jccp_register", label: "JCCP register entry", hint: "JCCP practitioner register confirmation" },
-  { value: "statutory_registration", label: "Statutory registration", hint: "GMC / GDC / NMC / GPhC / HCPC certificate" },
-  { value: "qualification", label: "Qualification / Ofqual certificate", hint: "Level 4–7 aesthetics or clinical qualification" },
-  { value: "indemnity_insurance", label: "Medical indemnity insurance", hint: "Current cover schedule" },
-  { value: "dbs", label: "DBS check", hint: "Enhanced DBS disclosure" },
-  { value: "training", label: "CPD / training certificate", hint: "Product, technique or CPD training" },
-  { value: "bls", label: "BLS & anaphylaxis training", hint: "Basic life support and emergency management" },
-  { value: "infection_control", label: "Infection control & sharps", hint: "Infection prevention, waste and sharps training" },
-  { value: "safeguarding", label: "Safeguarding training", hint: "Adults and children safeguarding" },
-  { value: "information_governance", label: "Information governance / GDPR", hint: "Data protection and confidentiality training" },
-  { value: "right_to_work", label: "Right to work / ID", hint: "Passport, visa or share code evidence" },
-  { value: "immunisation", label: "Immunisation record", hint: "Hepatitis B and occupational health" },
-  { value: "contract", label: "Contract & policies", hint: "Employment contract, signed clinic policies" },
-  { value: "other", label: "Other", hint: "Anything else held on your staff file" },
-];
-
-function categoryLabel(value: string) {
-  return CATEGORIES.find((c) => c.value === value)?.label ?? value;
-}
-
-function safeName(name: string) {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-function formatSize(bytes?: number | null) {
-  if (!bytes) return "";
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-async function openSigned(path: string) {
-  if (DEMO_MODE) {
-    if (path.startsWith("blob:")) window.open(path, "_blank", "noopener");
-    else toast.info("Demo mode — sample file, nothing stored");
-    return;
-  }
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
-  if (error || !data?.signedUrl) {
-    toast.error("Could not open this file");
-    return;
-  }
-  window.open(data.signedUrl, "_blank", "noopener");
-}
+const MAX_BYTES = STAFF_FILE_MAX_BYTES;
+const BUCKET = STAFF_FILE_BUCKET;
+export const CATEGORIES = STAFF_FILE_CATEGORIES;
+const categoryLabel = staffFileCategoryLabel;
+const safeName = safeFileName;
+const formatSize = formatFileSize;
+const openSigned = openStaffFile;
 
 export function StaffAvatar({
   userId,

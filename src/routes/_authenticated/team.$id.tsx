@@ -104,6 +104,7 @@ function StaffProfileRoute() {
         patternSummary: data.patternSummary ?? "Hours not set",
         bookable: data.bookable ?? [],
         upcomingUnavailable: data.upcomingUnavailable ?? [],
+        compliance: data.compliance ?? null,
         requests: (data.requests ?? []) as ProfileSubject["requests"],
         documents: (data.documents ?? []) as StaffDocumentRow[],
         presentCategories: data.presentCategories ?? [],

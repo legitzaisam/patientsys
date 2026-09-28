@@ -63,6 +63,8 @@ export type ProfileSubject = {
   patternSummary: string;
   bookable: BookableTreatment[];
   upcomingUnavailable: { starts_on: string; ends_on: string }[];
+  /** One line everyone may see, computed on the server ("Compliant", "Registration expires in 46 days"). */
+  compliance: { tone: "ok" | "warn" | "bad"; label: string } | null;
   requests: ChangeRequest[];
   documents: StaffDocumentRow[];
   presentCategories: string[];
