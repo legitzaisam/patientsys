@@ -21,6 +21,11 @@ export function demoSnapshotRows(): SnapshotRows {
       id: String(p["id"]),
       status: String(p["status"] ?? "active"),
       created_at: String(p["created_at"] ?? ""),
+      deleted_at: str(p["deleted_at"]),
+      first_name: String(p["first_name"] ?? ""),
+      last_name: String(p["last_name"] ?? ""),
+      email: str(p["email"]),
+      source: str(p["source"]),
     })),
     treatments: (rows["treatments"] as Row[]).map((t) => ({
       id: String(t["id"]),
@@ -76,6 +81,15 @@ export function demoSnapshotRows(): SnapshotRows {
           commissionRate: Number(profile?.["commission_rate"] ?? 0),
         };
       }),
+    leads: (rows["websiteLeads"] as Row[]).map((l) => ({
+      id: String(l["id"]),
+      patient_id: str(l["patient_id"]),
+      first_name: str(l["first_name"]),
+      last_name: str(l["last_name"]),
+      email: str(l["email"]),
+      source: str(l["source"]),
+      occurred_at: String(l["occurred_at"]),
+    })),
     offers: (rows["patientOffers"] as Row[]).map((o) => ({
       template_id: str(o["template_id"]),
       patient_id: String(o["patient_id"]),

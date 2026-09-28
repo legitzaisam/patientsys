@@ -3,7 +3,7 @@
  * ("Last 12 months", never a calendar year with empty months at the end), and
  * no chart bucket ever starts after now.
  */
-import { DAY_MS } from "./definitions";
+import { DAY_MS } from "./period";
 
 export type MsWindow = { fromMs: number; toMs: number };
 

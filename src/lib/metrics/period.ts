@@ -34,6 +34,9 @@ export type PeriodSelection = {
 
 export const PRESET_MONTHS: Partial<Record<PeriodPreset, number>> = { "1m": 1, "6m": 6, "1y": 12 };
 
+/** Every metrics page opens on this: the 12 whole calendar months ending with this month. */
+export const DEFAULT_PERIOD: PeriodSelection = { key: "year", offset: 0, preset: "1y" };
+
 const PARTS = new Intl.DateTimeFormat("en-GB", {
   timeZone: CLINIC_TIME_ZONE,
   year: "numeric",
@@ -163,6 +166,12 @@ export function resolvePeriod(selection: PeriodSelection, nowMs: number): MsWind
     default:
       return calendarMonthsWindow(nowMs, 1, offset);
   }
+}
+
+/** A resolved window as the inclusive ISO pair the server functions take. */
+export function periodIso(selection: PeriodSelection, nowMs: number): { from: string; to: string } {
+  const w = resolvePeriod(selection, nowMs);
+  return { from: new Date(w.fromMs).toISOString(), to: new Date(w.toMs).toISOString() };
 }
 
 /** The same span immediately before the selected window. */

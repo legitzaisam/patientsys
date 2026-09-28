@@ -20,6 +20,8 @@ type Snapshot = {
   dashboard: Record<string, number>;
   retention: Record<string, number | { rate: number | null }>;
   insights: {
+    book: Record<string, number>;
+    funnel: { signUps: number; bookedCount: number; consulted: number; converted: number } | null;
     composition: Record<string, number>;
     neverTreated: number;
     firstToSecond: { rate: number | null };
@@ -80,6 +82,17 @@ function expected(id: string, snap: Snapshot, clinic: Snapshot): number | undefi
       // Insights is a clinic-wide report; "Never treated" is the whole book's count.
       if (rest[0] === "composition" && rest[1] === "never") return clinic.insights.neverTreated;
       if (rest[0] === "composition") return clinic.insights.composition[rest[1] ?? ""];
+      if (rest[0] === "book") return clinic.insights.book[rest[1] ?? ""];
+      if (rest[0] === "funnel" && clinic.insights.funnel) {
+        const f = clinic.insights.funnel;
+        const map: Record<string, number> = {
+          signUps: f.signUps,
+          booked: f.bookedCount,
+          consulted: f.consulted,
+          treated: f.converted,
+        };
+        return map[rest[1] ?? ""];
+      }
       return undefined;
     }
     case "performance": {
@@ -153,7 +166,15 @@ async function become(page: Page, persona: Persona) {
 }
 
 const PAGES: Record<Persona, string[]> = {
-  owner: ["/dashboard", "/patients", "/retention", "/insights?tab=book", "/performance", "/offers"],
+  owner: [
+    "/dashboard",
+    "/patients",
+    "/retention",
+    "/insights",
+    "/insights?tab=book",
+    "/performance",
+    "/offers",
+  ],
   admin: ["/dashboard", "/patients", "/performance", "/offers"],
   practitioner: ["/dashboard", "/patients", "/insights?tab=book", "/profile"],
   front_desk: ["/dashboard", "/patients"],

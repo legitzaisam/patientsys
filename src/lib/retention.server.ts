@@ -2,14 +2,23 @@
 
 import { deriveRetentionInsights } from "./retention-insights.server";
 import {
+  DEFAULT_PERIOD,
   SECOND_VISIT_HORIZON_DAYS,
+  buildVisits,
   composition,
   dueState,
   firstToSecond,
+  isOnList,
+  lineMoney,
+  londonMidnight,
+  londonParts,
   nextDueFor,
+  resolvePeriod,
+  rollingRetention,
+  rollingRetentionDays,
   upcomingBookingSet,
   type DueState,
-} from "./metrics/definitions";
+} from "./metrics";
 
 export type RetentionPatient = {
   id: string;
@@ -20,9 +29,12 @@ export type RetentionPatient = {
   email: string | null;
   phone: string | null;
   created_at: string;
+  deleted_at?: string | null;
 };
 
 export type RetentionTreatment = {
+  id?: string;
+  appointment_id?: string | null;
   patient_id: string;
   practitioner_id: string | null;
   name: string;
@@ -32,6 +44,8 @@ export type RetentionTreatment = {
 };
 
 export type RetentionAppointment = {
+  id: string;
+  payment_status?: string | null;
   patient_id: string;
   practitioner_id: string | null;
   starts_at: string;
@@ -101,11 +115,19 @@ const DAY = 86400000;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function monthKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const p = londonParts(d.getTime());
+  return `${p.year}-${String(p.month).padStart(2, "0")}`;
 }
 
 function monthLabel(d: Date) {
-  return `${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`;
+  const p = londonParts(d.getTime());
+  return `${MONTHS[p.month - 1]} ${String(p.year).slice(-2)}`;
+}
+
+/** The last instant of the London month `i` months after the one holding `ms`. */
+function monthEndMs(ms: number, i = 0) {
+  const p = londonParts(ms);
+  return londonMidnight(p.year, p.month + i + 1, 1) - 1;
 }
 
 function pct(n: number, d: number) {
@@ -113,29 +135,17 @@ function pct(n: number, d: number) {
 }
 
 function weekKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const p = londonParts(d.getTime());
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 }
 
 function weekLabel(d: Date) {
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const p = londonParts(d.getTime());
+  return `${p.day} ${MONTHS[p.month - 1]}`;
 }
 
-/** Of patients seen in the window ending at `endMs`, how many came more than once. */
-function rollingRateWindow(treatments: RetentionTreatment[], endMs: number, windowDays: number) {
-  const startMs = endMs - windowDays * DAY;
-  const seen = new Map<string, number>();
-  for (const t of treatments) {
-    const ms = new Date(t.performed_at).getTime();
-    if (ms > startMs && ms <= endMs) seen.set(t.patient_id, (seen.get(t.patient_id) ?? 0) + 1);
-  }
-  const returning = [...seen.values()].filter((n) => n > 1).length;
-  return { rate: pct(returning, seen.size), active: seen.size, returning };
-}
-
-/** Rolling 12-month retention rate. */
-function rollingRate(treatments: RetentionTreatment[], endMs: number) {
-  return rollingRateWindow(treatments, endMs, 365);
-}
+/** One row per visit (metrics/visits), shaped like a treatment so the report reads visits throughout. */
+type VisitRow = RetentionTreatment & { names: string[] };
 
 function groupRetention(
   groups: Map<string, Map<string, string[]>>,
@@ -177,26 +187,41 @@ export function buildRetention(input: {
    * Reporting window from the page's period picker. The headline, trend,
    * cohorts and breakdowns are read "as of" the window's end and cover the
    * patients seen inside it; the at-risk list is an action list and always
-   * reflects today. Defaults to the calendar year to date.
+   * reflects today. Defaults to the page's default (the last 12 calendar months).
    */
   window?: RetentionWindow | undefined;
 }) {
   const realNow = input.now ?? Date.now();
-  const win: RetentionWindow = input.window ?? {
-    from: new Date(new Date(realNow).getFullYear(), 0, 1).getTime(),
-    to: realNow,
-    key: "year",
-  };
+  const fallback = resolvePeriod(DEFAULT_PERIOD, realNow);
+  const win: RetentionWindow = input.window ?? { from: fallback.fromMs, to: fallback.toMs, key: "year" };
   // Nothing is known about the future, so a window that runs past today is
   // read as of today.
   const now = Math.min(win.to, realNow);
-  let treatments = [...input.treatments].sort(
-    (a, b) => new Date(a.performed_at).getTime() - new Date(b.performed_at).getTime(),
-  );
+  const deleted = new Set(input.patients.filter((p) => !isOnList(p)).map((p) => p.id));
+  const apptById = new Map(input.appointments.map((a) => [a.id, a]));
+  // Visits, not treatment rows: one per attended appointment (metrics/visits).
+  let treatments: VisitRow[] = buildVisits({
+    treatments: input.treatments,
+    appointments: input.appointments,
+    nowMs: realNow,
+    excluded: deleted,
+  }).map((v) => ({
+    patient_id: v.patient_id,
+    practitioner_id: v.practitioner_id ?? v.treatments[0]?.practitioner_id ?? null,
+    name: v.treatments[0]?.name ?? "Visit",
+    names: [...new Set(v.treatments.map((t) => t.name))],
+    price:
+      v.treatments.reduce(
+        (sum, t) => sum + lineMoney(t, t.appointment_id ? (apptById.get(t.appointment_id) as never) : undefined, { depositPercent: 30 }).earned,
+        0,
+      ) / 100,
+    performed_at: v.performed_at,
+    next_due_at: v.next_due_at,
+  }));
 
   if (input.practitionerId) {
     const mine = new Set(
-      treatments.filter((t) => t.practitioner_id === input.practitionerId).map((t) => t.patient_id),
+      input.treatments.filter((t) => t.practitioner_id === input.practitionerId).map((t) => t.patient_id),
     );
     treatments = treatments.filter((t) => mine.has(t.patient_id));
   }
@@ -204,9 +229,9 @@ export function buildRetention(input: {
   const patientIds = new Set(treatments.map((t) => t.patient_id));
   const patients = input.practitionerId
     ? input.patients.filter((p) => patientIds.has(p.id))
-    : input.patients;
+    : input.patients.filter(isOnList);
 
-  const byPatient = new Map<string, RetentionTreatment[]>();
+  const byPatient = new Map<string, VisitRow[]>();
   for (const t of treatments) {
     const list = byPatient.get(t.patient_id) ?? [];
     list.push(t);
@@ -217,14 +242,14 @@ export function buildRetention(input: {
   for (const t of treatments) {
     lifetimeValueByPatient.set(
       t.patient_id,
-      (lifetimeValueByPatient.get(t.patient_id) ?? 0) + Number(t.price ?? 0),
+      Math.round(((lifetimeValueByPatient.get(t.patient_id) ?? 0) + Number(t.price ?? 0)) * 100) / 100,
     );
   }
 
   // ---- headline: rolling 12-month rate at the end of the window, and how
   // far it moved since the start of the window.
-  const current = rollingRate(treatments, now);
-  const previous = rollingRate(treatments, win.from);
+  const current = rollingRetention(byPatient, now);
+  const previous = rollingRetention(byPatient, win.from);
 
   // Patients seen inside the window, with their visit history up to its end.
   const seenInWindow = new Set<string>();
@@ -232,7 +257,7 @@ export function buildRetention(input: {
     const ms = new Date(t.performed_at).getTime();
     if (ms >= win.from && ms <= now) seenInWindow.add(t.patient_id);
   }
-  const windowHistory = new Map<string, RetentionTreatment[]>();
+  const windowHistory = new Map<string, VisitRow[]>();
   for (const [id, list] of byPatient) {
     if (!seenInWindow.has(id)) continue;
     windowHistory.set(id, list.filter((t) => new Date(t.performed_at).getTime() <= now));
@@ -261,17 +286,16 @@ export function buildRetention(input: {
 
   // ---- monthly trend (last 60 months) + weekly (last 5 weeks, 30-day window)
   const monthly: MonthPoint[] = [];
-  const anchor = new Date(now);
   for (let i = 59; i >= 0; i--) {
-    const end = new Date(anchor.getFullYear(), anchor.getMonth() - i + 1, 0, 23, 59, 59);
-    const r = rollingRate(treatments, Math.min(end.getTime(), now));
+    const end = new Date(monthEndMs(now, -i));
+    const r = rollingRetention(byPatient, Math.min(end.getTime(), now));
     monthly.push({ key: monthKey(end), label: monthLabel(end), ...r });
   }
 
   const weekly: MonthPoint[] = [];
   for (let i = 4; i >= 0; i--) {
     const end = new Date(now - i * 7 * DAY);
-    const r = rollingRateWindow(treatments, Math.min(end.getTime(), now), 30);
+    const r = rollingRetentionDays(byPatient, Math.min(end.getTime(), now), 30);
     weekly.push({ key: weekKey(end), label: weekLabel(end), ...r });
   }
 
@@ -280,17 +304,17 @@ export function buildRetention(input: {
   // the period (and never fewer than five points, so there is a line to read).
   const trend: MonthPoint[] = [];
   if (win.key === "year") {
-    const from = new Date(win.from);
-    for (let d = new Date(from.getFullYear(), from.getMonth(), 1); d.getTime() <= now; d.setMonth(d.getMonth() + 1)) {
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
-      const r = rollingRate(treatments, Math.min(end.getTime(), now));
+    const start = londonParts(win.from);
+    for (let i = 0; londonMidnight(start.year, start.month + i, 1) <= now; i++) {
+      const end = new Date(monthEndMs(win.from, i));
+      const r = rollingRetention(byPatient, Math.min(end.getTime(), now));
       trend.push({ key: monthKey(end), label: monthLabel(end), ...r });
     }
   } else {
     const points = Math.max(5, Math.ceil((now - win.from) / (7 * DAY)) + 1);
     for (let i = points - 1; i >= 0; i--) {
       const end = new Date(now - i * 7 * DAY);
-      const r = rollingRateWindow(treatments, end.getTime(), 30);
+      const r = rollingRetentionDays(byPatient, end.getTime(), 30);
       trend.push({ key: weekKey(end), label: weekLabel(end), ...r });
     }
   }
@@ -384,7 +408,7 @@ export function buildRetention(input: {
       total: 0,
       second: 0,
       third: 0,
-      monthEnd: new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).getTime(),
+      monthEnd: monthEndMs(d.getTime()),
     };
     const firstMs = d.getTime();
     row.total += 1;
@@ -411,11 +435,13 @@ export function buildRetention(input: {
   const treatMap = new Map<string, Map<string, string[]>>();
   const pracMap = new Map<string, Map<string, string[]>>();
   for (const t of [...windowHistory.values()].flat()) {
-    const perName = treatMap.get(t.name) ?? new Map<string, string[]>();
-    const dates = perName.get(t.patient_id) ?? [];
-    dates.push(t.performed_at);
-    perName.set(t.patient_id, dates);
-    treatMap.set(t.name, perName);
+    for (const name of t.names) {
+      const perName = treatMap.get(name) ?? new Map<string, string[]>();
+      const dates = perName.get(t.patient_id) ?? [];
+      dates.push(t.performed_at);
+      perName.set(t.patient_id, dates);
+      treatMap.set(name, perName);
+    }
 
     const pracKey = t.practitioner_id ?? "unassigned";
     const perPrac = pracMap.get(pracKey) ?? new Map<string, string[]>();

@@ -22,11 +22,17 @@ import {
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
 import {
+  dashboardKpis,
   dueState,
+  DEFAULT_PERIOD,
+  isOnList,
   nextDueFor,
+  periodIso,
+  shareOf,
+  toPence,
   upcomingBookingSet,
   visitsByPatient,
-} from "@/lib/metrics/definitions";
+} from "@/lib/metrics";
 import {
   noShowLookbackISO,
   planStepState,
@@ -451,10 +457,6 @@ export const getMe = createServerFn({ method: "GET" }).handler(async () => ident
 export const getDashboard = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireCapability("view.dashboard");
   const today = new Date();
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-  const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString();
-  const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-
   // The fixtures build the day in local time so the dashboard and the diary
   // (which renders in the browser's timezone) agree on what "today" contains.
   const range = {
@@ -465,7 +467,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   const isPractitioner = me.roles.includes("practitioner");
   const isFrontDesk = me.roles.includes("front_desk");
 
-  const all = patients;
+  const all = patients.filter(isOnList);
   // Shared definition (metrics/definitions), same as production: next due is
   // the most recent treatment carrying a date, and only an active patient with
   // no upcoming booking can be overdue or due soon.
@@ -484,10 +486,6 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     if (state !== "overdue" && state !== "due_soon") continue;
     dueAll.push({ ...nextDueFor(visits)!, state });
   }
-  let monthTreats = treatments.filter((t) => t.performed_at >= monthStart);
-  let prevMonthTreats = treatments.filter(
-    (t) => t.performed_at >= prevMonthStart && t.performed_at < prevMonthEnd,
-  );
   let todayAppts = sortAsc(
     appointments.filter((a) => a.starts_at >= range.startISO && a.starts_at < range.endISO),
     "starts_at",
@@ -495,8 +493,6 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
 
   if (isPractitioner && !isManager) {
     dueAll = dueAll.filter((t) => t.practitioner_id === me.userId || !t.practitioner_id);
-    monthTreats = monthTreats.filter((t) => t.practitioner_id === me.userId);
-    prevMonthTreats = prevMonthTreats.filter((t) => t.practitioner_id === me.userId);
     todayAppts = todayAppts.filter((a) => a.practitioner_id === me.userId);
   }
 
@@ -506,52 +502,21 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     .slice(0, 12)
     .map((t) => ({ ...t, patients: patientJoin(t.patient_id) }));
 
-  const active = all.filter((p) => p.status === "active").length;
-  const inactive = all.filter((p) => p.status !== "active").length;
-
-  // Mirrors production: a practitioner's book is everyone they have treated or
-  // hold a non-cancelled appointment for; the chip is book size now vs the end
-  // of last month.
-  const monthStartMs = new Date(monthStart).getTime();
-  let ownClients: number | null = null;
-  let ownClientsPrev = 0;
-  if (isPractitioner && !isManager) {
-    const firstSeen = new Map<string, number>();
-    for (const t of treatments.filter((t) => t.practitioner_id === me.userId)) {
-      const ms = new Date(t.performed_at).getTime();
-      firstSeen.set(t.patient_id, Math.min(firstSeen.get(t.patient_id) ?? Infinity, ms));
-    }
-    for (const a of appointments.filter(
-      (a) => a.practitioner_id === me.userId && a.status !== "cancelled",
-    )) {
-      const ms = new Date(a.starts_at).getTime();
-      firstSeen.set(a.patient_id, Math.min(firstSeen.get(a.patient_id) ?? Infinity, ms));
-    }
-    ownClients = firstSeen.size;
-    ownClientsPrev = [...firstSeen.values()].filter((ms) => ms < monthStartMs).length;
-  }
-  const clinicClientsPrev = all.filter(
-    (p) => new Date(p.created_at).getTime() < monthStartMs,
-  ).length;
-  const clientsNow = ownClients ?? all.length;
-  const clientsPrev = ownClients === null ? clinicClientsPrev : ownClientsPrev;
-  const clientsChange = clientsPrev
-    ? Math.round(((clientsNow - clientsPrev) / clientsPrev) * 100)
-    : 0;
-
-  const revenue = monthTreats.reduce((sum, t) => sum + Number(t.price ?? 0), 0);
-  const prevRevenue = prevMonthTreats.reduce((sum, t) => sum + Number(t.price ?? 0), 0);
-  const revenueChange = prevRevenue ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100) : 0;
-
-  const newPatientsThisMonth = all.filter(
-    (p) => new Date(p.created_at) >= new Date(monthStart),
-  ).length;
-  const newPatientsPrevMonth = all.filter(
-    (p) => p.created_at >= prevMonthStart && p.created_at < prevMonthEnd,
-  ).length;
-  const patientChange = newPatientsPrevMonth
-    ? Math.round(((newPatientsThisMonth - newPatientsPrevMonth) / newPatientsPrevMonth) * 100)
-    : 0;
+  // Shared KPI figures (metrics/dashboard), same as production.
+  const ownScope = isPractitioner && !isManager ? me.userId : null;
+  const kpiFigures = dashboardKpis({
+    nowMs: today.getTime(),
+    patients: all,
+    treatments: ownScope ? treatments.filter((t) => t.practitioner_id === ownScope) : treatments,
+    appointmentsById: new Map(appointments.map((a) => [a.id, a])),
+    money: { depositPercent: Number(db.clinic["deposit_percent"] ?? 30) },
+    ownBook: ownScope
+      ? {
+          treatments: treatments.filter((t) => t.practitioner_id === ownScope),
+          appointments: appointments.filter((a) => a.practitioner_id === ownScope),
+        }
+      : null,
+  });
 
   const pendingDocs = sortAsc(
     documents.filter((d) => d.status === "sent" || d.status === "viewed"),
@@ -863,19 +828,19 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   return {
     kpis: {
       scope: isPractitioner && !isManager ? "own" : "clinic",
-      totalClients: all.length,
-      ownClients,
-      clientsChange,
-      activeClients: active,
-      inactiveClients: inactive,
+      totalClients: kpiFigures.totalClients,
+      ownClients: kpiFigures.ownClients,
+      clientsChange: kpiFigures.clientsChange,
+      activeClients: kpiFigures.activeClients,
+      inactiveClients: kpiFigures.inactiveClients,
       treatmentsDue: treatmentsDueSoon + treatmentsOverdue,
       treatmentsDueSoon,
       treatmentsOverdue,
       pendingConsents,
-      revenueMonth: revenue,
-      treatmentsMonth: monthTreats.length,
-      revenueChange,
-      patientChange,
+      revenueMonth: kpiFigures.revenueMonth,
+      treatmentsMonth: kpiFigures.treatmentsMonth,
+      revenueChange: kpiFigures.revenueChange,
+      patientChange: kpiFigures.patientChange,
     },
     todayAppointments: todayAppts,
     attentionItems: dropThisWeekDepositsIfUrgent(attentionItems),
@@ -1018,12 +983,13 @@ export const getPatientMetrics = createServerFn({ method: "GET" })
       throw new Error("You do not have access to insights reports");
     }
     const { buildBookMetrics } = await import("./insights.server");
+    const range = data.from && data.to ? { from: data.from, to: data.to } : periodIso(DEFAULT_PERIOD, Date.now());
     return buildBookMetrics({
-      ...(data.from ? { from: data.from } : {}),
-      ...(data.to ? { to: data.to } : {}),
+      ...range,
       patients,
       treatments,
       appointments,
+      money: { depositPercent: Number(db.clinic["deposit_percent"] ?? 30) },
     });
   });
 
@@ -4294,45 +4260,17 @@ export const setStaffEmail = createServerFn({ method: "POST" })
 /* performance and earnings                                           */
 /* ---------------------------------------------------------------- */
 
-function earningsInputs(from: string, to: string) {
-  const nowIso = new Date().toISOString();
-  return {
-    // The clinic's deposit share and the clock, for the shared money model.
-    money: { depositPercent: Number(db.clinic["deposit_percent"] ?? 30), nowMs: Date.now() },
-    treatments: treatments
-      .filter((t) => t.performed_at >= from && t.performed_at <= to)
-      .map((t) => ({
-        id: t.id,
-        practitioner_id: t.practitioner_id,
-        patient_id: t.patient_id,
-        name: t.name,
-        price: t.price,
-        performed_at: t.performed_at,
-        commission_rate_snapshot: t.commission_rate_snapshot,
-        appointment_id: t.appointment_id ?? null,
-      })),
-    // Period bookings plus every live future booking (booked ahead).
-    appointments: appointments
-      .filter(
-        (a) =>
-          (a.starts_at >= from && a.starts_at <= to) ||
-          (a.starts_at >= nowIso && a.status !== "cancelled"),
-      )
-      .map((a) => ({
-        id: a.id,
-        practitioner_id: a.practitioner_id,
-        price: a.price,
-        payment_status: a.payment_status,
-        status: a.status,
-        starts_at: a.starts_at,
-      })),
-    yearTreatments: treatments
-      .filter((t) => t.performed_at >= isoDaysAgo(365))
-      .map((t) => ({ practitioner_id: t.practitioner_id, patient_id: t.patient_id })),
-    firstSeen: new Map<string, string>(
-      patients.map((p) => [p.id as string, p.created_at as string]),
-    ),
-  };
+async function earningsInputs(from: string, to: string) {
+  const shared = await import("./earnings.server");
+  return shared.earningsInputs({
+    from,
+    to,
+    nowMs: Date.now(),
+    depositPercent: Number(db.clinic["deposit_percent"] ?? 30),
+    patients,
+    treatments: treatments as never,
+    appointments: appointments as never,
+  });
 }
 
 export const getPractitionerPerformance = createServerFn({ method: "POST" })
@@ -4344,10 +4282,10 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
     if (!me.isStaff) throw new Error("Staff access only");
     // Money and commission need reports.commission (owners always have it).
     const showMoney = me.isOwner || me.permissions.includes("reports.commission");
-    const { buildStats, buildTrend, moneyChanges, moneyTotals, whatSold, withoutMoney } =
+    const { buildStats, buildTrend, moneyChanges, moneyTotals, performanceTotals, whatSold, withoutMoney } =
       await import("./earnings.server");
-    const inputs = earningsInputs(data.from, data.to);
-    const prevInputs = earningsInputs(data.previousFrom, data.previousTo);
+    const inputs = await earningsInputs(data.from, data.to);
+    const prevInputs = await earningsInputs(data.previousFrom, data.previousTo);
 
     const staffIds = [
       ...new Set(
@@ -4386,53 +4324,7 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       inputs.money,
     );
 
-    const totals = rows.reduce(
-      (acc, r) => ({
-        earned: acc.earned + r.earned,
-        collected: acc.collected + r.collected,
-        toPractitioners: acc.toPractitioners + r.earnedShare,
-        toClinic: acc.toClinic + r.clinicEarnedShare,
-        treatments: acc.treatments + r.treatments,
-        patients: acc.patients + r.patients,
-        newPatients: acc.newPatients + r.newPatients,
-        appointments: acc.appointments + r.appointments,
-        attended: acc.attended + r.attended,
-        noShows: acc.noShows + r.noShows,
-        cancelled: acc.cancelled + r.cancelled,
-        outstanding: acc.outstanding + r.outstanding,
-        bookedAhead: acc.bookedAhead + r.bookedAhead,
-      }),
-      {
-        earned: 0,
-        collected: 0,
-        toPractitioners: 0,
-        toClinic: 0,
-        treatments: 0,
-        patients: 0,
-        newPatients: 0,
-        appointments: 0,
-        attended: 0,
-        noShows: 0,
-        cancelled: 0,
-        outstanding: 0,
-        bookedAhead: 0,
-      },
-    );
-
-    const settled = totals.attended + totals.noShows;
-    const clinic = {
-      ...totals,
-      attendance: settled ? Math.round((totals.attended / settled) * 100) : 0,
-      averageValue: totals.treatments
-        ? Math.round((totals.earned / totals.treatments) * 100) / 100
-        : 0,
-      retention: rows.length
-        ? Math.round(rows.reduce((s, r) => s + r.retention, 0) / rows.length)
-        : 0,
-      averageCommission: rows.length
-        ? Math.round((rows.reduce((s, r) => s + r.commissionRate, 0) / rows.length) * 10) / 10
-        : 0,
-    };
+    const { totals, clinic } = performanceTotals(rows);
 
     const trend = buildTrend(
       staff,
@@ -4446,9 +4338,11 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
     const changes = moneyChanges(moneyTotals(rows), moneyTotals(prevRows));
     const sold = whatSold(
       inputs.treatments as never,
+      inputs.appointments as never,
       productSales as never,
       retailProducts.map((p) => ({ id: p.id, name: p.name, sku: p.sku ?? null })),
       { from: data.from, to: data.to },
+      inputs.money,
     );
     if (!showMoney) {
       const strip = (points: import("./earnings.server").TrendPoint[]) => points.map(withoutMoney);
@@ -4493,8 +4387,8 @@ export const getMyEarnings = createServerFn({ method: "POST" })
     } else if (!can(me, "view.earnings")) {
       throw new Error("You do not have access to this area");
     }
-    const { buildStats } = await import("./earnings.server");
-    const inputs = earningsInputs(data.from, data.to);
+    const { buildStats, earningsLines } = await import("./earnings.server");
+    const inputs = await earningsInputs(data.from, data.to);
     const targetProfile = profiles.find((p) => p.id === targetUserId);
     const rate = Number(targetProfile?.commission_rate ?? 0);
     const mine = inputs.treatments.filter((t) => t.practitioner_id === targetUserId);
@@ -4516,16 +4410,16 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       inputs.money,
     )[0]!;
 
-    // Every money figure is the practitioner's share so the cards reconcile.
+    // Every money figure is the practitioner's share, per line, so the cards,
+    // the table and the CSV reconcile to the penny.
+    const lines = earningsLines(mine as never, inputs.appointments as never, rate, inputs.money);
     return {
       earnedShare: stats.earnedShare,
       collectedShare: stats.collectedShare,
-      outstandingShare: Math.round((stats.earnedShare - stats.collectedShare) * 100) / 100,
-      bookedAheadShare: Math.round(((stats.bookedAhead * rate) / 100) * 100) / 100,
+      outstandingShare: stats.outstandingShare,
+      bookedAheadShare: shareOf(toPence(stats.bookedAhead), rate) / 100,
       commissionRate: rate,
-      averageShareValue: stats.treatments
-        ? Math.round((stats.earnedShare / stats.treatments) * 100) / 100
-        : 0,
+      averageShareValue: stats.treatments ? Math.round((stats.earnedShare * 100) / stats.treatments) / 100 : 0,
       outstanding: stats.outstanding,
       treatments: stats.treatments,
       patients: stats.patients,
@@ -4536,23 +4430,20 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       attendance: stats.attendance,
       noShows: stats.noShows,
       cancelled: stats.cancelled,
-      lines: sortDesc(mine, "performed_at").map((t) => ({
-        id: t.id,
-        performedAt: t.performed_at,
-        name: t.name,
-        patientId: t.patient_id,
-        patient: (() => {
-          const p = patientById(t.patient_id);
-          return p ? `${p.first_name} ${p.last_name}` : "—";
-        })(),
-        share: Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,
-        // Payout status: paid once the linked booking is paid in full.
-        payout: (() => {
-          if (!t.appointment_id) return "paid" as const;
-          const appt = appointments.find((a) => a.id === t.appointment_id);
-          return appt?.payment_status === "paid" ? ("paid" as const) : ("pending" as const);
-        })(),
-      })),
+      lines: lines
+        .sort((x, y) => y.treatment.performed_at.localeCompare(x.treatment.performed_at))
+        .map((l) => ({
+          id: l.treatment.id,
+          performedAt: l.treatment.performed_at,
+          name: l.treatment.name,
+          patientId: l.treatment.patient_id,
+          patient: (() => {
+            const p = patientById(l.treatment.patient_id);
+            return p ? `${p.first_name} ${p.last_name}` : "—";
+          })(),
+          share: l.share,
+          payout: l.payout,
+        })),
     };
   });
 
@@ -4972,10 +4863,13 @@ export const getRetention = createServerFn({ method: "GET" })
         email: p.email,
         phone: p.phone,
         created_at: p.created_at,
+        deleted_at: p.deleted_at ?? null,
       })),
       treatments: treatments
         .filter((t) => t.performed_at >= sixYearsAgo)
         .map((t) => ({
+          id: t.id,
+          appointment_id: t.appointment_id ?? null,
           patient_id: t.patient_id,
           practitioner_id: t.practitioner_id,
           name: t.name,
@@ -4984,6 +4878,8 @@ export const getRetention = createServerFn({ method: "GET" })
           next_due_at: t.next_due_at,
         })),
       appointments: appointments.map((a) => ({
+        id: a.id,
+        payment_status: a.payment_status,
         patient_id: a.patient_id,
         practitioner_id: a.practitioner_id,
         starts_at: a.starts_at,
@@ -6664,16 +6560,24 @@ export const getInsights = createServerFn({ method: "GET" })
         avatar_url: p.avatar_url,
         source: p.source,
         created_at: p.created_at,
+        deleted_at: p.deleted_at ?? null,
       })),
       appointments: appointments.map((a) => ({
+        id: a.id,
         patient_id: a.patient_id,
+        practitioner_id: a.practitioner_id,
         starts_at: a.starts_at,
         status: a.status,
+        price: a.price,
+        payment_status: a.payment_status,
         treatment_name: a.treatment_name,
         catalogue_id: a.catalogue_id,
       })),
       treatments: treatments.map((t) => ({
+        id: t.id,
         patient_id: t.patient_id,
+        practitioner_id: t.practitioner_id,
+        appointment_id: t.appointment_id ?? null,
         name: t.name,
         price: t.price,
         performed_at: t.performed_at,
@@ -6698,6 +6602,7 @@ export const getInsights = createServerFn({ method: "GET" })
         amount: s.amount,
         occurred_at: s.occurred_at,
       })),
+      money: { depositPercent: Number(db.clinic["deposit_percent"] ?? 30) },
     });
   });
 

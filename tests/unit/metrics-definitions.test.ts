@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  DAY_MS,
-  composition,
   countDueStates,
   dueState,
   dueStates,
-  firstToSecond,
   nextDueFor,
   visitsByPatient,
 } from "@/lib/metrics/definitions";
+import { composition, firstToSecond } from "@/lib/metrics/visits";
 import {
   appointmentFlags,
   attentionDepositUrgency,
@@ -16,8 +14,8 @@ import {
   isRunningLate,
   phaseOf,
 } from "@/lib/metrics/appointment-flags";
-import { bookedAhead, collectedFor, moneyTotals, shareTotals } from "@/lib/metrics/money";
-import { monthBucketsUpToNow, noFutureBuckets, trailingMonthsWindow } from "@/lib/metrics/windows";
+import { bookedAhead, lineMoney, moneyLines, moneyTotals, sumLines } from "@/lib/metrics/money";
+import { DAY_MS, calendarMonthsWindow, londonMonthKey, monthBuckets } from "@/lib/metrics/period";
 
 const NOW = new Date(2026, 8, 20, 12, 0, 0).getTime(); // 20 Sep 2026, local
 const iso = (daysFromNow: number) => new Date(NOW + daysFromNow * DAY_MS).toISOString();
@@ -232,28 +230,30 @@ describe("money", () => {
     { performed_at: iso(-8), price: 100, appointment_id: "a3" },
   ];
 
-  it("a deposit counts the deposit share; earned = collected + outstanding", () => {
-    expect(collectedFor(treatments[1]!, appts.get("a2"), { depositPercent: 30 })).toBe(90);
+  it("a deposit counts the deposit share; earned = collected + outstanding (pence)", () => {
+    expect(lineMoney(treatments[1]!, appts.get("a2"), { depositPercent: 30 }).collected).toBe(9000);
     const t = moneyTotals(treatments, appts, { depositPercent: 30 });
-    expect(t.earned).toBe(600);
-    expect(t.collected).toBe(290);
-    expect(t.outstanding).toBe(310);
+    expect(t.earned).toBe(60000);
+    expect(t.collected).toBe(29000);
+    expect(t.outstanding).toBe(31000);
     expect(t.earned).toBe(t.collected + t.outstanding);
   });
 
   it("the share model applies the snapshot rate per treatment and still reconciles", () => {
-    const s = shareTotals(
-      [
-        { ...treatments[0]!, commission_rate_snapshot: 50 },
-        { ...treatments[2]!, commission_rate_snapshot: null },
-      ],
-      appts,
-      40,
-      { depositPercent: 30 },
+    const s = sumLines(
+      moneyLines(
+        [
+          { ...treatments[0]!, commission_rate_snapshot: 50 },
+          { ...treatments[2]!, commission_rate_snapshot: null },
+        ],
+        appts,
+        { depositPercent: 30 },
+        () => 40,
+      ),
     );
-    expect(s.earned).toBe(140); // 200 × 50% + 100 × 40%
-    expect(s.collected).toBe(100); // only the paid one
-    expect(s.outstanding).toBe(40);
+    expect(s.earnedShare).toBe(14000); // 200 × 50% + 100 × 40%
+    expect(s.collectedShare).toBe(10000); // only the paid one
+    expect(s.outstandingShare).toBe(4000);
   });
 
   it("booked ahead is the value of live future bookings only", () => {
@@ -265,18 +265,18 @@ describe("money", () => {
       ],
       NOW,
     );
-    expect(value).toBe(150);
+    expect(value).toBe(15000);
   });
 });
 
 describe("windows", () => {
-  it("12 months is a rolling window ending today and its buckets never run past now", () => {
-    const w = trailingMonthsWindow(NOW, 12);
-    expect(new Date(w.fromMs).getMonth()).toBe(8);
-    expect(new Date(w.fromMs).getFullYear()).toBe(2025);
-    const buckets = monthBucketsUpToNow(w, NOW);
-    expect(buckets.length).toBe(13);
+  it("12 months is the 12 calendar months ending this month, and no bucket starts after now", () => {
+    const w = calendarMonthsWindow(NOW, 12);
+    expect(londonMonthKey(w.fromMs)).toBe("2025-10");
+    expect(londonMonthKey(w.toMs)).toBe("2026-09");
+    const buckets = monthBuckets(w, NOW);
+    expect(buckets.length).toBe(12);
     expect(buckets[buckets.length - 1]!.key).toBe("2026-09");
-    expect(noFutureBuckets(buckets, NOW)).toBe(true);
+    expect(buckets.every((b) => b.startMs <= NOW)).toBe(true);
   });
 });

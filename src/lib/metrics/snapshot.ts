@@ -4,35 +4,45 @@
  * builder to this; the rendered-number e2e compares the DOM to it; the demo
  * `/api/demo/metrics` route serves it.
  */
-import { isConsultation } from "@/lib/insights.server";
 import { offerResults, type OfferResultOffer } from "@/lib/offers/results";
 import { planNearingEnd } from "@/lib/offers/stages";
 import { planProgress } from "@/lib/portal/shape";
 import {
-  composition,
   countDueStates,
   dueStates,
-  firstToSecond,
-  seenInWindow,
   upcomingBookingSet,
   visitsByPatient,
   type AppointmentLike,
   type PatientLike,
   type TreatmentLike,
-  type Window,
 } from "./definitions";
 import {
   bookedAhead,
-  inPeriod,
+  moneyLines,
   moneyTotals,
-  shareTotals,
+  sumLines,
   type MoneyAppointment,
   type MoneyTreatment,
 } from "./money";
+import { bookMetrics } from "./book";
+import { funnelMetrics, type FunnelLead } from "./funnel";
+import { fromPence } from "./money";
+import { inWindow, type MsWindow as Window } from "./period";
+import { isConsultation, isOnList } from "./rules";
+import { buildVisits, byPatient, composition, firstToSecond, seenInWindow } from "./visits";
 
 export type SnapshotRows = {
   clinic: { deposit_percent?: number | null; deposit_lead_days?: number | null };
-  patients: (PatientLike & { created_at?: string })[];
+  patients: (PatientLike & {
+    created_at?: string;
+    deleted_at?: string | null;
+    first_name?: string;
+    last_name?: string;
+    email?: string | null;
+    source?: string | null;
+  })[];
+  /** Website leads, for the Insights funnel. */
+  leads?: FunnelLead[];
   treatments: (TreatmentLike &
     MoneyTreatment & {
       id?: string;
@@ -64,6 +74,13 @@ export type SnapshotRows = {
 
 export type MetricsSnapshot = ReturnType<typeof metricsSnapshot>;
 
+const pounds = <T extends { earned: number; collected: number; outstanding: number }>(m: T) => ({
+  ...m,
+  earned: fromPence(m.earned),
+  collected: fromPence(m.collected),
+  outstanding: fromPence(m.outstanding),
+});
+
 export function metricsSnapshot(
   rows: SnapshotRows,
   opts: {
@@ -79,16 +96,19 @@ export function metricsSnapshot(
   const scope = opts.practitionerId ?? null;
 
   // Scope: a practitioner's page covers the patients they have treated.
-  const scopedTreatments = scope
-    ? rows.treatments.filter((t) => t.practitioner_id === scope)
-    : rows.treatments;
-  const scopedPatientIds = scope ? new Set(scopedTreatments.map((t) => t.patient_id)) : null;
-  const patients = rows.patients.filter((p) =>
-    scopedPatientIds ? scopedPatientIds.has(p.id) : true,
+  // Deleted patients are off the list everywhere, money included.
+  const excluded = new Set(rows.patients.filter((p) => !isOnList(p)).map((p) => p.id));
+  const listed = <T extends { patient_id: string }>(r: T) => !excluded.has(r.patient_id);
+  const scopedTreatments = rows.treatments.filter(
+    (t) => listed(t) && (!scope || t.practitioner_id === scope),
   );
-  const appointments = scope
-    ? rows.appointments.filter((a) => a.practitioner_id === scope)
-    : rows.appointments;
+  const scopedPatientIds = scope ? new Set(scopedTreatments.map((t) => t.patient_id)) : null;
+  const patients = rows.patients.filter(
+    (p) => isOnList(p) && (scopedPatientIds ? scopedPatientIds.has(p.id) : true),
+  );
+  const appointments = rows.appointments.filter(
+    (a) => listed(a) && (!scope || a.practitioner_id === scope),
+  );
 
   // ---- Due states (dashboard, retention, patients list)
   const states = dueStates({
@@ -104,7 +124,7 @@ export function metricsSnapshot(
   const noUpcomingBooking = [...states.values()].filter((s) => s !== "booked").length;
 
   // ---- Visits
-  const visits = visitsByPatient(scopedTreatments);
+  const visits = byPatient(buildVisits({ treatments: scopedTreatments, appointments, nowMs, excluded }));
   const seen = seenInWindow(visits, window);
   const mix = composition(seen, visits, window.toMs);
   const f2s = firstToSecond(visits, window, nowMs);
@@ -112,24 +132,58 @@ export function metricsSnapshot(
   // ---- Money (period)
   const apptById = new Map<string, MoneyAppointment>(rows.appointments.map((a) => [a.id, a]));
   const depositPercent = Number(rows.clinic.deposit_percent ?? 30);
-  const periodTreatments = scopedTreatments.filter((t) =>
-    inPeriod(t.performed_at, window.fromMs, window.toMs),
-  );
+  const periodTreatments = scopedTreatments.filter((t) => inWindow(t.performed_at, window));
   const money = moneyTotals(periodTreatments, apptById, { depositPercent });
   const ahead = bookedAhead(appointments, nowMs);
   const perPractitioner = Object.fromEntries(
     rows.staff.map((s) => {
       const mine = periodTreatments.filter((t) => t.practitioner_id === s.userId);
+      const lines = sumLines(moneyLines(mine, apptById, { depositPercent }, () => s.commissionRate));
       return [
         s.userId,
         {
-          ...moneyTotals(mine, apptById, { depositPercent }),
-          share: shareTotals(mine, apptById, s.commissionRate, { depositPercent }),
+          ...pounds(moneyTotals(mine, apptById, { depositPercent })),
+          share: {
+            earned: fromPence(lines.earnedShare),
+            collected: fromPence(lines.collectedShare),
+            outstanding: fromPence(lines.outstandingShare),
+            treatments: lines.treatments,
+          },
           treatmentsCompleted: mine.length,
         },
       ];
     }),
   );
+
+  // ---- Insights (clinic-wide reports: never scoped to a practitioner)
+  const clinicVisits = byPatient(
+    buildVisits({ treatments: rows.treatments, appointments: rows.appointments, nowMs, excluded }),
+  );
+  const bookPatients = rows.patients.map((p) => ({ ...p, created_at: p.created_at ?? "" }));
+  const clinicBook = bookMetrics({
+    window,
+    nowMs,
+    patients: bookPatients,
+    visits: clinicVisits,
+    appointments: rows.appointments.map((a) => ({ ...a, status: a.status ?? "booked" })),
+    earnedInWindow: 0,
+  });
+  const clinicFunnel = rows.leads
+    ? funnelMetrics({
+        window,
+        nowMs,
+        patients: bookPatients.map((p) => ({
+          ...p,
+          first_name: p.first_name ?? "",
+          last_name: p.last_name ?? "",
+        })),
+        appointments: rows.appointments.map((a) => ({ ...a, status: a.status ?? "booked" })),
+        treatments: rows.treatments.map((t) => ({ ...t, name: t.name ?? "" })),
+        catalogue: rows.catalogue,
+        leads: rows.leads,
+        visitedPatientIds: new Set(clinicVisits.keys()),
+      }).funnel
+    : null;
 
   // ---- Offer stages (the four stage cards)
   const catalogueById = new Map(rows.catalogue.map((c) => [c.id, c]));
@@ -145,8 +199,9 @@ export function metricsSnapshot(
   for (const m of rows.milestones)
     milestonesBy.set(m.plan_id, [...(milestonesBy.get(m.plan_id) ?? []), m]);
   const stages = { pre_consultation: 0, post_consultation: 0, single_treatment: 0, plan_ending: 0 };
-  const allVisits = visitsByPatient(rows.treatments);
+  const allVisits = visitsByPatient(rows.treatments.filter(listed));
   for (const p of rows.patients) {
+    if (!isOnList(p)) continue;
     if (p.status === "archived") continue;
     const tx = allVisits.get(p.id) ?? [];
     const activePlan = (plansBy.get(p.id) ?? []).find((pl) => pl.status === "active");
@@ -257,14 +312,17 @@ export function metricsSnapshot(
       firstToSecond: f2s,
     },
     insights: {
+      book: clinicBook.totals,
+      funnel: clinicFunnel,
       composition: mix,
       /** The whole book's never-treated count (outside the window), as Insights shows it. */
-      neverTreated: rows.patients.filter((p) => (allVisits.get(p.id) ?? []).length === 0).length,
+      neverTreated: clinicBook.composition.neverTreated,
       firstToSecond: f2s,
     },
+    // Pounds at the edge, as the pages show them.
     performance: {
-      ...money,
-      bookedAhead: ahead,
+      ...pounds(money),
+      bookedAhead: fromPence(ahead),
       perPractitioner,
     },
     offers: { stages, results },

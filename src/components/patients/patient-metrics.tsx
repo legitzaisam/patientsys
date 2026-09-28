@@ -44,6 +44,7 @@ export function PatientMetrics({ period }: { period: PeriodSelection }) {
       hint: "Everyone on the clinic list",
       icon: Users,
       target: "book-composition",
+      metric: "insights.book.total",
     },
     {
       label: "Active",
@@ -51,22 +52,25 @@ export function PatientMetrics({ period }: { period: PeriodSelection }) {
       hint: `${data?.totals.inactive ?? 0} inactive`,
       icon: UserRound,
       target: "book-status",
+      metric: "insights.book.active",
     },
     {
-      label: "New this month",
-      value: data?.totals.newThisMonth ?? "—",
-      hint: "Records created this calendar month",
+      label: "New patients",
+      value: data?.totals.newPatients ?? "—",
+      hint: `Records created ${phrase}`,
       icon: UserPlus,
       target: "book-new-patients",
+      metric: "insights.book.newPatients",
     },
     {
       label: "Dormant",
       value: data?.totals.dormant ?? "—",
       hint: data
         ? `${pct(data.totals.dormantShare)} of the book · no visit in 12 months`
-        : "No visit in 12 months, or never treated",
+        : "Treated before, no visit in 12 months",
       icon: Moon,
       target: "book-status",
+      metric: "insights.book.dormant",
     },
   ];
 
@@ -85,7 +89,7 @@ export function PatientMetrics({ period }: { period: PeriodSelection }) {
     {
       label: "Rebooked",
       value: pct(data?.quality.rebooked),
-      hint: "Booked again after a visit in the last 90 days",
+      hint: `Booked again after a visit ${phrase}`,
       icon: CalendarCheck,
       target: "book-mix",
     },
@@ -164,12 +168,12 @@ export function PatientMetrics({ period }: { period: PeriodSelection }) {
         <Card id="book-new-patients" className="scroll-mt-20 p-5">
           <h2 className="section-title">New patients</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Records created per month, last 12 months.
+            Records created {phrase}.
           </p>
           <div className="mt-4 h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={data?.monthlyNew ?? []}
+                data={data?.newSeries ?? []}
                 margin={{ top: 4, right: 4, bottom: 0, left: -22 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--edge-2)" vertical={false} />
@@ -312,6 +316,7 @@ function Tile({
   hint,
   icon: Icon,
   target,
+  metric,
 }: {
   label: string;
   value: string | number;
@@ -319,6 +324,8 @@ function Tile({
   icon: typeof Users;
   /** id of the detail card this tile summarises. */
   target: string;
+  /** Snapshot id for the rendered-number check. */
+  metric?: string;
 }) {
   return (
     <Card
@@ -338,7 +345,10 @@ function Tile({
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <Icon className="h-4 w-4 text-ink-3 transition-colors group-hover:text-foreground" aria-hidden />
       </div>
-      <p className="mt-2.5 text-[27px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground">
+      <p
+        className="mt-2.5 text-[27px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground"
+        data-qc={metric ? `metric:${metric}` : undefined}
+      >
         {value}
       </p>
       <p className="mt-2 text-2xs text-muted-foreground">{hint}</p>

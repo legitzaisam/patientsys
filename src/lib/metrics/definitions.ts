@@ -14,17 +14,15 @@
  * - To chase = overdue + due soon + lapsing + lost.
  * - The next due date is the one on the patient's most recent treatment that
  *   carries one (not the earliest date on file).
- * - One visit only / treated once = exactly one treatment visit, any type.
- * - First-to-second = of patients whose first visit fell in the period and is
- *   at least SECOND_VISIT_HORIZON_DAYS old, the share with a second visit
- *   within that horizon.
+ * - Callers pass visits (visits.ts), so "last visit" and "days since" read
+ *   appointments, not treatment rows.
  */
 
-export const DAY_MS = 86_400_000;
+import { DAY_MS } from "./period";
+
 export const DUE_SOON_DAYS = 30;
 export const LAPSING_DAYS = 90;
 export const LOST_DAYS = 180;
-export const SECOND_VISIT_HORIZON_DAYS = 180;
 
 export type TreatmentLike = {
   patient_id: string;
@@ -44,9 +42,7 @@ export type AppointmentLike = {
 
 export type PatientLike = { id: string; status: string };
 
-export type Window = { fromMs: number; toMs: number };
-
-/** Treatments grouped by patient, each list oldest first. */
+/** Rows grouped by patient, each list oldest first. */
 export function visitsByPatient<T extends TreatmentLike>(
   treatments: readonly T[],
 ): Map<string, T[]> {
@@ -202,91 +198,6 @@ export function countDueStates(states: Map<string, DueState>) {
     treatmentsDue: counts.overdue + counts.due_soon,
     /** Dashboard "to chase" and Retention's at-risk total. */
     toChase: counts.overdue + counts.due_soon + counts.lapsing + counts.lost,
-  };
-}
-
-/** Patients with at least one visit inside the window. */
-export function seenInWindow(visits: Map<string, TreatmentLike[]>, window: Window): Set<string> {
-  const out = new Set<string>();
-  for (const [id, list] of visits) {
-    if (
-      list.some((t) => {
-        const ms = new Date(t.performed_at).getTime();
-        return ms >= window.fromMs && ms <= window.toMs;
-      })
-    )
-      out.add(id);
-  }
-  return out;
-}
-
-/**
- * Visit-count composition over a population: never treated, exactly one
- * visit, two or more visits (any treatment type). The three always sum to the
- * population.
- */
-export function composition(
-  population: Iterable<string>,
-  visits: Map<string, TreatmentLike[]>,
-  upToMs = Number.POSITIVE_INFINITY,
-) {
-  let never = 0;
-  let once = 0;
-  let twoPlus = 0;
-  for (const id of population) {
-    const n = (visits.get(id) ?? []).filter(
-      (t) => new Date(t.performed_at).getTime() <= upToMs,
-    ).length;
-    if (n === 0) never++;
-    else if (n === 1) once++;
-    else twoPlus++;
-  }
-  return { never, once, twoPlus, total: never + once + twoPlus };
-}
-
-/**
- * First-to-second rate. Cohort: patients whose first visit fell inside the
- * window and is at least `horizonDays` before `nowMs` (so the second visit
- * has had its chance). Returned: those with a second visit within
- * `horizonDays` of the first. `rate` is null when the cohort is empty.
- * `pending` counts first visits in the window that are still younger than the
- * horizon, for "N% so far" / "Too early" copy.
- */
-export function firstToSecond(
-  visits: Map<string, TreatmentLike[]>,
-  window: Window,
-  nowMs: number,
-  horizonDays = SECOND_VISIT_HORIZON_DAYS,
-) {
-  const horizonMs = horizonDays * DAY_MS;
-  let cohort = 0;
-  let returned = 0;
-  let pending = 0;
-  let pendingReturned = 0;
-  for (const list of visits.values()) {
-    const first = list[0];
-    if (!first) continue;
-    const firstMs = new Date(first.performed_at).getTime();
-    if (firstMs < window.fromMs || firstMs > window.toMs) continue;
-    const second = list.find((t) => new Date(t.performed_at).getTime() > firstMs);
-    const secondWithin = second
-      ? new Date(second.performed_at).getTime() - firstMs <= horizonMs
-      : false;
-    if (nowMs - firstMs < horizonMs) {
-      pending += 1;
-      if (secondWithin) pendingReturned += 1;
-      continue;
-    }
-    cohort += 1;
-    if (secondWithin) returned += 1;
-  }
-  return {
-    cohort,
-    returned,
-    rate: cohort ? Math.round((returned / cohort) * 100) : null,
-    pending,
-    pendingReturned,
-    horizonDays,
   };
 }
 

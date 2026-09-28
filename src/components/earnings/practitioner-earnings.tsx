@@ -28,6 +28,7 @@ import {
   type PeriodSelection,
 } from "@/components/period-picker";
 import { moneyWhole } from "@/lib/format";
+import { CLINIC_TIME_ZONE } from "@/lib/metrics/period";
 
 function toCsv(lines: EarningsLine[]) {
   const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
@@ -35,8 +36,8 @@ function toCsv(lines: EarningsLine[]) {
   const rows = lines.map((l) => {
     const d = new Date(l.performedAt);
     return [
-      d.toLocaleDateString("en-GB"),
-      d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+      d.toLocaleDateString("en-GB", { timeZone: CLINIC_TIME_ZONE }),
+      d.toLocaleTimeString("en-GB", { timeZone: CLINIC_TIME_ZONE, hour: "2-digit", minute: "2-digit" }),
       l.patient,
       l.name,
       l.share.toFixed(2),

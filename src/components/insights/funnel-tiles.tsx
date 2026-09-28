@@ -11,8 +11,8 @@ export const FUNNEL_SECTION = {
   treated: "insights-sold",
 } as const;
 
-function pct(value: number) {
-  return `${Math.round(value * 100)}%`;
+function pct(value: number | null) {
+  return value === null ? "—" : `${Math.round(value * 100)}%`;
 }
 
 export function FunnelTiles({ funnel }: { funnel: InsightsResult["funnel"] | undefined }) {
@@ -22,27 +22,31 @@ export function FunnelTiles({ funnel }: { funnel: InsightsResult["funnel"] | und
       label: "Online enquiries",
       target: FUNNEL_SECTION.signUps,
       value: funnel?.signUps ?? "—",
+      qc: "metric:insights.funnel.signUps",
       hint: empty ? "No new enquiries in this window" : "Website, Instagram and referral enquiries plus website-sourced records",
     },
     {
       label: "Booked",
       target: FUNNEL_SECTION.booked,
       value: funnel?.bookedCount ?? "—",
+      qc: "metric:insights.funnel.booked",
       hint: funnel && !empty ? `${pct(funnel.bookedRate)} of sign-ups` : "At least one appointment",
     },
     {
       label: "Consulted",
       target: FUNNEL_SECTION.consulted,
       value: funnel?.consulted ?? "—",
+      qc: "metric:insights.funnel.consulted",
       hint:
         funnel && !empty
-          ? `${pct(funnel.consultRate)} of ${funnel.bookedCount ? "booked" : "sign-ups"}`
+          ? `${pct(funnel.consultRate)} of booked`
           : "Consultation visit on file",
     },
     {
       label: "Treated",
       target: FUNNEL_SECTION.treated,
       value: funnel?.converted ?? "—",
+      qc: "metric:insights.funnel.treated",
       hint: funnel && !empty ? `${pct(funnel.convertRate)} of consulted` : "At least one treatment",
     },
   ];
@@ -71,7 +75,10 @@ export function FunnelTiles({ funnel }: { funnel: InsightsResult["funnel"] | und
               aria-hidden
             />
           </div>
-          <p className="mt-2.5 text-[27px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground">
+          <p
+            className="mt-2.5 text-[27px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground"
+            data-qc={tile.qc}
+          >
             {tile.value}
           </p>
           <p className="mt-2 text-2xs text-muted-foreground">{tile.hint}</p>

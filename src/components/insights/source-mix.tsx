@@ -3,8 +3,7 @@ import type { InsightsResult } from "@/lib/insights.server";
 
 export function SourceMix({ sources }: { sources: InsightsResult["sources"] | undefined }) {
   const rows = sources ?? [];
-  const total = rows.reduce((sum, row) => sum + row.count, 0) || 1;
-  const max = rows[0]?.count ?? 1;
+  const max = Math.max(1, ...rows.map((row) => row.count));
   return (
     <Card className="p-5">
       <h2 className="section-title">Source mix</h2>
@@ -23,7 +22,7 @@ export function SourceMix({ sources }: { sources: InsightsResult["sources"] | un
             </div>
             <div className="shrink-0 text-right">
               <p className="text-sm font-semibold tabular-nums text-foreground">{row.count}</p>
-              <p className="text-2xs tabular-nums text-muted-foreground">{Math.round((row.count / total) * 100)}%</p>
+              <p className="text-2xs tabular-nums text-muted-foreground">{row.percent}%</p>
             </div>
           </li>
         ))}

@@ -4,7 +4,7 @@
  * booking badge all read, so a booking is never "unpaid" on one screen and
  * fine on another.
  */
-import { DAY_MS } from "./definitions";
+import { DAY_MS } from "./period";
 
 export type FlagKey =
   | "unpaid"

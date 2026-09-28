@@ -3,41 +3,32 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_PERIOD,
+  londonDayKey,
+  londonParts,
+  previousPeriod,
+  resolvePeriod,
+  type PeriodKey,
+  type PeriodPreset,
+  type PeriodSelection,
+} from "@/lib/metrics/period";
 
-export type PeriodKey = "day" | "week" | "month" | "year";
+export type { PeriodKey, PeriodPreset, PeriodSelection };
 
-/** Lookback shortcuts, plus a from/to range the clinic chooses. */
-export type PeriodPreset = "1w" | "1m" | "6m" | "1y" | "custom";
-
-export type PeriodSelection = {
-  key: PeriodKey;
-  offset: number;
-  preset?: PeriodPreset;
-  /** yyyy-mm-dd inclusive. Used when `preset` is `custom`. */
-  from?: string;
-  to?: string;
-};
-
-/** Trailing month ending today. */
+/** The current calendar month. */
 export const CURRENT_MONTH: PeriodSelection = { key: "month", offset: 0, preset: "1m" };
 /**
- * The default for every metrics page: the last 12 months ending today. A
- * calendar year would show empty months at its end, so every preset is a
- * trailing window.
+ * The default for every metrics page: the 12 whole calendar months ending
+ * with the current month, in London time (metrics/period).
  */
-export const CURRENT_YEAR: PeriodSelection = { key: "year", offset: 0, preset: "1y" };
+export const CURRENT_YEAR: PeriodSelection = DEFAULT_PERIOD;
 
 const MAX_OFFSET: Record<PeriodKey, number> = {
   day: 365,
   week: 104,
   month: 36,
   year: 8,
-};
-
-const PRESET_MONTHS: Partial<Record<PeriodPreset, number>> = {
-  "1m": 1,
-  "6m": 6,
-  "1y": 12,
 };
 
 export function asPeriod(period: PeriodKey | PeriodSelection): PeriodSelection {
@@ -53,50 +44,19 @@ export function asPeriod(period: PeriodKey | PeriodSelection): PeriodSelection {
   return next;
 }
 
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+/** Calendar parts of the London day holding `ms`, as a local Date for display only. */
+function displayDate(ms: number) {
+  const p = londonParts(ms);
+  return new Date(p.year, p.month - 1, p.day);
 }
 
-function endOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-}
-
-/** Monday of the week containing `date` (local). */
-export function startOfWeek(date: Date) {
-  const start = startOfDay(date);
-  const weekday = start.getDay();
-  start.setDate(start.getDate() - (weekday === 0 ? 6 : weekday - 1));
-  return start;
+function boundsOf(period: PeriodSelection, now: Date) {
+  const w = resolvePeriod(period, now.getTime());
+  return { start: displayDate(w.fromMs), end: displayDate(w.toMs), window: w };
 }
 
 function shift(period: PeriodSelection, now: Date) {
-  const { key, offset } = asPeriod(period);
-  if (key === "day") {
-    const start = startOfDay(now);
-    start.setDate(start.getDate() - offset);
-    return { start, end: endOfDay(start) };
-  }
-  if (key === "week") {
-    const start = startOfWeek(now);
-    start.setDate(start.getDate() - offset * 7);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    return { start, end: endOfDay(end) };
-  }
-  if (key === "year") {
-    const year = now.getFullYear() - offset;
-    return { start: new Date(year, 0, 1), end: endOfDay(new Date(year, 11, 31)) };
-  }
-  const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-  const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 0, 23, 59, 59, 999);
-  return { start, end };
-}
-
-function trailingMonths(now: Date, months: number) {
-  const end = endOfDay(now);
-  const start = startOfDay(now);
-  start.setMonth(start.getMonth() - months);
-  return { start, end };
+  return boundsOf({ key: period.key, offset: period.offset }, now);
 }
 
 function dateKey(date: Date) {
@@ -112,41 +72,19 @@ function parseDateKey(key: string) {
 function customBounds(from: string, to: string) {
   const startKey = from <= to ? from : to;
   const endKey = from <= to ? to : from;
-  return { start: startOfDay(parseDateKey(startKey)), end: endOfDay(parseDateKey(endKey)) };
+  return { start: parseDateKey(startKey), end: parseDateKey(endKey) };
 }
 
-function trailingDays(now: Date, days: number) {
-  const end = endOfDay(now);
-  const start = startOfDay(now);
-  start.setDate(start.getDate() - (days - 1));
-  return { start, end };
-}
-
-function boundsOf(period: PeriodSelection, now: Date) {
-  if (period.preset === "custom" && period.from && period.to) return customBounds(period.from, period.to);
-  if (period.preset === "1w") return trailingDays(now, 7);
-  const months = period.preset ? PRESET_MONTHS[period.preset] : undefined;
-  if (months) return trailingMonths(now, months);
-  return shift(period, now);
-}
-
-/** Inclusive ISO range for the selected period. */
+/** Inclusive ISO range for the selected period: London midnights (metrics/period). */
 export function periodRange(period: PeriodKey | PeriodSelection, now: Date = new Date()): { from: string; to: string } {
-  const { start, end } = boundsOf(asPeriod(period), now);
-  return { from: start.toISOString(), to: end.toISOString() };
+  const w = resolvePeriod(asPeriod(period), now.getTime());
+  return { from: new Date(w.fromMs).toISOString(), to: new Date(w.toMs).toISOString() };
 }
 
-/** Same length as `periodRange`, immediately before it. */
+/** Same span, immediately before `periodRange`. */
 export function previousPeriodRange(period: PeriodKey | PeriodSelection, now: Date = new Date()) {
-  const current = asPeriod(period);
-  if (current.preset === "custom" || current.preset === "1w" || (current.preset && PRESET_MONTHS[current.preset])) {
-    const { start, end } = boundsOf(current, now);
-    const span = end.getTime() - start.getTime();
-    const prevEnd = new Date(start.getTime() - 1);
-    const prevStart = new Date(prevEnd.getTime() - span);
-    return { from: prevStart.toISOString(), to: prevEnd.toISOString() };
-  }
-  return periodRange({ key: current.key, offset: current.offset + 1 }, now);
+  const w = previousPeriod(asPeriod(period), now.getTime());
+  return { from: new Date(w.fromMs).toISOString(), to: new Date(w.toMs).toISOString() };
 }
 
 /** Long windows group earnings by month; short ones by day. */
@@ -180,7 +118,7 @@ function dayMonthYear(date: Date) {
 /** Short label for the resolved window (stepper and section copy). */
 export function periodWindowLabel(period: PeriodKey | PeriodSelection, now: Date = new Date()) {
   const selection = asPeriod(period);
-  // Trailing presets and custom ranges read as their dates, not a calendar unit.
+  // Presets and custom ranges read as their dates, not a calendar unit.
   if (selection.preset) {
     const { start, end } = boundsOf(selection, now);
     return `${dayMonthYear(start)} – ${dayMonthYear(end)}`;
@@ -196,10 +134,10 @@ export function periodWindowLabel(period: PeriodKey | PeriodSelection, now: Date
   return start.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 }
 
-/** Every preset is a trailing window, and the heading says so. */
+/** What each preset covers, in words. */
 const PRESET_HEADING: Record<PeriodPreset, string> = {
   "1w": "Last 7 days",
-  "1m": "Last month",
+  "1m": "This month",
   "6m": "Last 6 months",
   "1y": "Last 12 months",
   custom: "Select dates",
@@ -281,14 +219,14 @@ export function PeriodPicker({
   const selected = activePreset(period);
   const [open, setOpen] = useState(false);
   const current = periodRange(period);
-  const [from, setFrom] = useState(() => dateKey(new Date(current.from)));
-  const [to, setTo] = useState(() => dateKey(new Date(current.to)));
+  const [from, setFrom] = useState(() => londonDayKey(new Date(current.from).getTime()));
+  const [to, setTo] = useState(() => londonDayKey(new Date(current.to).getTime()));
 
   function openDates(next: boolean) {
     if (next) {
       const range = periodRange(period);
-      setFrom(dateKey(new Date(range.from)));
-      setTo(dateKey(new Date(range.to)));
+      setFrom(londonDayKey(new Date(range.from).getTime()));
+      setTo(londonDayKey(new Date(range.to).getTime()));
     }
     setOpen(next);
   }

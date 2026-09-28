@@ -124,6 +124,21 @@ function percents(counts: number[]) {
 
 const pct = (n: number, d: number) => (d ? Math.round((n * 100) / d) : null);
 
+/** Bars the chart should show: months beyond 45 days, weeks beyond 10, days beyond 1.5, else hours; none after `asOf`. */
+function expectedBars(win: AuditWindow, asOf: number) {
+  if (asOf < win.from) return 0;
+  const days = (win.to + 1 - win.from) / 86_400_000;
+  const a = parts(win.from);
+  let n = 0;
+  if (days > 45) while (midnight(a.y, a.m + n, 1) <= asOf) n++;
+  else if (days > 10) {
+    const weekday = (new Date(Date.UTC(a.y, a.m - 1, a.d)).getUTCDay() + 6) % 7;
+    while (midnight(a.y, a.m, a.d - weekday + n * 7) <= asOf) n++;
+  } else if (days > 1.5) while (midnight(a.y, a.m, a.d + n) <= asOf) n++;
+  else while (win.from + n * 3_600_000 <= asOf && win.from + n * 3_600_000 <= win.to) n++;
+  return n;
+}
+
 export function recalc(now: number, win: AuditWindow) {
   const asOf = Math.min(win.to, now);
   const inWin = (t: number) => t >= win.from && t <= asOf;
@@ -371,7 +386,7 @@ export function recalc(now: number, win: AuditWindow) {
       consultRate: pct(consulted, booked),
       treatRate: pct(treated, consulted),
       chart: {
-        months: [...chartMonths.keys()].sort(),
+        months: Array.from({ length: expectedBars(win, asOf) }),
         signUps: [...chartMonths.values()].reduce((n, v) => n + v.signUps, 0),
         booked: [...chartMonths.values()].reduce((n, v) => n + v.booked, 0),
         consulted: [...chartMonths.values()].reduce((n, v) => n + v.consulted, 0),

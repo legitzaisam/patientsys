@@ -15,11 +15,20 @@ import {
 import { complianceReminders } from "@/lib/metrics/compliance";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import {
+  calendarMonthsWindow,
+  dashboardKpis,
+  DEFAULT_PERIOD,
   dueState,
+  isOnList,
   nextDueFor,
+  periodIso,
+  shareOf,
+  toPence,
   upcomingBookingSet,
   visitsByPatient,
-} from "@/lib/metrics/definitions";
+  type MoneyAppointment,
+  type MoneyTreatment,
+} from "@/lib/metrics";
 import {
   noShowLookbackISO,
   planStepState,
@@ -394,9 +403,7 @@ export const getDashboard = createServerFn({ method: "GET" })
     const identity = await authorize(context as Ctx, "getDashboard");
     const supabase = (context as Ctx).supabase;
     const today = new Date();
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-    const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString();
-    const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+    const prevMonthStart = new Date(calendarMonthsWindow(today.getTime(), 1, 1).fromMs).toISOString();
 
     const dayRange = clinicDayRange(today);
     const todayStart = dayRange.startISO;
@@ -413,17 +420,16 @@ export const getDashboard = createServerFn({ method: "GET" })
       historyFlags,
       todayAppointmentsRaw,
       unpaidDepositRaw,
-      prevMonthTreatments,
-      prevMonthPatients,
       dueDatesRaw,
       upcomingApptsRaw,
       clinicRow,
     ] = await Promise.all([
-      supabase.from("patients").select("id, status, created_at"),
+      supabase.from("patients").select("id, status, created_at, deleted_at"),
+      // This month and last, for the revenue and treatments KPIs.
       supabase
         .from("treatments")
-        .select("id, price, patient_id, practitioner_id, performed_at")
-        .gte("performed_at", monthStart),
+        .select("id, price, patient_id, practitioner_id, performed_at, appointment_id, commission_rate_snapshot")
+        .gte("performed_at", prevMonthStart),
       supabase
         .from("documents")
         .select("id, title, kind, status, patient_id, sent_at, patients(first_name, last_name)")
@@ -461,16 +467,6 @@ export const getDashboard = createServerFn({ method: "GET" })
         .limit(80),
       supabase
         .from("treatments")
-        .select("id, price, patient_id, practitioner_id, performed_at")
-        .gte("performed_at", prevMonthStart)
-        .lt("performed_at", prevMonthEnd),
-      supabase
-        .from("patients")
-        .select("id, created_at")
-        .gte("created_at", prevMonthStart)
-        .lt("created_at", prevMonthEnd),
-      supabase
-        .from("treatments")
         .select(
           "id, name, patient_id, performed_at, next_due_at, practitioner_id, patients(first_name, last_name)",
         )
@@ -483,7 +479,7 @@ export const getDashboard = createServerFn({ method: "GET" })
         .neq("status", "cancelled"),
       supabase
         .from("clinics")
-        .select("deposit_lead_days")
+        .select("deposit_lead_days, deposit_percent")
         .eq("id", clinicIdOf(context))
         .maybeSingle(),
     ]);
@@ -519,9 +515,8 @@ export const getDashboard = createServerFn({ method: "GET" })
         .gte("starts_at", noShowLookbackISO(today)),
     ]);
 
-    let all = patients.data ?? [];
-    let monthTreats = (monthTreatments.data ?? []) as any[];
-    let prevMonthTreats = (prevMonthTreatments.data ?? []) as any[];
+    const all = (patients.data ?? []).filter(isOnList);
+    let monthTreats = (monthTreatments.data ?? []) as MoneyTreatment[];
     let todayAppts = (todayAppointmentsRaw.data ?? []) as any[];
     await holdArrivedUntilConsent(supabase, todayAppts);
     let unpaidDeposits = (unpaidDepositRaw.data ?? []) as any[];
@@ -561,8 +556,7 @@ export const getDashboard = createServerFn({ method: "GET" })
     const scoped = scopeFor(identity, "getDashboard");
     if (scoped) {
       dueDates = dueDates.filter((t) => t.practitioner_id === scoped || !t.practitioner_id);
-      monthTreats = monthTreats.filter((t: any) => t.practitioner_id === scoped);
-      prevMonthTreats = prevMonthTreats.filter((t: any) => t.practitioner_id === scoped);
+      monthTreats = monthTreats.filter((t) => t.practitioner_id === scoped);
       todayAppts = todayAppts.filter((a: any) => a.practitioner_id === scoped);
       unpaidDeposits = unpaidDeposits.filter((a: any) => a.practitioner_id === scoped);
     }
@@ -631,17 +625,13 @@ export const getDashboard = createServerFn({ method: "GET" })
       return { id: offer.id, headline: offer.headline, code: offer.code };
     };
 
-    const active = all.filter((p: { status: string }) => p.status === "active").length;
-    const inactive = all.filter((p: { status: string }) => p.status !== "active").length;
-
     // "Your clients" for a practitioner: anyone they have treated or have on
     // their book (non-cancelled appointment), same attribution the retention
-    // page uses. The change chip compares the size of that book now with its
-    // size at the end of last month, so it reads as growth rather than as a
-    // swing in sign-ups. Managers and front desk see the clinic figure instead.
-    const monthStartMs = new Date(monthStart).getTime();
-    let ownClients: number | null = null;
-    let ownClientsPrev = 0;
+    // page uses. Managers and front desk see the clinic figure instead.
+    let ownBook: {
+      treatments: { patient_id: string; performed_at: string }[];
+      appointments: { patient_id: string; starts_at: string; status: string | null }[];
+    } | null = null;
     if (scoped) {
       const [{ data: myTreats }, { data: myAppts }] = await Promise.all([
         supabase
@@ -650,55 +640,36 @@ export const getDashboard = createServerFn({ method: "GET" })
           .eq("practitioner_id", scoped),
         supabase
           .from("appointments")
-          .select("patient_id, starts_at")
+          .select("patient_id, starts_at, status")
           .eq("practitioner_id", scoped)
           .neq("status", "cancelled"),
       ]);
-      const firstSeen = new Map<string, number>();
-      for (const t of myTreats ?? []) {
-        const ms = new Date(t.performed_at).getTime();
-        firstSeen.set(t.patient_id, Math.min(firstSeen.get(t.patient_id) ?? Infinity, ms));
-      }
-      for (const a of myAppts ?? []) {
-        const ms = new Date(a.starts_at).getTime();
-        firstSeen.set(a.patient_id, Math.min(firstSeen.get(a.patient_id) ?? Infinity, ms));
-      }
-      ownClients = firstSeen.size;
-      ownClientsPrev = [...firstSeen.values()].filter((ms) => ms < monthStartMs).length;
+      ownBook = { treatments: myTreats ?? [], appointments: myAppts ?? [] };
     }
-    const clinicClientsPrev = all.filter(
-      (p: any) => new Date(p.created_at).getTime() < monthStartMs,
-    ).length;
-    const clientsNow = ownClients ?? all.length;
-    const clientsPrev = ownClients === null ? clinicClientsPrev : ownClientsPrev;
-    const clientsChange = clientsPrev
-      ? Math.round(((clientsNow - clientsPrev) / clientsPrev) * 100)
-      : 0;
+    const monthApptIds = [
+      ...new Set(monthTreats.map((t) => t.appointment_id).filter((id): id is string => !!id)),
+    ];
+    const monthAppts: MoneyAppointment[] = [];
+    for (let i = 0; i < monthApptIds.length; i += 200) {
+      const { data } = await supabase
+        .from("appointments")
+        .select("id, practitioner_id, price, payment_status, status, starts_at")
+        .in("id", monthApptIds.slice(i, i + 200));
+      monthAppts.push(...((data ?? []) as MoneyAppointment[]));
+    }
+    const kpiFigures = dashboardKpis({
+      nowMs: today.getTime(),
+      patients: all,
+      treatments: monthTreats,
+      appointmentsById: new Map(monthAppts.map((a) => [a.id, a])),
+      money: { depositPercent: Number(clinicRow.data?.deposit_percent ?? 30) },
+      ownBook,
+    });
 
     const treatmentsOverdue = dueDates.filter((t) => t.state === "overdue").length;
     const treatmentsDueSoon = dueDates.filter((t) => t.state === "due_soon").length;
     // Still returned for older callers; Attention Needed no longer lists these.
     const due = dueDates.slice(0, 12);
-
-    const revenue = monthTreats.reduce(
-      (sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0),
-      0,
-    );
-    const prevRevenue = prevMonthTreats.reduce(
-      (sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0),
-      0,
-    );
-    const revenueChange = prevRevenue
-      ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100)
-      : 0;
-
-    const newPatientsThisMonth = all.filter(
-      (p: any) => new Date(p.created_at) >= new Date(monthStart),
-    ).length;
-    const newPatientsPrevMonth = (prevMonthPatients.data ?? []).length;
-    const patientChange = newPatientsPrevMonth
-      ? Math.round(((newPatientsThisMonth - newPatientsPrevMonth) / newPatientsPrevMonth) * 100)
-      : 0;
 
     const pendingConsents = (pendingDocs.data ?? []).filter(
       (d: { kind: string }) => d.kind === "consent",
@@ -974,21 +945,21 @@ export const getDashboard = createServerFn({ method: "GET" })
       kpis: {
         // "own" when the caller is a practitioner looking at their own book.
         scope: scoped ? "own" : "clinic",
-        totalClients: all.length,
-        ownClients,
-        clientsChange,
-        activeClients: active,
-        inactiveClients: inactive,
+        totalClients: kpiFigures.totalClients,
+        ownClients: kpiFigures.ownClients,
+        clientsChange: kpiFigures.clientsChange,
+        activeClients: kpiFigures.activeClients,
+        inactiveClients: kpiFigures.inactiveClients,
         // Retention figures come from getRetention (see the dashboard route)
         // so the KPI card and the retention page can never disagree.
         treatmentsDue: treatmentsDueSoon + treatmentsOverdue,
         treatmentsDueSoon,
         treatmentsOverdue,
         pendingConsents,
-        revenueMonth: revenue,
-        treatmentsMonth: monthTreats.length,
-        revenueChange,
-        patientChange,
+        revenueMonth: kpiFigures.revenueMonth,
+        treatmentsMonth: kpiFigures.treatmentsMonth,
+        revenueChange: kpiFigures.revenueChange,
+        patientChange: kpiFigures.patientChange,
       },
       // Every diary card carries its consent state so the stage menu and the
       // dock can gate "waiting" without a second lookup, and the claimed
@@ -1153,21 +1124,29 @@ export const getPatientMetrics = createServerFn({ method: "GET" })
     await authorize(context as Ctx, "getPatientMetrics");
     const supabase = (context as Ctx).supabase;
     const { buildBookMetrics } = await import("./insights.server");
-    const [{ data: patients }, { data: treatments }, { data: appointments }] = await Promise.all([
-      supabase
-        .from("patients")
-        .select("id, status, created_at, source, last_visit_at")
-        .is("deleted_at", null),
-      supabase.from("treatments").select("patient_id, name, price, performed_at"),
-      supabase.from("appointments").select("patient_id, starts_at, status"),
-    ]);
+    const [{ data: patients }, { data: treatments }, { data: appointments }, { data: clinicRow }] =
+      await Promise.all([
+        supabase
+          .from("patients")
+          .select("id, status, created_at, source, last_visit_at, deleted_at")
+          .is("deleted_at", null),
+        supabase
+          .from("treatments")
+          .select("id, patient_id, practitioner_id, appointment_id, name, price, performed_at"),
+        supabase
+          .from("appointments")
+          .select("id, patient_id, practitioner_id, starts_at, status, price, payment_status"),
+        supabase.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
+      ]);
 
+    const range =
+      data.from && data.to ? { from: data.from, to: data.to } : periodIso(DEFAULT_PERIOD, Date.now());
     return buildBookMetrics({
-      ...(data.from ? { from: data.from } : {}),
-      ...(data.to ? { to: data.to } : {}),
+      ...range,
       patients: (patients ?? []) as any,
       treatments: (treatments ?? []) as any,
       appointments: (appointments ?? []) as any,
+      money: { depositPercent: Number(clinicRow?.deposit_percent ?? 30) },
     });
   });
 
@@ -5765,6 +5744,39 @@ export const setStaffEmail = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** The whole-table rows `earningsInputs` narrows to a period (Performance, My Profile, CSV). */
+async function earningsSource(
+  supabaseAdmin: Awaited<ReturnType<typeof adminClient>>,
+  clinicId: string,
+) {
+  const [{ data: patients }, { data: treatments }, { data: appointments }, { data: clinicRow }] =
+    await Promise.all([
+      supabaseAdmin.from("patients").select("id, status, deleted_at, first_name, last_name"),
+      supabaseAdmin
+        .from("treatments")
+        .select(
+          "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id",
+        ),
+      supabaseAdmin
+        .from("appointments")
+        .select("id, patient_id, practitioner_id, price, payment_status, status, starts_at"),
+      supabaseAdmin.from("clinics").select("deposit_percent").eq("id", clinicId).maybeSingle(),
+    ]);
+  return {
+    nowMs: Date.now(),
+    depositPercent: Number(clinicRow?.deposit_percent ?? 30),
+    patients: (patients ?? []) as {
+      id: string;
+      status: string | null;
+      deleted_at: string | null;
+      first_name: string | null;
+      last_name: string | null;
+    }[],
+    treatments: (treatments ?? []) as never[],
+    appointments: (appointments ?? []) as never[],
+  };
+}
+
 /** Manager-only: earnings, KPIs, retention and the clinic/practitioner split per practitioner. */
 export const getPractitionerPerformance = createServerFn({ method: "POST" })
   .validator((data: { from: string; to: string; previousFrom: string; previousTo: string }) =>
@@ -5778,67 +5790,27 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
     // manager without it gets counts, attendance and retention only.
     const showMoney = identity.isOwner || identity.permissions.includes("reports.commission");
     const supabaseAdmin = await adminClient(context);
-    const { buildStats, buildTrend, moneyChanges, moneyTotals, whatSold, withoutMoney } =
-      await import("./earnings.server");
-    const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
-    const previous = { from: data.previousFrom, to: data.previousTo };
+    const {
+      buildStats,
+      buildTrend,
+      earningsInputs,
+      moneyChanges,
+      moneyTotals,
+      performanceTotals,
+      whatSold,
+      withoutMoney,
+    } = await import("./earnings.server");
 
     const [
       { data: profiles },
       { data: roles },
-      { data: treatments },
-      { data: appointments },
-      { data: prevTreatments },
-      { data: prevAppointments },
-      { data: yearTreatments },
-      { data: firstSeen },
-      { data: futureAppointments },
-      { data: clinicRow },
+      source,
       { data: periodSales },
       { data: products },
     ] = await Promise.all([
       supabaseAdmin.from("profiles").select("id, full_name, job_title, commission_rate"),
       supabaseAdmin.from("user_roles").select("user_id, role"),
-      supabaseAdmin
-        .from("treatments")
-        .select(
-          "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id",
-        )
-        .gte("performed_at", data.from)
-        .lte("performed_at", data.to),
-      supabaseAdmin
-        .from("appointments")
-        .select("id, practitioner_id, price, payment_status, status, starts_at")
-        .gte("starts_at", data.from)
-        .lte("starts_at", data.to),
-      supabaseAdmin
-        .from("treatments")
-        .select(
-          "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id",
-        )
-        .gte("performed_at", previous.from)
-        .lte("performed_at", previous.to),
-      supabaseAdmin
-        .from("appointments")
-        .select("id, practitioner_id, price, payment_status, status, starts_at")
-        .gte("starts_at", previous.from)
-        .lte("starts_at", previous.to),
-      supabaseAdmin
-        .from("treatments")
-        .select("practitioner_id, patient_id")
-        .gte("performed_at", yearAgo),
-      supabaseAdmin.from("patients").select("id, created_at"),
-      // Booked ahead: live bookings from now on, whatever the period.
-      supabaseAdmin
-        .from("appointments")
-        .select("id, practitioner_id, price, payment_status, status, starts_at")
-        .gte("starts_at", new Date().toISOString())
-        .neq("status", "cancelled"),
-      supabaseAdmin
-        .from("clinics")
-        .select("deposit_percent")
-        .eq("id", clinicIdOf(context))
-        .maybeSingle(),
+      earningsSource(supabaseAdmin, clinicIdOf(context)),
       // Retail in the period, for its share of revenue and What sold.
       supabaseAdmin
         .from("product_sales")
@@ -5847,18 +5819,9 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
         .lte("occurred_at", data.to),
       supabaseAdmin.from("retail_products").select("id, name, sku"),
     ]);
-    const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
-    // Period bookings plus the live future ones, once each.
-    const withFuture = (rows: unknown[] | null) => {
-      const seen = new Set<string>();
-      const out: unknown[] = [];
-      for (const a of [...(rows ?? []), ...(futureAppointments ?? [])] as { id: string }[]) {
-        if (seen.has(a.id)) continue;
-        seen.add(a.id);
-        out.push(a);
-      }
-      return out;
-    };
+    const inputs = earningsInputs({ ...source, from: data.from, to: data.to });
+    const previous = { from: data.previousFrom, to: data.previousTo };
+    const prevInputs = earningsInputs({ ...source, ...previous });
 
     const staffIds = (roles ?? [])
       .filter((r) => r.role === "owner" || r.role === "practitioner")
@@ -5873,93 +5836,45 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       };
     });
 
-    const patientFirstSeen = new Map<string, string>(
-      (firstSeen ?? []).map((p: { id: string; created_at: string }) => [p.id, p.created_at]),
-    );
-
     const rows = buildStats(
       staff,
-      (treatments ?? []) as never,
-      withFuture(appointments) as never,
-      (yearTreatments ?? []) as never,
-      patientFirstSeen,
+      inputs.treatments as never,
+      inputs.appointments as never,
+      inputs.yearTreatments as never,
+      inputs.firstSeen,
       { from: data.from, to: data.to },
-      money,
+      inputs.money,
     ).sort((a, b) => b.earned - a.earned);
 
     const prevRows = buildStats(
       staff,
-      (prevTreatments ?? []) as never,
-      (prevAppointments ?? []) as never,
-      (yearTreatments ?? []) as never,
-      patientFirstSeen,
+      prevInputs.treatments as never,
+      prevInputs.appointments as never,
+      prevInputs.yearTreatments as never,
+      prevInputs.firstSeen,
       previous,
-      money,
+      inputs.money,
     );
 
-    const totals = rows.reduce(
-      (acc, r) => ({
-        earned: acc.earned + r.earned,
-        collected: acc.collected + r.collected,
-        toPractitioners: acc.toPractitioners + r.earnedShare,
-        toClinic: acc.toClinic + r.clinicEarnedShare,
-        treatments: acc.treatments + r.treatments,
-        patients: acc.patients + r.patients,
-        newPatients: acc.newPatients + r.newPatients,
-        appointments: acc.appointments + r.appointments,
-        attended: acc.attended + r.attended,
-        noShows: acc.noShows + r.noShows,
-        cancelled: acc.cancelled + r.cancelled,
-        outstanding: acc.outstanding + r.outstanding,
-        bookedAhead: acc.bookedAhead + r.bookedAhead,
-      }),
-      {
-        earned: 0,
-        collected: 0,
-        toPractitioners: 0,
-        toClinic: 0,
-        treatments: 0,
-        patients: 0,
-        newPatients: 0,
-        appointments: 0,
-        attended: 0,
-        noShows: 0,
-        cancelled: 0,
-        outstanding: 0,
-        bookedAhead: 0,
-      },
-    );
-
-    const settled = totals.attended + totals.noShows;
-    const clinic = {
-      ...totals,
-      attendance: settled ? Math.round((totals.attended / settled) * 100) : 0,
-      averageValue: totals.treatments
-        ? Math.round((totals.earned / totals.treatments) * 100) / 100
-        : 0,
-      retention: rows.length
-        ? Math.round(rows.reduce((s2, r) => s2 + r.retention, 0) / rows.length)
-        : 0,
-      averageCommission: rows.length
-        ? Math.round((rows.reduce((s2, r) => s2 + r.commissionRate, 0) / rows.length) * 10) / 10
-        : 0,
-    };
+    const { totals, clinic } = performanceTotals(rows);
 
     const trend = buildTrend(
       staff,
-      (treatments ?? []) as never,
-      (appointments ?? []) as never,
+      inputs.treatments as never,
+      inputs.appointments as never,
       { from: data.from, to: data.to },
-      money,
+      inputs.money,
     );
 
     // One period per page: the trend follows the picker (Phase 10, bullet 097).
     const changes = moneyChanges(moneyTotals(rows), moneyTotals(prevRows));
     const sold = whatSold(
-      (treatments ?? []) as never,
+      inputs.treatments as never,
+      inputs.appointments as never,
       (periodSales ?? []) as never,
       (products ?? []) as never,
       { from: data.from, to: data.to },
+      inputs.money,
     );
     if (!showMoney) {
       const strip = (points: import("./earnings.server").TrendPoint[]) => points.map(withoutMoney);
@@ -5999,61 +5914,20 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       throw new Error("You do not have access to this area");
     }
     const supabaseAdmin = await adminClient(context);
-    const { buildStats } = await import("./earnings.server");
-    const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
-
-    const [
-      { data: profile },
-      { data: treatments },
-      { data: appointments },
-      { data: yearTreatments },
-      { data: firstSeen },
-      { data: clinicRow },
-    ] = await Promise.all([
+    const { buildStats, earningsInputs, earningsLines } = await import("./earnings.server");
+    const [{ data: profile }, source] = await Promise.all([
       supabaseAdmin
         .from("profiles")
         .select("id, full_name, job_title, commission_rate")
         .eq("id", targetUserId)
         .maybeSingle(),
-      supabaseAdmin
-        .from("treatments")
-        .select(
-          "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id, patients(first_name, last_name)",
-        )
-        .eq("practitioner_id", targetUserId)
-        .gte("performed_at", data.from)
-        .lte("performed_at", data.to)
-        .order("performed_at", { ascending: false }),
-      supabaseAdmin
-        .from("appointments")
-        .select("id, practitioner_id, price, payment_status, status, starts_at")
-        .eq("practitioner_id", targetUserId)
-        .gte("starts_at", data.from),
-      supabaseAdmin
-        .from("treatments")
-        .select("practitioner_id, patient_id")
-        .eq("practitioner_id", targetUserId)
-        .gte("performed_at", yearAgo),
-      supabaseAdmin.from("patients").select("id, created_at"),
-      supabaseAdmin
-        .from("clinics")
-        .select("deposit_percent")
-        .eq("id", clinicIdOf(context))
-        .maybeSingle(),
+      earningsSource(supabaseAdmin, clinicIdOf(context)),
     ]);
-
+    const inputs = earningsInputs({ ...source, from: data.from, to: data.to });
     const rate = Number(profile?.commission_rate ?? 0);
-    const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
-    const paymentById = new Map(
-      ((appointments ?? []) as { id: string; payment_status: string | null }[]).map((a) => [
-        a.id,
-        a.payment_status,
-      ]),
-    );
-    const payoutFor = (appointmentId: string | null | undefined): "paid" | "pending" => {
-      if (!appointmentId) return "paid";
-      return paymentById.get(appointmentId) === "paid" ? "paid" : "pending";
-    };
+    const mine = inputs.treatments.filter((t) => t.practitioner_id === targetUserId);
+    const nameOf = new Map(source.patients.map((p) => [p.id, `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim()]));
+
     const stats = buildStats(
       [
         {
@@ -6063,26 +5937,26 @@ export const getMyEarnings = createServerFn({ method: "POST" })
           commissionRate: rate,
         },
       ],
-      (treatments ?? []) as never,
-      (appointments ?? []) as never,
-      (yearTreatments ?? []) as never,
-      new Map<string, string>(
-        (firstSeen ?? []).map((p: { id: string; created_at: string }) => [p.id, p.created_at]),
-      ),
+      inputs.treatments as never,
+      inputs.appointments as never,
+      inputs.yearTreatments.filter((t) => t.practitioner_id === targetUserId) as never,
+      inputs.firstSeen,
       { from: data.from, to: data.to },
-      money,
+      inputs.money,
     )[0]!;
 
     // Only the caller's own figures leave the server — no clinic revenue, no rate.
-    // Every money figure is the practitioner's share so the cards reconcile.
+    // Every money figure is the practitioner's share, per line, so the cards,
+    // the table and the CSV reconcile to the penny.
+    const lines = earningsLines(mine as never, inputs.appointments as never, rate, inputs.money);
     return {
       earnedShare: stats.earnedShare,
       collectedShare: stats.collectedShare,
-      outstandingShare: Math.round((stats.earnedShare - stats.collectedShare) * 100) / 100,
-      bookedAheadShare: Math.round(((stats.bookedAhead * rate) / 100) * 100) / 100,
+      outstandingShare: stats.outstandingShare,
+      bookedAheadShare: shareOf(toPence(stats.bookedAhead), rate) / 100,
       commissionRate: rate,
       averageShareValue: stats.treatments
-        ? Math.round((stats.earnedShare / stats.treatments) * 100) / 100
+        ? Math.round((stats.earnedShare * 100) / stats.treatments) / 100
         : 0,
       outstanding: stats.outstanding,
       treatments: stats.treatments,
@@ -6094,17 +5968,19 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       attendance: stats.attendance,
       noShows: stats.noShows,
       cancelled: stats.cancelled,
-      lines: (treatments ?? []).map((t: any) => ({
-        id: t.id as string,
-        performedAt: t.performed_at as string,
-        name: t.name as string,
-        patientId: t.patient_id as string | undefined,
-        patient: t.patients ? `${t.patients.first_name} ${t.patients.last_name}` : "—",
-        share: Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,
-        // Payout status: paid once the linked booking is paid in full; a
-        // treatment with no booking counts as paid (recorded at the desk).
-        payout: payoutFor(t.appointment_id as string | null | undefined),
-      })),
+      lines: lines
+        .sort((x, y) => y.treatment.performed_at.localeCompare(x.treatment.performed_at))
+        .map((l) => ({
+          id: l.treatment.id,
+          performedAt: l.treatment.performed_at,
+          name: l.treatment.name,
+          patientId: l.treatment.patient_id,
+          patient: nameOf.get(l.treatment.patient_id) || "—",
+          share: l.share,
+          // Paid once the line is fully collected; a treatment with no
+          // booking counts as paid (recorded at the desk).
+          payout: l.payout,
+        })),
     };
   });
 
@@ -6734,12 +6610,16 @@ export const getRetention = createServerFn({ method: "GET" })
     ] = await Promise.all([
       supabase
         .from("patients")
-        .select("id, title, first_name, last_name, status, email, phone, created_at"),
+        .select("id, title, first_name, last_name, status, email, phone, created_at, deleted_at"),
       supabase
         .from("treatments")
-        .select("patient_id, practitioner_id, name, price, performed_at, next_due_at")
+        .select(
+          "id, appointment_id, patient_id, practitioner_id, name, price, performed_at, next_due_at",
+        )
         .gte("performed_at", sixYearsAgo),
-      supabase.from("appointments").select("patient_id, practitioner_id, starts_at, status"),
+      supabase
+        .from("appointments")
+        .select("id, payment_status, patient_id, practitioner_id, starts_at, status"),
       supabase.from("profiles").select("id, full_name"),
       supabase.from("retention_outreach").select("patient_id, created_at"),
     ]);
@@ -9299,15 +9179,24 @@ export const getInsights = createServerFn({ method: "GET" })
       { data: leads },
       { data: products },
       { data: sales },
+      { data: clinicRow },
     ] = await Promise.all([
       supabase
         .from("patients")
-        .select("id, title, first_name, last_name, email, phone, avatar_url, source, created_at")
+        .select(
+          "id, title, first_name, last_name, email, phone, avatar_url, source, created_at, deleted_at",
+        )
         .is("deleted_at", null),
-      supabase.from("treatments").select("patient_id, name, price, performed_at, catalogue_id"),
+      supabase
+        .from("treatments")
+        .select(
+          "id, patient_id, practitioner_id, appointment_id, name, price, performed_at, catalogue_id",
+        ),
       supabase
         .from("appointments")
-        .select("patient_id, starts_at, status, treatment_name, catalogue_id"),
+        .select(
+          "id, patient_id, practitioner_id, starts_at, status, price, payment_status, treatment_name, catalogue_id",
+        ),
       supabase.from("treatment_catalogue").select("id, name, category"),
       supabase
         .from("website_leads")
@@ -9316,6 +9205,7 @@ export const getInsights = createServerFn({ method: "GET" })
         ),
       supabase.from("retail_products").select("id, name, sku"),
       supabase.from("product_sales").select("product_id, qty, amount, occurred_at"),
+      supabase.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
     ]);
 
     return buildInsights({
@@ -9328,6 +9218,7 @@ export const getInsights = createServerFn({ method: "GET" })
       leads: (leads ?? []) as any,
       products: (products ?? []) as any,
       sales: (sales ?? []) as any,
+      money: { depositPercent: Number(clinicRow?.deposit_percent ?? 30) },
     });
   });
 
