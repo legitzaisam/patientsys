@@ -11,6 +11,7 @@ import {
 } from "@/lib/clinic.functions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -334,12 +335,13 @@ export function RegistrationInsuranceCard({
               <Label htmlFor="ri-renew" className="text-xs">
                 New renewal date
               </Label>
-              <Input
+              <DateField
                 id="ri-renew"
-                type="date"
-                value={renewInput}
-                onChange={(e) => setRenewInput(e.target.value)}
-                className="bg-card"
+                value={renewInput || null}
+                onChange={(v) => setRenewInput(v ?? "")}
+                min={todayKey}
+                className="[&_input]:bg-card"
+                data-qc="registration-renew-date"
               />
               <div className="flex gap-2">
                 <Button
@@ -445,12 +447,12 @@ export function RegistrationInsuranceCard({
                 <Label htmlFor="ri-ins-expiry" className="text-xs">
                   Valid until
                 </Label>
-                <Input
+                <DateField
                   id="ri-ins-expiry"
-                  type="date"
-                  value={insExpiry}
-                  onChange={(e) => setInsExpiry(e.target.value)}
-                  className="bg-card"
+                  value={insExpiry || null}
+                  onChange={(v) => setInsExpiry(v ?? "")}
+                  className="[&_input]:bg-card"
+                  data-qc="insurance-expiry-date"
                 />
               </div>
               <div className="flex gap-2">

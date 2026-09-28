@@ -87,7 +87,8 @@ test.describe("practitioner on their own profile", () => {
     await page.locator('[data-qc="registration-renewed"]').click();
     const next = new Date();
     next.setFullYear(next.getFullYear() + 1);
-    await page.locator('[data-qc="registration-renew-form"] input[type="date"]').fill(dayKey(next));
+    await page.locator('[data-qc="registration-renew-date"]').fill(dayKey(next));
+    await page.locator('[data-qc="registration-renew-date"]').press("Enter");
     await page.locator('[data-qc="registration-renew-save"]').click();
     await expect(page.locator('[data-qc="registration-renew-sent"]')).toBeVisible();
   });

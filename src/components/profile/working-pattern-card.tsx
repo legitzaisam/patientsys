@@ -23,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { TimeField } from "@/components/ui/time-field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ProfileMode, ProfileSubject } from "./profile-types";
@@ -166,11 +166,10 @@ export function WorkingPatternCard({
                   <Label htmlFor={`pat-start-${r.weekday}`} className="sr-only">
                     {WEEKDAYS[r.weekday]} start
                   </Label>
-                  <Input
+                  <TimeField
                     id={`pat-start-${r.weekday}`}
-                    type="time"
-                    value={r.start ?? ""}
-                    onChange={(e) => setDraftRow(r.weekday, { start: e.target.value || null })}
+                    value={r.start}
+                    onChange={(v) => setDraftRow(r.weekday, { start: v })}
                     disabled={off}
                     data-qc={`pattern-start-${r.weekday}`}
                   />
@@ -179,11 +178,10 @@ export function WorkingPatternCard({
                   <Label htmlFor={`pat-end-${r.weekday}`} className="sr-only">
                     {WEEKDAYS[r.weekday]} end
                   </Label>
-                  <Input
+                  <TimeField
                     id={`pat-end-${r.weekday}`}
-                    type="time"
-                    value={r.end ?? ""}
-                    onChange={(e) => setDraftRow(r.weekday, { end: e.target.value || null })}
+                    value={r.end}
+                    onChange={(v) => setDraftRow(r.weekday, { end: v })}
                     disabled={off}
                     data-qc={`pattern-end-${r.weekday}`}
                   />

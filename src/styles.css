@@ -1209,6 +1209,15 @@ input:-webkit-autofill {
   .scroll-x-plain::-webkit-scrollbar {
     display: none;
   }
+  /* A short column that scrolls without a scrollbar (the time picker's hours). */
+  .scroll-y-plain {
+    overflow-y: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroll-y-plain::-webkit-scrollbar {
+    display: none;
+  }
 
   .scroll-x-shadows {
     overflow-x: auto;
