@@ -18,7 +18,13 @@ import { RegistrationInsuranceCard } from "./registration-insurance-card";
 import { QualificationsCard } from "./qualifications-card";
 import { DocumentsSummaryCard, MonthSoFarCard, YourWeekCard } from "./overview-side-cards";
 import { useStaffSchedule } from "./profile-helpers";
-import type { ProfileMode, ProfileSubject, ProfileTabKey, ProfileViewer } from "./profile-types";
+import type {
+  PatternRequestView,
+  ProfileMode,
+  ProfileSubject,
+  ProfileTabKey,
+  ProfileViewer,
+} from "./profile-types";
 
 /**
  * The staff profile in its three modes. The route decides the mode and hands
@@ -145,10 +151,16 @@ export function StaffProfilePage({
         <ScheduleTab
           mode={mode}
           subject={subject}
+          viewer={viewer}
           todayKey={todayKey}
           pattern={pattern}
+          patternRequest={
+            (schedule.data as { patternRequest?: PatternRequestView | null } | undefined)
+              ?.patternRequest ?? null
+          }
           timeOff={timeOff}
           totals={schedule.data?.totals ?? null}
+          hasSeparateManager={hasSeparateManager}
           onTimeOff={openTimeOff}
         />
       ) : null}

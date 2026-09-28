@@ -73,6 +73,19 @@ export type ProfileSubject = {
   daysRemaining: number;
 };
 
+/** A pending working-pattern request as getStaffSchedule returns it. */
+export type PatternRequestView = {
+  id: string;
+  user_id: string;
+  rows: PatternRow[];
+  note: string | null;
+  requires_owner: boolean;
+  status: string;
+  requested_at: string | null;
+  /** "Thu 09:00–17:00 (was 12:00–20:00)" */
+  summary: string;
+};
+
 export type ProfileViewer = {
   userId: string;
   email?: string | null;

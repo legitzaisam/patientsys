@@ -4,24 +4,35 @@ import { useStaffSchedule } from "./profile-helpers";
 import { TimeOffCalendar } from "./time-off-calendar";
 import { BankHolidaysCard, TimeOffRequestsCard, TimeOffSummaryCard } from "./time-off-cards";
 import { WorkingPatternCard } from "./working-pattern-card";
-import type { ProfileMode, ProfileSubject } from "./profile-types";
+import type {
+  PatternRequestView,
+  ProfileMode,
+  ProfileSubject,
+  ProfileViewer,
+} from "./profile-types";
 
 /** Schedule & time off: pattern and calendar on the left, totals, requests and bank holidays on the right. */
 export function ScheduleTab({
   mode,
   subject,
+  viewer,
   todayKey,
   pattern,
+  patternRequest,
   timeOff,
   totals,
+  hasSeparateManager,
   onTimeOff,
 }: {
   mode: ProfileMode;
   subject: ProfileSubject;
+  viewer: ProfileViewer;
   todayKey: string;
   pattern: PatternRow[];
+  patternRequest: PatternRequestView | null;
   timeOff: TimeOffLike[];
   totals: { taken: number; booked: number; pending: number } | null;
+  hasSeparateManager: boolean;
   onTimeOff: () => void;
 }) {
   const current = yearMonthOf(todayKey);
@@ -41,7 +52,14 @@ export function ScheduleTab({
       data-qc="profile-schedule-tab"
     >
       <div className="flex min-w-0 flex-col gap-5">
-        <WorkingPatternCard mode={mode} subject={subject} pattern={pattern} />
+        <WorkingPatternCard
+          mode={mode}
+          subject={subject}
+          viewer={viewer}
+          pattern={pattern}
+          request={patternRequest}
+          hasSeparateManager={hasSeparateManager}
+        />
         <TimeOffCalendar
           year={view.year}
           month={view.month}
@@ -60,7 +78,12 @@ export function ScheduleTab({
             onRequest={onTimeOff}
           />
         ) : null}
-        <TimeOffRequestsCard mode={mode} subject={subject} rows={timeOff} />
+        <TimeOffRequestsCard
+          mode={mode}
+          subject={subject}
+          rows={timeOff}
+          patternRequest={patternRequest}
+        />
         <BankHolidaysCard todayKey={todayKey} />
       </div>
     </div>

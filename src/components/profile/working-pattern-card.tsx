@@ -2,13 +2,20 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Check } from "lucide-react";
-import { requestWorkingPatternChange, setWorkingPattern } from "@/lib/clinic.functions";
+import { Check, Info } from "lucide-react";
+import {
+  requestWorkingPatternChange,
+  reviewWorkingPatternChange,
+  setWorkingPattern,
+  withdrawWorkingPatternChange,
+} from "@/lib/clinic.functions";
 import {
   WEEKDAYS,
   fullPattern,
   minutesOf,
+  patternChanges,
   rowLabel,
+  samePattern,
   weeklyHours,
   type PatternRow,
 } from "@/lib/staff-schedule";
@@ -26,7 +33,12 @@ import {
 import { TimeField } from "@/components/ui/time-field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { ProfileMode, ProfileSubject } from "./profile-types";
+import type {
+  PatternRequestView,
+  ProfileMode,
+  ProfileSubject,
+  ProfileViewer,
+} from "./profile-types";
 
 const AXIS_START = 7 * 60;
 const AXIS_END = 21 * 60;
@@ -41,70 +53,130 @@ function barGeometry(row: PatternRow): { left: number; width: number } | null {
   return { left: ((a - AXIS_START) / span) * 100, width: ((b - a) / span) * 100 };
 }
 
+function firstName(fullName: string) {
+  return fullName.replace(/^(Dr|Mr|Mrs|Ms|Miss|Mx|Prof)\.?\s+/i, "").split(" ")[0] ?? fullName;
+}
+
+/** The days that differ, "Thu · 09:00–17:00 (was 12:00–20:00)". */
+function ChangeList({ current, proposed }: { current: PatternRow[]; proposed: PatternRow[] }) {
+  const changes = patternChanges(current, proposed);
+  if (changes.length === 0) return <p className="text-sm text-muted-foreground">No change.</p>;
+  return (
+    <ul className="flex flex-col gap-1" data-qc="pattern-change-list">
+      {changes.map((c) => (
+        <li
+          key={c.weekday}
+          className="flex items-baseline gap-2 text-sm"
+          data-qc="pattern-change-row"
+        >
+          <span className="w-8 shrink-0 font-semibold text-foreground">{WEEKDAYS[c.weekday]}</span>
+          <span className="tabular-nums text-foreground">{c.to}</span>
+          <span className="text-xs text-muted-foreground">(was {c.from})</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
- * The seven-day working pattern as hour bars. Staff ask for a change; a
- * manager with Edit staff profiles edits the hours in place.
+ * The seven-day working pattern as hour bars. The owner (and anyone with Edit
+ * staff profiles, on a colleague's page) edits the hours in place; other staff
+ * edit their own and send the result for approval, which waits here as a
+ * pending request until the owner or a manager decides.
  */
 export function WorkingPatternCard({
   mode,
   subject,
+  viewer,
   pattern,
+  request,
+  hasSeparateManager,
 }: {
   mode: ProfileMode;
   subject: ProfileSubject;
+  viewer: ProfileViewer;
   pattern: PatternRow[];
+  request: PatternRequestView | null;
+  hasSeparateManager: boolean;
 }) {
   const queryClient = useQueryClient();
   const rows = fullPattern(pattern);
   const hours = weeklyHours(rows);
+  const selfDirect = mode === "self" && Boolean(viewer.isOwner || viewer.isAdmin);
+  const direct = mode === "manage" || selfDirect;
+  const canEdit = mode !== "frontdesk" && !subject.revoked && (mode === "manage" || !request);
 
-  const [askOpen, setAskOpen] = useState(false);
-  const [note, setNote] = useState("");
-  const [asked, setAsked] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<PatternRow[]>(rows);
+  const [note, setNote] = useState("");
+  const [declining, setDeclining] = useState(false);
+  const [reviewerNote, setReviewerNote] = useState("");
 
   useEffect(() => {
     if (!editing) setDraft(fullPattern(pattern));
   }, [pattern, editing]);
 
-  const ask = useServerFn(requestWorkingPatternChange);
-  const askChange = useMutation({
-    mutationFn: () => ask({ data: { note: note.trim() } }),
-    onSuccess: () => {
-      setAsked(true);
-      setAskOpen(false);
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["staff-schedule"] });
+    queryClient.invalidateQueries({ queryKey: ["staff-profile", subject.userId] });
+    queryClient.invalidateQueries({ queryKey: ["my-profile"] });
+    queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  };
+
+  const draftRows = () =>
+    draft.map((r) => ({ weekday: r.weekday, start: r.start || null, end: r.end || null }));
+
+  const saveFn = useServerFn(setWorkingPattern);
+  const requestFn = useServerFn(requestWorkingPatternChange);
+  const submit = useMutation({
+    mutationFn: () =>
+      mode === "manage"
+        ? saveFn({ data: { userId: subject.userId, rows: draftRows() } })
+        : requestFn({ data: { rows: draftRows(), ...(note.trim() ? { note: note.trim() } : {}) } }),
+    onSuccess: (result) => {
+      setEditing(false);
       setNote("");
-      toast.success("Change requested");
+      const applied = mode === "manage" || (result as { applied?: boolean }).applied;
+      toast.success(applied ? "Hours saved" : "Sent for approval");
+      refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const save = useServerFn(setWorkingPattern);
-  const savePattern = useMutation({
-    mutationFn: () =>
-      save({
-        data: {
-          userId: subject.userId,
-          rows: draft.map((r) => ({
-            weekday: r.weekday,
-            start: r.start || null,
-            end: r.end || null,
-          })),
-        },
-      }),
+  const withdrawFn = useServerFn(withdrawWorkingPatternChange);
+  const withdraw = useMutation({
+    mutationFn: (id: string) => withdrawFn({ data: { id } }),
     onSuccess: () => {
-      setEditing(false);
-      toast.success("Hours saved");
-      queryClient.invalidateQueries({ queryKey: ["staff-schedule"] });
-      queryClient.invalidateQueries({ queryKey: ["staff-profile", subject.userId] });
-      queryClient.invalidateQueries({ queryKey: ["my-profile"] });
+      toast.success("Request withdrawn");
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reviewFn = useServerFn(reviewWorkingPatternChange);
+  const review = useMutation({
+    mutationFn: (input: { id: string; approve: boolean; reviewerNote?: string }) =>
+      reviewFn({ data: input }),
+    onSuccess: (_r, input) => {
+      toast.success(input.approve ? "Hours approved" : "Request declined");
+      setDeclining(false);
+      setReviewerNote("");
+      refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const setDraftRow = (weekday: number, patch: Partial<PatternRow>) =>
     setDraft((d) => d.map((r) => (r.weekday === weekday ? { ...r, ...patch } : r)));
+
+  const unchanged = samePattern(rows, draft);
+  const approverLabel =
+    mode === "self" && request?.requires_owner
+      ? "the clinic owner"
+      : hasSeparateManager
+        ? "your manager"
+        : "the clinic owner";
 
   return (
     <Card className="p-6" data-qc="working-pattern">
@@ -117,40 +189,99 @@ export function WorkingPatternCard({
               : "The front desk can only book them inside these hours."}
           </p>
         </div>
-        {mode === "self" ? (
+        {!editing && mode === "self" && request ? (
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className={cn(
-              "shrink-0",
-              asked && "bg-success-bg text-success-ink hover:bg-success-bg",
-            )}
-            disabled={asked}
-            onClick={() => setAskOpen(true)}
-            data-qc={asked ? "pattern-change-requested" : "pattern-request-change"}
+            className="shrink-0 bg-success-bg text-success-ink hover:bg-success-bg"
+            disabled
+            data-qc="pattern-change-requested"
           >
-            {asked ? (
-              <>
-                Change requested <Check className="h-3.5 w-3.5" />
-              </>
-            ) : (
-              "Request a change"
-            )}
+            Change requested <Check className="h-3.5 w-3.5" />
           </Button>
-        ) : mode === "manage" && !editing && !subject.revoked ? (
+        ) : !editing && canEdit ? (
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="shrink-0"
             onClick={() => setEditing(true)}
-            data-qc="pattern-edit"
+            data-qc={direct ? "pattern-edit" : "pattern-request-change"}
           >
-            Edit hours
+            {direct ? "Edit hours" : "Request a change"}
           </Button>
         ) : null}
       </div>
+
+      {request && !editing ? (
+        <div
+          className={cn(
+            "mb-4 flex flex-col gap-3 rounded-2xl p-4",
+            mode === "manage" ? "bg-accent-soft" : "bg-glass-2 shadow-inset-hi",
+          )}
+          data-qc={mode === "manage" ? "pattern-proposal" : "pattern-pending"}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                {mode === "manage"
+                  ? `Proposed change from ${firstName(subject.fullName)}`
+                  : `Change requested · awaiting ${approverLabel}`}
+              </p>
+              {request.note ? (
+                <p className="mt-0.5 text-xs text-muted-foreground" data-qc="pattern-request-note">
+                  “{request.note}”
+                </p>
+              ) : null}
+            </div>
+            {mode === "self" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2.5 text-xs"
+                disabled={withdraw.isPending}
+                onClick={() => withdraw.mutate(request.id)}
+                data-qc="pattern-request-withdraw"
+              >
+                Withdraw
+              </Button>
+            ) : null}
+          </div>
+          <ChangeList current={rows} proposed={request.rows} />
+          {mode === "manage" ? (
+            request.requires_owner && !viewer.isOwner && !viewer.isAdmin ? (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Info className="h-3.5 w-3.5" /> Only the clinic owner can decide this one.
+              </p>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={review.isPending}
+                  onClick={() => review.mutate({ id: request.id, approve: true })}
+                  data-qc="pattern-approve"
+                >
+                  Approve
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="bg-card"
+                  disabled={review.isPending}
+                  onClick={() => setDeclining(true)}
+                  data-qc="pattern-decline"
+                >
+                  Decline
+                </Button>
+              </div>
+            )
+          ) : null}
+        </div>
+      ) : null}
 
       {editing ? (
         <div className="flex flex-col gap-3" data-qc="pattern-editor">
@@ -202,6 +333,26 @@ export function WorkingPatternCard({
               </div>
             );
           })}
+          {!direct ? (
+            <>
+              <p className="flex items-center gap-2 rounded-2xl bg-warning-bg px-3.5 py-3 text-xs text-warning-ink">
+                <Info className="h-4 w-4 shrink-0" />
+                New hours go to {approverLabel} for approval; the diary follows once they agree.
+              </p>
+              <div className="field-stack">
+                <Label htmlFor="pattern-note">Note for the reviewer (optional)</Label>
+                <Textarea
+                  id="pattern-note"
+                  rows={2}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="e.g. Earlier Thursdays from November for the school run"
+                  className="rounded-xl"
+                  data-qc="pattern-note"
+                />
+              </div>
+            </>
+          ) : null}
           <div className="flex items-center justify-between gap-3 pt-1">
             <span className="text-sm text-muted-foreground">{weeklyHours(draft)} hours a week</span>
             <div className="flex gap-2">
@@ -210,11 +361,17 @@ export function WorkingPatternCard({
               </Button>
               <Button
                 type="button"
-                disabled={savePattern.isPending}
-                onClick={() => savePattern.mutate()}
-                data-qc="pattern-save"
+                disabled={submit.isPending || unchanged}
+                onClick={() => submit.mutate()}
+                data-qc={direct ? "pattern-save" : "pattern-request-send"}
               >
-                {savePattern.isPending ? "Saving…" : "Save hours"}
+                {submit.isPending
+                  ? direct
+                    ? "Saving…"
+                    : "Sending…"
+                  : direct
+                    ? "Save hours"
+                    : "Send for approval"}
               </Button>
             </div>
           </div>
@@ -267,38 +424,44 @@ export function WorkingPatternCard({
         </>
       )}
 
-      <Dialog open={askOpen} onOpenChange={setAskOpen}>
+      <Dialog open={declining} onOpenChange={setDeclining}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Request a change to your hours</DialogTitle>
+            <DialogTitle>Decline these hours?</DialogTitle>
             <DialogDescription>
-              Say what you would like to change. Your manager will update the pattern and the diary
-              follows.
+              {firstName(subject.fullName)} will be told, with your reason if you give one.
             </DialogDescription>
           </DialogHeader>
           <div className="field-stack">
-            <Label htmlFor="pattern-note">What should change?</Label>
+            <Label htmlFor="pattern-decline-note">Reason (optional)</Label>
             <Textarea
-              id="pattern-note"
-              rows={3}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Move Thursday to 09:00–17:00 from November"
+              id="pattern-decline-note"
+              rows={2}
+              value={reviewerNote}
+              onChange={(e) => setReviewerNote(e.target.value)}
               className="rounded-xl"
-              data-qc="pattern-note"
+              data-qc="pattern-decline-note"
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setAskOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setDeclining(false)}>
               Cancel
             </Button>
             <Button
               type="button"
-              disabled={askChange.isPending || !note.trim()}
-              onClick={() => askChange.mutate()}
-              data-qc="pattern-request-send"
+              variant="destructive"
+              disabled={review.isPending || !request}
+              onClick={() =>
+                request &&
+                review.mutate({
+                  id: request.id,
+                  approve: false,
+                  ...(reviewerNote.trim() ? { reviewerNote: reviewerNote.trim() } : {}),
+                })
+              }
+              data-qc="pattern-decline-confirm"
             >
-              {askChange.isPending ? "Sending…" : "Send request"}
+              {review.isPending ? "Declining…" : "Decline"}
             </Button>
           </DialogFooter>
         </DialogContent>

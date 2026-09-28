@@ -50,6 +50,7 @@ const KIND_ORDER = [
   "treatment_due",
   "incomplete_profile",
   "profile_change",
+  "staff_request",
   "compliance_due",
 ] as const;
 
@@ -64,6 +65,7 @@ const CHIP_META: Record<string, { label: string; className: string }> = {
   treatment_due: { label: "Skin-plan treatment due", className: "bg-accent-soft text-accent-ink" },
   incomplete_profile: { label: "Incomplete profile", className: "bg-warning-bg text-warning-ink" },
   profile_change: { label: "Profile change request", className: "bg-warning-bg text-warning-ink" },
+  staff_request: { label: "Requests to approve", className: "bg-accent-soft text-accent-ink" },
   compliance_due: {
     label: "Registration or insurance",
     className: "bg-warning-bg text-warning-ink",
@@ -169,7 +171,7 @@ function displayHref(person: TaskPerson, kind: string) {
 
 function personKey(item: AttentionRaw) {
   if (item.patientId) return `patient:${item.patientId}`;
-  if (item.kind === "profile_change") return `id:${item.id}`;
+  if (item.kind === "profile_change" || item.kind === "staff_request") return `id:${item.id}`;
   if (item.href) return `href:${item.href}`;
   return `id:${item.id}`;
 }
@@ -500,6 +502,8 @@ function railFor(kind: string) {
     case "profile_change":
     case "compliance_due":
       return "bg-warning";
+    case "staff_request":
+      return "bg-accent";
     default:
       return "bg-bar";
   }

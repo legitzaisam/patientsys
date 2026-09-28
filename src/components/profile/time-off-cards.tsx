@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { ProfileMode, ProfileSubject } from "./profile-types";
+import type { PatternRequestView, ProfileMode, ProfileSubject } from "./profile-types";
 
 /** Taken / booked / pending this year, with the request button. */
 export function TimeOffSummaryCard({
@@ -97,10 +97,13 @@ export function TimeOffRequestsCard({
   mode,
   subject,
   rows,
+  patternRequest = null,
 }: {
   mode: ProfileMode;
   subject: ProfileSubject;
   rows: TimeOffLike[];
+  /** The person's pending working-pattern request, listed first; decided in the Working pattern card. */
+  patternRequest?: PatternRequestView | null;
 }) {
   const queryClient = useQueryClient();
   const [declining, setDeclining] = useState<TimeOffLike | null>(null);
@@ -143,7 +146,27 @@ export function TimeOffRequestsCard({
       <h2 className="section-title mb-2">
         {mode === "self" ? "Your requests" : `${first}’s requests`}
       </h2>
-      {list.length === 0 ? (
+      {patternRequest ? (
+        <div
+          className="flex flex-wrap items-center gap-2.5 border-t border-edge-2 py-3"
+          data-qc="pattern-request-row"
+          data-status={patternRequest.status}
+        >
+          <div className="min-w-[12rem] flex-1">
+            <p className="text-[15px] font-semibold text-foreground">Working pattern</p>
+            <p className="text-[13px] text-muted-foreground">{patternRequest.summary}</p>
+          </div>
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-1 text-xs font-bold capitalize",
+              STATUS_CHIP[patternRequest.status] ?? STATUS_CHIP["withdrawn"],
+            )}
+          >
+            {patternRequest.status}
+          </span>
+        </div>
+      ) : null}
+      {list.length === 0 && !patternRequest ? (
         <p className="py-2 text-sm text-muted-foreground">No time off requested this year.</p>
       ) : (
         list.map((r) => (
@@ -153,7 +176,7 @@ export function TimeOffRequestsCard({
             data-qc="timeoff-row"
             data-status={r.status}
           >
-            <div className="min-w-0 flex-1">
+            <div className="min-w-[12rem] flex-1">
               <p className="text-[15px] font-semibold text-foreground">{timeOffLabel(r)}</p>
               <p className="text-[13px] text-muted-foreground">{timeOffWhat(r)}</p>
               {r.note ? <p className="mt-0.5 text-xs text-muted-foreground">“{r.note}”</p> : null}
