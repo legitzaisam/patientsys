@@ -18,7 +18,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | P7 | [`worklog/07-earnings.md`](worklog/07-earnings.md) | Performance & earnings tab and invoice dialog | `9fdafa7` |
 | P8 | [`worklog/08-schedule-and-time-off.md`](worklog/08-schedule-and-time-off.md) | Working pattern, calendar, requests, time-off sheet | `0d9f69a` |
 | P9 | [`worklog/09-documents-security-frontdesk.md`](worklog/09-documents-security-frontdesk.md) | Documents, Security, Access, Front desk layout, retirement | `3223e3a` |
-| P10 | [`worklog/10-tests-and-verify.md`](worklog/10-tests-and-verify.md) | e2e, full verification, after-captures, docs | `5d47b80` |
+| P10 | [`worklog/10-tests-and-verify.md`](worklog/10-tests-and-verify.md) | e2e, full verification, after-captures, docs | `d9a6c78` (+ this docs note) |
 
 ## To-dos
 
