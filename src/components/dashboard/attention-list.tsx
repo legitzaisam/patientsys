@@ -146,7 +146,10 @@ function patientBookingsChaseHref(patientId: string) {
 }
 
 function displaySubtitle(person: TaskPerson, kind: string) {
-  if (APPOINTMENT_ATTENTION_KINDS.has(kind) && person.subtitleParts.length > APPOINTMENT_SUMMARY_LIMIT) {
+  if (
+    APPOINTMENT_ATTENTION_KINDS.has(kind) &&
+    person.subtitleParts.length > APPOINTMENT_SUMMARY_LIMIT
+  ) {
     return "Several appointments";
   }
   return formatMergedSubtitle(person.subtitleParts);
@@ -182,7 +185,10 @@ function groupByTask(items: AttentionRaw[]): TaskGroup[] {
     const existing = people.get(key);
     const parsed = treatmentFromSubtitle(item.subtitle);
     if (existing) {
-      if (parsed && !existing.subtitleParts.some((part) => subtitleKey(part) === subtitleKey(parsed))) {
+      if (
+        parsed &&
+        !existing.subtitleParts.some((part) => subtitleKey(part) === subtitleKey(parsed))
+      ) {
         existing.subtitleParts.push(parsed);
       }
       continue;
@@ -285,7 +291,9 @@ function AttentionSection({
         ) : (
           <Bell className="h-4 w-4 text-ink-3" />
         )}
-        <h3 className={`text-sm font-semibold ${tone === "urgent" ? "text-destructive" : "text-foreground"}`}>
+        <h3
+          className={`text-sm font-semibold ${tone === "urgent" ? "text-destructive" : "text-foreground"}`}
+        >
           {title}
         </h3>
         <span className="ml-auto rounded-full border border-edge bg-glass-2 px-2 py-0.5 text-2xs font-semibold text-muted-foreground shadow-inset-hi">
@@ -337,7 +345,10 @@ function TaskCategory({
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
         />
-        <h4 className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.02em] text-foreground">
+        <h4
+          data-qc={`attention-kind-${task.kind}`}
+          className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.02em] text-foreground"
+        >
           {task.label}
         </h4>
         <span
@@ -353,6 +364,7 @@ function TaskCategory({
             <AttentionPersonRow
               key={person.key}
               person={person}
+              kind={task.kind}
               subtitle={displaySubtitle(person, task.kind)}
               href={displayHref(person, task.kind)}
               rail={rail}
@@ -377,11 +389,13 @@ function TaskCategory({
 
 function AttentionPersonRow({
   person,
+  kind,
   subtitle,
   href,
   rail,
 }: {
   person: TaskPerson;
+  kind: string;
   subtitle: string | null;
   href: string;
   rail: string;
@@ -411,15 +425,20 @@ function AttentionPersonRow({
 
   const expandable = Boolean(subtitle) && !summarized && (truncated || expanded);
 
+  const rowQc = kind === "treatment_due" ? "attention-treatment-due" : undefined;
+
   if (!expandable) {
     return (
-      <li>
+      <li data-qc={rowQc}>
         <Link
           to={href as any}
           className="flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
         >
           <i className={`h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
-          <p ref={textRef} className="min-w-0 flex-1 truncate text-[13px] leading-snug text-foreground">
+          <p
+            ref={textRef}
+            className="min-w-0 flex-1 truncate text-[13px] leading-snug text-foreground"
+          >
             {line}
           </p>
         </Link>
@@ -428,7 +447,7 @@ function AttentionPersonRow({
   }
 
   return (
-    <li>
+    <li data-qc={rowQc}>
       <div className="flex items-start gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.08)]">
         <i className={`mt-1.5 h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
         <div className="min-w-0 flex-1">
@@ -436,7 +455,7 @@ function AttentionPersonRow({
             type="button"
             onClick={() => setExpanded((open) => !open)}
             aria-expanded={expanded}
-            title={expanded ? undefined : subtitle ?? undefined}
+            title={expanded ? undefined : (subtitle ?? undefined)}
             className="w-full cursor-pointer text-left"
           >
             <p

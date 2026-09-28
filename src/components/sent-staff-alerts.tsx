@@ -532,6 +532,7 @@ export function SentStaffAlerts({
       await markAlertRead({ data: { id: row.id } });
       invalidateInbox();
       void queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
+      void queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
     }
     if (!row.peerId) return;
     openTeamChat({ userId: row.peerId, name: row.peerName });

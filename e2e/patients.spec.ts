@@ -255,3 +255,107 @@ test.describe("insights", () => {
     await expect(consulted.getByText(/\d+d waiting · consulted/).first()).toBeVisible();
   });
 });
+
+test.describe("attention treatment due", () => {
+  async function treatmentDueNames(page: import("@playwright/test").Page) {
+    await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
+    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
+    await expect(kind).toBeVisible({ timeout: 15_000 });
+    await kind.click();
+    const more = page.getByRole("button", { name: /Show \d+ more/ });
+    if ((await more.count()) > 0) await more.click();
+    return page
+      .locator('[data-qc="attention-treatment-due"]')
+      .evaluateAll((els) =>
+        els
+          .map((e) => e.querySelector(".font-semibold")?.textContent?.trim() ?? "")
+          .filter(Boolean),
+      );
+  }
+
+  test("owner: every Treatment due name has a Book button on the journey board", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    const names = await treatmentDueNames(page);
+    expect(names.length).toBeGreaterThan(0);
+
+    await page.goto("/patients?tab=board");
+    await expect(page.locator('[data-qc="board-card"]').first()).toBeVisible();
+    const bookNames = await page.locator('[data-qc="board-card"]').evaluateAll((els) =>
+      els
+        .filter((e) => e.querySelector('[data-qc="board-book"]'))
+        .map((e) => e.querySelector("p.font-semibold")?.textContent?.trim() ?? "")
+        .filter(Boolean),
+    );
+    for (const name of names) expect(bookNames).toContain(name);
+    for (const name of new Set(bookNames)) expect(names).toContain(name);
+
+    await page.goto("/dashboard");
+    await page.locator('[data-qc="attention-kind-treatment_due"]').click();
+    await page.locator('[data-qc="attention-treatment-due"] a').first().click();
+    await expect(page).toHaveURL(/\/patients\/.+[?&]tab=treatments/);
+    await expect(page.locator('[data-qc="treatment-plan-card"]')).toBeVisible();
+  });
+});
+
+test.describe("attention treatment due as practitioner", () => {
+  test.use({ role: "practitioner" });
+
+  test("Nadia only sees her unbooked plan patients", async ({ page }) => {
+    await page.goto("/dashboard");
+    await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
+    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
+    await expect(kind).toBeVisible({ timeout: 15_000 });
+    await kind.click();
+    const more = page.getByRole("button", { name: /Show \d+ more/ });
+    if ((await more.count()) > 0) await more.click();
+    const names = await page
+      .locator('[data-qc="attention-treatment-due"]')
+      .evaluateAll((els) =>
+        els
+          .map((e) => e.querySelector(".font-semibold")?.textContent?.trim() ?? "")
+          .filter(Boolean),
+      );
+    expect(names.length).toBeGreaterThan(0);
+    expect(names).not.toContain("Marcus Delaney");
+
+    await page.goto("/patients?tab=board");
+    await expect(page.locator('[data-qc="board-card"]').first()).toBeVisible();
+    const bookNames = await page.locator('[data-qc="board-card"]').evaluateAll((els) =>
+      els
+        .filter((e) => e.querySelector('[data-qc="board-book"]'))
+        .map((e) => e.querySelector("p.font-semibold")?.textContent?.trim() ?? "")
+        .filter(Boolean),
+    );
+    for (const name of names) expect(bookNames).toContain(name);
+    for (const name of new Set(bookNames)) expect(names).toContain(name);
+  });
+});
+
+test.describe("attention treatment due as front desk", () => {
+  test.use({ role: "front_desk" });
+
+  test("Sofia sees the clinic-wide unbooked plan chase", async ({ page }) => {
+    await page.goto("/dashboard");
+    await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
+    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
+    await expect(kind).toBeVisible({ timeout: 15_000 });
+    await kind.click();
+    const more = page.getByRole("button", { name: /Show \d+ more/ });
+    if ((await more.count()) > 0) await more.click();
+    const names = await page
+      .locator('[data-qc="attention-treatment-due"]')
+      .evaluateAll((els) =>
+        els
+          .map((e) => e.querySelector(".font-semibold")?.textContent?.trim() ?? "")
+          .filter(Boolean),
+      );
+    // Clinic-wide: Nadia's patient and another practitioner's patient.
+    expect(names).toContain("Harriet Blackwood");
+    expect(names).toContain("Marcus Delaney");
+  });
+});

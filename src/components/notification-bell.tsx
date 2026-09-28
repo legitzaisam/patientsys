@@ -14,8 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { parseStaffAlertTitle, formatTeamAlertToast } from "@/lib/staff-alert-title";
 import { cn } from "@/lib/utils";
-import { showChatQuickReplyToast } from "@/components/chat-quick-reply-toast";
-import { useOpenTeamChat } from "@/components/floating-dock/dock-context";
+import { showChatQuickReplyToast, showChatToast } from "@/components/chat-quick-reply-toast";
+import { useFloatingDock, useOpenTeamChat } from "@/components/floating-dock/dock-context";
+
+const TEAM_ALERT_KINDS = new Set(["staff_chat", "staff_message", "urgent"]);
 
 function showTeamAlertToast(opts: {
   id: string;
@@ -65,6 +67,7 @@ export function NotificationBell({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const openTeamChat = useOpenTeamChat();
+  const { requestChat } = useFloatingDock();
   const sessionReady = useAuthSessionReady();
   const fetchUnread = useServerFn(getUnreadMessages);
   const fetchAlerts = useServerFn(listStaffNotifications);
@@ -72,9 +75,9 @@ export function NotificationBell({
   const { data } = useQuery({
     queryKey: ["unread-messages"],
     queryFn: () => fetchUnread(),
-    refetchInterval: 60_000,
-    // Staff read patient threads in the chat bubble, not this bell.
-    enabled: sessionReady && !isStaff,
+    // Demo has no realtime, so the poll is what raises message toasts on both sides.
+    refetchInterval: DEMO_MODE ? 4_000 : 60_000,
+    enabled: sessionReady,
   });
   const { data: alerts } = useQuery({
     queryKey: ["staff-notifications"],
@@ -88,6 +91,48 @@ export function NotificationBell({
   const staffAlertsPrimedFor = useRef<string | null>(null);
   const [pressedNonUrgent, setPressedNonUrgent] = useState<Set<string>>(new Set());
 
+  function showPatientMessageToast(msg: { id: string; patientId: string; name: string; body: string }) {
+    showChatToast({
+      id: `patient-message-${msg.id}`,
+      peerName: msg.name,
+      tag: "Patient message",
+      description: msg.body.slice(0, 160),
+      onOpen: () => requestChat({ patientId: msg.patientId, patientName: msg.name }),
+    });
+  }
+
+  // Demo: no realtime — toast when a thread's unread count grows between polls.
+  const unreadPrimedFor = useRef<string | null>(null);
+  const unreadCounts = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!DEMO_MODE || !data || !identity?.userId) return;
+    const counts = new Map(data.items.map((item) => [item.patient_id, item.count]));
+    if (unreadPrimedFor.current !== identity.userId) {
+      unreadPrimedFor.current = identity.userId;
+      unreadCounts.current = counts;
+      return;
+    }
+    for (const item of data.items) {
+      if (item.count <= (unreadCounts.current.get(item.patient_id) ?? 0)) continue;
+      if (isStaff) {
+        queryClient.invalidateQueries({ queryKey: ["patient-threads"] });
+        queryClient.invalidateQueries({ queryKey: ["patient-messages", item.patient_id] });
+        showPatientMessageToast({
+          id: `${item.patient_id}-${item.count}-${Date.now()}`,
+          patientId: item.patient_id,
+          name: item.name,
+          body: item.last,
+        });
+      } else {
+        toast.message("New message from your clinic", {
+          description: item.last.slice(0, 120),
+          action: { label: "Open", onClick: () => navigate({ to: "/my-record" }) },
+        });
+      }
+    }
+    unreadCounts.current = counts;
+  }, [data, identity?.userId, isStaff, navigate, queryClient, requestChat]);
+
   useEffect(() => {
     if (DEMO_MODE) return;
     const channel = supabase
@@ -98,8 +143,20 @@ export function NotificationBell({
         if (!incoming || seen.current.has(row.id)) return;
         seen.current.add(row.id);
         queryClient.invalidateQueries({ queryKey: ["unread-messages"] });
-        // Staff already have the chat bubble for this. Patients still get a toast.
-        if (isStaff) return;
+        if (isStaff) {
+          queryClient.invalidateQueries({ queryKey: ["patient-threads"] });
+          queryClient.invalidateQueries({ queryKey: ["patient-messages", row.patient_id] });
+          void (async () => {
+            const { data: patient } = await supabase
+              .from("patients")
+              .select("first_name, last_name")
+              .eq("id", row.patient_id)
+              .maybeSingle();
+            const name = `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient";
+            showPatientMessageToast({ id: row.id, patientId: row.patient_id, name, body: row.body });
+          })();
+          return;
+        }
         toast.message("New message from your clinic", {
           description: row.body.slice(0, 120),
           action: {
@@ -112,7 +169,7 @@ export function NotificationBell({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [isStaff, navigate, queryClient]);
+  }, [isStaff, navigate, queryClient, requestChat]);
 
   useEffect(() => {
     if (!isStaff || DEMO_MODE) return;
@@ -133,7 +190,10 @@ export function NotificationBell({
           };
           queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
           queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
-          if (row.kind === "staff_chat") queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
+          if (TEAM_ALERT_KINDS.has(row.kind ?? "")) queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
+          if (row.sender_id && TEAM_ALERT_KINDS.has(row.kind ?? "")) {
+            queryClient.invalidateQueries({ queryKey: ["staff-chat", row.sender_id] });
+          }
           // A patient reaching "waiting" changes the diary and the dock too.
           if (row.kind === "patient_waiting") {
             queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -190,6 +250,9 @@ export function NotificationBell({
       if (alert.kind !== "staff_chat" && alert.kind !== "staff_message" && alert.kind !== "urgent") {
         continue;
       }
+      queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
+      if (alert.sender_id) queryClient.invalidateQueries({ queryKey: ["staff-chat", alert.sender_id] });
       showTeamAlertToast({
         id: alert.id,
         senderId: alert.sender_id,

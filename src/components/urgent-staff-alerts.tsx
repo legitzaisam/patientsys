@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   listStaffNotifications,
   markStaffNotificationRead,
-  sendStaffAlert,
+  replyToStaffAlert,
 } from "@/lib/clinic.functions";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ export function UrgentStaffAlerts({
   const sessionReady = useAuthSessionReady();
   const fetchAlerts = useServerFn(listStaffNotifications);
   const markRead = useServerFn(markStaffNotificationRead);
-  const sendAlert = useServerFn(sendStaffAlert);
+  const replyToAlert = useServerFn(replyToStaffAlert);
   const [collapsed, setCollapsed] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [replying, setReplying] = useState(false);
@@ -116,6 +116,7 @@ export function UrgentStaffAlerts({
       void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
       void queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
       void queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
+      void queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
       toast.success("Alert acknowledged");
       setCursor(0);
       setReplying(false);
@@ -125,22 +126,15 @@ export function UrgentStaffAlerts({
   });
 
   const replyMutation = useMutation({
-    mutationFn: async (args: { recipientId: string; body: string; alertId: string }) => {
-      await sendAlert({
-        data: {
-          audience: "user",
-          recipientId: args.recipientId,
-          body: args.body,
-          urgent: false,
-        },
-      });
-      await markRead({ data: { id: args.alertId } });
-    },
+    mutationFn: (args: { body: string; alertId: string }) =>
+      replyToAlert({ data: { alertId: args.alertId, body: args.body } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
       void queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
       void queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
+      void queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
+      void queryClient.invalidateQueries({ queryKey: ["practitioner-day"] });
       toast.success("Reply sent");
       setReplying(false);
       setReply("");
@@ -284,11 +278,7 @@ export function UrgentStaffAlerts({
                     toast.error("Cannot reply — sender unknown");
                     return;
                   }
-                  replyMutation.mutate({
-                    recipientId: current.sender_id,
-                    body: reply.trim(),
-                    alertId: current.id,
-                  });
+                  replyMutation.mutate({ body: reply.trim(), alertId: current.id });
                 }}
               >
                 <Send className="h-3.5 w-3.5" />

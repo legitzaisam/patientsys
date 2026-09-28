@@ -265,6 +265,7 @@ export function StaffChatPanel({
     void queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
     void queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
     void queryClient.invalidateQueries({ queryKey: ["practitioner-day"] });
+    void queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
   }
 
   const acknowledge = useMutation({

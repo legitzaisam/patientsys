@@ -98,6 +98,44 @@ test("a patient's message reaches their clinician in the chat box, not the bell"
   await expect(page.getByText("New bookings")).toBeVisible();
 });
 
+test("messages between the clinic and a patient raise a toast on the other side", async ({ page, browser }) => {
+  const staffContext = await browser.newContext();
+  await staffContext.addCookies([{ name: "demo_role", value: "owner", url: "http://localhost:8091" }]);
+  const staff = await staffContext.newPage();
+  await staff.goto("/dashboard");
+  await staff.addStyleTag({ content: '[data-qc="floating-dock"] { display: flex !important; }' });
+
+  await becomePatient(page);
+  await page.goto("/my-record");
+  // Let both sides take their first poll before anything is sent.
+  await page.waitForTimeout(1_500);
+
+  const fromPatient = `Toast to clinic ${Date.now()}`;
+  await page.locator('[data-qc="chat-bubble"]').click();
+  await page.locator('[data-qc="chat-panel"] textarea').fill(fromPatient);
+  await page.locator('[data-qc="chat-panel"] [aria-label="Send message"]').click();
+
+  const staffToast = staff.locator("[data-sonner-toast]", { hasText: fromPatient });
+  await expect(staffToast).toContainText("Patient message", { timeout: 15_000 });
+  await expect(staffToast).toContainText(PATIENT_NAME);
+  await staffToast.getByRole("button", { name: "Open Chat" }).click();
+  const staffChat = staff.locator('[data-qc="chat-window"]');
+  await expect(staffChat.getByText(fromPatient)).toBeVisible();
+  await expect(staffToast).toHaveCount(0);
+
+  const fromClinic = `Toast to patient ${Date.now()}`;
+  await staffChat.locator("textarea").fill(fromClinic);
+  await staffChat.locator('[aria-label="Send message"]').click();
+  await expect(staffChat.getByText(fromClinic)).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(page.locator("[data-sonner-toast]", { hasText: fromClinic })).toContainText(
+    "New message from your clinic",
+    { timeout: 15_000 },
+  );
+  await staffContext.close();
+});
+
 test("a journal entry the patient writes is visible to the clinic", async ({ page }) => {
   const title = `Sync journal ${Date.now()}`;
 

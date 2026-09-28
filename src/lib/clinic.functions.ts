@@ -17,9 +17,7 @@ import {
 } from "@/lib/metrics/definitions";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
-import {
-  PRACTITIONER_OVERLAP_MESSAGE,
-} from "@/lib/appointment-overlap";
+import { PRACTITIONER_OVERLAP_MESSAGE } from "@/lib/appointment-overlap";
 import {
   bookingDetailsMessage,
   formatMoney,
@@ -30,7 +28,7 @@ import {
 import { assertEmail } from "@/lib/email";
 import { assertPhone } from "@/lib/phone";
 import { practitionerDayAlerts, type PractitionerDayAlertRow } from "@/lib/practitioner-day-alerts";
-import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
+import { parseStaffAlertTitle, teamAlertPreview } from "@/lib/staff-alert-title";
 import { GENERIC_STAFF_DEFAULTS, loginRoleForClinicPack } from "@/lib/access-catalogue";
 import { assertStaffInvite, normalizeClinicRoleName } from "@/lib/clinic-roles";
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
@@ -38,10 +36,21 @@ import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voic
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
-import { CONSENT_BODY_DEFAULT, PRE_TREATMENT_CHECKS, canStartTreatment, consentReady, stageHeldForConsent } from "@/lib/visit-stage";
+import { attentionDueSubtitle } from "@/components/patients/plan-step-copy";
+import {
+  CONSENT_BODY_DEFAULT,
+  PRE_TREATMENT_CHECKS,
+  canStartTreatment,
+  consentReady,
+  stageHeldForConsent,
+} from "@/lib/visit-stage";
 import { fieldsFor, foldResults } from "@/lib/treatment-results";
 import { aftercarePointsFor } from "@/lib/aftercare-defaults";
-import { advanceToWaitingIfReady, consentStateOf, holdArrivedUntilConsent } from "@/lib/visit-stage.server";
+import {
+  advanceToWaitingIfReady,
+  consentStateOf,
+  holdArrivedUntilConsent,
+} from "@/lib/visit-stage.server";
 import {
   type Ctx,
   authorize,
@@ -166,7 +175,6 @@ async function banAuthUser(userId: string) {
   });
   if (res.error) throw new Error(res.error.message);
 }
-
 
 const EX_TEAM_RETAIN_DAYS = 90;
 
@@ -296,7 +304,6 @@ async function purgeExpiredExTeamMembers(clinicId: string) {
   }
 }
 
-
 /**
  * Every call site runs after its mutation has already committed, so a failure
  * here must not throw: that would report a successful clinical write as an error
@@ -375,7 +382,6 @@ export const getDashboard = createServerFn({ method: "GET" })
     const identity = await authorize(context as Ctx, "getDashboard");
     const supabase = (context as Ctx).supabase;
     const today = new Date();
-    const weekAhead = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
     const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString();
     const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
@@ -403,7 +409,10 @@ export const getDashboard = createServerFn({ method: "GET" })
       clinicRow,
     ] = await Promise.all([
       supabase.from("patients").select("id, status, created_at"),
-      supabase.from("treatments").select("id, price, patient_id, practitioner_id, performed_at").gte("performed_at", monthStart),
+      supabase
+        .from("treatments")
+        .select("id, price, patient_id, practitioner_id, performed_at")
+        .gte("performed_at", monthStart),
       supabase
         .from("documents")
         .select("id, title, kind, status, patient_id, sent_at, patients(first_name, last_name)")
@@ -436,8 +445,16 @@ export const getDashboard = createServerFn({ method: "GET" })
         .lt("starts_at", new Date(today.getTime() + 30 * 86400000).toISOString())
         .order("starts_at", { ascending: true })
         .limit(80),
-      supabase.from("treatments").select("id, price, patient_id, practitioner_id, performed_at").gte("performed_at", prevMonthStart).lt("performed_at", prevMonthEnd),
-      supabase.from("patients").select("id, created_at").gte("created_at", prevMonthStart).lt("created_at", prevMonthEnd),
+      supabase
+        .from("treatments")
+        .select("id, price, patient_id, practitioner_id, performed_at")
+        .gte("performed_at", prevMonthStart)
+        .lt("performed_at", prevMonthEnd),
+      supabase
+        .from("patients")
+        .select("id, created_at")
+        .gte("created_at", prevMonthStart)
+        .lt("created_at", prevMonthEnd),
       supabase
         .from("messages")
         .select("id, patient_id, body, created_at, patients(first_name, last_name)")
@@ -470,7 +487,9 @@ export const getDashboard = createServerFn({ method: "GET" })
     const [plansRaw, milestonesRaw, horizonApptsRaw] = await Promise.all([
       supabase
         .from("treatment_plans")
-        .select("id, patient_id, practitioner_id, name, kind, phase, status, total_sessions, patients(first_name, last_name, avatar_url)")
+        .select(
+          "id, patient_id, practitioner_id, name, kind, phase, status, total_sessions, patients(first_name, last_name, avatar_url)",
+        )
         .eq("status", "active")
         .order("started_at", { ascending: true }),
       supabase.from("plan_milestones").select("plan_id, status, kind, idx, due_date, title"),
@@ -539,7 +558,9 @@ export const getDashboard = createServerFn({ method: "GET" })
       string,
       { id: string; headline: string; code: string | null; appliesTo: string[] }
     >();
-    const todayPatientIds = [...new Set(todayAppts.map((a: any) => a.patient_id as string).filter(Boolean))];
+    const todayPatientIds = [
+      ...new Set(todayAppts.map((a: any) => a.patient_id as string).filter(Boolean)),
+    ];
     if (todayPatientIds.length > 0) {
       const { data: claimedRows } = await supabase
         .from("patient_offers")
@@ -569,7 +590,9 @@ export const getDashboard = createServerFn({ method: "GET" })
       );
       const { liveClaimedOffer } = await import("./offers/shape");
       for (const pid of todayPatientIds) {
-        const live = liveClaimedOffer(((claimedRows ?? []) as any[]).filter((r) => r.patient_id === pid));
+        const live = liveClaimedOffer(
+          ((claimedRows ?? []) as any[]).filter((r) => r.patient_id === pid),
+        );
         if (live) {
           claimedOfferByPatient.set(pid, {
             id: live.id,
@@ -606,8 +629,15 @@ export const getDashboard = createServerFn({ method: "GET" })
     let ownClientsPrev = 0;
     if (scoped) {
       const [{ data: myTreats }, { data: myAppts }] = await Promise.all([
-        supabase.from("treatments").select("patient_id, performed_at").eq("practitioner_id", scoped),
-        supabase.from("appointments").select("patient_id, starts_at").eq("practitioner_id", scoped).neq("status", "cancelled"),
+        supabase
+          .from("treatments")
+          .select("patient_id, performed_at")
+          .eq("practitioner_id", scoped),
+        supabase
+          .from("appointments")
+          .select("patient_id, starts_at")
+          .eq("practitioner_id", scoped)
+          .neq("status", "cancelled"),
       ]);
       const firstSeen = new Map<string, number>();
       for (const t of myTreats ?? []) {
@@ -621,30 +651,50 @@ export const getDashboard = createServerFn({ method: "GET" })
       ownClients = firstSeen.size;
       ownClientsPrev = [...firstSeen.values()].filter((ms) => ms < monthStartMs).length;
     }
-    const clinicClientsPrev = all.filter((p: any) => new Date(p.created_at).getTime() < monthStartMs).length;
+    const clinicClientsPrev = all.filter(
+      (p: any) => new Date(p.created_at).getTime() < monthStartMs,
+    ).length;
     const clientsNow = ownClients ?? all.length;
     const clientsPrev = ownClients === null ? clinicClientsPrev : ownClientsPrev;
-    const clientsChange = clientsPrev ? Math.round(((clientsNow - clientsPrev) / clientsPrev) * 100) : 0;
+    const clientsChange = clientsPrev
+      ? Math.round(((clientsNow - clientsPrev) / clientsPrev) * 100)
+      : 0;
 
     const treatmentsOverdue = dueDates.filter((t) => t.state === "overdue").length;
     const treatmentsDueSoon = dueDates.filter((t) => t.state === "due_soon").length;
-    // The attention list shows the soonest dozen of the same population.
+    // Still returned for older callers; Attention Needed no longer lists these.
     const due = dueDates.slice(0, 12);
 
-    const revenue = monthTreats.reduce((sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0), 0);
-    const prevRevenue = prevMonthTreats.reduce((sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0), 0);
-    const revenueChange = prevRevenue ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100) : 0;
+    const revenue = monthTreats.reduce(
+      (sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0),
+      0,
+    );
+    const prevRevenue = prevMonthTreats.reduce(
+      (sum: number, t: { price: number | null }) => sum + Number(t.price ?? 0),
+      0,
+    );
+    const revenueChange = prevRevenue
+      ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100)
+      : 0;
 
-    const newPatientsThisMonth = all.filter((p: any) => new Date(p.created_at) >= new Date(monthStart)).length;
+    const newPatientsThisMonth = all.filter(
+      (p: any) => new Date(p.created_at) >= new Date(monthStart),
+    ).length;
     const newPatientsPrevMonth = (prevMonthPatients.data ?? []).length;
-    const patientChange = newPatientsPrevMonth ? Math.round(((newPatientsThisMonth - newPatientsPrevMonth) / newPatientsPrevMonth) * 100) : 0;
+    const patientChange = newPatientsPrevMonth
+      ? Math.round(((newPatientsThisMonth - newPatientsPrevMonth) / newPatientsPrevMonth) * 100)
+      : 0;
 
-    const pendingConsents = (pendingDocs.data ?? []).filter((d: { kind: string }) => d.kind === "consent").length;
+    const pendingConsents = (pendingDocs.data ?? []).filter(
+      (d: { kind: string }) => d.kind === "consent",
+    ).length;
 
     const attentionItems: any[] = [];
 
     for (const a of todayAppts) {
-      const stage = a.stage ?? (a.status === "no_show" ? "no_show" : a.status === "attended" ? "complete" : "booked");
+      const stage =
+        a.stage ??
+        (a.status === "no_show" ? "no_show" : a.status === "attended" ? "complete" : "booked");
       if (stage === "no_show") {
         attentionItems.push({
           id: `no-show-${a.id}`,
@@ -691,7 +741,8 @@ export const getDashboard = createServerFn({ method: "GET" })
       const apptDay = clinicDayKey(new Date(a.starts_at));
       const daysUntil = clinicDayDiff(todayISO, apptDay);
       if (daysUntil < 0) continue;
-      const who = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
+      const who =
+        `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
       const when = new Date(a.starts_at).toLocaleDateString("en-GB", {
         weekday: "short",
         day: "numeric",
@@ -706,17 +757,6 @@ export const getDashboard = createServerFn({ method: "GET" })
         subtitle: `${a.treatment_name} · ${when}`,
         patientId: a.patient_id,
         appointmentId: a.id,
-      });
-    }
-
-    for (const t of due.filter((x: any) => x.next_due_at && x.next_due_at <= weekAhead)) {
-      attentionItems.push({
-        id: `due-${t.id}`,
-        kind: "treatment_due",
-        urgency: "this_week",
-        title: `${t.patients?.first_name ?? ""} ${t.patients?.last_name ?? ""} — ${t.name}`,
-        subtitle: `Due ${new Date(t.next_due_at).toLocaleDateString("en-GB")}`,
-        patientId: t.patient_id,
       });
     }
 
@@ -754,6 +794,39 @@ export const getDashboard = createServerFn({ method: "GET" })
       list.push(m);
       milestonesByPlan.set(m.plan_id, list);
     }
+    // Attention “Treatment due” is the board Book chase: active plan, no live booking.
+    const bookedUpcoming = new Set(
+      ((upcomingApptsRaw.data ?? []) as { patient_id: string; starts_at: string; status: string }[])
+        .filter((a) => a.status === "booked")
+        .map((a) => a.patient_id),
+    );
+    for (const p of plans) {
+      if (bookedUpcoming.has(p.patient_id)) continue;
+      const mine = (milestonesByPlan.get(p.id) ?? []).sort((a, b) => a.idx - b.idx);
+      const next =
+        mine.find((m) => m.status === "current") ??
+        mine.find((m) => m.status === "upcoming") ??
+        null;
+      const who =
+        `${p.patients?.first_name ?? ""} ${p.patients?.last_name ?? ""}`.trim() || "Patient";
+      const title = (next?.title as string | undefined) || "Next step";
+      const dueDate = (next?.due_date as string | null | undefined) ?? null;
+      const overdue = Boolean(dueDate && dueDate < todayKeyForPlans);
+      attentionItems.push({
+        id: `due-${p.id}`,
+        kind: "treatment_due",
+        urgency: "this_week",
+        title: `${who} — ${title}`,
+        subtitle: attentionDueSubtitle({
+          nextMilestone: { title, dueDate },
+          overdue,
+          atRisk: true,
+          riskReason: "No upcoming booking",
+        }),
+        patientId: p.patient_id,
+        href: `/patients/${p.patient_id}?tab=treatments#plan`,
+      });
+    }
     const journeyPhases = (["consult", "foundation", "build", "results"] as const).map((phase) => {
       const inPhase = plans.filter((p) => p.phase === phase);
       return {
@@ -776,8 +849,12 @@ export const getDashboard = createServerFn({ method: "GET" })
       };
     });
     const overduePlanIds = new Set<string>();
-    for (const m of ((milestonesRaw.data ?? []) as any[])) {
-      if ((m.status === "current" || m.status === "upcoming") && m.due_date && m.due_date < todayKeyForPlans) {
+    for (const m of (milestonesRaw.data ?? []) as any[]) {
+      if (
+        (m.status === "current" || m.status === "upcoming") &&
+        m.due_date &&
+        m.due_date < todayKeyForPlans
+      ) {
         overduePlanIds.add(m.plan_id);
       }
     }
@@ -795,7 +872,10 @@ export const getDashboard = createServerFn({ method: "GET" })
         planByPatient.set(p.patient_id, { name: p.name, totalSessions: p.total_sessions });
       }
     }
-    todayAppts = todayAppts.map((a: any) => ({ ...a, plan: planByPatient.get(a.patient_id) ?? null }));
+    todayAppts = todayAppts.map((a: any) => ({
+      ...a,
+      plan: planByPatient.get(a.patient_id) ?? null,
+    }));
 
     // ---- Safe to proceed: today/tomorrow bookings with pre-visit blockers.
     let horizon = (horizonApptsRaw.data ?? []) as any[];
@@ -807,12 +887,14 @@ export const getDashboard = createServerFn({ method: "GET" })
       if (a.payment_status === "unpaid") blockers.push("Deposit unpaid");
       else if (a.payment_status === "deposit_paid") blockers.push("Balance due");
       const allergies = (a.patients?.allergies ?? "").trim();
-      if (allergies && allergies.toLowerCase() !== "none") blockers.push(`Allergy: ${allergies.slice(0, 60)}`);
+      if (allergies && allergies.toLowerCase() !== "none")
+        blockers.push(`Allergy: ${allergies.slice(0, 60)}`);
       if (blockers.length === 0) continue;
       safeToProceed.push({
         id: a.id,
         patientId: a.patient_id,
-        patientName: `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient",
+        patientName:
+          `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient",
         avatarUrl: a.patients?.avatar_url ?? null,
         treatment: a.treatment_name,
         startsAt: a.starts_at,
@@ -886,27 +968,32 @@ export const listPatients = createServerFn({ method: "GET" })
     const ids = (data ?? []).map((p: { id: string }) => p.id);
     if (ids.length === 0) return [];
 
-    const [{ data: treatments }, { data: docs }, { data: upcoming }, { data: openRecalls }, { data: staffProfiles }] =
-      await Promise.all([
-        supabase
-          .from("treatments")
-          .select("patient_id, name, performed_at, next_due_at, practitioner_id")
-          .in("patient_id", ids),
-        supabase.from("documents").select("patient_id, status").in("patient_id", ids),
-        supabase
-          .from("appointments")
-          .select("patient_id, treatment_name, treatment_number, starts_at, status, practitioner_id")
-          .in("patient_id", ids)
-          .gte("starts_at", new Date().toISOString())
-          .in("status", ["booked"])
-          .order("starts_at", { ascending: true }),
-        supabase
-          .from("recall_tasks")
-          .select("id, patient_id, note, status")
-          .in("patient_id", ids)
-          .in("status", ["open", "contacted"]),
-        supabase.from("profiles").select("id, full_name"),
-      ]);
+    const [
+      { data: treatments },
+      { data: docs },
+      { data: upcoming },
+      { data: openRecalls },
+      { data: staffProfiles },
+    ] = await Promise.all([
+      supabase
+        .from("treatments")
+        .select("patient_id, name, performed_at, next_due_at, practitioner_id")
+        .in("patient_id", ids),
+      supabase.from("documents").select("patient_id, status").in("patient_id", ids),
+      supabase
+        .from("appointments")
+        .select("patient_id, treatment_name, treatment_number, starts_at, status, practitioner_id")
+        .in("patient_id", ids)
+        .gte("starts_at", new Date().toISOString())
+        .in("status", ["booked"])
+        .order("starts_at", { ascending: true }),
+      supabase
+        .from("recall_tasks")
+        .select("id, patient_id, note, status")
+        .in("patient_id", ids)
+        .in("status", ["open", "contacted"]),
+      supabase.from("profiles").select("id, full_name"),
+    ]);
 
     const nameOf = new Map((staffProfiles ?? []).map((s: any) => [s.id, s.full_name as string]));
     const now = new Date();
@@ -949,9 +1036,12 @@ export const listPatients = createServerFn({ method: "GET" })
       const practitionerIds: string[] = [];
       if (next?.practitioner_id) practitionerIds.push(next.practitioner_id);
       for (const t of mine) {
-        if (t.practitioner_id && !practitionerIds.includes(t.practitioner_id)) practitionerIds.push(t.practitioner_id);
+        if (t.practitioner_id && !practitionerIds.includes(t.practitioner_id))
+          practitionerIds.push(t.practitioner_id);
       }
-      const practitioners = practitionerIds.map((pid) => nameOf.get(pid)).filter(Boolean) as string[];
+      const practitioners = practitionerIds
+        .map((pid) => nameOf.get(pid))
+        .filter(Boolean) as string[];
 
       // Open items: assigned recall tasks plus derived chase items.
       const openTasks: { id: string; label: string; kind: string }[] = (openRecalls ?? [])
@@ -998,7 +1088,10 @@ export const getPatientMetrics = createServerFn({ method: "GET" })
     const supabase = (context as Ctx).supabase;
     const { buildBookMetrics } = await import("./insights.server");
     const [{ data: patients }, { data: treatments }, { data: appointments }] = await Promise.all([
-      supabase.from("patients").select("id, status, created_at, source, last_visit_at").is("deleted_at", null),
+      supabase
+        .from("patients")
+        .select("id, status, created_at, source, last_visit_at")
+        .is("deleted_at", null),
       supabase.from("treatments").select("patient_id, name, price, performed_at"),
       supabase.from("appointments").select("patient_id, starts_at, status"),
     ]);
@@ -1028,56 +1121,57 @@ export const getPatient = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     if (!patient) throw new Error("Patient not found");
 
-    const [treatments, photos, documents, messages, history, upcoming, visitAppts, bookingAppts] = await Promise.all([
-      supabase
-        .from("treatments")
-        .select("*, profiles(full_name)")
-        .eq("patient_id", data.id)
-        .order("performed_at", { ascending: false }),
-      supabase
-        .from("treatment_photos")
-        .select("*")
-        .eq("patient_id", data.id)
-        .order("taken_at", { ascending: true }),
-      supabase
-        .from("documents")
-        .select("*")
-        .eq("patient_id", data.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("messages")
-        .select("*")
-        .eq("patient_id", data.id)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("medical_history_versions")
-        .select("*")
-        .eq("patient_id", data.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("appointments")
-        .select("starts_at, status")
-        .eq("patient_id", data.id)
-        .gte("starts_at", new Date().toISOString())
-        .not("status", "in", "(cancelled,no_show)")
-        .limit(1),
-      supabase
-        .from("appointments")
-        .select(
-          "id, starts_at, ends_at, status, treatment_name, treatment_number, notes, profiles(full_name), appointment_notes(body, updated_at, updated_by_label)",
-        )
-        .eq("patient_id", data.id)
-        .order("starts_at", { ascending: false }),
-      supabase
-        .from("appointments")
-        .select(
-          "id, starts_at, treatment_name, status, payment_status, notes, profiles(full_name), documents(status, title), appointment_notes(body)",
-        )
-        .eq("patient_id", data.id)
-        .gte("starts_at", new Date().toISOString())
-        .not("status", "in", "(cancelled,no_show)")
-        .order("starts_at", { ascending: true }),
-    ]);
+    const [treatments, photos, documents, messages, history, upcoming, visitAppts, bookingAppts] =
+      await Promise.all([
+        supabase
+          .from("treatments")
+          .select("*, profiles(full_name)")
+          .eq("patient_id", data.id)
+          .order("performed_at", { ascending: false }),
+        supabase
+          .from("treatment_photos")
+          .select("*")
+          .eq("patient_id", data.id)
+          .order("taken_at", { ascending: true }),
+        supabase
+          .from("documents")
+          .select("*")
+          .eq("patient_id", data.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("messages")
+          .select("*")
+          .eq("patient_id", data.id)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("medical_history_versions")
+          .select("*")
+          .eq("patient_id", data.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("appointments")
+          .select("starts_at, status")
+          .eq("patient_id", data.id)
+          .gte("starts_at", new Date().toISOString())
+          .not("status", "in", "(cancelled,no_show)")
+          .limit(1),
+        supabase
+          .from("appointments")
+          .select(
+            "id, starts_at, ends_at, status, treatment_name, treatment_number, notes, profiles(full_name), appointment_notes(body, updated_at, updated_by_label)",
+          )
+          .eq("patient_id", data.id)
+          .order("starts_at", { ascending: false }),
+        supabase
+          .from("appointments")
+          .select(
+            "id, starts_at, treatment_name, status, payment_status, notes, profiles(full_name), documents(status, title), appointment_notes(body)",
+          )
+          .eq("patient_id", data.id)
+          .gte("starts_at", new Date().toISOString())
+          .not("status", "in", "(cancelled,no_show)")
+          .order("starts_at", { ascending: true }),
+      ]);
 
     const signed: Record<string, string> = {};
     for (const photo of photos.data ?? []) {
@@ -1091,7 +1185,10 @@ export const getPatient = createServerFn({ method: "GET" })
 
     const { patientRetention } = await import("./retention.server");
     const retention = patientRetention(
-      (treatments.data ?? []).map((t: any) => ({ performed_at: t.performed_at, next_due_at: t.next_due_at })),
+      (treatments.data ?? []).map((t: any) => ({
+        performed_at: t.performed_at,
+        next_due_at: t.next_due_at,
+      })),
       (upcoming.data ?? []).length > 0,
     );
 
@@ -1125,8 +1222,9 @@ export const getPatient = createServerFn({ method: "GET" })
         const embedded = a.appointment_notes;
         const noteRow = Array.isArray(embedded) ? embedded[0] : embedded;
         const bookingNote =
-          String(a.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim() ||
-          plainVisitNote(noteRow?.body);
+          String(a.notes ?? "")
+            .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
+            .trim() || plainVisitNote(noteRow?.body);
         return {
           id: a.id as string,
           startsAt: a.starts_at as string,
@@ -1162,10 +1260,16 @@ export const getPatient = createServerFn({ method: "GET" })
     // and today's visit if there is one, so the record page can offer the form.
     const day = clinicDayRange(new Date());
     const [{ data: sessions }, { data: todayAppts }] = await Promise.all([
-      supabase.from("treatment_sessions").select("treatment_id").eq("patient_id", data.id).eq("status", "complete"),
+      supabase
+        .from("treatment_sessions")
+        .select("treatment_id")
+        .eq("patient_id", data.id)
+        .eq("status", "complete"),
       supabase
         .from("appointments")
-        .select("id, starts_at, treatment_name, stage, status, practitioner_id, documents(status), treatment_catalogue(requires_consent), profiles(full_name)")
+        .select(
+          "id, starts_at, treatment_name, stage, status, practitioner_id, documents(status), treatment_catalogue(requires_consent), profiles(full_name)",
+        )
         .eq("patient_id", data.id)
         .gte("starts_at", day.startISO)
         .lt("starts_at", day.endISO)
@@ -1179,7 +1283,10 @@ export const getPatient = createServerFn({ method: "GET" })
 
     return {
       patient,
-      treatments: (treatments.data ?? []).map((t: any) => ({ ...t, hasRecord: withRecord.has(t.id) })),
+      treatments: (treatments.data ?? []).map((t: any) => ({
+        ...t,
+        hasRecord: withRecord.has(t.id),
+      })),
       photos: (photos.data ?? []).map((p: any) => ({ ...p, url: signed[p.id] ?? null })),
       documents: documents.data ?? [],
       messages: messages.data ?? [],
@@ -1198,7 +1305,10 @@ export const getPatient = createServerFn({ method: "GET" })
             id: todayVisit.id,
             startsAt: todayVisit.starts_at,
             treatment: todayVisit.treatment_name,
-            stage: stageHeldForConsent(todayVisit.stage ?? "booked", consentStateOf(todayVisit as any)),
+            stage: stageHeldForConsent(
+              todayVisit.stage ?? "booked",
+              consentStateOf(todayVisit as any),
+            ),
             practitionerName: (todayVisit as any).profiles?.full_name ?? null,
             consentState: consentStateOf(todayVisit as any),
           }
@@ -1224,7 +1334,8 @@ export const listPlanPauseRequests = createServerFn({ method: "GET" })
       planId: r.plan_id,
       planName: r.treatment_plans?.name ?? "Treatment plan",
       patientId: r.patient_id,
-      patientName: `${r.patients?.first_name ?? ""} ${r.patients?.last_name ?? ""}`.trim() || "Patient",
+      patientName:
+        `${r.patients?.first_name ?? ""} ${r.patients?.last_name ?? ""}`.trim() || "Patient",
       avatarUrl: r.patients?.avatar_url ?? null,
       reason: r.reason,
       notes: r.notes,
@@ -1260,9 +1371,18 @@ export const decidePlanPause = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     if (data.approve) {
-      await ctx.supabase.from("treatment_plans").update({ status: "paused" }).eq("id", request.plan_id);
+      await ctx.supabase
+        .from("treatment_plans")
+        .update({ status: "paused" })
+        .eq("id", request.plan_id);
     }
-    await audit(ctx, data.approve ? "approve" : "decline", "plan_pause_requests", data.id, request.patient_id);
+    await audit(
+      ctx,
+      data.approve ? "approve" : "decline",
+      "plan_pause_requests",
+      data.id,
+      request.patient_id,
+    );
     return { ok: true, alreadyDecided: false };
   });
 
@@ -1425,7 +1545,11 @@ async function notifyBookingChange(
       .eq("id", opts.patientId)
       .maybeSingle(),
     opts.practitionerId
-      ? ctx.supabase.from("profiles").select("full_name").eq("id", opts.practitionerId).maybeSingle()
+      ? ctx.supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", opts.practitionerId)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
   const { bookingUpdatedMessage } = await import("./comms/templates");
@@ -1501,7 +1625,11 @@ async function queueAppointmentReminders(
         .eq("id", opts.patientId)
         .maybeSingle(),
       opts.practitionerId
-        ? ctx.supabase.from("profiles").select("full_name").eq("id", opts.practitionerId).maybeSingle()
+        ? ctx.supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", opts.practitionerId)
+            .maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
     const offsets = (clinic?.reminder_offsets as number[] | null) ?? [168, 24];
@@ -1571,7 +1699,8 @@ export const saveAppointment = createServerFn({ method: "POST" })
       starts_at: start.toISOString(),
       ends_at: endsAt,
       price: data.price ?? null,
-      payment_status: (data.payment_status as "unpaid" | "deposit_paid" | "paid" | "refunded") ?? "unpaid",
+      payment_status:
+        (data.payment_status as "unpaid" | "deposit_paid" | "paid" | "refunded") ?? "unpaid",
       consent_document_id: data.consent_document_id || null,
       notes: data.notes || null,
       details_incomplete: data.details_incomplete ?? false,
@@ -1594,7 +1723,11 @@ export const saveAppointment = createServerFn({ method: "POST" })
       await audit(context as Ctx, "update", "appointment", data.id, data.patient_id);
       const noteBody = String(data.notes ?? "");
       if (noteBody.trim()) {
-        const { data: me } = await supabase.from("profiles").select("full_name").eq("id", context.userId).maybeSingle();
+        const { data: me } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", context.userId)
+          .maybeSingle();
         await supabase.from("appointment_notes").upsert(
           {
             appointment_id: data.id,
@@ -1642,7 +1775,11 @@ export const saveAppointment = createServerFn({ method: "POST" })
 
     const noteBody = String(data.notes ?? "");
     if (noteBody.trim()) {
-      const { data: me } = await supabase.from("profiles").select("full_name").eq("id", context.userId).maybeSingle();
+      const { data: me } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", context.userId)
+        .maybeSingle();
       await supabase.from("appointment_notes").upsert(
         {
           appointment_id: created.id,
@@ -1659,7 +1796,11 @@ export const saveAppointment = createServerFn({ method: "POST" })
 
     // Confirmation + payment link, written to the patient's portal thread.
     const [{ data: patient }, { data: practitioner }] = await Promise.all([
-      supabase.from("patients").select("first_name, last_name, email, phone").eq("id", data.patient_id).maybeSingle(),
+      supabase
+        .from("patients")
+        .select("first_name, last_name, email, phone")
+        .eq("id", data.patient_id)
+        .maybeSingle(),
       supabase.from("profiles").select("full_name").eq("id", payload.practitioner_id).maybeSingle(),
     ]);
     const when = formatWhenLondon(start);
@@ -1766,7 +1907,8 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       id: string;
       status?: "booked" | "attended" | "cancelled" | "no_show";
       payment_status?: "unpaid" | "deposit_paid" | "paid" | "refunded";
-      stage?: "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
+      stage?:
+        "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
       cancel_reason?: string;
     }) => parseInput(schemas.UpdateAppointmentState, data),
   )
@@ -1796,7 +1938,9 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
       else if (data.stage === "booked") patch["status"] = "booked";
       else patch["status"] = "attended";
     }
-    const reason = String(data.cancel_reason ?? "").trim().slice(0, 2000);
+    const reason = String(data.cancel_reason ?? "")
+      .trim()
+      .slice(0, 2000);
     if (data.status === "cancelled" && reason) {
       const { data: existing } = await supabase
         .from("appointments")
@@ -1821,7 +1965,10 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
     if (data.stage === "arrived" || data.stage === "waiting") {
       const advanced = await advanceToWaitingIfReady(supabase, { appointmentId: data.id });
       if (advanced.advanced) {
-        await audit(context as Ctx, "update", "appointment", data.id, null, { stage: "waiting", auto: true });
+        await audit(context as Ctx, "update", "appointment", data.id, null, {
+          stage: "waiting",
+          auto: true,
+        });
       }
       return { ok: true, stage: advanced.advanced ? "waiting" : "arrived" };
     }
@@ -1848,7 +1995,8 @@ export const getAppointmentConsent = createServerFn({ method: "GET" })
     return {
       appointmentId: appt.id,
       stage: appt.stage,
-      patientName: `${(appt as any).patients?.first_name ?? ""} ${(appt as any).patients?.last_name ?? ""}`.trim(),
+      patientName:
+        `${(appt as any).patients?.first_name ?? ""} ${(appt as any).patients?.last_name ?? ""}`.trim(),
       treatment: appt.treatment_name,
       consentState: consentStateOf(appt as any),
       document: {
@@ -1858,9 +2006,10 @@ export const getAppointmentConsent = createServerFn({ method: "GET" })
         status: doc?.status ?? null,
         signedAt: doc?.signed_at ?? null,
         signedName: doc?.signed_name ?? null,
-        signatureData: typeof doc?.signature_data === "string" && doc.signature_data.startsWith("data:image/")
-          ? doc.signature_data
-          : null,
+        signatureData:
+          typeof doc?.signature_data === "string" && doc.signature_data.startsWith("data:image/")
+            ? doc.signature_data
+            : null,
       },
     };
   });
@@ -1872,12 +2021,14 @@ export const getAppointmentConsent = createServerFn({ method: "GET" })
  * lets the arrival rule move the patient on to waiting.
  */
 export const completeConsentInClinic = createServerFn({ method: "POST" })
-  .validator((data: {
-    appointment_id: string;
-    signed_name: string;
-    signature_data?: string;
-    contraindications?: Record<string, "yes" | "no" | "na">;
-  }) => parseInput(schemas.CompleteConsentInClinic, data))
+  .validator(
+    (data: {
+      appointment_id: string;
+      signed_name: string;
+      signature_data?: string;
+      contraindications?: Record<string, "yes" | "no" | "na">;
+    }) => parseInput(schemas.CompleteConsentInClinic, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -1930,16 +2081,24 @@ export const completeConsentInClinic = createServerFn({ method: "POST" })
           signature_data: signature,
           viewed_at: new Date().toISOString(),
           witnessed_by: ctx.userId,
-          ...(data.contraindications ? { responses: { contraindications: data.contraindications } } : {}),
+          ...(data.contraindications
+            ? { responses: { contraindications: data.contraindications } }
+            : {}),
         })
         .eq("id", documentId)
         .neq("status", "signed");
       if (signError) throw new Error(signError.message);
-      await audit(ctx, "sign", "document", documentId, appt.patient_id, { inClinic: true, witnessedBy: ctx.userId });
+      await audit(ctx, "sign", "document", documentId, appt.patient_id, {
+        inClinic: true,
+        witnessedBy: ctx.userId,
+      });
     }
     const advanced = await advanceToWaitingIfReady(ctx.supabase, { appointmentId: appt.id });
     if (advanced.advanced) {
-      await audit(ctx, "update", "appointment", appt.id, appt.patient_id, { stage: "waiting", auto: true });
+      await audit(ctx, "update", "appointment", appt.id, appt.patient_id, {
+        stage: "waiting",
+        auto: true,
+      });
     }
     return { ok: true, documentId, stage: advanced.advanced ? "waiting" : appt.stage };
   });
@@ -2095,7 +2254,9 @@ export const addTreatment = createServerFn({ method: "POST" })
       .from("patients")
       .update({ last_visit_at: data.performed_at, status: "active" })
       .eq("id", data.patient_id);
-    await audit(context as Ctx, "create", "treatment", created.id, data.patient_id, { name: data.name });
+    await audit(context as Ctx, "create", "treatment", created.id, data.patient_id, {
+      name: data.name,
+    });
     return { id: created.id as string };
   });
 
@@ -2426,8 +2587,8 @@ export const sendPaymentRequest = createServerFn({ method: "POST" })
  * only queued rows, so a call can never reach a provider adapter.
  */
 export const logCallAttempt = createServerFn({ method: "POST" })
-  .validator(
-    (data: { patient_id: string; phone?: string }) => parseInput(schemas.LogCallAttempt, data),
+  .validator((data: { patient_id: string; phone?: string }) =>
+    parseInput(schemas.LogCallAttempt, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -2528,7 +2689,8 @@ export const sendMessage = createServerFn({ method: "POST" })
           .select("first_name, last_name")
           .eq("id", data.patient_id)
           .maybeSingle();
-        const who = `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "A patient";
+        const who =
+          `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "A patient";
         // Patients cannot write staff_notifications under RLS, so the insert
         // goes through the clinic-scoped admin client.
         const supabaseAdmin = await adminClient(context);
@@ -2592,7 +2754,11 @@ export const getUnreadMessages = createServerFn({ method: "GET" })
     const identity = await authorize(context as Ctx, "getUnreadMessages");
 
     if (identity.isPatient) {
-      if (!identity.patient) return { total: 0, items: [] as { patient_id: string; name: string; count: number; last: string }[] };
+      if (!identity.patient)
+        return {
+          total: 0,
+          items: [] as { patient_id: string; name: string; count: number; last: string }[],
+        };
       const { data: rows } = await supabase
         .from("messages")
         .select("id, body, created_at")
@@ -2628,14 +2794,19 @@ export const getUnreadMessages = createServerFn({ method: "GET" })
       .is("read_at", null)
       .order("created_at", { ascending: false });
 
-    const grouped = new Map<string, { patient_id: string; name: string; count: number; last: string }>();
+    const grouped = new Map<
+      string,
+      { patient_id: string; name: string; count: number; last: string }
+    >();
     for (const row of (rows ?? []) as any[]) {
       const existing = grouped.get(row.patient_id);
       if (existing) existing.count += 1;
       else
         grouped.set(row.patient_id, {
           patient_id: row.patient_id,
-          name: `${row.patients?.first_name ?? ""} ${row.patients?.last_name ?? ""}`.trim() || "Patient",
+          name:
+            `${row.patients?.first_name ?? ""} ${row.patients?.last_name ?? ""}`.trim() ||
+            "Patient",
           count: 1,
           last: row.body,
         });
@@ -2653,7 +2824,9 @@ export const listStaffNotifications = createServerFn({ method: "GET" })
     // Service-role client bypasses RLS — only show alerts addressed to this user.
     const { data: rows } = await ctx.supabase
       .from("staff_notifications")
-      .select("id, title, body, patient_id, appointment_id, read_at, created_at, urgent, sender_id, kind")
+      .select(
+        "id, title, body, patient_id, appointment_id, read_at, created_at, urgent, sender_id, kind",
+      )
       .eq("recipient_id", ctx.userId)
       .is("read_at", null)
       .is("recipient_dismissed_at", null)
@@ -2705,12 +2878,14 @@ export const listStaffDirectory = createServerFn({ method: "GET" })
       .select("id, full_name, job_title")
       .in("id", ids)
       .order("full_name", { ascending: true });
-    return (profiles ?? []).map((p: { id: string; full_name: string; job_title: string | null }) => ({
-      ...p,
-      roles: (roles ?? [])
-        .filter((r: { user_id: string }) => r.user_id === p.id)
-        .map((r: { role: string }) => r.role) as string[],
-    }));
+    return (profiles ?? []).map(
+      (p: { id: string; full_name: string; job_title: string | null }) => ({
+        ...p,
+        roles: (roles ?? [])
+          .filter((r: { user_id: string }) => r.user_id === p.id)
+          .map((r: { role: string }) => r.role) as string[],
+      }),
+    );
   });
 
 /** Send a direct or urgent alert to teammates; appears in their notification bell. */
@@ -2743,8 +2918,13 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
             : data.audience === "front_desk"
               ? ["front_desk"]
               : ["owner", "manager", "front_desk", "practitioner"];
-      const { data: roles } = await ctx.supabase.from("user_roles").select("user_id").in("role", wanted);
-      recipients = [...new Set((roles ?? []).map((r: { user_id: string }) => r.user_id))] as string[];
+      const { data: roles } = await ctx.supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", wanted);
+      recipients = [
+        ...new Set((roles ?? []).map((r: { user_id: string }) => r.user_id)),
+      ] as string[];
     }
     recipients = recipients.filter((id) => id !== ctx.userId);
     if (recipients.length === 0) throw new Error("No recipients found");
@@ -2775,7 +2955,9 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
  * sender's Team alerts and raises their toast. Replying also acknowledges the original.
  */
 export const replyToStaffAlert = createServerFn({ method: "POST" })
-  .validator((data: { alertId: string; body: string }) => parseInput(schemas.ReplyToStaffAlert, data))
+  .validator((data: { alertId: string; body: string }) =>
+    parseInput(schemas.ReplyToStaffAlert, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -2790,8 +2972,10 @@ export const replyToStaffAlert = createServerFn({ method: "POST" })
       .maybeSingle();
     if (fetchErr) throw new Error(fetchErr.message);
     if (!original || original.recipient_id !== ctx.userId) throw new Error("Alert not found");
-    if (original.kind !== "urgent" && original.kind !== "staff_message") throw new Error("Only team alerts can be replied to");
-    if (!original.sender_id || original.sender_id === ctx.userId) throw new Error("This alert has no one to reply to");
+    if (original.kind !== "urgent" && original.kind !== "staff_message")
+      throw new Error("Only team alerts can be replied to");
+    if (!original.sender_id || original.sender_id === ctx.userId)
+      throw new Error("This alert has no one to reply to");
 
     const from = identity.profile?.full_name || identity.email || "A colleague";
     const { topic } = parseStaffAlertTitle(original.title);
@@ -2818,13 +3002,17 @@ export const replyToStaffAlert = createServerFn({ method: "POST" })
         .eq("id", original.id)
         .eq("recipient_id", ctx.userId);
     }
-    await audit(ctx, "notify", "staff_notification", inserted?.id ?? null, null, { reply_to: original.id });
+    await audit(ctx, "notify", "staff_notification", inserted?.id ?? null, null, {
+      reply_to: original.id,
+    });
     return { id: inserted?.id ?? null };
   });
 
 /** Day summary for a practitioner: bookings, free windows and their urgent notes to me. */
 export const getPractitionerDay = createServerFn({ method: "GET" })
-  .validator((data: { practitionerId: string; date: string }) => parseInput(schemas.GetPractitionerDay, data))
+  .validator((data: { practitionerId: string; date: string }) =>
+    parseInput(schemas.GetPractitionerDay, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "getPractitionerDay");
@@ -2842,7 +3030,9 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
         .order("starts_at", { ascending: true }),
       ctx.supabase
         .from("staff_notifications")
-        .select("id, title, body, created_at, urgent, recipient_id, read_at, recipient_dismissed_at")
+        .select(
+          "id, title, body, created_at, urgent, recipient_id, read_at, recipient_dismissed_at",
+        )
         .eq("sender_id", data.practitionerId)
         .eq("urgent", true)
         .order("created_at", { ascending: false })
@@ -2875,7 +3065,9 @@ export const getPractitionerDay = createServerFn({ method: "GET" })
   });
 
 export const markStaffNotificationRead = createServerFn({ method: "POST" })
-  .validator((data: { id?: string; all?: boolean }) => parseInput(schemas.MarkStaffNotificationRead, data))
+  .validator((data: { id?: string; all?: boolean }) =>
+    parseInput(schemas.MarkStaffNotificationRead, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -3051,7 +3243,9 @@ export const listMessageTemplates = createServerFn({ method: "GET" })
   });
 
 export const saveMessageTemplate = createServerFn({ method: "POST" })
-  .validator((data: { id?: string; title: string; body: string; category?: string }) => parseInput(schemas.SaveMessageTemplate, data))
+  .validator((data: { id?: string; title: string; body: string; category?: string }) =>
+    parseInput(schemas.SaveMessageTemplate, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "saveMessageTemplate");
@@ -3076,7 +3270,10 @@ export const deleteMessageTemplate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await authorize(context as Ctx, "deleteMessageTemplate");
-    const { error } = await (context as Ctx).supabase.from("message_templates").delete().eq("id", data.id);
+    const { error } = await (context as Ctx).supabase
+      .from("message_templates")
+      .delete()
+      .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -3206,21 +3403,33 @@ export const listPatientThreads = createServerFn({ method: "GET" })
     // a clinic's active conversations without scanning the whole table.
     const { data: rows, error } = await supabase
       .from("messages")
-      .select("id, patient_id, author, body, read_at, created_at, patients(first_name, last_name, avatar_url)")
+      .select(
+        "id, patient_id, author, body, read_at, created_at, patients(first_name, last_name, avatar_url)",
+      )
       .order("created_at", { ascending: false })
       .limit(400);
     if (error) throw new Error(error.message);
 
     const threads = new Map<
       string,
-      { patientId: string; name: string; avatarUrl: string | null; last: string; lastAt: string; lastAuthor: string; unread: number }
+      {
+        patientId: string;
+        name: string;
+        avatarUrl: string | null;
+        last: string;
+        lastAt: string;
+        lastAuthor: string;
+        unread: number;
+      }
     >();
     for (const row of (rows ?? []) as any[]) {
       let thread = threads.get(row.patient_id);
       if (!thread) {
         thread = {
           patientId: row.patient_id,
-          name: `${row.patients?.first_name ?? ""} ${row.patients?.last_name ?? ""}`.trim() || "Patient",
+          name:
+            `${row.patients?.first_name ?? ""} ${row.patients?.last_name ?? ""}`.trim() ||
+            "Patient",
           avatarUrl: row.patients?.avatar_url ?? null,
           last: row.body,
           lastAt: row.created_at,
@@ -3303,15 +3512,31 @@ export const getMyRecord = createServerFn({ method: "GET" })
     if (!patient) return null;
 
     const [treatments, documents, messages, history, photos] = await Promise.all([
-      supabase.from("treatments").select("*").eq("patient_id", patient.id).order("performed_at", { ascending: false }),
-      supabase.from("documents").select("*").eq("patient_id", patient.id).order("created_at", { ascending: false }),
-      supabase.from("messages").select("*").eq("patient_id", patient.id).order("created_at", { ascending: true }),
+      supabase
+        .from("treatments")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("performed_at", { ascending: false }),
+      supabase
+        .from("documents")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("messages")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .order("created_at", { ascending: true }),
       supabase
         .from("medical_history_versions")
         .select("*")
         .eq("patient_id", patient.id)
         .order("created_at", { ascending: false }),
-      supabase.from("treatment_photos").select("*").eq("patient_id", patient.id).eq("visible_to_patient", true),
+      supabase
+        .from("treatment_photos")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .eq("visible_to_patient", true),
     ]);
 
     const withUrls = [] as any[];
@@ -3323,8 +3548,13 @@ export const getMyRecord = createServerFn({ method: "GET" })
     }
 
     const [{ data: products }, { data: sales }] = await Promise.all([
-      supabase.from("retail_products").select("id, name, sku, price, active, featured_on_portal, image_url"),
-      supabase.from("product_sales").select("product_id, patient_id, occurred_at").eq("patient_id", patient.id),
+      supabase
+        .from("retail_products")
+        .select("id, name, sku, price, active, featured_on_portal, image_url"),
+      supabase
+        .from("product_sales")
+        .select("product_id, patient_id, occurred_at")
+        .eq("patient_id", patient.id),
     ]);
     const { portalProductsFor } = await import("./insights.server");
 
@@ -3375,10 +3605,7 @@ async function portalPlan(ctx: Ctx, patientId: string) {
 }
 
 async function portalMilestones(ctx: Ctx, planId: string) {
-  const { data } = await ctx.supabase
-    .from("plan_milestones")
-    .select("*")
-    .eq("plan_id", planId);
+  const { data } = await ctx.supabase.from("plan_milestones").select("*").eq("plan_id", planId);
   return data ?? [];
 }
 
@@ -3426,7 +3653,13 @@ export const getPortalHome = createServerFn({ method: "GET" })
     const plan = await portalPlan(ctx, patient.id);
     const milestones = plan ? await portalMilestones(ctx, plan.id) : [];
 
-    const [{ data: appts }, { data: news }, { data: offers }, { data: messages }, { data: myOffers }] = await Promise.all([
+    const [
+      { data: appts },
+      { data: news },
+      { data: offers },
+      { data: messages },
+      { data: myOffers },
+    ] = await Promise.all([
       ctx.supabase
         .from("appointments")
         .select("*")
@@ -3483,7 +3716,9 @@ export const getPortalHome = createServerFn({ method: "GET" })
     }
 
     const progress = portal.planProgress(milestones as any);
-    const live = (offers ?? []).filter((o: any) => !o.expires_at || new Date(o.expires_at) > new Date());
+    const live = (offers ?? []).filter(
+      (o: any) => !o.expires_at || new Date(o.expires_at) > new Date(),
+    );
     const { patientOfferView } = await import("./offers/shape");
     // The patient's own offers, live ones first, then claimed; expired drop off.
     const patientOffers = ((myOffers ?? []) as any[])
@@ -3492,7 +3727,11 @@ export const getPortalHome = createServerFn({ method: "GET" })
       .sort((a, b) => Number(b.live) - Number(a.live));
 
     return {
-      patient: { id: patient.id, firstName: patient.first_name, name: `${patient.first_name} ${patient.last_name}`.trim() },
+      patient: {
+        id: patient.id,
+        firstName: patient.first_name,
+        name: `${patient.first_name} ${patient.last_name}`.trim(),
+      },
       patientOffers,
       clinician,
       plan: plan
@@ -3536,31 +3775,32 @@ export const getPortalPlan = createServerFn({ method: "GET" })
     const milestones = plan ? await portalMilestones(ctx, plan.id) : [];
     const ids = milestones.map((m: any) => m.id);
 
-    const [{ data: checklist }, { data: checkins }, { data: photos }, { data: appts }] = await Promise.all([
-      ids.length
-        ? ctx.supabase.from("plan_milestone_checklist").select("*").in("milestone_id", ids)
-        : Promise.resolve({ data: [] as any[] }),
-      ctx.supabase
-        .from("recovery_checkins")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .order("checkin_date", { ascending: false })
-        .limit(1),
-      ctx.supabase
-        .from("treatment_photos")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .eq("visible_to_patient", true)
-        .order("taken_at", { ascending: true }),
-      ctx.supabase
-        .from("appointments")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .gte("starts_at", new Date().toISOString())
-        .neq("status", "cancelled")
-        .order("starts_at", { ascending: true })
-        .limit(1),
-    ]);
+    const [{ data: checklist }, { data: checkins }, { data: photos }, { data: appts }] =
+      await Promise.all([
+        ids.length
+          ? ctx.supabase.from("plan_milestone_checklist").select("*").in("milestone_id", ids)
+          : Promise.resolve({ data: [] as any[] }),
+        ctx.supabase
+          .from("recovery_checkins")
+          .select("*")
+          .eq("patient_id", patient.id)
+          .order("checkin_date", { ascending: false })
+          .limit(1),
+        ctx.supabase
+          .from("treatment_photos")
+          .select("*")
+          .eq("patient_id", patient.id)
+          .eq("visible_to_patient", true)
+          .order("taken_at", { ascending: true }),
+        ctx.supabase
+          .from("appointments")
+          .select("*")
+          .eq("patient_id", patient.id)
+          .gte("starts_at", new Date().toISOString())
+          .neq("status", "cancelled")
+          .order("starts_at", { ascending: true })
+          .limit(1),
+      ]);
 
     let clinician = null;
     if (plan?.practitioner_id) {
@@ -3579,7 +3819,9 @@ export const getPortalPlan = createServerFn({ method: "GET" })
     const after = [...(photos ?? [])].reverse().find((p: any) => p.kind === "after") ?? null;
     const signed = async (photo: any) => {
       if (!photo) return null;
-      const { data } = await ctx.supabase.storage.from("patient-photos").createSignedUrl(photo.storage_path, 3600);
+      const { data } = await ctx.supabase.storage
+        .from("patient-photos")
+        .createSignedUrl(photo.storage_path, 3600);
       return { ...photo, url: data?.signedUrl ?? null };
     };
 
@@ -3616,9 +3858,21 @@ export const getPortalPlan = createServerFn({ method: "GET" })
         ? {
             date: latest.checkin_date,
             rows: [
-              { label: "Redness", value: latest.redness, reading: portal.severityLabel(latest.redness) },
-              { label: "Sensitivity", value: latest.sensitivity, reading: portal.severityLabel(latest.sensitivity) },
-              { label: "Dryness", value: latest.dryness, reading: portal.severityLabel(latest.dryness) },
+              {
+                label: "Redness",
+                value: latest.redness,
+                reading: portal.severityLabel(latest.redness),
+              },
+              {
+                label: "Sensitivity",
+                value: latest.sensitivity,
+                reading: portal.severityLabel(latest.sensitivity),
+              },
+              {
+                label: "Dryness",
+                value: latest.dryness,
+                reading: portal.severityLabel(latest.dryness),
+              },
             ],
             needsAttention: portal.checkinNeedsAttention(latest),
             note: latest.note ?? null,
@@ -3634,7 +3888,10 @@ export const getPortalPlan = createServerFn({ method: "GET" })
       journeySnapshot: portal.roadmapFor(milestones as any, (checklist ?? []) as any).map((g) => ({
         month: g.month,
         title: g.title,
-        steps: g.steps.map((s: any) => ({ label: s.title, done: s.status === "done" || s.status === "skipped" })),
+        steps: g.steps.map((s: any) => ({
+          label: s.title,
+          done: s.status === "done" || s.status === "skipped",
+        })),
       })),
       safeToProceed: currentChecklist
         .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
@@ -3657,29 +3914,49 @@ export const getPortalTimeline = createServerFn({ method: "GET" })
 
     const apptIds = milestones.map((m: any) => m.appointment_id).filter(Boolean) as string[];
 
-    const [{ data: checklist }, { data: pauses }, { data: stepAppts }, { data: treatments }, { data: photos }, { data: sessions }] =
-      await Promise.all([
-        ids.length
-          ? ctx.supabase.from("plan_milestone_checklist").select("*").in("milestone_id", ids)
-          : Promise.resolve({ data: [] as any[] }),
-        ctx.supabase
-          .from("plan_pause_requests")
-          .select("*")
-          .eq("plan_id", plan.id)
-          .eq("status", "pending")
-          .order("created_at", { ascending: false })
-          .limit(1),
-        // What the record holds for each step: its appointment (and consent),
-        // the treatment note and the photos. All patient-readable under RLS.
-        apptIds.length
-          ? ctx.supabase.from("appointments").select("id, starts_at, treatment_name, documents(status)").in("id", apptIds)
-          : Promise.resolve({ data: [] as any[] }),
-        ctx.supabase.from("treatments").select("id, name, performed_at, notes").eq("patient_id", patient.id),
-        ctx.supabase.from("treatment_photos").select("*").eq("patient_id", patient.id).eq("visible_to_patient", true),
-        // The visit note written on the treatment form is what the patient
-        // should read; the clinical treatment note is the fallback.
-        ctx.supabase.from("treatment_sessions").select("treatment_id, visit_notes").eq("patient_id", patient.id).eq("status", "complete"),
-      ]);
+    const [
+      { data: checklist },
+      { data: pauses },
+      { data: stepAppts },
+      { data: treatments },
+      { data: photos },
+      { data: sessions },
+    ] = await Promise.all([
+      ids.length
+        ? ctx.supabase.from("plan_milestone_checklist").select("*").in("milestone_id", ids)
+        : Promise.resolve({ data: [] as any[] }),
+      ctx.supabase
+        .from("plan_pause_requests")
+        .select("*")
+        .eq("plan_id", plan.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1),
+      // What the record holds for each step: its appointment (and consent),
+      // the treatment note and the photos. All patient-readable under RLS.
+      apptIds.length
+        ? ctx.supabase
+            .from("appointments")
+            .select("id, starts_at, treatment_name, documents(status)")
+            .in("id", apptIds)
+        : Promise.resolve({ data: [] as any[] }),
+      ctx.supabase
+        .from("treatments")
+        .select("id, name, performed_at, notes")
+        .eq("patient_id", patient.id),
+      ctx.supabase
+        .from("treatment_photos")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .eq("visible_to_patient", true),
+      // The visit note written on the treatment form is what the patient
+      // should read; the clinical treatment note is the fallback.
+      ctx.supabase
+        .from("treatment_sessions")
+        .select("treatment_id, visit_notes")
+        .eq("patient_id", patient.id)
+        .eq("status", "complete"),
+    ]);
 
     const visitNoteFor = new Map<string, string | null>(
       (sessions ?? []).map((x: any) => [x.treatment_id, x.visit_notes ?? null]),
@@ -3692,7 +3969,10 @@ export const getPortalTimeline = createServerFn({ method: "GET" })
         treatment_name: a.treatment_name,
         consentSigned: a.documents ? a.documents.status === "signed" : null,
       })),
-      treatments: (treatments ?? []).map((t: any) => ({ ...t, notes: visitNoteFor.get(t.id) ?? t.notes ?? null })) as any,
+      treatments: (treatments ?? []).map((t: any) => ({
+        ...t,
+        notes: visitNoteFor.get(t.id) ?? t.notes ?? null,
+      })) as any,
       photos: (photos ?? []).map((p: any) => ({ ...p, url: null })),
     });
     // Sign only the photos that made it onto a step card.
@@ -3700,7 +3980,9 @@ export const getPortalTimeline = createServerFn({ method: "GET" })
       for (const photo of extra.photos) {
         const row = (photos ?? []).find((p: any) => p.id === photo.id);
         if (!row) continue;
-        const { data } = await ctx.supabase.storage.from("patient-photos").createSignedUrl(row.storage_path, 3600);
+        const { data } = await ctx.supabase.storage
+          .from("patient-photos")
+          .createSignedUrl(row.storage_path, 3600);
         photo.url = data?.signedUrl ?? null;
       }
     }
@@ -3743,7 +4025,9 @@ export const getPortalJournal = createServerFn({ method: "GET" })
 
     const signedFor = new Map<string, any[]>();
     for (const a of attachments ?? []) {
-      const { data } = await ctx.supabase.storage.from("patient-photos").createSignedUrl(a.storage_path, 3600);
+      const { data } = await ctx.supabase.storage
+        .from("patient-photos")
+        .createSignedUrl(a.storage_path, 3600);
       const list = signedFor.get(a.entry_id) ?? [];
       list.push({ ...a, url: data?.signedUrl ?? null });
       signedFor.set(a.entry_id, list);
@@ -3784,13 +4068,20 @@ export const getPortalRoutine = createServerFn({ method: "GET" })
       .from("routine_item_overrides")
       .select("*")
       .eq("patient_id", patient.id);
-    const overrideFor = new Map<string, any>((overrides ?? []).map((o: any) => [o.routine_item_id, o]));
+    const overrideFor = new Map<string, any>(
+      (overrides ?? []).map((o: any) => [o.routine_item_id, o]),
+    );
     const withOverride = (i: any) => {
       const o = overrideFor.get(i.id);
       return {
         ...i,
         override: o
-          ? { product_name: o.product_name, how_to: o.how_to ?? null, product_url: o.product_url ?? null, source: o.source }
+          ? {
+              product_name: o.product_name,
+              how_to: o.how_to ?? null,
+              product_url: o.product_url ?? null,
+              source: o.source,
+            }
           : null,
       };
     };
@@ -3852,28 +4143,29 @@ export const getPortalClinic = createServerFn({ method: "GET" })
     const plan = await portalPlan(ctx, patient.id);
     const now = new Date().toISOString();
 
-    const [{ data: clinic }, { data: upcoming }, { data: completed }, { data: external }] = await Promise.all([
-      ctx.supabase.from("clinics").select("*").maybeSingle(),
-      ctx.supabase
-        .from("appointments")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .gte("starts_at", now)
-        .neq("status", "cancelled")
-        .order("starts_at", { ascending: true })
-        .limit(6),
-      ctx.supabase
-        .from("treatments")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .order("performed_at", { ascending: false })
-        .limit(6),
-      ctx.supabase
-        .from("external_treatments")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .order("performed_on", { ascending: false, nullsFirst: false }),
-    ]);
+    const [{ data: clinic }, { data: upcoming }, { data: completed }, { data: external }] =
+      await Promise.all([
+        ctx.supabase.from("clinics").select("*").maybeSingle(),
+        ctx.supabase
+          .from("appointments")
+          .select("*")
+          .eq("patient_id", patient.id)
+          .gte("starts_at", now)
+          .neq("status", "cancelled")
+          .order("starts_at", { ascending: true })
+          .limit(6),
+        ctx.supabase
+          .from("treatments")
+          .select("*")
+          .eq("patient_id", patient.id)
+          .order("performed_at", { ascending: false })
+          .limit(6),
+        ctx.supabase
+          .from("external_treatments")
+          .select("*")
+          .eq("patient_id", patient.id)
+          .order("performed_on", { ascending: false, nullsFirst: false }),
+      ]);
 
     let clinician = null;
     if (plan?.practitioner_id) {
@@ -3889,7 +4181,11 @@ export const getPortalClinic = createServerFn({ method: "GET" })
       clinician,
       clinic: clinic ?? null,
       upcoming: (upcoming ?? []).map(appointmentView),
-      completed: (completed ?? []).map((t: any) => ({ id: t.id, name: t.name, performedAt: t.performed_at })),
+      completed: (completed ?? []).map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        performedAt: t.performed_at,
+      })),
       external: external ?? [],
     };
   });
@@ -3902,36 +4198,39 @@ export const getPortalRecords = createServerFn({ method: "GET" })
     const patient = await portalPatient(ctx);
     if (!patient) return null;
 
-    const [{ data: treatments }, { data: documents }, { data: photos }, { data: history }] = await Promise.all([
-      ctx.supabase
-        .from("treatments")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .order("performed_at", { ascending: false })
-        .limit(8),
-      ctx.supabase
-        .from("documents")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .order("created_at", { ascending: false }),
-      ctx.supabase
-        .from("treatment_photos")
-        .select("id, kind, caption, taken_at, storage_path, treatment_id, treatments(name)")
-        .eq("patient_id", patient.id)
-        .eq("visible_to_patient", true)
-        .order("taken_at", { ascending: false }),
-      ctx.supabase
-        .from("medical_history_versions")
-        .select("*")
-        .eq("patient_id", patient.id)
-        .order("created_at", { ascending: false })
-        .limit(1),
-    ]);
+    const [{ data: treatments }, { data: documents }, { data: photos }, { data: history }] =
+      await Promise.all([
+        ctx.supabase
+          .from("treatments")
+          .select("*")
+          .eq("patient_id", patient.id)
+          .order("performed_at", { ascending: false })
+          .limit(8),
+        ctx.supabase
+          .from("documents")
+          .select("*")
+          .eq("patient_id", patient.id)
+          .order("created_at", { ascending: false }),
+        ctx.supabase
+          .from("treatment_photos")
+          .select("id, kind, caption, taken_at, storage_path, treatment_id, treatments(name)")
+          .eq("patient_id", patient.id)
+          .eq("visible_to_patient", true)
+          .order("taken_at", { ascending: false }),
+        ctx.supabase
+          .from("medical_history_versions")
+          .select("*")
+          .eq("patient_id", patient.id)
+          .order("created_at", { ascending: false })
+          .limit(1),
+      ]);
 
     // The archive gallery: every photo the clinic has shared, newest first.
     const gallery = [];
     for (const photo of (photos ?? []) as any[]) {
-      const { data: signed } = await ctx.supabase.storage.from("patient-photos").createSignedUrl(photo.storage_path, 3600);
+      const { data: signed } = await ctx.supabase.storage
+        .from("patient-photos")
+        .createSignedUrl(photo.storage_path, 3600);
       gallery.push({
         id: photo.id,
         kind: photo.kind,
@@ -3971,8 +4270,13 @@ async function requirePortalPatient(ctx: Ctx) {
 
 export const createJournalEntry = createServerFn({ method: "POST" })
   .validator(
-    (data: { title: string; body?: string; kind?: string; entry_date?: string; shared_with_clinic?: boolean }) =>
-      parseInput(schemas.CreateJournalEntry, data),
+    (data: {
+      title: string;
+      body?: string;
+      kind?: string;
+      entry_date?: string;
+      shared_with_clinic?: boolean;
+    }) => parseInput(schemas.CreateJournalEntry, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -4023,19 +4327,17 @@ export const submitRecoveryCheckin = createServerFn({ method: "POST" })
     await authorize(ctx, "submitRecoveryCheckin");
     const patient = await requirePortalPatient(ctx);
     // One reading per day: re-submitting corrects today rather than stacking.
-    const { error } = await ctx.supabase
-      .from("recovery_checkins")
-      .upsert(
-        {
-          patient_id: patient.id,
-          checkin_date: new Date().toISOString().slice(0, 10),
-          redness: data.redness,
-          sensitivity: data.sensitivity,
-          dryness: data.dryness,
-          note: data.note?.trim().slice(0, 1000) ?? null,
-        } as any,
-        { onConflict: "patient_id,checkin_date" },
-      );
+    const { error } = await ctx.supabase.from("recovery_checkins").upsert(
+      {
+        patient_id: patient.id,
+        checkin_date: new Date().toISOString().slice(0, 10),
+        redness: data.redness,
+        sensitivity: data.sensitivity,
+        dryness: data.dryness,
+        note: data.note?.trim().slice(0, 1000) ?? null,
+      } as any,
+      { onConflict: "patient_id,checkin_date" },
+    );
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -4097,7 +4399,9 @@ export const confirmAppointment = createServerFn({ method: "POST" })
       p_appointment_id: data.appointment_id,
     });
     if (error) throw new Error(error.message);
-    await audit(ctx, "update", "appointments", data.appointment_id, patient.id, { patientConfirmed: true });
+    await audit(ctx, "update", "appointments", data.appointment_id, patient.id, {
+      patientConfirmed: true,
+    });
     return { ok: true, confirmedAt: confirmedAt as string };
   });
 
@@ -4108,17 +4412,15 @@ export const markRoutineComplete = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     await authorize(ctx, "markRoutineComplete");
     const patient = await requirePortalPatient(ctx);
-    const { error } = await ctx.supabase
-      .from("routine_completions")
-      .upsert(
-        {
-          patient_id: patient.id,
-          period: data.period as any,
-          completed_on: new Date().toISOString().slice(0, 10),
-          snoozed_until: null,
-        } as any,
-        { onConflict: "patient_id,period,completed_on" },
-      );
+    const { error } = await ctx.supabase.from("routine_completions").upsert(
+      {
+        patient_id: patient.id,
+        period: data.period as any,
+        completed_on: new Date().toISOString().slice(0, 10),
+        snoozed_until: null,
+      } as any,
+      { onConflict: "patient_id,period,completed_on" },
+    );
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -4133,17 +4435,15 @@ export const snoozeRoutineReminder = createServerFn({ method: "POST" })
     await authorize(ctx, "snoozeRoutineReminder");
     const patient = await requirePortalPatient(ctx);
     const until = new Date(Date.now() + (data.minutes ?? 60) * 60_000).toISOString();
-    const { error } = await ctx.supabase
-      .from("routine_completions")
-      .upsert(
-        {
-          patient_id: patient.id,
-          period: data.period as any,
-          completed_on: new Date().toISOString().slice(0, 10),
-          snoozed_until: until,
-        } as any,
-        { onConflict: "patient_id,period,completed_on" },
-      );
+    const { error } = await ctx.supabase.from("routine_completions").upsert(
+      {
+        patient_id: patient.id,
+        period: data.period as any,
+        completed_on: new Date().toISOString().slice(0, 10),
+        snoozed_until: until,
+      } as any,
+      { onConflict: "patient_id,period,completed_on" },
+    );
     if (error) throw new Error(error.message);
     return { ok: true, snoozedUntil: until };
   });
@@ -4167,7 +4467,8 @@ async function requireOwnRoutineItem(ctx: Ctx, patientId: string, routineItemId:
     .select("id, routine_id, skincare_routines(patient_id)")
     .eq("id", routineItemId)
     .maybeSingle();
-  if (!item || (item as any).skincare_routines?.patient_id !== patientId) throw new Error("Routine step not found");
+  if (!item || (item as any).skincare_routines?.patient_id !== patientId)
+    throw new Error("Routine step not found");
   return item;
 }
 
@@ -4205,7 +4506,9 @@ export const saveRoutineOverride = createServerFn({ method: "POST" })
       .select("id")
       .single();
     if (error) throw new Error(error.message);
-    await audit(ctx, "update", "routine_item_overrides", row.id, patient.id, { routineItemId: data.routine_item_id });
+    await audit(ctx, "update", "routine_item_overrides", row.id, patient.id, {
+      routineItemId: data.routine_item_id,
+    });
     return { ok: true, id: row.id };
   });
 
@@ -4277,7 +4580,11 @@ export const updatePortalProfile = createServerFn({ method: "POST" })
         postcode: data.postcode ?? null,
         emergency_contact_name: data.emergency_contact_name ?? null,
         emergency_contact_relationship: data.emergency_contact_relationship ?? null,
-        emergency_contact_phone: assertPhone(data.emergency_contact_phone ?? "", "phone number", true),
+        emergency_contact_phone: assertPhone(
+          data.emergency_contact_phone ?? "",
+          "phone number",
+          true,
+        ),
       })
       .eq("id", patient.id);
     if (error) throw new Error(error.message);
@@ -4286,8 +4593,9 @@ export const updatePortalProfile = createServerFn({ method: "POST" })
   });
 
 export const addExternalTreatment = createServerFn({ method: "POST" })
-  .validator((data: { treatment: string; clinic_name: string; performed_label: string; notes?: string }) =>
-    parseInput(schemas.AddExternalTreatment, data),
+  .validator(
+    (data: { treatment: string; clinic_name: string; performed_label: string; notes?: string }) =>
+      parseInput(schemas.AddExternalTreatment, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -4306,7 +4614,9 @@ export const addExternalTreatment = createServerFn({ method: "POST" })
       .select("id")
       .single();
     if (error) throw new Error(error.message);
-    await audit(ctx, "create", "external_treatments", row.id, patient.id, { treatment: data.treatment });
+    await audit(ctx, "create", "external_treatments", row.id, patient.id, {
+      treatment: data.treatment,
+    });
     return { ok: true, id: row.id };
   });
 
@@ -4393,8 +4703,12 @@ export const submitHistoryUpdate = createServerFn({ method: "POST" })
   });
 
 export const signDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; signed_name: string; contraindications?: Record<string, "yes" | "no" | "na"> }) =>
-    parseInput(schemas.SignDocument, data),
+  .validator(
+    (data: {
+      id: string;
+      signed_name: string;
+      contraindications?: Record<string, "yes" | "no" | "na">;
+    }) => parseInput(schemas.SignDocument, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -4418,7 +4732,9 @@ export const signDocument = createServerFn({ method: "POST" })
         signed_at: new Date().toISOString(),
         signed_name: name,
         signature_data: name,
-        ...(data.contraindications ? { responses: { contraindications: data.contraindications } } : {}),
+        ...(data.contraindications
+          ? { responses: { contraindications: data.contraindications } }
+          : {}),
       })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -4478,7 +4794,9 @@ export const listTeam = createServerFn({ method: "GET" })
     }
     const staffRoles = (roles ?? []).filter((r) => r.role !== "patient" && r.role !== "admin");
     const { data: namedRoles } = await supabaseAdmin.from("clinic_roles").select("id, name");
-    const namedName = new Map((namedRoles ?? []).map((row: { id: string; name: string }) => [row.id, row.name]));
+    const namedName = new Map(
+      (namedRoles ?? []).map((row: { id: string; name: string }) => [row.id, row.name]),
+    );
     return staffRoles
       .map((r) => {
         const profile = (profiles ?? []).find((p) => p.id === r.user_id);
@@ -4533,7 +4851,8 @@ export const createStaffAccount = createServerFn({ method: "POST" })
       email_confirm: true,
       user_metadata: { full_name: data.fullName },
     });
-    if (created.error || !created.data.user) throw new Error(created.error?.message ?? "Could not create account");
+    if (created.error || !created.data.user)
+      throw new Error(created.error?.message ?? "Could not create account");
     const uid = created.data.user.id;
     await supabaseAdmin.from("profiles").upsert({
       id: uid,
@@ -4606,7 +4925,11 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       .neq("role", "patient");
     const previousRole = (priorRoles ?? []).map((r: { role: string }) => r.role)[0] ?? null;
 
-    await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
+    await supabaseAdmin
+      .from("user_roles")
+      .delete()
+      .eq("user_id", data.userId)
+      .neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: data.userId, role: data.role });
     // Undo revoke / role restore must lift the Auth ban so they can sign in again.
     await clearExTeamArchive(clinicIdOf(context), data.userId);
@@ -4665,12 +4988,20 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
         .select("permission, enabled")
         .eq("clinic_role_id", clinicRoleId);
       assignedRole = loginRoleForClinicPack(
-        Boolean((packPerms ?? []).some((row: { permission: string; enabled: boolean }) => row.permission === "treatments.record" && row.enabled)),
+        Boolean(
+          (packPerms ?? []).some(
+            (row: { permission: string; enabled: boolean }) =>
+              row.permission === "treatments.record" && row.enabled,
+          ),
+        ),
       );
     }
     const email = assertEmail(data.email, "work email")!;
     const supabaseAdmin = await adminClient(context);
-    const origin = (data.app_origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(/\/$/, "");
+    const origin = (data.app_origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(
+      /\/$/,
+      "",
+    );
     const redirectTo = `${origin}/auth/reset`;
 
     let uid: string | undefined;
@@ -4747,7 +5078,6 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
     };
   });
 
-
 export const revokeStaffAccess = createServerFn({ method: "POST" })
   .validator((data: { userId: string }) => parseInput(schemas.RevokeStaffAccess, data))
   .middleware([requireSupabaseAuth])
@@ -4772,7 +5102,8 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
 
     const identitySnap = staffArchiveIdentity({
       profileName: profile?.full_name,
-      metaName: (authUser.data.user?.user_metadata as { full_name?: string } | undefined)?.full_name,
+      metaName: (authUser.data.user?.user_metadata as { full_name?: string } | undefined)
+        ?.full_name,
       email: authUser.data.user?.email,
     });
 
@@ -4789,7 +5120,11 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
       revokedBy: ctx.userId,
     });
 
-    await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
+    await supabaseAdmin
+      .from("user_roles")
+      .delete()
+      .eq("user_id", data.userId)
+      .neq("role", "patient");
     // End their Auth session and block sign-in until access is restored.
     await banAuthUser(data.userId);
     await audit(ctx, "staff.revoke", "user_roles", data.userId, null);
@@ -4829,7 +5164,10 @@ export const listExTeamMembers = createServerFn({ method: "GET" })
         ])
       : [{ data: [] as { id: string; full_name: string | null }[] }, { data: { users: [] } }];
     const profileName = new Map(
-      (profiles ?? []).map((p: { id: string; full_name: string | null }) => [p.id, p.full_name ?? ""]),
+      (profiles ?? []).map((p: { id: string; full_name: string | null }) => [
+        p.id,
+        p.full_name ?? "",
+      ]),
     );
     const authById = new Map(
       (users.data?.users ?? []).map((u) => [
@@ -4891,13 +5229,15 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
     const authUser = await supabaseAdmin.auth.admin.getUserById(data.userId);
     const filled = staffArchiveIdentity({
       profileName: (archived.full_name as string) || currentProfile?.full_name,
-      metaName: (authUser.data.user?.user_metadata as { full_name?: string } | undefined)?.full_name,
+      metaName: (authUser.data.user?.user_metadata as { full_name?: string } | undefined)
+        ?.full_name,
       email: (archived.email as string | null) || authUser.data.user?.email,
     });
     const patch: Record<string, unknown> = {};
     if (filled.fullName) patch.full_name = filled.fullName;
     if (String(archived.job_title ?? "").trim()) patch.job_title = archived.job_title;
-    if (String(archived.registration_body ?? "").trim()) patch.registration_body = archived.registration_body;
+    if (String(archived.registration_body ?? "").trim())
+      patch.registration_body = archived.registration_body;
     if (String(archived.registration_number ?? "").trim()) {
       patch.registration_number = archived.registration_number;
     }
@@ -4905,7 +5245,11 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
     if (Object.keys(patch).length) {
       await supabaseAdmin.from("profiles").update(patch).eq("id", data.userId);
     }
-    await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).neq("role", "patient");
+    await supabaseAdmin
+      .from("user_roles")
+      .delete()
+      .eq("user_id", data.userId)
+      .neq("role", "patient");
     await supabaseAdmin.from("user_roles").insert({ user_id: data.userId, role });
     await clearExTeamArchive(clinicIdOf(context), data.userId);
     await unbanAuthUser(data.userId);
@@ -4919,7 +5263,9 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
  * invite link is opened, which is why sign-in fails with "Invalid credentials").
  */
 export const setStaffPassword = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; password: string }) => parseInput(schemas.SetStaffPassword, data))
+  .validator((data: { userId: string; password: string }) =>
+    parseInput(schemas.SetStaffPassword, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -4977,7 +5323,9 @@ async function consumePasswordEmailCode(ctx: Ctx, code: string | undefined) {
 
 /** Signed-in staff: replace temporary/reset password and clear the must-change flag. */
 export const changeOwnPassword = createServerFn({ method: "POST" })
-  .validator((data: { password: string; code?: string }) => parseInput(schemas.ChangeOwnPassword, data))
+  .validator((data: { password: string; code?: string }) =>
+    parseInput(schemas.ChangeOwnPassword, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -5076,7 +5424,10 @@ async function emailLoginCode(
         text,
       }),
     });
-    const payload = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
+    const payload = (await response.json().catch(() => null)) as {
+      id?: string;
+      message?: string;
+    } | null;
     if (!response.ok || !payload?.id) {
       throw new Error(payload?.message || "Could not email a login code");
     }
@@ -5194,10 +5545,13 @@ export const verifyLoginEmailCode = createServerFn({ method: "POST" })
 
     if (row.channel === "supabase_otp") {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data: matched, error: matchError } = await supabaseAdmin.rpc("match_reauthentication_otp", {
-        p_user_id: ctx.userId,
-        p_code: data.code,
-      });
+      const { data: matched, error: matchError } = await supabaseAdmin.rpc(
+        "match_reauthentication_otp",
+        {
+          p_user_id: ctx.userId,
+          p_code: data.code,
+        },
+      );
       if (matchError) throw new Error(matchError.message);
       if (!matched) throw new Error("That code was not recognised");
     } else if (row.code_hash !== hashLoginEmailCode(ctx.userId, data.code)) {
@@ -5307,13 +5661,18 @@ export const listAccountsMissingEmail = createServerFn({ method: "GET" })
 
 /** Manager-only: add or correct a patient's email address. */
 export const setPatientEmail = createServerFn({ method: "POST" })
-  .validator((data: { patientId: string; email: string }) => parseInput(schemas.SetPatientEmail, data))
+  .validator((data: { patientId: string; email: string }) =>
+    parseInput(schemas.SetPatientEmail, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "setPatientEmail");
     const email = assertEmail(data.email)!;
-    const { error } = await ctx.supabase.from("patients").update({ email }).eq("id", data.patientId);
+    const { error } = await ctx.supabase
+      .from("patients")
+      .update({ email })
+      .eq("id", data.patientId);
     if (error) throw new Error(error.message);
     await audit(ctx, "update", "patient", data.patientId, data.patientId);
     return { ok: true };
@@ -5368,47 +5727,57 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
       { data: clinicRow },
       { data: periodSales },
       { data: products },
-    ] =
-      await Promise.all([
-        supabaseAdmin.from("profiles").select("id, full_name, job_title, commission_rate"),
-        supabaseAdmin.from("user_roles").select("user_id, role"),
-        supabaseAdmin
-          .from("treatments")
-          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id")
-          .gte("performed_at", data.from)
-          .lte("performed_at", data.to),
-        supabaseAdmin
-          .from("appointments")
-          .select("id, practitioner_id, price, payment_status, status, starts_at")
-          .gte("starts_at", data.from)
-          .lte("starts_at", data.to),
-        supabaseAdmin
-          .from("treatments")
-          .select("id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id")
-          .gte("performed_at", previous.from)
-          .lte("performed_at", previous.to),
-        supabaseAdmin
-          .from("appointments")
-          .select("id, practitioner_id, price, payment_status, status, starts_at")
-          .gte("starts_at", previous.from)
-          .lte("starts_at", previous.to),
-        supabaseAdmin.from("treatments").select("practitioner_id, patient_id").gte("performed_at", yearAgo),
-        supabaseAdmin.from("patients").select("id, created_at"),
-        // Booked ahead: live bookings from now on, whatever the period.
-        supabaseAdmin
-          .from("appointments")
-          .select("id, practitioner_id, price, payment_status, status, starts_at")
-          .gte("starts_at", new Date().toISOString())
-          .neq("status", "cancelled"),
-        supabaseAdmin.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
-        // Retail in the period, for its share of revenue and What sold.
-        supabaseAdmin
-          .from("product_sales")
-          .select("product_id, qty, amount, occurred_at")
-          .gte("occurred_at", data.from)
-          .lte("occurred_at", data.to),
-        supabaseAdmin.from("retail_products").select("id, name, sku"),
-      ]);
+    ] = await Promise.all([
+      supabaseAdmin.from("profiles").select("id, full_name, job_title, commission_rate"),
+      supabaseAdmin.from("user_roles").select("user_id, role"),
+      supabaseAdmin
+        .from("treatments")
+        .select(
+          "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id",
+        )
+        .gte("performed_at", data.from)
+        .lte("performed_at", data.to),
+      supabaseAdmin
+        .from("appointments")
+        .select("id, practitioner_id, price, payment_status, status, starts_at")
+        .gte("starts_at", data.from)
+        .lte("starts_at", data.to),
+      supabaseAdmin
+        .from("treatments")
+        .select(
+          "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id",
+        )
+        .gte("performed_at", previous.from)
+        .lte("performed_at", previous.to),
+      supabaseAdmin
+        .from("appointments")
+        .select("id, practitioner_id, price, payment_status, status, starts_at")
+        .gte("starts_at", previous.from)
+        .lte("starts_at", previous.to),
+      supabaseAdmin
+        .from("treatments")
+        .select("practitioner_id, patient_id")
+        .gte("performed_at", yearAgo),
+      supabaseAdmin.from("patients").select("id, created_at"),
+      // Booked ahead: live bookings from now on, whatever the period.
+      supabaseAdmin
+        .from("appointments")
+        .select("id, practitioner_id, price, payment_status, status, starts_at")
+        .gte("starts_at", new Date().toISOString())
+        .neq("status", "cancelled"),
+      supabaseAdmin
+        .from("clinics")
+        .select("deposit_percent")
+        .eq("id", clinicIdOf(context))
+        .maybeSingle(),
+      // Retail in the period, for its share of revenue and What sold.
+      supabaseAdmin
+        .from("product_sales")
+        .select("product_id, qty, amount, occurred_at")
+        .gte("occurred_at", data.from)
+        .lte("occurred_at", data.to),
+      supabaseAdmin.from("retail_products").select("id, name, sku"),
+    ]);
     const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
     // Period bookings plus the live future ones, once each.
     const withFuture = (rows: unknown[] | null) => {
@@ -5496,8 +5865,12 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
     const clinic = {
       ...totals,
       attendance: settled ? Math.round((totals.attended / settled) * 100) : 0,
-      averageValue: totals.treatments ? Math.round((totals.earned / totals.treatments) * 100) / 100 : 0,
-      retention: rows.length ? Math.round(rows.reduce((s2, r) => s2 + r.retention, 0) / rows.length) : 0,
+      averageValue: totals.treatments
+        ? Math.round((totals.earned / totals.treatments) * 100) / 100
+        : 0,
+      retention: rows.length
+        ? Math.round(rows.reduce((s2, r) => s2 + r.retention, 0) / rows.length)
+        : 0,
       averageCommission: rows.length
         ? Math.round((rows.reduce((s2, r) => s2 + r.commissionRate, 0) / rows.length) * 10) / 10
         : 0,
@@ -5543,7 +5916,9 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
 
 /** The caller's own earnings and KPIs. Never returns clinic figures or the split percentage. */
 export const getMyEarnings = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string; userId?: string }) => parseInput(schemas.GetMyEarnings, data))
+  .validator((data: { from: string; to: string; userId?: string }) =>
+    parseInput(schemas.GetMyEarnings, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -5565,35 +5940,38 @@ export const getMyEarnings = createServerFn({ method: "POST" })
       { data: yearTreatments },
       { data: firstSeen },
       { data: clinicRow },
-    ] =
-      await Promise.all([
-        supabaseAdmin
-          .from("profiles")
-          .select("id, full_name, job_title, commission_rate")
-          .eq("id", targetUserId)
-          .maybeSingle(),
-        supabaseAdmin
-          .from("treatments")
-          .select(
-            "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id, patients(first_name, last_name)",
-          )
-          .eq("practitioner_id", targetUserId)
-          .gte("performed_at", data.from)
-          .lte("performed_at", data.to)
-          .order("performed_at", { ascending: false }),
-        supabaseAdmin
-          .from("appointments")
-          .select("id, practitioner_id, price, payment_status, status, starts_at")
-          .eq("practitioner_id", targetUserId)
-          .gte("starts_at", data.from),
-        supabaseAdmin
-          .from("treatments")
-          .select("practitioner_id, patient_id")
-          .eq("practitioner_id", targetUserId)
-          .gte("performed_at", yearAgo),
-        supabaseAdmin.from("patients").select("id, created_at"),
-        supabaseAdmin.from("clinics").select("deposit_percent").eq("id", clinicIdOf(context)).maybeSingle(),
-      ]);
+    ] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("id, full_name, job_title, commission_rate")
+        .eq("id", targetUserId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("treatments")
+        .select(
+          "id, practitioner_id, patient_id, name, price, performed_at, commission_rate_snapshot, appointment_id, patients(first_name, last_name)",
+        )
+        .eq("practitioner_id", targetUserId)
+        .gte("performed_at", data.from)
+        .lte("performed_at", data.to)
+        .order("performed_at", { ascending: false }),
+      supabaseAdmin
+        .from("appointments")
+        .select("id, practitioner_id, price, payment_status, status, starts_at")
+        .eq("practitioner_id", targetUserId)
+        .gte("starts_at", data.from),
+      supabaseAdmin
+        .from("treatments")
+        .select("practitioner_id, patient_id")
+        .eq("practitioner_id", targetUserId)
+        .gte("performed_at", yearAgo),
+      supabaseAdmin.from("patients").select("id, created_at"),
+      supabaseAdmin
+        .from("clinics")
+        .select("deposit_percent")
+        .eq("id", clinicIdOf(context))
+        .maybeSingle(),
+    ]);
 
     const rate = Number(profile?.commission_rate ?? 0);
     const money = { depositPercent: Number(clinicRow?.deposit_percent ?? 30), nowMs: Date.now() };
@@ -5653,8 +6031,7 @@ export const getMyEarnings = createServerFn({ method: "POST" })
         name: t.name as string,
         patientId: t.patient_id as string | undefined,
         patient: t.patients ? `${t.patients.first_name} ${t.patients.last_name}` : "—",
-        share:
-          Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,
+        share: Math.round(Number(t.price ?? 0) * Number(t.commission_rate_snapshot ?? rate)) / 100,
         // Payout status: paid once the linked booking is paid in full; a
         // treatment with no booking counts as paid (recorded at the desk).
         payout: payoutFor(t.appointment_id as string | null | undefined),
@@ -5664,7 +6041,9 @@ export const getMyEarnings = createServerFn({ method: "POST" })
 
 /** Manager-only: set a staff member's commission percentage. */
 export const setCommissionRate = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; rate: number }) => parseInput(schemas.SetCommissionRate, data))
+  .validator((data: { userId: string; rate: number }) =>
+    parseInput(schemas.SetCommissionRate, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -5689,15 +6068,19 @@ async function notifyProfileChangeApprovers(
   opts: { requiresOwner: boolean; fromName: string; summary: string },
 ) {
   const supabaseAdmin = await adminClient(ctx);
-  const [{ data: roles }, { data: grants }, { data: namedGrants }, { data: staffProfiles }] = await Promise.all([
-    supabaseAdmin.from("user_roles").select("user_id, role"),
-    supabaseAdmin.from("role_permissions").select("role, permission, enabled").eq("permission", "team.approve_changes"),
-    supabaseAdmin
-      .from("clinic_role_permissions")
-      .select("clinic_role_id, permission, enabled")
-      .eq("permission", "team.approve_changes"),
-    supabaseAdmin.from("profiles").select("id, clinic_role_id"),
-  ]);
+  const [{ data: roles }, { data: grants }, { data: namedGrants }, { data: staffProfiles }] =
+    await Promise.all([
+      supabaseAdmin.from("user_roles").select("user_id, role"),
+      supabaseAdmin
+        .from("role_permissions")
+        .select("role, permission, enabled")
+        .eq("permission", "team.approve_changes"),
+      supabaseAdmin
+        .from("clinic_role_permissions")
+        .select("clinic_role_id, permission, enabled")
+        .eq("permission", "team.approve_changes"),
+      supabaseAdmin.from("profiles").select("id, clinic_role_id"),
+    ]);
   const recipients = profileChangeApproverIds({
     requesterId: ctx.userId,
     requiresOwner: opts.requiresOwner,
@@ -5761,14 +6144,17 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       requires_owner: requiresOwner,
     });
     if (error) throw new Error(error.message);
-    const summary = [
-      data.jobTitle ? "job title" : null,
-      data.registrationBody || data.registrationNumber || data.registrationExpiry ? "registration" : null,
-      workEmail ? "work email" : null,
-      data.workingArrangement ? "working arrangement" : null,
-    ]
-      .filter(Boolean)
-      .join(", ") || "their profile";
+    const summary =
+      [
+        data.jobTitle ? "job title" : null,
+        data.registrationBody || data.registrationNumber || data.registrationExpiry
+          ? "registration"
+          : null,
+        workEmail ? "work email" : null,
+        data.workingArrangement ? "working arrangement" : null,
+      ]
+        .filter(Boolean)
+        .join(", ") || "their profile";
     try {
       await notifyProfileChangeApprovers(ctx, {
         requiresOwner,
@@ -5785,11 +6171,8 @@ export const submitProfileChange = createServerFn({ method: "POST" })
 /** Photo-adjacent professional facts anyone may keep current without approval. */
 export const saveMyInstantProfile = createServerFn({ method: "POST" })
   .validator(
-    (data: {
-      insuranceProvider?: string;
-      insuranceExpiry?: string;
-      qualifications?: string;
-    }) => parseInput(schemas.SaveMyInstantProfile, data),
+    (data: { insuranceProvider?: string; insuranceExpiry?: string; qualifications?: string }) =>
+      parseInput(schemas.SaveMyInstantProfile, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -5887,7 +6270,9 @@ export const getMyProfile = createServerFn({ method: "GET" })
       isManager: identity.isManager,
       canSelfApply: canSelfApplyIdentityChanges(identity),
       requiresOwner: profileChangeRequiresOwner(identity),
-      hasSeparateManager: clinicHasSeparateManager((roleRows ?? []) as { user_id: string; role: string }[]),
+      hasSeparateManager: clinicHasSeparateManager(
+        (roleRows ?? []) as { user_id: string; role: string }[],
+      ),
       requests: requests ?? [],
     };
   });
@@ -5899,30 +6284,36 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "listProfileChangeRequests");
     const supabaseAdmin = await adminClient(context);
-    const [{ data: requests }, { data: profiles }, users, { data: roles }, { data: grants }, { data: namedGrants }] =
-      await Promise.all([
-        supabaseAdmin
-          .from("profile_change_requests")
-          .select("*")
-          .is("inbox_cleared_at", null)
-          .order("created_at", { ascending: false })
-          .limit(50),
-        supabaseAdmin
-          .from("profiles")
-          .select(
-            "id, full_name, job_title, registration_body, registration_number, registration_expiry, working_arrangement, clinic_role_id",
-          ),
-        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
-        supabaseAdmin.from("user_roles").select("user_id, role"),
-        supabaseAdmin
-          .from("role_permissions")
-          .select("role, permission, enabled")
-          .eq("permission", "team.approve_changes"),
-        supabaseAdmin
-          .from("clinic_role_permissions")
-          .select("clinic_role_id, permission, enabled")
-          .eq("permission", "team.approve_changes"),
-      ]);
+    const [
+      { data: requests },
+      { data: profiles },
+      users,
+      { data: roles },
+      { data: grants },
+      { data: namedGrants },
+    ] = await Promise.all([
+      supabaseAdmin
+        .from("profile_change_requests")
+        .select("*")
+        .is("inbox_cleared_at", null)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      supabaseAdmin
+        .from("profiles")
+        .select(
+          "id, full_name, job_title, registration_body, registration_number, registration_expiry, working_arrangement, clinic_role_id",
+        ),
+      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
+      supabaseAdmin.from("user_roles").select("user_id, role"),
+      supabaseAdmin
+        .from("role_permissions")
+        .select("role, permission, enabled")
+        .eq("permission", "team.approve_changes"),
+      supabaseAdmin
+        .from("clinic_role_permissions")
+        .select("clinic_role_id, permission, enabled")
+        .eq("permission", "team.approve_changes"),
+    ]);
     const emailFor = new Map<string, string>(
       (users.data?.users ?? []).map((u) => [u.id, u.email ?? ""]),
     );
@@ -5947,12 +6338,12 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
         reviewed_by_name: reviewer?.full_name ?? null,
         show_reviewer: Boolean(
           r.reviewed_by &&
-            r.status !== "pending" &&
-            profileChangeShowsReviewer({
-              requesterId: r.user_id,
-              requiresOwner: Boolean(r.requires_owner),
-              ...approverInput,
-            }),
+          r.status !== "pending" &&
+          profileChangeShowsReviewer({
+            requesterId: r.user_id,
+            requiresOwner: Boolean(r.requires_owner),
+            ...approverInput,
+          }),
         ),
         current: current
           ? { ...current, email: emailFor.get(r.user_id) ?? "" }
@@ -5963,7 +6354,9 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
 
 /** Owner, or staff granted Approve profile change requests. */
 export const reviewProfileChange = createServerFn({ method: "POST" })
-  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) => parseInput(schemas.ReviewProfileChange, data))
+  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) =>
+    parseInput(schemas.ReviewProfileChange, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -5989,7 +6382,8 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
         registration_body: req.registration_body,
         registration_number: req.registration_number,
       };
-      if (req.registration_expiry !== undefined) patch.registration_expiry = req.registration_expiry;
+      if (req.registration_expiry !== undefined)
+        patch.registration_expiry = req.registration_expiry;
       if (req.working_arrangement != null) patch.working_arrangement = req.working_arrangement;
       const { error } = await supabaseAdmin.from("profiles").update(patch).eq("id", req.user_id);
       if (error) throw new Error(error.message);
@@ -6053,7 +6447,9 @@ export const dismissProfileChangeRequest = createServerFn({ method: "POST" })
 
 /** Save a staff member's profile picture. Managers may update another user's avatar. */
 export const setMyAvatar = createServerFn({ method: "POST" })
-  .validator((data: { path: string | null; targetUserId?: string }) => parseInput(schemas.SetMyAvatar, data))
+  .validator((data: { path: string | null; targetUserId?: string }) =>
+    parseInput(schemas.SetMyAvatar, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -6062,7 +6458,10 @@ export const setMyAvatar = createServerFn({ method: "POST" })
     if (targetUserId !== ctx.userId) await requireOwner(ctx);
     const supabaseAdmin = await adminClient(context);
     const client = targetUserId === ctx.userId ? ctx.supabase : supabaseAdmin;
-    const { error } = await client.from("profiles").update({ avatar_url: data.path }).eq("id", targetUserId);
+    const { error } = await client
+      .from("profiles")
+      .update({ avatar_url: data.path })
+      .eq("id", targetUserId);
     if (error) throw new Error(error.message);
     await audit(ctx, "profile.avatar_updated", "profiles", targetUserId, null);
     return { ok: true };
@@ -6155,32 +6554,38 @@ export const getStaffProfile = createServerFn({ method: "GET" })
 
     const supabaseAdmin = await adminClient(context);
     const now = new Date().toISOString();
-    const [{ data: profile }, { data: roles }, { data: docs }, users, { data: requests }, { data: archived }] =
-      await Promise.all([
-        supabaseAdmin.from("profiles").select("*").eq("id", data.userId).maybeSingle(),
-        supabaseAdmin.from("user_roles").select("role").eq("user_id", data.userId),
-        supabaseAdmin
-          .from("staff_documents")
-          .select(canViewDocuments ? "*" : "category")
-          .eq("user_id", data.userId)
-          .order("created_at", { ascending: false }),
-        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
-        identity.isOwner
-          ? supabaseAdmin
-              .from("profile_change_requests")
-              .select("*")
-              .eq("user_id", data.userId)
-              .order("created_at", { ascending: false })
-              .limit(20)
-          : Promise.resolve({ data: [] as never[] }),
-        supabaseAdmin
-          .from("ex_team_members")
-          .select("full_name, email, role, retain_until, revoked_at")
-          .eq("user_id", data.userId)
-          .is("purged_at", null)
-          .gt("retain_until", now)
-          .maybeSingle(),
-      ]);
+    const [
+      { data: profile },
+      { data: roles },
+      { data: docs },
+      users,
+      { data: requests },
+      { data: archived },
+    ] = await Promise.all([
+      supabaseAdmin.from("profiles").select("*").eq("id", data.userId).maybeSingle(),
+      supabaseAdmin.from("user_roles").select("role").eq("user_id", data.userId),
+      supabaseAdmin
+        .from("staff_documents")
+        .select(canViewDocuments ? "*" : "category")
+        .eq("user_id", data.userId)
+        .order("created_at", { ascending: false }),
+      supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
+      identity.isOwner
+        ? supabaseAdmin
+            .from("profile_change_requests")
+            .select("*")
+            .eq("user_id", data.userId)
+            .order("created_at", { ascending: false })
+            .limit(20)
+        : Promise.resolve({ data: [] as never[] }),
+      supabaseAdmin
+        .from("ex_team_members")
+        .select("full_name, email, role, retain_until, revoked_at")
+        .eq("user_id", data.userId)
+        .is("purged_at", null)
+        .gt("retain_until", now)
+        .maybeSingle(),
+    ]);
     const authUser = users.data?.users?.find((u) => u.id === data.userId);
     const filled = staffArchiveIdentity({
       profileName: (archived?.full_name as string | undefined) || profile?.full_name,
@@ -6225,7 +6630,8 @@ export const getStaffProfile = createServerFn({ method: "GET" })
       requests: identity.isOwner ? (requests ?? []) : [],
       // "What can this person actually do" — only the management tier needs it,
       // and only they can act on the answer.
-      capabilities: identity.isManager && !archived ? await effectiveCapabilities(ctx, data.userId) : null,
+      capabilities:
+        identity.isManager && !archived ? await effectiveCapabilities(ctx, data.userId) : null,
     };
   });
 
@@ -6238,7 +6644,9 @@ function retentionWindow(data: { from?: string; to?: string; key?: string }) {
 }
 
 export const getRetention = createServerFn({ method: "GET" })
-  .validator((data: { from?: string; to?: string; key?: string }) => parseInput(schemas.GetRetention, data))
+  .validator((data: { from?: string; to?: string; key?: string }) =>
+    parseInput(schemas.GetRetention, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -6248,17 +6656,24 @@ export const getRetention = createServerFn({ method: "GET" })
     // 5-year chart + 365-day rolling lookback.
     const sixYearsAgo = new Date(Date.now() - 6 * 365 * 86400000).toISOString();
 
-    const [{ data: patients }, { data: treatments }, { data: appointments }, { data: profiles }, { data: outreach }] =
-      await Promise.all([
-        supabase.from("patients").select("id, title, first_name, last_name, status, email, phone, created_at"),
-        supabase
-          .from("treatments")
-          .select("patient_id, practitioner_id, name, price, performed_at, next_due_at")
-          .gte("performed_at", sixYearsAgo),
-        supabase.from("appointments").select("patient_id, practitioner_id, starts_at, status"),
-        supabase.from("profiles").select("id, full_name"),
-        supabase.from("retention_outreach").select("patient_id, created_at"),
-      ]);
+    const [
+      { data: patients },
+      { data: treatments },
+      { data: appointments },
+      { data: profiles },
+      { data: outreach },
+    ] = await Promise.all([
+      supabase
+        .from("patients")
+        .select("id, title, first_name, last_name, status, email, phone, created_at"),
+      supabase
+        .from("treatments")
+        .select("patient_id, practitioner_id, name, price, performed_at, next_due_at")
+        .gte("performed_at", sixYearsAgo),
+      supabase.from("appointments").select("patient_id, practitioner_id, starts_at, status"),
+      supabase.from("profiles").select("id, full_name"),
+      supabase.from("retention_outreach").select("patient_id, created_at"),
+    ]);
 
     const practitionerNames = new Map<string, string>(
       (profiles ?? []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]),
@@ -6291,7 +6706,9 @@ export const getRetention = createServerFn({ method: "GET" })
  * on `communications` once Phase 8 starts draining the outbox.
  */
 export const logRetentionOutreach = createServerFn({ method: "POST" })
-  .validator((data: { patient_id: string; channel?: string; note?: string }) => parseInput(schemas.LogRetentionOutreach, data))
+  .validator((data: { patient_id: string; channel?: string; note?: string }) =>
+    parseInput(schemas.LogRetentionOutreach, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -6386,7 +6803,9 @@ export const createRecallTask = createServerFn({ method: "POST" })
     );
     const pool = sameNote.length ? sameNote : [];
     const alreadyAssigned = new Set(
-      (sameNote.length ? sameNote : openTasks ?? []).map((t: { assigned_to: string }) => t.assigned_to),
+      (sameNote.length ? sameNote : (openTasks ?? [])).map(
+        (t: { assigned_to: string }) => t.assigned_to,
+      ),
     );
     const recipients = requested.filter((r) => !alreadyAssigned.has(r.id));
     if (!recipients.length) {
@@ -6428,11 +6847,8 @@ export const createRecallTask = createServerFn({ method: "POST" })
  */
 export const updateRecallTask = createServerFn({ method: "POST" })
   .validator(
-    (data: {
-      task_id: string;
-      recipients: { id: string; label: string }[];
-      note?: string;
-    }) => parseInput(schemas.UpdateRecallTask, data),
+    (data: { task_id: string; recipients: { id: string; label: string }[]; note?: string }) =>
+      parseInput(schemas.UpdateRecallTask, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -6506,7 +6922,9 @@ export const updateRecallTask = createServerFn({ method: "POST" })
     }
 
     const existingByAssignee = new Map(
-      group.filter((g: any) => nextIds.has(g.assigned_to)).map((g: any) => [g.assigned_to as string, g]),
+      group
+        .filter((g: any) => nextIds.has(g.assigned_to))
+        .map((g: any) => [g.assigned_to as string, g]),
     );
 
     for (const r of data.recipients) {
@@ -6548,7 +6966,9 @@ export const updateRecallTask = createServerFn({ method: "POST" })
  * the patient never gets chased twice.
  */
 export const setRecallTaskStatus = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; status: "open" | "contacted" | "completed" }) => parseInput(schemas.SetRecallTaskStatus, data))
+  .validator((data: { task_id: string; status: "open" | "contacted" | "completed" }) =>
+    parseInput(schemas.SetRecallTaskStatus, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -6607,7 +7027,9 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
  * the group; omit it (or pass every assignee) to retract the whole assignment.
  */
 export const deleteRecallTask = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; assignee_ids?: string[] }) => parseInput(schemas.DeleteRecallTask, data))
+  .validator((data: { task_id: string; assignee_ids?: string[] }) =>
+    parseInput(schemas.DeleteRecallTask, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -6621,7 +7043,10 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
 
     const groupId = (target.group_id as string | null) ?? null;
     const { data: peers } = groupId
-      ? await ctx.supabase.from("recall_tasks").select("id, assigned_to, assigned_label").eq("group_id", groupId)
+      ? await ctx.supabase
+          .from("recall_tasks")
+          .select("id, assigned_to, assigned_label")
+          .eq("group_id", groupId)
       : { data: [target] };
     const group = peers?.length ? peers : [target];
 
@@ -6736,7 +7161,12 @@ export const listOpenRecallTasks = createServerFn({ method: "GET" })
 /** Move an appointment to a new start time (keeps or updates its duration). */
 export const rescheduleAppointment = createServerFn({ method: "POST" })
   .validator(
-    (data: { id: string; starts_at: string; duration_minutes?: number; practitioner_id?: string }) => parseInput(schemas.RescheduleAppointment, data),
+    (data: {
+      id: string;
+      starts_at: string;
+      duration_minutes?: number;
+      practitioner_id?: string;
+    }) => parseInput(schemas.RescheduleAppointment, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -6756,7 +7186,8 @@ export const rescheduleAppointment = createServerFn({ method: "POST" })
           ? Math.max(
               5,
               Math.round(
-                (new Date(current.ends_at).getTime() - new Date(current.starts_at).getTime()) / 60000,
+                (new Date(current.ends_at).getTime() - new Date(current.starts_at).getTime()) /
+                  60000,
               ),
             )
           : 30;
@@ -6811,7 +7242,11 @@ export const listTreatmentColours = createServerFn({ method: "GET" })
       .from("treatment_colours")
       .select("treatment_name, lane, hex");
     const map: Record<string, number | string> = {};
-    for (const row of (data ?? []) as { treatment_name: string; lane: number; hex: string | null }[]) {
+    for (const row of (data ?? []) as {
+      treatment_name: string;
+      lane: number;
+      hex: string | null;
+    }[]) {
       map[row.treatment_name] = row.hex ?? row.lane;
     }
     return map;
@@ -6819,7 +7254,9 @@ export const listTreatmentColours = createServerFn({ method: "GET" })
 
 /** Manager-only: set or clear the colour used for a treatment across the diary. */
 export const saveTreatmentColour = createServerFn({ method: "POST" })
-  .validator((data: { treatment_name: string; lane: number | null; hex?: string | null }) => parseInput(schemas.SaveTreatmentColour, data))
+  .validator((data: { treatment_name: string; lane: number | null; hex?: string | null }) =>
+    parseInput(schemas.SaveTreatmentColour, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -6829,25 +7266,26 @@ export const saveTreatmentColour = createServerFn({ method: "POST" })
     const hex = data.hex ? data.hex.trim().toLowerCase() : null;
     if (hex && !/^#[0-9a-f]{6}$/.test(hex)) throw new Error("Invalid colour");
     if (data.lane === null && !hex) {
-      const { error } = await ctx.supabase.from("treatment_colours").delete().eq("treatment_name", key);
+      const { error } = await ctx.supabase
+        .from("treatment_colours")
+        .delete()
+        .eq("treatment_name", key);
       if (error) throw new Error(error.message);
       await audit(ctx, "reset", "treatment_colour", key, null, { treatment_name: key });
       return { ok: true };
     }
     const lane = hex ? 1 : data.lane;
     if (!Number.isInteger(lane) || lane! < 1 || lane! > 8) throw new Error("Invalid colour");
-    const { error } = await ctx.supabase
-      .from("treatment_colours")
-      .upsert(
-        {
-          treatment_name: key,
-          lane: lane as number,
-          hex,
-          updated_by: ctx.userId,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "clinic_id,treatment_name" },
-      );
+    const { error } = await ctx.supabase.from("treatment_colours").upsert(
+      {
+        treatment_name: key,
+        lane: lane as number,
+        hex,
+        updated_by: ctx.userId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "clinic_id,treatment_name" },
+    );
     if (error) throw new Error(error.message);
     await audit(ctx, "update", "treatment_colour", key, null, { treatment_name: key, lane, hex });
     return { ok: true };
@@ -6862,7 +7300,12 @@ export const listColourThemes = createServerFn({ method: "GET" })
       .from("treatment_colour_themes")
       .select("id, name, colours, updated_at")
       .order("name");
-    return (data ?? []) as { id: string; name: string; colours: Record<string, number | string>; updated_at: string }[];
+    return (data ?? []) as {
+      id: string;
+      name: string;
+      colours: Record<string, number | string>;
+      updated_at: string;
+    }[];
   });
 
 /** Manager-only: save the current treatment colours as a named theme. */
@@ -6874,9 +7317,15 @@ export const saveColourTheme = createServerFn({ method: "POST" })
     await authorize(ctx, "saveColourTheme");
     const name = data.name.trim();
     if (!name) throw new Error("Theme name is required");
-    const { data: rows } = await ctx.supabase.from("treatment_colours").select("treatment_name, lane, hex");
+    const { data: rows } = await ctx.supabase
+      .from("treatment_colours")
+      .select("treatment_name, lane, hex");
     const colours: Record<string, number | string> = {};
-    for (const row of (rows ?? []) as { treatment_name: string; lane: number; hex: string | null }[]) {
+    for (const row of (rows ?? []) as {
+      treatment_name: string;
+      lane: number;
+      hex: string | null;
+    }[]) {
       colours[row.treatment_name] = row.hex ?? row.lane;
     }
     const { data: existing } = await ctx.supabase
@@ -6974,11 +7423,11 @@ export type CatalogueInput = {
   interval_days?: number | null;
   duration_minutes?: number | null;
   cooling_off_hours?: number | null;
-      requires_consent?: boolean;
-      active?: boolean;
-      aftercare_points?: string[];
-      result_template?: string;
-    };
+  requires_consent?: boolean;
+  active?: boolean;
+  aftercare_points?: string[];
+  result_template?: string;
+};
 
 /** Manager-only: create or update a treatment in the clinic catalogue. */
 export const saveCatalogueItem = createServerFn({ method: "POST" })
@@ -7006,7 +7455,10 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
         : {}),
     };
     if (data.id) {
-      const { error } = await ctx.supabase.from("treatment_catalogue").update(row).eq("id", data.id);
+      const { error } = await ctx.supabase
+        .from("treatment_catalogue")
+        .update(row)
+        .eq("id", data.id);
       if (error) throw new Error(error.message);
       await audit(ctx, "update", "treatment_catalogue", data.id, null, { name });
       return { ok: true, id: data.id };
@@ -7023,7 +7475,9 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
 
 /** Manager-only: archive or restore a treatment (kept for historical records). */
 export const setCatalogueItemActive = createServerFn({ method: "POST" })
-  .validator((data: { id: string; active: boolean }) => parseInput(schemas.SetCatalogueItemActive, data))
+  .validator((data: { id: string; active: boolean }) =>
+    parseInput(schemas.SetCatalogueItemActive, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -7044,7 +7498,9 @@ export const getClinicDetails = createServerFn({ method: "GET" })
     await authorize(context as Ctx, "getClinicDetails");
     const { data } = await (context as Ctx).supabase
       .from("clinics")
-      .select("id, name, address, phone, email, reminder_offsets, deposit_lead_days, deposit_percent")
+      .select(
+        "id, name, address, phone, email, reminder_offsets, deposit_lead_days, deposit_percent",
+      )
       .eq("id", clinicIdOf(context))
       .maybeSingle();
     return data ?? null;
@@ -7109,15 +7565,24 @@ export const listRolePermissions = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "listRolePermissions");
-    const [{ data, error }, { data: namedRoles, error: namedError }, { data: namedPerms, error: namedPermsError }, setup] =
-      await Promise.all([
-        ctx.supabase.from("role_permissions").select("role, permission, enabled, updated_by, updated_at"),
-        ctx.supabase.from("clinic_roles").select("id, name, created_at").order("created_at", { ascending: true }),
-        ctx.supabase
-          .from("clinic_role_permissions")
-          .select("clinic_role_id, permission, enabled, updated_by, updated_at"),
-        clinicSetupOf(ctx),
-      ]);
+    const [
+      { data, error },
+      { data: namedRoles, error: namedError },
+      { data: namedPerms, error: namedPermsError },
+      setup,
+    ] = await Promise.all([
+      ctx.supabase
+        .from("role_permissions")
+        .select("role, permission, enabled, updated_by, updated_at"),
+      ctx.supabase
+        .from("clinic_roles")
+        .select("id, name, created_at")
+        .order("created_at", { ascending: true }),
+      ctx.supabase
+        .from("clinic_role_permissions")
+        .select("clinic_role_id, permission, enabled, updated_by, updated_at"),
+      clinicSetupOf(ctx),
+    ]);
     if (error) throw new Error(error.message);
     if (namedError) throw new Error(namedError.message);
     if (namedPermsError) throw new Error(namedPermsError.message);
@@ -7141,7 +7606,8 @@ export const listRolePermissions = createServerFn({ method: "GET" })
       ),
     ];
     const changers: { id: string; full_name: string }[] = changerIds.length
-      ? ((await ctx.supabase.from("profiles").select("id, full_name").in("id", changerIds)).data ?? [])
+      ? ((await ctx.supabase.from("profiles").select("id, full_name").in("id", changerIds)).data ??
+        [])
       : [];
     const nameOf = new Map<string, string>(changers.map((p) => [p.id, p.full_name]));
     const editableRoles = ["manager", "front_desk", "practitioner", "patient"] as const;
@@ -7157,7 +7623,10 @@ export const listRolePermissions = createServerFn({ method: "GET" })
         const row = rows.find((r) => r.role === role && r.permission === key);
         grants[role]![key] = row?.enabled ?? false;
         if (row?.updated_by) {
-          (changes[role] ??= {})[key] = { by: nameOf.get(row.updated_by) ?? "A manager", at: row.updated_at };
+          (changes[role] ??= {})[key] = {
+            by: nameOf.get(row.updated_by) ?? "A manager",
+            at: row.updated_at,
+          };
         }
       }
     }
@@ -7207,18 +7676,16 @@ export const setRolePermission = createServerFn({ method: "POST" })
     await requireStepUp(ctx);
     if (!(PERMISSION_KEYS as readonly string[]).includes(data.permission))
       throw new Error("Unknown permission");
-    const { error } = await ctx.supabase
-      .from("role_permissions")
-      .upsert(
-        {
-          role: data.role,
-          permission: data.permission,
-          enabled: data.enabled,
-          updated_by: ctx.userId,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "clinic_id,role,permission" },
-      );
+    const { error } = await ctx.supabase.from("role_permissions").upsert(
+      {
+        role: data.role,
+        permission: data.permission,
+        enabled: data.enabled,
+        updated_by: ctx.userId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "clinic_id,role,permission" },
+    );
     if (error) throw new Error(error.message);
     await audit(ctx, "access.update", "role_permissions", null, null, {
       role: data.role,
@@ -7229,7 +7696,9 @@ export const setRolePermission = createServerFn({ method: "POST" })
   });
 
 export const completeOwnerSetup = createServerFn({ method: "POST" })
-  .validator((data: { hasSeparateManager: boolean }) => parseInput(schemas.CompleteOwnerSetup, data))
+  .validator((data: { hasSeparateManager: boolean }) =>
+    parseInput(schemas.CompleteOwnerSetup, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -7335,7 +7804,11 @@ export const setClinicRolePermission = createServerFn({ method: "POST" })
         .select("id")
         .eq("clinic_role_id", data.clinicRoleId);
       for (const member of members ?? []) {
-        await ctx.supabase.from("user_roles").delete().eq("user_id", member.id).neq("role", "patient");
+        await ctx.supabase
+          .from("user_roles")
+          .delete()
+          .eq("user_id", member.id)
+          .neq("role", "patient");
         await ctx.supabase.from("user_roles").insert({ user_id: member.id, role: nextRole });
       }
     }
@@ -7428,7 +7901,10 @@ async function writeBookingNote(ctx: Ctx, appointmentId: string, body: string) {
   const prior = String((appt as { notes?: string | null } | null)?.notes ?? "");
   const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
   const next = cancelLine ? (body.trim() ? `${cancelLine}\n\n${body}` : cancelLine) : body || null;
-  const { error } = await supabase.from("appointments").update({ notes: next }).eq("id", appointmentId);
+  const { error } = await supabase
+    .from("appointments")
+    .update({ notes: next })
+    .eq("id", appointmentId);
   if (error) throw new Error(error.message);
   return { body: plainVisitNote(body), updatedAt: new Date().toISOString(), updatedBy: null };
 }
@@ -7440,7 +7916,11 @@ async function writeBookingNote(ctx: Ctx, appointmentId: string, body: string) {
 async function writeVisitNote(ctx: Ctx, appointmentId: string, body: string) {
   const { supabase, userId } = ctx;
   const [{ data: appt }, { data: me }] = await Promise.all([
-    supabase.from("appointments").select("clinic_id, patient_id").eq("id", appointmentId).maybeSingle(),
+    supabase
+      .from("appointments")
+      .select("clinic_id, patient_id")
+      .eq("id", appointmentId)
+      .maybeSingle(),
     supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle(),
   ]);
   const { data: row, error } = await supabase
@@ -7467,7 +7947,6 @@ async function writeVisitNote(ctx: Ctx, appointmentId: string, body: string) {
     updatedBy: (row.updated_by_label as string) ?? null,
   };
 }
-
 
 /* ---------------------------------------------------------------- */
 /* Staff direct chat                                                 */
@@ -7549,7 +8028,9 @@ export const getStaffChat = createServerFn({ method: "GET" })
       // Direct alerts + alert-replies between these two people (not chat pings).
       ctx.supabase
         .from("staff_notifications")
-        .select("id, sender_id, recipient_id, title, body, urgent, kind, read_at, recipient_dismissed_at, reply_to_id, created_at")
+        .select(
+          "id, sender_id, recipient_id, title, body, urgent, kind, read_at, recipient_dismissed_at, reply_to_id, created_at",
+        )
         .in("kind", ["urgent", "staff_message"])
         .or(
           `and(sender_id.eq.${ctx.userId},recipient_id.eq.${peer}),and(sender_id.eq.${peer},recipient_id.eq.${ctx.userId})`,
@@ -7584,8 +8065,9 @@ export const getStaffChat = createServerFn({ method: "GET" })
       ((reads ?? []) as { user_id: string; last_read_at: string }[]).find((r) => r.user_id === peer)
         ?.last_read_at ?? null;
     const myReadAt =
-      ((reads ?? []) as { user_id: string; last_read_at: string }[]).find((r) => r.user_id === ctx.userId)
-        ?.last_read_at ?? null;
+      ((reads ?? []) as { user_id: string; last_read_at: string }[]).find(
+        (r) => r.user_id === ctx.userId,
+      )?.last_read_at ?? null;
 
     return {
       conversationId,
@@ -7597,18 +8079,19 @@ export const getStaffChat = createServerFn({ method: "GET" })
       },
       peerReadAt,
       myReadAt,
-      messages: ((messages ?? []) as {
-        id: string;
-        sender_id: string;
-        body: string;
-        attachments?: unknown;
-        created_at: string;
-      }[]).map((m) => ({
+      messages: (
+        (messages ?? []) as {
+          id: string;
+          sender_id: string;
+          body: string;
+          attachments?: unknown;
+          created_at: string;
+        }[]
+      ).map((m) => ({
         ...m,
         attachments: Array.isArray(m.attachments) ? m.attachments : [],
         mine: m.sender_id === ctx.userId,
-        readByPeer:
-          m.sender_id === ctx.userId && peerReadAt != null && peerReadAt >= m.created_at,
+        readByPeer: m.sender_id === ctx.userId && peerReadAt != null && peerReadAt >= m.created_at,
       })),
       alerts: (
         (alerts ?? []) as {
@@ -7660,7 +8143,11 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
     const attachments = (data.attachments ?? []).slice(0, 5);
     const body =
       data.body.trim() ||
-      (attachments.length === 1 ? "Sent an attachment" : attachments.length > 1 ? "Sent attachments" : "");
+      (attachments.length === 1
+        ? "Sent an attachment"
+        : attachments.length > 1
+          ? "Sent attachments"
+          : "");
     if (!body && attachments.length === 0) throw new Error("Write a message first");
     if (body.length > 4000) throw new Error("Message is too long");
 
@@ -7686,10 +8173,12 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
       .eq("id", conversationId);
 
     // Sender has read up to this message.
-    await ctx.supabase.from("staff_conversation_reads").upsert(
-      { conversation_id: conversationId, user_id: ctx.userId, last_read_at: now },
-      { onConflict: "conversation_id,user_id" },
-    );
+    await ctx.supabase
+      .from("staff_conversation_reads")
+      .upsert(
+        { conversation_id: conversationId, user_id: ctx.userId, last_read_at: now },
+        { onConflict: "conversation_id,user_id" },
+      );
 
     // Lightweight bell notice for the peer (one pending chat ping per sender).
     const from = identity.profile?.full_name || identity.email || "A colleague";
@@ -7728,10 +8217,12 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
     await assertStaffPeer(ctx, data.peerUserId);
     const conversationId = await getOrCreateConversationId(ctx, data.peerUserId);
     const now = new Date().toISOString();
-    const { error } = await ctx.supabase.from("staff_conversation_reads").upsert(
-      { conversation_id: conversationId, user_id: ctx.userId, last_read_at: now },
-      { onConflict: "conversation_id,user_id" },
-    );
+    const { error } = await ctx.supabase
+      .from("staff_conversation_reads")
+      .upsert(
+        { conversation_id: conversationId, user_id: ctx.userId, last_read_at: now },
+        { onConflict: "conversation_id,user_id" },
+      );
     if (error) throw new Error(error.message);
 
     // Clear chat pings from this peer in the bell.
@@ -7768,26 +8259,39 @@ export const listStaffThreads = createServerFn({ method: "GET" })
     if (peerIds.length === 0) return [];
 
     const convs = (conversations ?? []) as { id: string; user_low: string; user_high: string }[];
-    const peerOf = new Map(convs.map((c) => [c.id, c.user_low === ctx.userId ? c.user_high : c.user_low]));
+    const peerOf = new Map(
+      convs.map((c) => [c.id, c.user_low === ctx.userId ? c.user_high : c.user_low]),
+    );
     const convIds = convs.map((c) => c.id);
-    const [{ data: profiles }, { data: messages }, { data: reads }] = await Promise.all([
-      ctx.supabase.from("profiles").select("id, full_name, job_title, avatar_url").in("id", peerIds),
-      convIds.length
-        ? ctx.supabase
-            .from("staff_chat_messages")
-            .select("conversation_id, sender_id, body, created_at")
-            .in("conversation_id", convIds)
-            .order("created_at", { ascending: false })
-            .limit(400)
-        : Promise.resolve({ data: [] as never[] }),
-      convIds.length
-        ? ctx.supabase
-            .from("staff_conversation_reads")
-            .select("conversation_id, last_read_at")
-            .eq("user_id", ctx.userId)
-            .in("conversation_id", convIds)
-        : Promise.resolve({ data: [] as never[] }),
-    ]);
+    const [{ data: profiles }, { data: messages }, { data: reads }, { data: alerts }] =
+      await Promise.all([
+        ctx.supabase
+          .from("profiles")
+          .select("id, full_name, job_title, avatar_url")
+          .in("id", peerIds),
+        convIds.length
+          ? ctx.supabase
+              .from("staff_chat_messages")
+              .select("conversation_id, sender_id, body, created_at")
+              .in("conversation_id", convIds)
+              .order("created_at", { ascending: false })
+              .limit(400)
+          : Promise.resolve({ data: [] as never[] }),
+        convIds.length
+          ? ctx.supabase
+              .from("staff_conversation_reads")
+              .select("conversation_id, last_read_at")
+              .eq("user_id", ctx.userId)
+              .in("conversation_id", convIds)
+          : Promise.resolve({ data: [] as never[] }),
+        ctx.supabase
+          .from("staff_notifications")
+          .select("sender_id, recipient_id, title, body, urgent, kind, created_at")
+          .in("kind", ["urgent", "staff_message"])
+          .or(`sender_id.eq.${ctx.userId},recipient_id.eq.${ctx.userId}`)
+          .order("created_at", { ascending: false })
+          .limit(400),
+      ]);
 
     const myReadAt = new Map(
       ((reads ?? []) as { conversation_id: string; last_read_at: string }[]).map((r) => [
@@ -7795,7 +8299,10 @@ export const listStaffThreads = createServerFn({ method: "GET" })
         r.last_read_at,
       ]),
     );
-    const latest = new Map<string, { last: string; lastAt: string; lastMine: boolean; unread: number }>();
+    const latest = new Map<
+      string,
+      { last: string; lastAt: string; lastMine: boolean; unread: number }
+    >();
     for (const m of (messages ?? []) as {
       conversation_id: string;
       sender_id: string;
@@ -7806,14 +8313,49 @@ export const listStaffThreads = createServerFn({ method: "GET" })
       if (!peer) continue;
       let row = latest.get(peer);
       if (!row) {
-        row = { last: m.body, lastAt: m.created_at, lastMine: m.sender_id === ctx.userId, unread: 0 };
+        row = {
+          last: m.body,
+          lastAt: m.created_at,
+          lastMine: m.sender_id === ctx.userId,
+          unread: 0,
+        };
         latest.set(peer, row);
       }
       const readAt = myReadAt.get(m.conversation_id);
       if (m.sender_id !== ctx.userId && (!readAt || m.created_at > readAt)) row.unread += 1;
     }
+    // Alerts sit in the same thread, so they count as its latest line; their unread state
+    // belongs to Team alerts and is not added to the chat badge.
+    for (const a of (alerts ?? []) as {
+      sender_id: string | null;
+      recipient_id: string;
+      title: string;
+      body: string | null;
+      urgent: boolean | null;
+      kind: string;
+      created_at: string;
+    }[]) {
+      if (!a.sender_id) continue;
+      const peer = a.sender_id === ctx.userId ? a.recipient_id : a.sender_id;
+      if (peer === ctx.userId) continue;
+      const row = latest.get(peer);
+      if (row && row.lastAt >= a.created_at) continue;
+      latest.set(peer, {
+        last: teamAlertPreview(a),
+        lastAt: a.created_at,
+        lastMine: a.sender_id === ctx.userId,
+        unread: row?.unread ?? 0,
+      });
+    }
 
-    return ((profiles ?? []) as { id: string; full_name: string; job_title: string | null; avatar_url: string | null }[])
+    return (
+      (profiles ?? []) as {
+        id: string;
+        full_name: string;
+        job_title: string | null;
+        avatar_url: string | null;
+      }[]
+    )
       .map((p) => ({
         userId: p.id,
         name: p.full_name || "Teammate",
@@ -7824,7 +8366,9 @@ export const listStaffThreads = createServerFn({ method: "GET" })
         lastMine: latest.get(p.id)?.lastMine ?? false,
         unread: latest.get(p.id)?.unread ?? 0,
       }))
-      .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? "") || a.name.localeCompare(b.name));
+      .sort(
+        (a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? "") || a.name.localeCompare(b.name),
+      );
   });
 
 /* ---------------------------------------------------------------------------
@@ -7898,7 +8442,9 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
       const mine = ((milestones ?? []) as any[]).filter((m) => m.plan_id === p.id);
       const done = mine.filter((m) => m.status === "done" || m.status === "skipped").length;
       const next =
-        mine.find((m) => m.status === "current") ?? mine.find((m) => m.status === "upcoming") ?? null;
+        mine.find((m) => m.status === "current") ??
+        mine.find((m) => m.status === "upcoming") ??
+        null;
       const overdue = Boolean(next?.due_date && next.due_date < todayISO);
       const atRisk = overdue || !hasUpcoming.has(p.patient_id);
       return {
@@ -7913,7 +8459,9 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
         phase: p.phase,
         done,
         total: mine.length || p.total_sessions,
-        nextMilestone: next ? { id: next.id, title: next.title, kind: next.kind, dueDate: next.due_date } : null,
+        nextMilestone: next
+          ? { id: next.id, title: next.title, kind: next.kind, dueDate: next.due_date }
+          : null,
         overdue,
         atRisk,
         riskReason: overdue
@@ -7927,7 +8475,8 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
 
     if (needle) {
       rows = rows.filter(
-        (r: any) => r.patientName.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle),
+        (r: any) =>
+          r.patientName.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle),
       );
     }
     if (data.at_risk_only) rows = rows.filter((r: any) => r.atRisk);
@@ -7953,7 +8502,8 @@ export const createTreatmentPlan = createServerFn({ method: "POST" })
     const clinicId = clinicIdOf(context);
 
     const totalSessions =
-      data.total_sessions ?? Math.max(1, data.milestones.filter((m) => (m.kind ?? "task") === "session").length);
+      data.total_sessions ??
+      Math.max(1, data.milestones.filter((m) => (m.kind ?? "task") === "session").length);
     const { data: created, error } = await supabase
       .from("treatment_plans")
       .insert({
@@ -7983,10 +8533,17 @@ export const createTreatmentPlan = createServerFn({ method: "POST" })
     );
     if (milestoneError) throw new Error(milestoneError.message);
 
-    await audit(context as Ctx, "treatment_plan.create", "treatment_plans", created.id, data.patient_id, {
-      name: data.name,
-      milestones: data.milestones.length,
-    });
+    await audit(
+      context as Ctx,
+      "treatment_plan.create",
+      "treatment_plans",
+      created.id,
+      data.patient_id,
+      {
+        name: data.name,
+        milestones: data.milestones.length,
+      },
+    );
     return { id: created.id };
   });
 
@@ -8032,7 +8589,9 @@ async function setMilestoneStatus(
     .select("id, idx, status")
     .eq("plan_id", updated.plan_id)
     .order("idx", { ascending: true });
-  const open = (siblings ?? []).filter((m: any) => m.status === "upcoming" || m.status === "current");
+  const open = (siblings ?? []).filter(
+    (m: any) => m.status === "upcoming" || m.status === "current",
+  );
   if (status === "done" || status === "skipped") {
     const hasCurrent = (siblings ?? []).some((m: any) => m.status === "current");
     const nextUp = (siblings ?? []).find((m: any) => m.status === "upcoming");
@@ -8062,7 +8621,10 @@ function sessionView(row: any) {
     id: row.id,
     status: row.status as "started" | "treating" | "aftercare" | "complete",
     treatmentId: row.treatment_id ?? null,
-    preChecks: (row.pre_checks ?? {}) as Record<string, { answer: "yes" | "no" | "na"; note?: string }>,
+    preChecks: (row.pre_checks ?? {}) as Record<
+      string,
+      { answer: "yes" | "no" | "na"; note?: string }
+    >,
     results: (row.results ?? {}) as { area?: string; product?: string; dose?: string },
     treatmentNotes: row.treatment_notes ?? null,
     visitNotes: row.visit_notes ?? null,
@@ -8134,7 +8696,12 @@ async function milestoneForVisit(ctx: Ctx, appt: any) {
     .order("idx", { ascending: true });
   const list = sessions ?? [];
   const n = list.findIndex((m: any) => m.id === milestone.id) + 1;
-  return { id: milestone.id as string, title: milestone.title as string, sessionNumber: n || null, sessionTotal: list.length || null };
+  return {
+    id: milestone.id as string,
+    title: milestone.title as string,
+    sessionNumber: n || null,
+    sessionTotal: list.length || null,
+  };
 }
 
 export const getTreatmentSession = createServerFn({ method: "GET" })
@@ -8148,7 +8715,11 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
     const consent = consentStateOf(appt);
 
     const [{ data: session }, { data: lastSame }, { data: photos }, milestone] = await Promise.all([
-      ctx.supabase.from("treatment_sessions").select(SESSION_SELECT).eq("appointment_id", appt.id).maybeSingle(),
+      ctx.supabase
+        .from("treatment_sessions")
+        .select(SESSION_SELECT)
+        .eq("appointment_id", appt.id)
+        .maybeSingle(),
       ctx.supabase
         .from("treatments")
         .select("performed_at, product, dose, area, notes, profiles(full_name)")
@@ -8157,14 +8728,26 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
         .order("performed_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      ctx.supabase.from("treatment_photos").select("*").eq("appointment_id", appt.id).order("taken_at", { ascending: true }),
+      ctx.supabase
+        .from("treatment_photos")
+        .select("*")
+        .eq("appointment_id", appt.id)
+        .order("taken_at", { ascending: true }),
       milestoneForVisit(ctx, appt),
     ]);
 
     const signedPhotos = [];
     for (const photo of photos ?? []) {
-      const { data: signed } = await ctx.supabase.storage.from("patient-photos").createSignedUrl(photo.storage_path, 3600);
-      signedPhotos.push({ id: photo.id, kind: photo.kind, takenAt: photo.taken_at, caption: photo.caption, url: signed?.signedUrl ?? null });
+      const { data: signed } = await ctx.supabase.storage
+        .from("patient-photos")
+        .createSignedUrl(photo.storage_path, 3600);
+      signedPhotos.push({
+        id: photo.id,
+        kind: photo.kind,
+        takenAt: photo.taken_at,
+        caption: photo.caption,
+        url: signed?.signedUrl ?? null,
+      });
     }
 
     const starts = new Date(appt.starts_at);
@@ -8173,7 +8756,12 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
         id: appt.id,
         startsAt: appt.starts_at,
         endsAt: appt.ends_at ?? null,
-        date: starts.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }),
+        date: starts.toLocaleDateString("en-GB", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }),
         time: starts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
         stage: appt.stage ?? "booked",
         status: appt.status,
@@ -8208,8 +8796,13 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
       },
       canStart: canStartTreatment({ stage: appt.stage ?? "booked", consent }),
       session: sessionView(session),
-      bookingNote: String(appt.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim(),
-      resultFields: fieldsFor(appt.treatment_name, appt.treatment_catalogue?.result_template ?? null),
+      bookingNote: String(appt.notes ?? "")
+        .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
+        .trim(),
+      resultFields: fieldsFor(
+        appt.treatment_name,
+        appt.treatment_catalogue?.result_template ?? null,
+      ),
       lastSameTreatment: lastSame
         ? {
             performedAt: (lastSame as any).performed_at,
@@ -8232,18 +8825,28 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
 
 /** Page 1 → In treatment. Refused until consent is complete. */
 export const startTreatment = createServerFn({ method: "POST" })
-  .validator((data: { appointment_id: string; pre_checks: Record<string, { answer: "yes" | "no" | "na"; note?: string }> }) =>
-    parseInput(schemas.StartTreatment, data),
+  .validator(
+    (data: {
+      appointment_id: string;
+      pre_checks: Record<string, { answer: "yes" | "no" | "na"; note?: string }>;
+    }) => parseInput(schemas.StartTreatment, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "startTreatment");
     const appt = await loadFormAppointment(ctx, data.appointment_id);
-    const gate = canStartTreatment({ stage: appt.stage ?? "booked", consent: consentStateOf(appt) });
+    const gate = canStartTreatment({
+      stage: appt.stage ?? "booked",
+      consent: consentStateOf(appt),
+    });
     if (!gate.ok) throw new Error(gate.reason);
     const now = new Date().toISOString();
-    const { data: existing } = await ctx.supabase.from("treatment_sessions").select("id, started_at").eq("appointment_id", appt.id).maybeSingle();
+    const { data: existing } = await ctx.supabase
+      .from("treatment_sessions")
+      .select("id, started_at")
+      .eq("appointment_id", appt.id)
+      .maybeSingle();
     const { data: row, error } = await ctx.supabase
       .from("treatment_sessions")
       .upsert(
@@ -8268,7 +8871,9 @@ export const startTreatment = createServerFn({ method: "POST" })
       .update({ stage: "in_treatment", status: "attended" })
       .eq("id", appt.id);
     if (stageError) throw new Error(stageError.message);
-    await audit(ctx, "treatment.start", "treatment_sessions", row.id, appt.patient_id, { appointmentId: appt.id });
+    await audit(ctx, "treatment.start", "treatment_sessions", row.id, appt.patient_id, {
+      appointmentId: appt.id,
+    });
     return { ok: true, sessionId: row.id as string, stage: "in_treatment" as const };
   });
 
@@ -8315,7 +8920,9 @@ export const moveToAftercare = createServerFn({ method: "POST" })
       .update({ stage: "aftercare", status: "attended" })
       .eq("id", appt.id);
     if (stageError) throw new Error(stageError.message);
-    await audit(ctx, "treatment.aftercare", "treatment_sessions", row.id, appt.patient_id, { appointmentId: appt.id });
+    await audit(ctx, "treatment.aftercare", "treatment_sessions", row.id, appt.patient_id, {
+      appointmentId: appt.id,
+    });
     return { ok: true, sessionId: row.id as string, stage: "aftercare" as const };
   });
 
@@ -8326,8 +8933,11 @@ export const moveToAftercare = createServerFn({ method: "POST" })
  */
 export const completeTreatment = createServerFn({ method: "POST" })
   .validator(
-    (data: { appointment_id: string; aftercare_points: { label: string; covered: boolean }[]; aftercare_extra?: string }) =>
-      parseInput(schemas.CompleteTreatment, data),
+    (data: {
+      appointment_id: string;
+      aftercare_points: { label: string; covered: boolean }[];
+      aftercare_extra?: string;
+    }) => parseInput(schemas.CompleteTreatment, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -8345,13 +8955,22 @@ export const completeTreatment = createServerFn({ method: "POST" })
     }
     const now = new Date().toISOString();
     const results = (session.results ?? {}) as Record<string, string>;
-    const folded = foldResults(fieldsFor(appt.treatment_name, appt.treatment_catalogue?.result_template ?? null), results);
+    const folded = foldResults(
+      fieldsFor(appt.treatment_name, appt.treatment_catalogue?.result_template ?? null),
+      results,
+    );
     const practitionerId = appt.practitioner_id ?? ctx.userId;
     const supabaseAdmin = await adminClient(context);
-    const { data: rateRow } = await supabaseAdmin.from("profiles").select("commission_rate").eq("id", practitionerId).maybeSingle();
+    const { data: rateRow } = await supabaseAdmin
+      .from("profiles")
+      .select("commission_rate")
+      .eq("id", practitionerId)
+      .maybeSingle();
     const interval = appt.treatment_catalogue?.interval_days as number | null | undefined;
     const nextDue = interval
-      ? new Date(new Date(appt.starts_at).getTime() + interval * 86400000).toISOString().slice(0, 10)
+      ? new Date(new Date(appt.starts_at).getTime() + interval * 86400000)
+          .toISOString()
+          .slice(0, 10)
       : null;
 
     const { data: treatment, error } = await ctx.supabase
@@ -8408,7 +9027,10 @@ export const completeTreatment = createServerFn({ method: "POST" })
       .update({ stage: "complete", status: "attended" })
       .eq("id", appt.id);
     if (stageError) throw new Error(stageError.message);
-    await ctx.supabase.from("patients").update({ last_visit_at: appt.starts_at, status: "active" }).eq("id", appt.patient_id);
+    await ctx.supabase
+      .from("patients")
+      .update({ last_visit_at: appt.starts_at, status: "active" })
+      .eq("id", appt.patient_id);
 
     await audit(ctx, "treatment.complete", "treatments", treatmentId, appt.patient_id, {
       appointmentId: appt.id,
@@ -8444,10 +9066,14 @@ export const saveTreatmentSessionDraft = createServerFn({ method: "POST" })
     const patch: Record<string, unknown> = {};
     if (data.pre_checks) patch["pre_checks"] = data.pre_checks;
     if (data.results) patch["results"] = data.results;
-    if (data.treatment_notes !== undefined) patch["treatment_notes"] = data.treatment_notes.trim() || null;
-    if (data.visit_notes !== undefined) patch["visit_notes"] = plainVisitNote(sanitizeNoteHtml(data.visit_notes)).slice(0, 20000) || null;
+    if (data.treatment_notes !== undefined)
+      patch["treatment_notes"] = data.treatment_notes.trim() || null;
+    if (data.visit_notes !== undefined)
+      patch["visit_notes"] =
+        plainVisitNote(sanitizeNoteHtml(data.visit_notes)).slice(0, 20000) || null;
     if (data.aftercare_points) patch["aftercare_points"] = data.aftercare_points;
-    if (data.aftercare_extra !== undefined) patch["aftercare_extra"] = data.aftercare_extra.trim() || null;
+    if (data.aftercare_extra !== undefined)
+      patch["aftercare_extra"] = data.aftercare_extra.trim() || null;
     const { error } = await ctx.supabase.from("treatment_sessions").upsert(
       {
         clinic_id: clinicIdOf(context),
@@ -8482,16 +9108,36 @@ export const getTreatmentRecord = createServerFn({ method: "GET" })
     if (!treatment) throw new Error("Treatment not found");
     const t = treatment as any;
     const [{ data: session }, { data: photos }, consentRes] = await Promise.all([
-      ctx.supabase.from("treatment_sessions").select(SESSION_SELECT).eq("treatment_id", t.id).maybeSingle(),
-      ctx.supabase.from("treatment_photos").select("*").eq("treatment_id", t.id).order("taken_at", { ascending: true }),
+      ctx.supabase
+        .from("treatment_sessions")
+        .select(SESSION_SELECT)
+        .eq("treatment_id", t.id)
+        .maybeSingle(),
+      ctx.supabase
+        .from("treatment_photos")
+        .select("*")
+        .eq("treatment_id", t.id)
+        .order("taken_at", { ascending: true }),
       t.consent_document_id
-        ? ctx.supabase.from("documents").select("id, title, status, signed_at, signed_name, witnessed_by").eq("id", t.consent_document_id).maybeSingle()
+        ? ctx.supabase
+            .from("documents")
+            .select("id, title, status, signed_at, signed_name, witnessed_by")
+            .eq("id", t.consent_document_id)
+            .maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
     const signedPhotos = [];
     for (const photo of photos ?? []) {
-      const { data: signed } = await ctx.supabase.storage.from("patient-photos").createSignedUrl(photo.storage_path, 3600);
-      signedPhotos.push({ id: photo.id, kind: photo.kind, takenAt: photo.taken_at, caption: photo.caption, url: signed?.signedUrl ?? null });
+      const { data: signed } = await ctx.supabase.storage
+        .from("patient-photos")
+        .createSignedUrl(photo.storage_path, 3600);
+      signedPhotos.push({
+        id: photo.id,
+        kind: photo.kind,
+        takenAt: photo.taken_at,
+        caption: photo.caption,
+        url: signed?.signedUrl ?? null,
+      });
     }
     const consent = (consentRes as any)?.data ?? null;
     return {
@@ -8520,7 +9166,14 @@ export const getTreatmentRecord = createServerFn({ method: "GET" })
       session: sessionView(session),
       photos: signedPhotos,
       consent: consent
-        ? { id: consent.id, title: consent.title, status: consent.status, signedAt: consent.signed_at, signedName: consent.signed_name, witnessed: Boolean(consent.witnessed_by) }
+        ? {
+            id: consent.id,
+            title: consent.title,
+            status: consent.status,
+            signedAt: consent.signed_at,
+            signedName: consent.signed_name,
+            witnessed: Boolean(consent.witnessed_by),
+          }
         : null,
       checks: PRE_TREATMENT_CHECKS,
     };
@@ -8547,11 +9200,15 @@ export const getInsights = createServerFn({ method: "GET" })
         .select("id, title, first_name, last_name, email, phone, avatar_url, source, created_at")
         .is("deleted_at", null),
       supabase.from("treatments").select("patient_id, name, price, performed_at, catalogue_id"),
-      supabase.from("appointments").select("patient_id, starts_at, status, treatment_name, catalogue_id"),
+      supabase
+        .from("appointments")
+        .select("patient_id, starts_at, status, treatment_name, catalogue_id"),
       supabase.from("treatment_catalogue").select("id, name, category"),
       supabase
         .from("website_leads")
-        .select("id, patient_id, first_name, last_name, email, phone, source, interest, occurred_at"),
+        .select(
+          "id, patient_id, first_name, last_name, email, phone, source, interest, occurred_at",
+        ),
       supabase.from("retail_products").select("id, name, sku"),
       supabase.from("product_sales").select("product_id, qty, amount, occurred_at"),
     ]);
@@ -8616,14 +9273,20 @@ export const saveRetailProduct = createServerFn({ method: "POST" })
       await audit(ctx, "update", "retail_products", data.id, null, { name });
       return { ok: true, id: data.id };
     }
-    const { data: created, error } = await ctx.supabase.from("retail_products").insert(row).select("id").single();
+    const { data: created, error } = await ctx.supabase
+      .from("retail_products")
+      .insert(row)
+      .select("id")
+      .single();
     if (error) throw new Error(error.message);
     await audit(ctx, "create", "retail_products", created?.id ?? null, null, { name });
     return { ok: true, id: created?.id ?? null };
   });
 
 export const setRetailProductActive = createServerFn({ method: "POST" })
-  .validator((data: { id: string; active: boolean }) => parseInput(schemas.SetRetailProductActive, data))
+  .validator((data: { id: string; active: boolean }) =>
+    parseInput(schemas.SetRetailProductActive, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
@@ -8664,7 +9327,9 @@ export const rotateInsightsIngestKey = createServerFn({ method: "POST" })
       })
       .eq("id", clinicIdOf(context));
     if (error) throw new Error(error.message);
-    await audit(ctx, "update", "clinic", clinicIdOf(context), null, { insights_ingest_key: "rotated" });
+    await audit(ctx, "update", "clinic", clinicIdOf(context), null, {
+      insights_ingest_key: "rotated",
+    });
     return { raw: generated.raw, last4: generated.last4 };
   });
 
@@ -8680,7 +9345,9 @@ async function offerCohortInput(ctx: Ctx) {
   const supabase = ctx.supabase;
   const [patients, appointments, treatments, catalogue, plans, offers] = await Promise.all([
     supabase.from("patients").select(OFFER_PATIENT_COLUMNS),
-    supabase.from("appointments").select("patient_id, starts_at, status, treatment_name, catalogue_id"),
+    supabase
+      .from("appointments")
+      .select("patient_id, starts_at, status, treatment_name, catalogue_id"),
     supabase.from("treatments").select("patient_id, performed_at, name, catalogue_id"),
     supabase.from("treatment_catalogue").select("id, category"),
     supabase
@@ -8717,18 +9384,28 @@ async function offerStoreFor(ctx: Ctx, origin: string | null | undefined) {
     .select("name")
     .eq("id", clinicIdOf(ctx))
     .maybeSingle();
-  const resolvedOrigin = (origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(/\/$/, "");
+  const resolvedOrigin = (origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(
+    /\/$/,
+    "",
+  );
   const store: import("./offers/send").OfferStore = {
     clinicId: clinicIdOf(ctx),
     clinicName: clinicRow?.name ?? "Your clinic",
     origin: resolvedOrigin,
     async getPatients(ids) {
-      const { data, error } = await ctx.supabase.from("patients").select(OFFER_PATIENT_COLUMNS).in("id", ids);
+      const { data, error } = await ctx.supabase
+        .from("patients")
+        .select(OFFER_PATIENT_COLUMNS)
+        .in("id", ids);
       if (error) throw new Error(error.message);
       return (data ?? []) as any[];
     },
     async insertOffer(row) {
-      const { data, error } = await ctx.supabase.from("patient_offers").insert(row).select("id").single();
+      const { data, error } = await ctx.supabase
+        .from("patient_offers")
+        .insert(row)
+        .select("id")
+        .single();
       if (error) throw new Error(error.message);
       return data.id as string;
     },
@@ -8792,7 +9469,13 @@ export const listOfferTemplates = createServerFn({ method: "GET" })
     const counts = new Map<string, Record<string, number>>();
     for (const s of (sends ?? []) as any[]) {
       if (!s.template_id) continue;
-      const bucket = counts.get(s.template_id) ?? { sent: 0, viewed: 0, claimed: 0, expired: 0, cancelled: 0 };
+      const bucket = counts.get(s.template_id) ?? {
+        sent: 0,
+        viewed: 0,
+        claimed: 0,
+        expired: 0,
+        cancelled: 0,
+      };
       bucket[effectiveOfferStatus(s, now)] = (bucket[effectiveOfferStatus(s, now)] ?? 0) + 1;
       counts.set(s.template_id, bucket);
     }
@@ -8809,7 +9492,8 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
     (data: {
       id?: string;
       name: string;
-      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
+      stage:
+        "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
       subject: string;
       headline: string;
       body: string;
@@ -8846,7 +9530,7 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       send_sms: data.send_sms,
       show_in_portal: data.show_in_portal,
       image_url: data.image_url?.trim() || null,
-      image_placement: data.image_url?.trim() ? data.image_placement ?? "top" : null,
+      image_placement: data.image_url?.trim() ? (data.image_placement ?? "top") : null,
       applies_to_catalogue_ids: data.applies_to_catalogue_ids ?? [],
       one_per_patient: data.one_per_patient ?? true,
       no_stacking: data.no_stacking ?? true,
@@ -8863,7 +9547,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       const { data: clash } = await q.limit(1);
       if ((clash ?? []).length > 0) {
         const { STAGE_LABEL } = await import("./offers/stages");
-        throw new Error(`There is already a ${STAGE_LABEL[data.stage]} template. Edit that one or archive it first.`);
+        throw new Error(
+          `There is already a ${STAGE_LABEL[data.stage]} template. Edit that one or archive it first.`,
+        );
       }
     }
     let id = data.id ?? null;
@@ -8879,7 +9565,9 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
       id = created.id as string;
     }
-    await audit(ctx, data.id ? "update" : "create", "offer_templates", id, null, { stage: data.stage });
+    await audit(ctx, data.id ? "update" : "create", "offer_templates", id, null, {
+      stage: data.stage,
+    });
     return { id };
   });
 
@@ -8899,9 +9587,8 @@ export const archiveOfferTemplate = createServerFn({ method: "POST" })
   });
 
 export const setOfferAutomation = createServerFn({ method: "POST" })
-  .validator(
-    (data: { id: string; enabled: boolean; delay_days: number }) =>
-      parseInput(schemas.SetOfferAutomation, data),
+  .validator((data: { id: string; enabled: boolean; delay_days: number }) =>
+    parseInput(schemas.SetOfferAutomation, data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
@@ -8914,22 +9601,31 @@ export const setOfferAutomation = createServerFn({ method: "POST" })
       .maybeSingle();
     if (readError) throw new Error(readError.message);
     if (!tmpl) throw new Error("Template not found");
-    if (tmpl.stage === "custom" && data.enabled) throw new Error("One-off templates cannot run automatically.");
+    if (tmpl.stage === "custom" && data.enabled)
+      throw new Error("One-off templates cannot run automatically.");
     const { error } = await ctx.supabase
       .from("offer_templates")
       .update({ automation_enabled: data.enabled, automation_delay_days: data.delay_days })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
-    await audit(ctx, data.enabled ? "offers.automation_on" : "offers.automation_off", "offer_templates", data.id, null, {
-      delay_days: data.delay_days,
-    });
+    await audit(
+      ctx,
+      data.enabled ? "offers.automation_on" : "offers.automation_off",
+      "offer_templates",
+      data.id,
+      null,
+      {
+        delay_days: data.delay_days,
+      },
+    );
     return { ok: true };
   });
 
 export const draftOfferTemplate = createServerFn({ method: "POST" })
   .validator(
     (data: {
-      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
+      stage:
+        "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
       brief: string;
       tone: "warm" | "playful" | "clinical";
     }) => parseInput(schemas.DraftOfferTemplate, data),
@@ -8944,7 +9640,12 @@ export const draftOfferTemplate = createServerFn({ method: "POST" })
       .eq("id", clinicIdOf(context))
       .maybeSingle();
     const { draftOffer } = await import("./offers/draft.server");
-    return draftOffer({ stage: data.stage, brief: data.brief, tone: data.tone, clinicName: clinicRow?.name ?? "the clinic" });
+    return draftOffer({
+      stage: data.stage,
+      brief: data.brief,
+      tone: data.tone,
+      clinicName: clinicRow?.name ?? "the clinic",
+    });
   });
 
 export const previewOfferStage = createServerFn({ method: "GET" })
@@ -8999,7 +9700,8 @@ export const listOfferSends = createServerFn({ method: "GET" })
     const { patientOfferView } = await import("./offers/shape");
     return (rows ?? []).map((r: any) => ({
       ...patientOfferView(r),
-      patient_name: `${r.patients?.first_name ?? ""} ${r.patients?.last_name ?? ""}`.trim() || "Patient",
+      patient_name:
+        `${r.patients?.first_name ?? ""} ${r.patients?.last_name ?? ""}`.trim() || "Patient",
     }));
   });
 
@@ -9032,11 +9734,18 @@ export const sendOffer = createServerFn({ method: "POST" })
       personalLine: data.message ?? null,
       portalOnlyWhenNoConsent: true,
     });
-    await audit(ctx, "offers.sent", "offer_templates", data.template_id, data.patient_ids.length === 1 ? data.patient_ids[0]! : null, {
-      source: data.source,
-      sent: result.sent.length,
-      skipped: result.skipped.length,
-    });
+    await audit(
+      ctx,
+      "offers.sent",
+      "offer_templates",
+      data.template_id,
+      data.patient_ids.length === 1 ? data.patient_ids[0]! : null,
+      {
+        source: data.source,
+        sent: result.sent.length,
+        skipped: result.skipped.length,
+      },
+    );
     return result;
   });
 
@@ -9053,11 +9762,18 @@ export const listPatientOffers = createServerFn({ method: "GET" })
       .order("sent_at", { ascending: false });
     if (error) throw new Error(error.message);
     const { patientOfferView } = await import("./offers/shape");
-    return (rows ?? []).map((r: any) => ({ ...patientOfferView(r), template_name: r.offer_templates?.name ?? null }));
+    return (rows ?? []).map((r: any) => ({
+      ...patientOfferView(r),
+      template_name: r.offer_templates?.name ?? null,
+    }));
   });
 
 async function loadOwnOffer(ctx: Ctx, id: string) {
-  const { data, error } = await ctx.supabase.from("patient_offers").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await ctx.supabase
+    .from("patient_offers")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Offer not found");
   return data;
@@ -9100,8 +9816,15 @@ export const claimOffer = createServerFn({ method: "POST" })
 
     // Front desk and managers hear about the claim so it is applied at booking.
     const [{ data: patient }, { data: roles }] = await Promise.all([
-      ctx.supabase.from("patients").select("first_name, last_name").eq("id", offer.patient_id).maybeSingle(),
-      ctx.supabase.from("user_roles").select("user_id").in("role", ["owner", "manager", "front_desk"]),
+      ctx.supabase
+        .from("patients")
+        .select("first_name, last_name")
+        .eq("id", offer.patient_id)
+        .maybeSingle(),
+      ctx.supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["owner", "manager", "front_desk"]),
     ]);
     const recipients = [...new Set(((roles ?? []) as { user_id: string }[]).map((r) => r.user_id))];
     if (recipients.length > 0) {
@@ -9117,6 +9840,8 @@ export const claimOffer = createServerFn({ method: "POST" })
         })),
       );
     }
-    await audit(ctx, "offers.claimed", "patient_offers", data.id, offer.patient_id, { stage: offer.stage });
+    await audit(ctx, "offers.claimed", "patient_offers", data.id, offer.patient_id, {
+      stage: offer.stage,
+    });
     return { ok: true, claimed_at: now };
   });

@@ -139,6 +139,7 @@ export function StaffAlertDialog({
       queryClient.invalidateQueries({ queryKey: ["incoming-team-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["sent-staff-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["staff-chat"] });
+      queryClient.invalidateQueries({ queryKey: ["staff-threads"] });
       resetCompose();
       setOpen(false);
     } catch (e) {

@@ -97,6 +97,56 @@ test("replying to an alert sends it to the sender's Team alerts with a toast", a
   await expect(row.locator('[data-qc="alert-reply-tag"]')).toBeVisible();
 });
 
+test("a reply from the urgent alert card reaches the sender's toast, Team alerts and thread", async ({ page, browser, baseURL }) => {
+  // Sofia is signed in first, so the reply arrives while she is on the page.
+  const deskContext = await browser.newContext();
+  await deskContext.addCookies([{ name: "demo_role", value: "front_desk", url: baseURL ?? "http://localhost:8091" }]);
+  const desk = await deskContext.newPage();
+  await desk.goto("/dashboard");
+  await expect(desk.getByRole("button", { name: /^Team alerts/ })).toBeVisible();
+
+  const panel = page.locator('[data-qc="alert-panel"]');
+  if (!(await panel.getByRole("region", { name: "Urgent team alerts" }).isVisible())) {
+    await page.locator('[data-qc="alert-bubble"]').click();
+  }
+  const card = panel.getByRole("region", { name: "Urgent team alerts" });
+  await expect(card).toContainText("From Sofia Marchetti");
+  await card.getByRole("button", { name: "Message" }).click();
+  const reply = `Engineer confirmed ${Date.now()}`;
+  await card.locator("textarea").fill(reply);
+  await card.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Reply sent")).toBeVisible();
+
+  const toast = desk.locator("[data-sonner-toast]", { hasText: reply });
+  await expect(toast).toContainText("Replied to your alert", { timeout: 15_000 });
+  await expect(toast).toContainText("Dr Amara Osei");
+
+  await desk.getByRole("button", { name: /^Team alerts/ }).click();
+  const inbox = desk.getByRole("dialog").filter({ hasText: "Team alerts" });
+  const stack = inbox.getByRole("button", { name: /^Expand \d+ alerts with Dr Amara Osei/ });
+  if (await stack.isVisible()) await stack.click();
+  const row = inbox.getByRole("button", { name: "Open alert with Dr Amara Osei" }).filter({ hasText: reply });
+  await expect(row.locator('[data-qc="alert-reply-tag"]')).toBeVisible();
+
+  await row.click();
+  const thread = desk.locator('[data-qc="chat-window"] [data-qc="staff-chat-embedded"]');
+  const bubble = thread.locator('[data-qc="staff-chat-alert"]', { hasText: reply });
+  await expect(bubble.locator('[data-qc="staff-chat-alert-quote"]')).toContainText("autoclave in room 2");
+  // Seeded alerts are stamped at fixed clock times later today, so the newest line in the
+  // conversation list depends on when the suite runs; assert it is an alert line either way.
+  const alertLine = /(Reply|Urgent alert|Alert): /;
+  await desk.locator('[data-qc="chat-window"]').getByRole("button", { name: "Back to conversations" }).click();
+  await expect(
+    desk.locator('[data-qc="team-inbox"]').getByRole("button", { name: /Dr Amara Osei/ }),
+  ).toContainText(alertLine);
+
+  await page.locator('[data-qc="chat-bubble"]').click();
+  await expect(
+    page.locator('[data-qc="team-inbox"]').getByRole("button", { name: /Sofia Marchetti/ }),
+  ).toContainText(alertLine);
+  await deskContext.close();
+});
+
 test("opening an alert jumps to that teammate in the Team tab", async ({ page }) => {
   await page.getByRole("button", { name: /^Team alerts/ }).click();
   await page.getByRole("button", { name: /^Expand \d+ alerts with Sofia Marchetti/ }).click();

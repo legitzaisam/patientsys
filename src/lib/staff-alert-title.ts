@@ -20,6 +20,23 @@ export function isStaffAlertReply(title: string) {
   return /^Reply from /i.test(title);
 }
 
+/** One-line preview of a team alert for the Team conversation list ("Urgent alert: …"). */
+export function teamAlertPreview(input: {
+  title: string;
+  body?: string | null | undefined;
+  kind?: string | null | undefined;
+  urgent?: boolean | null | undefined;
+}): string {
+  const { topic } = parseStaffAlertTitle(input.title);
+  const text = (input.body ?? "").trim() || topic || "";
+  const label = isStaffAlertReply(input.title)
+    ? "Reply"
+    : input.urgent || input.kind === "urgent"
+      ? "Urgent alert"
+      : "Alert";
+  return text ? `${label}: ${text}` : label;
+}
+
 /** Toast title + preview for team alerts / chat pings. */
 export function formatTeamAlertToast(input: {
   title: string;

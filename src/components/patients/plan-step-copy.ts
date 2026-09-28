@@ -70,3 +70,8 @@ export function nextStepLine(plan: PlanStepInput) {
   const title = plan.nextMilestone?.title ?? "Next step";
   return plan.overdue ? title : `Next: ${title}`;
 }
+
+/** Attention Needed “Treatment due”: lateness, else the due date, else the chase. */
+export function attentionDueSubtitle(plan: PlanStepInput) {
+  return overdueLabel(plan) ?? dueLabel(plan.nextMilestone?.dueDate) ?? "No upcoming booking";
+}

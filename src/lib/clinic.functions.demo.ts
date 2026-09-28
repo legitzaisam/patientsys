@@ -35,15 +35,19 @@ import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
-import { CONSENT_BODY_DEFAULT, PRE_TREATMENT_CHECKS, canStartTreatment, consentReady, stageHeldForConsent } from "@/lib/visit-stage";
+import { attentionDueSubtitle } from "@/components/patients/plan-step-copy";
+import {
+  CONSENT_BODY_DEFAULT,
+  PRE_TREATMENT_CHECKS,
+  canStartTreatment,
+  consentReady,
+  stageHeldForConsent,
+} from "@/lib/visit-stage";
 import { fieldsFor, foldResults } from "@/lib/treatment-results";
 import { aftercarePointsFor } from "@/lib/aftercare-defaults";
 import { advanceToWaitingIfReadyDemo, demoConsentStateOf } from "@/lib/visit-stage.demo";
 import { EMAIL_OTP_RESEND_MS } from "@/lib/auth/constants";
-import {
-  findPractitionerOverlap,
-  PRACTITIONER_OVERLAP_MESSAGE,
-} from "@/lib/appointment-overlap";
+import { findPractitionerOverlap, PRACTITIONER_OVERLAP_MESSAGE } from "@/lib/appointment-overlap";
 import {
   bookingDetailsMessage,
   formatMoney,
@@ -54,7 +58,7 @@ import {
 import { assertEmail } from "@/lib/email";
 import { assertPhone } from "@/lib/phone";
 import { practitionerDayAlerts, type PractitionerDayAlertRow } from "@/lib/practitioner-day-alerts";
-import { parseStaffAlertTitle } from "@/lib/staff-alert-title";
+import { parseStaffAlertTitle, teamAlertPreview } from "@/lib/staff-alert-title";
 import {
   canSelfApplyIdentityChanges,
   clinicHasSeparateManager,
@@ -251,7 +255,6 @@ function clearExTeamArchiveDemo(userId: string) {
   }
 }
 
-
 type Identity = {
   userId: string;
   email: string;
@@ -287,15 +290,16 @@ function identity(): Identity {
   const isManager = isOwner || isAdmin || role === "manager";
   const profile = profiles.find((p) => p.id === account.userId) ?? null;
   const clinicRoleId = (profile?.clinic_role_id as string | null | undefined) ?? null;
-  const permissions = isOwner || isAdmin
-    ? [...PERMISSION_KEYS]
-    : clinicRoleId
-      ? clinicRolePermissions
-          .filter((p) => p.enabled && p.clinic_role_id === clinicRoleId)
-          .map((p) => p.permission as string)
-      : rolePermissions
-          .filter((p) => p.enabled && p.role === role)
-          .map((p) => p.permission as string);
+  const permissions =
+    isOwner || isAdmin
+      ? [...PERMISSION_KEYS]
+      : clinicRoleId
+        ? clinicRolePermissions
+            .filter((p) => p.enabled && p.clinic_role_id === clinicRoleId)
+            .map((p) => p.permission as string)
+        : rolePermissions
+            .filter((p) => p.enabled && p.role === role)
+            .map((p) => p.permission as string);
   const linked = patients.find((p) => p.user_id === account.userId);
   const ownerSetupAt =
     isOwner && ownerSetupPendingCookie() && !ownerSetupCompletedThisProcess
@@ -435,7 +439,6 @@ export const getMe = createServerFn({ method: "GET" }).handler(async () => ident
 export const getDashboard = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireCapability("view.dashboard");
   const today = new Date();
-  const weekAhead = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
   const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString();
   const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
@@ -487,7 +490,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
 
   const treatmentsOverdue = dueAll.filter((t) => t.state === "overdue").length;
   const treatmentsDueSoon = dueAll.filter((t) => t.state === "due_soon").length;
-  let due = sortAsc(dueAll, "next_due_at")
+  const due = sortAsc(dueAll, "next_due_at")
     .slice(0, 12)
     .map((t) => ({ ...t, patients: patientJoin(t.patient_id) }));
 
@@ -506,17 +509,23 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
       const ms = new Date(t.performed_at).getTime();
       firstSeen.set(t.patient_id, Math.min(firstSeen.get(t.patient_id) ?? Infinity, ms));
     }
-    for (const a of appointments.filter((a) => a.practitioner_id === me.userId && a.status !== "cancelled")) {
+    for (const a of appointments.filter(
+      (a) => a.practitioner_id === me.userId && a.status !== "cancelled",
+    )) {
       const ms = new Date(a.starts_at).getTime();
       firstSeen.set(a.patient_id, Math.min(firstSeen.get(a.patient_id) ?? Infinity, ms));
     }
     ownClients = firstSeen.size;
     ownClientsPrev = [...firstSeen.values()].filter((ms) => ms < monthStartMs).length;
   }
-  const clinicClientsPrev = all.filter((p) => new Date(p.created_at).getTime() < monthStartMs).length;
+  const clinicClientsPrev = all.filter(
+    (p) => new Date(p.created_at).getTime() < monthStartMs,
+  ).length;
   const clientsNow = ownClients ?? all.length;
   const clientsPrev = ownClients === null ? clinicClientsPrev : ownClientsPrev;
-  const clientsChange = clientsPrev ? Math.round(((clientsNow - clientsPrev) / clientsPrev) * 100) : 0;
+  const clientsChange = clientsPrev
+    ? Math.round(((clientsNow - clientsPrev) / clientsPrev) * 100)
+    : 0;
 
   const revenue = monthTreats.reduce((sum, t) => sum + Number(t.price ?? 0), 0);
   const prevRevenue = prevMonthTreats.reduce((sum, t) => sum + Number(t.price ?? 0), 0);
@@ -614,7 +623,8 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     unpaidDeposits = unpaidDeposits.filter((a) => a.practitioner_id === me.userId);
   }
   for (const a of unpaidDeposits) {
-    const who = `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
+    const who =
+      `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
     const apptDay = clinicDayKey(new Date(a.starts_at));
     const daysUntil = clinicDayDiff(todayISO, apptDay);
     if (daysUntil < 0) continue;
@@ -635,16 +645,6 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     });
   }
 
-  for (const t of due.filter((x) => x.next_due_at && x.next_due_at <= weekAhead)) {
-    attentionItems.push({
-      id: `due-${t.id}`,
-      kind: "treatment_due",
-      urgency: "this_week",
-      title: `${t.patients?.first_name ?? ""} ${t.patients?.last_name ?? ""} — ${t.name}`,
-      subtitle: `Due ${new Date(t.next_due_at).toLocaleDateString("en-GB")}`,
-      patientId: t.patient_id,
-    });
-  }
   for (const m of unread) {
     const p = patientById(m.patient_id);
     attentionItems.push({
@@ -667,6 +667,38 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     activePlans = activePlans.filter((p) => !p.practitioner_id || p.practitioner_id === me.userId);
   }
   const todayKeyForPlans = clinicDayKey(today);
+  // Attention “Treatment due” is the board Book chase: active plan, no live booking.
+  const nowISO = today.toISOString();
+  const bookedUpcoming = new Set(
+    appointments
+      .filter((a) => a.status === "booked" && a.starts_at >= nowISO)
+      .map((a) => a.patient_id),
+  );
+  for (const p of activePlans) {
+    if (bookedUpcoming.has(p.patient_id)) continue;
+    const mine = planMilestones.filter((m) => m.plan_id === p.id).sort((a, b) => a.idx - b.idx);
+    const next =
+      mine.find((m) => m.status === "current") ?? mine.find((m) => m.status === "upcoming") ?? null;
+    const patient = patientById(p.patient_id);
+    const who = `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient";
+    const title = (next?.title as string | undefined) || "Next step";
+    const dueDate = (next?.due_date as string | null | undefined) ?? null;
+    const overdue = Boolean(dueDate && dueDate < todayKeyForPlans);
+    attentionItems.push({
+      id: `due-${p.id}`,
+      kind: "treatment_due",
+      urgency: "this_week",
+      title: `${who} — ${title}`,
+      subtitle: attentionDueSubtitle({
+        nextMilestone: { title, dueDate },
+        overdue,
+        atRisk: true,
+        riskReason: "No upcoming booking",
+      }),
+      patientId: p.patient_id,
+      href: `/patients/${p.patient_id}?tab=treatments#plan`,
+    });
+  }
   const journeyPhases = (["consult", "foundation", "build", "results"] as const).map((phase) => {
     const inPhase = activePlans.filter((p) => p.phase === phase);
     return {
@@ -691,7 +723,11 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   });
   const overduePlanIds = new Set<string>();
   for (const m of planMilestones) {
-    if ((m.status === "current" || m.status === "upcoming") && m.due_date && m.due_date < todayKeyForPlans) {
+    if (
+      (m.status === "current" || m.status === "upcoming") &&
+      m.due_date &&
+      m.due_date < todayKeyForPlans
+    ) {
       overduePlanIds.add(m.plan_id);
     }
   }
@@ -753,7 +789,11 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     if (a.payment_status === "unpaid") blockers.push("Deposit unpaid");
     else if (a.payment_status === "deposit_paid") blockers.push("Balance due");
     const allergies = (patient?.allergies ?? "").trim();
-    if (allergies && allergies.toLowerCase() !== "none" && allergies.toLowerCase() !== "none known") {
+    if (
+      allergies &&
+      allergies.toLowerCase() !== "none" &&
+      allergies.toLowerCase() !== "none known"
+    ) {
       blockers.push(`Allergy: ${allergies.slice(0, 60)}`);
     }
     if (blockers.length === 0) continue;
@@ -865,7 +905,11 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
         });
       }
       if (state === "overdue" && dueRow) {
-        openTasks.push({ id: `due-${p.id}`, label: `${dueRow.name} overdue`, kind: "treatment_due" });
+        openTasks.push({
+          id: `due-${p.id}`,
+          label: `${dueRow.name} overdue`,
+          kind: "treatment_due",
+        });
       }
 
       return {
@@ -942,7 +986,9 @@ export const getPatient = createServerFn({ method: "GET" })
     if (!patient) throw new Error("Patient not found");
     const nowIso = new Date().toISOString();
     const withRecord = new Set(
-      treatmentSessions.filter((s) => s.patient_id === data.id && s.status === "complete").map((s) => s.treatment_id),
+      treatmentSessions
+        .filter((s) => s.patient_id === data.id && s.status === "complete")
+        .map((s) => s.treatment_id),
     );
     const mine = sortDesc(
       treatments.filter((t) => t.patient_id === data.id),
@@ -989,8 +1035,9 @@ export const getPatient = createServerFn({ method: "GET" })
         if (a.payment_status === "deposit_paid") issues.push("Balance due");
         if (docStatus !== "signed") issues.push("Consent due");
         const bookingNote =
-          String(a.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim() ||
-          plainVisitNote(view.appointment_notes?.body);
+          String(a.notes ?? "")
+            .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
+            .trim() || plainVisitNote(view.appointment_notes?.body);
         return {
           id: a.id as string,
           startsAt: a.starts_at as string,
@@ -1193,7 +1240,9 @@ export const getCatalogue = createServerFn({ method: "GET" }).handler(async () =
 );
 
 export const listPractitioners = createServerFn({ method: "GET" }).handler(async () => {
-  const ids = new Set(userRoles.filter((r) => r.role === "practitioner").map((r) => r.user_id as string));
+  const ids = new Set(
+    userRoles.filter((r) => r.role === "practitioner").map((r) => r.user_id as string),
+  );
   const treatingPacks = new Set(
     clinicRolePermissions
       .filter((p) => p.permission === "treatments.record" && p.enabled)
@@ -1388,7 +1437,9 @@ export const saveAppointment = createServerFn({ method: "POST" })
       ...new Set(
         [
           payload.practitioner_id,
-          ...userRoles.filter((r) => r.role === "owner" || r.role === "manager").map((r) => r.user_id),
+          ...userRoles
+            .filter((r) => r.role === "owner" || r.role === "manager")
+            .map((r) => r.user_id),
         ].filter(Boolean) as string[],
       ),
     ];
@@ -1458,7 +1509,10 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
     if (data.payment_status) row.payment_status = data.payment_status;
     // Mirrors production: waiting and in-treatment both need consent; a manual
     // "waiting" is arrival plus the rule.
-    if ((data.stage === "waiting" || data.stage === "in_treatment") && !consentReady(demoConsentStateOf(row))) {
+    if (
+      (data.stage === "waiting" || data.stage === "in_treatment") &&
+      !consentReady(demoConsentStateOf(row))
+    ) {
       throw new Error("Consent is outstanding — complete it in clinic first");
     }
     if (data.stage) {
@@ -1468,7 +1522,9 @@ export const updateAppointmentState = createServerFn({ method: "POST" })
     }
     // A cancelled appointment must not remind anyone it is coming up.
     if (row.status === "cancelled") cancelPendingCommunications(data.id, "reminder");
-    const reason = String(data.cancel_reason ?? "").trim().slice(0, 2000);
+    const reason = String(data.cancel_reason ?? "")
+      .trim()
+      .slice(0, 2000);
     if (data.status === "cancelled" && reason) {
       const prior = String(row.notes ?? "").trim();
       const stamp = `Cancelled: ${reason}`;
@@ -1488,7 +1544,9 @@ export const getAppointmentConsent = createServerFn({ method: "GET" })
     requireStaff();
     const appt = appointments.find((a) => a.id === data.appointment_id);
     if (!appt) throw new Error("Appointment not found");
-    const doc = appt.consent_document_id ? documents.find((d) => d.id === appt.consent_document_id) : null;
+    const doc = appt.consent_document_id
+      ? documents.find((d) => d.id === appt.consent_document_id)
+      : null;
     const patient = patientById(appt.patient_id);
     return {
       appointmentId: appt.id,
@@ -1504,7 +1562,8 @@ export const getAppointmentConsent = createServerFn({ method: "GET" })
         signedAt: doc?.signed_at ?? null,
         signedName: doc?.signed_name ?? null,
         signatureData:
-          typeof doc?.signature_data === "string" && String(doc.signature_data).startsWith("data:image/")
+          typeof doc?.signature_data === "string" &&
+          String(doc.signature_data).startsWith("data:image/")
             ? doc.signature_data
             : null,
       },
@@ -1512,12 +1571,14 @@ export const getAppointmentConsent = createServerFn({ method: "GET" })
   });
 
 export const completeConsentInClinic = createServerFn({ method: "POST" })
-  .validator((data: {
-    appointment_id: string;
-    signed_name: string;
-    signature_data?: string;
-    contraindications?: Record<string, "yes" | "no" | "na">;
-  }) => parseInput(schemas.CompleteConsentInClinic, data))
+  .validator(
+    (data: {
+      appointment_id: string;
+      signed_name: string;
+      signature_data?: string;
+      contraindications?: Record<string, "yes" | "no" | "na">;
+    }) => parseInput(schemas.CompleteConsentInClinic, data),
+  )
   .handler(async ({ data }) => {
     requireCapability("documents.send");
     const me = requireStaff();
@@ -1529,7 +1590,9 @@ export const completeConsentInClinic = createServerFn({ method: "POST" })
     const appt = appointments.find((a) => a.id === data.appointment_id);
     if (!appt) throw new Error("Appointment not found");
     const now = new Date().toISOString();
-    let doc = appt.consent_document_id ? documents.find((d) => d.id === appt.consent_document_id) : null;
+    let doc = appt.consent_document_id
+      ? documents.find((d) => d.id === appt.consent_document_id)
+      : null;
     if (!doc) {
       doc = {
         id: newId("f9"),
@@ -1565,7 +1628,9 @@ export const completeConsentInClinic = createServerFn({ method: "POST" })
       doc.signature_data = signature;
       doc.viewed_at = doc.viewed_at ?? now;
       doc.witnessed_by = me.userId;
-      doc.responses = data.contraindications ? { contraindications: data.contraindications } : doc.responses;
+      doc.responses = data.contraindications
+        ? { contraindications: data.contraindications }
+        : doc.responses;
       doc.updated_at = now;
     }
     const advanced = advanceToWaitingIfReadyDemo({ appointmentId: appt.id });
@@ -1665,7 +1730,11 @@ function demoWriteBookingNote(appointmentId: string, body: string) {
   if (!appointment) throw new Error("Appointment not found");
   const prior = String(appointment.notes ?? "");
   const cancelLine = prior.match(/^Cancelled:[^\n]*/)?.[0] ?? null;
-  appointment.notes = cancelLine ? (body.trim() ? `${cancelLine}\n\n${body}` : cancelLine) : body || null;
+  appointment.notes = cancelLine
+    ? body.trim()
+      ? `${cancelLine}\n\n${body}`
+      : cancelLine
+    : body || null;
   appointment.updated_at = new Date().toISOString();
   return { body, updatedAt: appointment.updated_at, updatedBy: null };
 }
@@ -1818,7 +1887,12 @@ function queueCommunication(input: {
     (input.channel === "email"
       ? String(patient.email ?? "").trim()
       : String(patient.phone ?? "").trim());
-  const decision = assertCanSend(prefsFromPatient(patient), input.purpose, input.channel, toAddress);
+  const decision = assertCanSend(
+    prefsFromPatient(patient),
+    input.purpose,
+    input.channel,
+    toAddress,
+  );
   if (!decision.ok) throw new Error(decision.reason);
   const row = {
     id: newId("m9"),
@@ -2118,8 +2192,12 @@ export const resendDocument = createServerFn({ method: "POST" })
   });
 
 export const signDocument = createServerFn({ method: "POST" })
-  .validator((data: { id: string; signed_name: string; contraindications?: Record<string, "yes" | "no" | "na"> }) =>
-    parseInput(schemas.SignDocument, data),
+  .validator(
+    (data: {
+      id: string;
+      signed_name: string;
+      contraindications?: Record<string, "yes" | "no" | "na">;
+    }) => parseInput(schemas.SignDocument, data),
   )
   .handler(async ({ data }) => {
     const name = data.signed_name.trim().slice(0, 120);
@@ -2219,8 +2297,8 @@ export const sendPaymentRequest = createServerFn({ method: "POST" })
   });
 
 export const logCallAttempt = createServerFn({ method: "POST" })
-  .validator(
-    (data: { patient_id: string; phone?: string }) => parseInput(schemas.LogCallAttempt, data),
+  .validator((data: { patient_id: string; phone?: string }) =>
+    parseInput(schemas.LogCallAttempt, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -2329,13 +2407,18 @@ export const sendMessage = createServerFn({ method: "POST" })
 /** Active plan's practitioner, else the next booking's, else the last treatment's. */
 function demoPractitionerForPatient(patientId: string): string | null {
   const plan = sortDesc(
-    treatmentPlans.filter((p) => p.patient_id === patientId && p.status === "active" && p.practitioner_id),
+    treatmentPlans.filter(
+      (p) => p.patient_id === patientId && p.status === "active" && p.practitioner_id,
+    ),
     "started_at",
   )[0];
   if (plan?.practitioner_id) return plan.practitioner_id;
   const next = demoUpcomingAppointments(patientId, 1)[0];
   if (next?.practitioner_id) return next.practitioner_id;
-  const last = sortDesc(treatments.filter((t) => t.patient_id === patientId && t.practitioner_id), "performed_at")[0];
+  const last = sortDesc(
+    treatments.filter((t) => t.patient_id === patientId && t.practitioner_id),
+    "performed_at",
+  )[0];
   return last?.practitioner_id ?? null;
 }
 
@@ -2389,7 +2472,15 @@ export const getUnreadMessages = createServerFn({ method: "GET" }).handler(async
 export const listPatientThreads = createServerFn({ method: "GET" }).handler(async () => {
   const threads = new Map<
     string,
-    { patientId: string; name: string; avatarUrl: string | null; last: string; lastAt: string; lastAuthor: string; unread: number }
+    {
+      patientId: string;
+      name: string;
+      avatarUrl: string | null;
+      last: string;
+      lastAt: string;
+      lastAuthor: string;
+      unread: number;
+    }
   >();
   for (const row of sortDesc([...messages], "created_at")) {
     let thread = threads.get(row.patient_id);
@@ -2444,7 +2535,9 @@ export const listMessageTemplates = createServerFn({ method: "GET" }).handler(as
 );
 
 export const saveMessageTemplate = createServerFn({ method: "POST" })
-  .validator((data: { id?: string; title: string; body: string; category?: string }) => parseInput(schemas.SaveMessageTemplate, data))
+  .validator((data: { id?: string; title: string; body: string; category?: string }) =>
+    parseInput(schemas.SaveMessageTemplate, data),
+  )
   .handler(async ({ data }) => {
     const me = requireStaff();
     const title = data.title.trim();
@@ -2593,7 +2686,9 @@ export const listStaffNotifications = createServerFn({ method: "GET" }).handler(
 });
 
 export const markStaffNotificationRead = createServerFn({ method: "POST" })
-  .validator((data: { id?: string; all?: boolean }) => parseInput(schemas.MarkStaffNotificationRead, data))
+  .validator((data: { id?: string; all?: boolean }) =>
+    parseInput(schemas.MarkStaffNotificationRead, data),
+  )
   .handler(async ({ data }) => {
     const me = identity();
     const now = new Date().toISOString();
@@ -2775,15 +2870,19 @@ export const sendStaffAlert = createServerFn({ method: "POST" })
   });
 
 export const replyToStaffAlert = createServerFn({ method: "POST" })
-  .validator((data: { alertId: string; body: string }) => parseInput(schemas.ReplyToStaffAlert, data))
+  .validator((data: { alertId: string; body: string }) =>
+    parseInput(schemas.ReplyToStaffAlert, data),
+  )
   .handler(async ({ data }) => {
     const me = requireStaff();
     const body = data.body.trim();
     if (!body) throw new Error("Write a reply");
     const original = staffNotifications.find((n) => n.id === data.alertId);
     if (!original || original.recipient_id !== me.userId) throw new Error("Alert not found");
-    if (original.kind !== "urgent" && original.kind !== "staff_message") throw new Error("Only team alerts can be replied to");
-    if (!original.sender_id || original.sender_id === me.userId) throw new Error("This alert has no one to reply to");
+    if (original.kind !== "urgent" && original.kind !== "staff_message")
+      throw new Error("Only team alerts can be replied to");
+    if (!original.sender_id || original.sender_id === me.userId)
+      throw new Error("This alert has no one to reply to");
 
     const from = me.profile?.full_name || me.email || "A colleague";
     const { topic } = parseStaffAlertTitle(original.title as string);
@@ -2809,7 +2908,9 @@ export const replyToStaffAlert = createServerFn({ method: "POST" })
   });
 
 export const getPractitionerDay = createServerFn({ method: "GET" })
-  .validator((data: { practitionerId: string; date: string }) => parseInput(schemas.GetPractitionerDay, data))
+  .validator((data: { practitionerId: string; date: string }) =>
+    parseInput(schemas.GetPractitionerDay, data),
+  )
   .handler(async ({ data }) => {
     const base = new Date(`${data.date}T00:00:00`);
     const from = new Date(base.getFullYear(), base.getMonth(), base.getDate()).toISOString();
@@ -2967,7 +3068,12 @@ function demoAppointmentView(a: any) {
 function demoUpcomingAppointments(patientId: string, limit: number) {
   const now = Date.now();
   return appointments
-    .filter((a) => a.patient_id === patientId && a.status !== "cancelled" && new Date(a.starts_at).getTime() >= now)
+    .filter(
+      (a) =>
+        a.patient_id === patientId &&
+        a.status !== "cancelled" &&
+        new Date(a.starts_at).getTime() >= now,
+    )
     .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
     .slice(0, limit);
 }
@@ -2979,7 +3085,10 @@ export const getPortalHome = createServerFn({ method: "GET" }).handler(async () 
   const milestones = plan ? planMilestones.filter((m) => m.plan_id === plan.id) : [];
   const progress = portal.planProgress(milestones as any);
   const upcoming = demoUpcomingAppointments(patient.id, 1)[0];
-  const last = sortDesc(messages.filter((m) => m.patient_id === patient.id), "created_at")[0];
+  const last = sortDesc(
+    messages.filter((m) => m.patient_id === patient.id),
+    "created_at",
+  )[0];
   const live = clinicOffers.filter((o) => !o.expires_at || new Date(o.expires_at) > new Date());
   const myOffers = sortDesc(
     patientOffers.filter((o) => o.patient_id === patient.id && o.status !== "cancelled"),
@@ -2990,7 +3099,11 @@ export const getPortalHome = createServerFn({ method: "GET" }).handler(async () 
     .sort((a, b) => Number(b.live) - Number(a.live));
 
   return {
-    patient: { id: patient.id, firstName: patient.first_name, name: `${patient.first_name} ${patient.last_name}`.trim() },
+    patient: {
+      id: patient.id,
+      firstName: patient.first_name,
+      name: `${patient.first_name} ${patient.last_name}`.trim(),
+    },
     patientOffers: myOffers,
     clinician: demoClinician(plan?.practitioner_id ?? null),
     plan: plan
@@ -3005,7 +3118,11 @@ export const getPortalHome = createServerFn({ method: "GET" }).handler(async () 
       : null,
     progressSteps: portal.progressTrack(milestones as any),
     nextAppointment: upcoming ? demoAppointmentView(upcoming) : null,
-    news: sortDesc(clinicNews.filter((n) => n.published_at), "published_at")[0] ?? null,
+    news:
+      sortDesc(
+        clinicNews.filter((n) => n.published_at),
+        "published_at",
+      )[0] ?? null,
     offer: sortDesc(live, "published_at")[0] ?? null,
     latestMessage: last
       ? {
@@ -3029,7 +3146,10 @@ export const getPortalPlan = createServerFn({ method: "GET" }).handler(async () 
   const ids = new Set(milestones.map((m) => m.id));
   const checklist = planMilestoneChecklist.filter((c) => ids.has(c.milestone_id));
   const current = portal.currentMilestone(milestones as any);
-  const latest = sortDesc(recoveryCheckins.filter((c) => c.patient_id === patient.id), "checkin_date")[0];
+  const latest = sortDesc(
+    recoveryCheckins.filter((c) => c.patient_id === patient.id),
+    "checkin_date",
+  )[0];
   const visible = photos
     .filter((p: any) => p.patient_id === patient.id && p.visible_to_patient)
     .map((p: any) => ({ ...p, url: p.storage_path }));
@@ -3066,9 +3186,21 @@ export const getPortalPlan = createServerFn({ method: "GET" }).handler(async () 
       ? {
           date: latest.checkin_date,
           rows: [
-            { label: "Redness", value: latest.redness, reading: portal.severityLabel(latest.redness) },
-            { label: "Sensitivity", value: latest.sensitivity, reading: portal.severityLabel(latest.sensitivity) },
-            { label: "Dryness", value: latest.dryness, reading: portal.severityLabel(latest.dryness) },
+            {
+              label: "Redness",
+              value: latest.redness,
+              reading: portal.severityLabel(latest.redness),
+            },
+            {
+              label: "Sensitivity",
+              value: latest.sensitivity,
+              reading: portal.severityLabel(latest.sensitivity),
+            },
+            {
+              label: "Dryness",
+              value: latest.dryness,
+              reading: portal.severityLabel(latest.dryness),
+            },
           ],
           needsAttention: portal.checkinNeedsAttention(latest),
           note: latest.note ?? null,
@@ -3078,11 +3210,17 @@ export const getPortalPlan = createServerFn({ method: "GET" }).handler(async () 
       before: visible.find((p: any) => p.kind === "before") ?? null,
       after: [...visible].reverse().find((p: any) => p.kind === "after") ?? null,
     },
-    improvements: visible.filter((p: any) => p.kind === "after" && p.caption).map((p: any) => p.caption as string).slice(0, 4),
+    improvements: visible
+      .filter((p: any) => p.kind === "after" && p.caption)
+      .map((p: any) => p.caption as string)
+      .slice(0, 4),
     journeySnapshot: portal.roadmapFor(milestones as any, checklist as any).map((g) => ({
       month: g.month,
       title: g.title,
-      steps: g.steps.map((st: any) => ({ label: st.title, done: st.status === "done" || st.status === "skipped" })),
+      steps: g.steps.map((st: any) => ({
+        label: st.title,
+        done: st.status === "done" || st.status === "skipped",
+      })),
     })),
     safeToProceed: checklist
       .filter((c) => c.milestone_id === current?.id)
@@ -3120,7 +3258,9 @@ export const getPortalTimeline = createServerFn({ method: "GET" }).handler(async
     treatments: treatments
       .filter((t) => t.patient_id === patient.id)
       .map((t) => {
-        const session = treatmentSessions.find((x) => x.treatment_id === t.id && x.status === "complete");
+        const session = treatmentSessions.find(
+          (x) => x.treatment_id === t.id && x.status === "complete",
+        );
         return { ...t, notes: session?.visit_notes ?? t.notes ?? null };
       }) as any,
     photos: photos
@@ -3151,7 +3291,10 @@ export const getPortalJournal = createServerFn({ method: "GET" }).handler(async 
   requireCapability("view.portal.plan.journal");
   const patient = demoPortalPatient();
   if (!patient) return null;
-  const entries = sortDesc(journalEntries.filter((e) => e.patient_id === patient.id), "entry_date");
+  const entries = sortDesc(
+    journalEntries.filter((e) => e.patient_id === patient.id),
+    "entry_date",
+  );
   return {
     entries: entries.map((e) => ({
       id: e.id,
@@ -3175,18 +3318,26 @@ export const getPortalRoutine = createServerFn({ method: "GET" }).handler(async 
   const items = routine ? routineItems.filter((i) => i.routine_id === routine.id) : [];
   const completions = routineCompletions.filter((c) => c.patient_id === patient.id);
   const overrideFor = new Map(
-    routineItemOverrides.filter((o) => o.patient_id === patient.id).map((o) => [o.routine_item_id, o]),
+    routineItemOverrides
+      .filter((o) => o.patient_id === patient.id)
+      .map((o) => [o.routine_item_id, o]),
   );
   const withOverride = (i: any) => {
     const o = overrideFor.get(i.id);
     return {
       ...i,
       override: o
-        ? { product_name: o.product_name, how_to: o.how_to ?? null, product_url: o.product_url ?? null, source: o.source }
+        ? {
+            product_name: o.product_name,
+            how_to: o.how_to ?? null,
+            product_url: o.product_url ?? null,
+            source: o.source,
+          }
         : null,
     };
   };
-  const order = (list: any[]) => [...list].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map(withOverride);
+  const order = (list: any[]) =>
+    [...list].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map(withOverride);
   const today = new Date().toISOString().slice(0, 10);
   const reminder = portal.nextRoutineReminder();
   const doneToday = completions.some(
@@ -3222,23 +3373,36 @@ export const getPortalClinic = createServerFn({ method: "GET" }).handler(async (
     clinician: demoClinician(plan?.practitioner_id ?? null),
     clinic: db.clinic ?? null,
     upcoming: demoUpcomingAppointments(patient.id, 6).map(demoAppointmentView),
-    completed: sortDesc(treatments.filter((t) => t.patient_id === patient.id), "performed_at")
+    completed: sortDesc(
+      treatments.filter((t) => t.patient_id === patient.id),
+      "performed_at",
+    )
       .slice(0, 6)
       .map((t) => ({ id: t.id, name: t.name, performedAt: t.performed_at })),
-    external: sortDesc(externalTreatments.filter((e) => e.patient_id === patient.id), "performed_on"),
+    external: sortDesc(
+      externalTreatments.filter((e) => e.patient_id === patient.id),
+      "performed_on",
+    ),
   };
 });
 
 export const getPortalRecords = createServerFn({ method: "GET" }).handler(async () => {
   const patient = demoPortalPatient();
   if (!patient) return null;
-  const docs = sortDesc(documents.filter((d) => d.patient_id === patient.id), "created_at");
+  const docs = sortDesc(
+    documents.filter((d) => d.patient_id === patient.id),
+    "created_at",
+  );
   return {
     patient,
-    treatments: sortDesc(treatments.filter((t) => t.patient_id === patient.id), "performed_at").slice(0, 8),
+    treatments: sortDesc(
+      treatments.filter((t) => t.patient_id === patient.id),
+      "performed_at",
+    ).slice(0, 8),
     labs: docs.filter((d) => d.kind === "consultation" || d.kind === "other"),
     documents: docs.filter((d) => d.kind !== "consultation" && d.kind !== "other"),
-    photoCount: photos.filter((p: any) => p.patient_id === patient.id && p.visible_to_patient).length,
+    photoCount: photos.filter((p: any) => p.patient_id === patient.id && p.visible_to_patient)
+      .length,
     photos: sortDesc(
       photos.filter((p: any) => p.patient_id === patient.id && p.visible_to_patient),
       "taken_at",
@@ -3247,18 +3411,28 @@ export const getPortalRecords = createServerFn({ method: "GET" }).handler(async 
       kind: p.kind,
       caption: p.caption ?? null,
       takenAt: p.taken_at,
-      treatment: p.treatment_id ? (treatments.find((t) => t.id === p.treatment_id)?.name ?? null) : null,
+      treatment: p.treatment_id
+        ? (treatments.find((t) => t.id === p.treatment_id)?.name ?? null)
+        : null,
       url: p.storage_path,
     })),
     latestHistory:
-      sortDesc(medicalHistory.filter((h: any) => h.patient_id === patient.id), "created_at")[0] ?? null,
+      sortDesc(
+        medicalHistory.filter((h: any) => h.patient_id === patient.id),
+        "created_at",
+      )[0] ?? null,
   };
 });
 
 export const createJournalEntry = createServerFn({ method: "POST" })
   .validator(
-    (data: { title: string; body?: string; kind?: string; entry_date?: string; shared_with_clinic?: boolean }) =>
-      parseInput(schemas.CreateJournalEntry, data),
+    (data: {
+      title: string;
+      body?: string;
+      kind?: string;
+      entry_date?: string;
+      shared_with_clinic?: boolean;
+    }) => parseInput(schemas.CreateJournalEntry, data),
   )
   .handler(async ({ data }) => {
     const patient = demoRequirePortalPatient();
@@ -3293,7 +3467,9 @@ export const submitRecoveryCheckin = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const patient = demoRequirePortalPatient();
     const today = new Date().toISOString().slice(0, 10);
-    const existing = recoveryCheckins.find((c) => c.patient_id === patient.id && c.checkin_date === today);
+    const existing = recoveryCheckins.find(
+      (c) => c.patient_id === patient.id && c.checkin_date === today,
+    );
     const row = {
       redness: data.redness,
       sensitivity: data.sensitivity,
@@ -3321,7 +3497,9 @@ export const requestPlanPause = createServerFn({ method: "POST" })
     const patient = demoRequirePortalPatient();
     const plan = treatmentPlans.find((p) => p.id === data.plan_id);
     if (!plan || plan.patient_id !== patient.id) throw new Error("Plan not found");
-    const open = planPauseRequests.find((r) => r.plan_id === data.plan_id && r.status === "pending");
+    const open = planPauseRequests.find(
+      (r) => r.plan_id === data.plan_id && r.status === "pending",
+    );
     if (open) return { ok: true, id: open.id, alreadyOpen: true };
     const id = newId("f2");
     planPauseRequests.push({
@@ -3499,13 +3677,18 @@ export const updatePortalProfile = createServerFn({ method: "POST" })
     patient.postcode = data.postcode ?? null;
     patient.emergency_contact_name = data.emergency_contact_name ?? null;
     patient.emergency_contact_relationship = data.emergency_contact_relationship ?? null;
-    patient.emergency_contact_phone = assertPhone(data.emergency_contact_phone ?? "", "phone number", true);
+    patient.emergency_contact_phone = assertPhone(
+      data.emergency_contact_phone ?? "",
+      "phone number",
+      true,
+    );
     return { ok: true };
   });
 
 export const addExternalTreatment = createServerFn({ method: "POST" })
-  .validator((data: { treatment: string; clinic_name: string; performed_label: string; notes?: string }) =>
-    parseInput(schemas.AddExternalTreatment, data),
+  .validator(
+    (data: { treatment: string; clinic_name: string; performed_label: string; notes?: string }) =>
+      parseInput(schemas.AddExternalTreatment, data),
   )
   .handler(async ({ data }) => {
     const patient = demoRequirePortalPatient();
@@ -3528,7 +3711,9 @@ export const deleteExternalTreatment = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => parseInput(schemas.DeleteExternalTreatment, data))
   .handler(async ({ data }) => {
     const patient = demoRequirePortalPatient();
-    const index = externalTreatments.findIndex((e) => e.id === data.id && e.patient_id === patient.id);
+    const index = externalTreatments.findIndex(
+      (e) => e.id === data.id && e.patient_id === patient.id,
+    );
     if (index >= 0) externalTreatments.splice(index, 1);
     return { ok: true };
   });
@@ -3633,7 +3818,8 @@ export const listTeam = createServerFn({ method: "GET" }).handler(async () => {
         role: r.role,
         clinicRoleId,
         clinicRoleName: clinicRoleId
-          ? (clinicRoles.find((role) => role.id === clinicRoleId)?.name as string | undefined) ?? null
+          ? ((clinicRoles.find((role) => role.id === clinicRoleId)?.name as string | undefined) ??
+            null)
           : null,
         email: db.staffEmails[r.user_id] ?? "",
         fullName: profile?.full_name ?? "",
@@ -3798,7 +3984,9 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
       assignedRole = loginRoleForClinicPack(
         clinicRolePermissions.some(
           (row) =>
-            row.clinic_role_id === clinicRoleId && row.permission === "treatments.record" && row.enabled,
+            row.clinic_role_id === clinicRoleId &&
+            row.permission === "treatments.record" &&
+            row.enabled,
         ),
       );
     }
@@ -3869,7 +4057,7 @@ export const revokeStaffAccess = createServerFn({ method: "POST" })
   });
 
 export const listExTeamMembers = createServerFn({ method: "GET" }).handler(async () => {
-    requireCapability("team.view");
+  requireCapability("team.view");
   purgeExpiredExTeamMembersDemo();
   const now = Date.now();
   return exTeamMembers
@@ -3878,18 +4066,19 @@ export const listExTeamMembers = createServerFn({ method: "GET" }).handler(async
       const profile = profiles.find((p) => p.id === r.userId);
       const email = r.email || db.staffEmails[r.userId] || "";
       return {
-      id: r.id,
-      userId: r.userId,
-      email,
-      fullName: String(r.fullName ?? "").trim() || String(profile?.full_name ?? "").trim() || email,
-      jobTitle: r.jobTitle,
-      registrationBody: r.registrationBody,
-      registrationNumber: r.registrationNumber,
-      role: r.role,
-      revokedAt: r.revokedAt,
-      retainUntil: r.retainUntil,
-      daysRemaining: Math.max(0, Math.ceil((new Date(r.retainUntil).getTime() - now) / 86400000)),
-    };
+        id: r.id,
+        userId: r.userId,
+        email,
+        fullName:
+          String(r.fullName ?? "").trim() || String(profile?.full_name ?? "").trim() || email,
+        jobTitle: r.jobTitle,
+        registrationBody: r.registrationBody,
+        registrationNumber: r.registrationNumber,
+        role: r.role,
+        revokedAt: r.revokedAt,
+        retainUntil: r.retainUntil,
+        daysRemaining: Math.max(0, Math.ceil((new Date(r.retainUntil).getTime() - now) / 86400000)),
+      };
     })
     .sort((a, b) => b.revokedAt.localeCompare(a.revokedAt));
 });
@@ -3899,7 +4088,8 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     purgeExpiredExTeamMembersDemo();
     const archived = exTeamMembers.find(
-      (r) => r.userId === data.userId && !r.purgedAt && new Date(r.retainUntil).getTime() > Date.now(),
+      (r) =>
+        r.userId === data.userId && !r.purgedAt && new Date(r.retainUntil).getTime() > Date.now(),
     );
     if (!archived) throw new Error("No former team record found (it may have expired)");
     const profile = profiles.find((p) => p.id === data.userId);
@@ -3928,7 +4118,9 @@ export const restoreExTeamMember = createServerFn({ method: "POST" })
   });
 
 export const setStaffPassword = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; password: string }) => parseInput(schemas.SetStaffPassword, data))
+  .validator((data: { userId: string; password: string }) =>
+    parseInput(schemas.SetStaffPassword, data),
+  )
   .handler(async ({ data }) => {
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
     mustChangePasswordByUser.add(data.userId);
@@ -3938,7 +4130,9 @@ export const setStaffPassword = createServerFn({ method: "POST" })
 
 /** Signed-in staff: replace temporary/reset password and clear the must-change flag. */
 export const changeOwnPassword = createServerFn({ method: "POST" })
-  .validator((data: { password: string; code?: string }) => parseInput(schemas.ChangeOwnPassword, data))
+  .validator((data: { password: string; code?: string }) =>
+    parseInput(schemas.ChangeOwnPassword, data),
+  )
   .handler(async ({ data }) => {
     if (data.password.length < 8) throw new Error("Password must be at least 8 characters");
     const me = identity();
@@ -3998,35 +4192,37 @@ export const revokeOtherSessions = createServerFn({ method: "POST" }).handler(as
 export const listAccountsMissingEmail = createServerFn({ method: "GET" }).handler(async () => {
   requireManager();
   return {
-  patients: patients
-    .filter((p) => p.status !== "archived" && (!p.email || !p.phone || !p.date_of_birth))
-    .map((p) => ({
-      id: p.id,
-      name: [p.title, p.first_name, p.last_name].filter(Boolean).join(" "),
-      phone: p.phone ?? null,
-      missingEmail: !String(p.email ?? "").trim(),
-      gaps: [
-        !String(p.email ?? "").trim() ? "email" : null,
-        !String(p.phone ?? "").trim() ? "phone" : null,
-        !p.date_of_birth ? "date of birth" : null,
-      ].filter(Boolean) as string[],
-    })),
-  staff: userRoles
-    .filter((r) => r.role !== "patient" && r.role !== "admin" && !db.staffEmails[r.user_id])
-    .map((r) => {
-      const profile = profiles.find((p) => p.id === r.user_id);
-      return {
-        userId: r.user_id,
-        role: r.role,
-        fullName: profile?.full_name ?? "Unnamed staff member",
-        jobTitle: profile?.job_title ?? "",
-      };
-    }),
+    patients: patients
+      .filter((p) => p.status !== "archived" && (!p.email || !p.phone || !p.date_of_birth))
+      .map((p) => ({
+        id: p.id,
+        name: [p.title, p.first_name, p.last_name].filter(Boolean).join(" "),
+        phone: p.phone ?? null,
+        missingEmail: !String(p.email ?? "").trim(),
+        gaps: [
+          !String(p.email ?? "").trim() ? "email" : null,
+          !String(p.phone ?? "").trim() ? "phone" : null,
+          !p.date_of_birth ? "date of birth" : null,
+        ].filter(Boolean) as string[],
+      })),
+    staff: userRoles
+      .filter((r) => r.role !== "patient" && r.role !== "admin" && !db.staffEmails[r.user_id])
+      .map((r) => {
+        const profile = profiles.find((p) => p.id === r.user_id);
+        return {
+          userId: r.user_id,
+          role: r.role,
+          fullName: profile?.full_name ?? "Unnamed staff member",
+          jobTitle: profile?.job_title ?? "",
+        };
+      }),
   };
 });
 
 export const setPatientEmail = createServerFn({ method: "POST" })
-  .validator((data: { patientId: string; email: string }) => parseInput(schemas.SetPatientEmail, data))
+  .validator((data: { patientId: string; email: string }) =>
+    parseInput(schemas.SetPatientEmail, data),
+  )
   .handler(async ({ data }) => {
     const email = assertEmail(data.email)!;
     const patient = patientById(data.patientId);
@@ -4234,7 +4430,9 @@ export const getPractitionerPerformance = createServerFn({ method: "POST" })
   });
 
 export const getMyEarnings = createServerFn({ method: "POST" })
-  .validator((data: { from: string; to: string; userId?: string }) => parseInput(schemas.GetMyEarnings, data))
+  .validator((data: { from: string; to: string; userId?: string }) =>
+    parseInput(schemas.GetMyEarnings, data),
+  )
   .handler(async ({ data }) => {
     const me = requireStaff();
     const targetUserId = data.userId ?? me.userId;
@@ -4307,7 +4505,9 @@ export const getMyEarnings = createServerFn({ method: "POST" })
   });
 
 export const setCommissionRate = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; rate: number }) => parseInput(schemas.SetCommissionRate, data))
+  .validator((data: { userId: string; rate: number }) =>
+    parseInput(schemas.SetCommissionRate, data),
+  )
   .handler(async ({ data }) => {
     const rate = Math.min(100, Math.max(0, Number(data.rate) || 0));
     const profile = profiles.find((p) => p.id === data.userId);
@@ -4382,14 +4582,17 @@ export const submitProfileChange = createServerFn({ method: "POST" })
       })),
     });
     const from = me.profile?.full_name || me.email || "A colleague";
-    const summary = [
-      data.jobTitle ? "job title" : null,
-      data.registrationBody || data.registrationNumber || data.registrationExpiry ? "registration" : null,
-      workEmail ? "work email" : null,
-      data.workingArrangement ? "working arrangement" : null,
-    ]
-      .filter(Boolean)
-      .join(", ") || "their profile";
+    const summary =
+      [
+        data.jobTitle ? "job title" : null,
+        data.registrationBody || data.registrationNumber || data.registrationExpiry
+          ? "registration"
+          : null,
+        workEmail ? "work email" : null,
+        data.workingArrangement ? "working arrangement" : null,
+      ]
+        .filter(Boolean)
+        .join(", ") || "their profile";
     for (const rid of recipients) {
       staffNotifications.unshift({
         id: newId("l9"),
@@ -4411,11 +4614,8 @@ export const submitProfileChange = createServerFn({ method: "POST" })
 
 export const saveMyInstantProfile = createServerFn({ method: "POST" })
   .validator(
-    (data: {
-      insuranceProvider?: string;
-      insuranceExpiry?: string;
-      qualifications?: string;
-    }) => parseInput(schemas.SaveMyInstantProfile, data),
+    (data: { insuranceProvider?: string; insuranceExpiry?: string; qualifications?: string }) =>
+      parseInput(schemas.SaveMyInstantProfile, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -4519,12 +4719,12 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" }).handl
         reviewed_by_name: profileName(r.reviewed_by),
         show_reviewer: Boolean(
           r.reviewed_by &&
-            r.status !== "pending" &&
-            profileChangeShowsReviewer({
-              requesterId: r.user_id,
-              requiresOwner: Boolean(r.requires_owner),
-              ...approverInput,
-            }),
+          r.status !== "pending" &&
+          profileChangeShowsReviewer({
+            requesterId: r.user_id,
+            requiresOwner: Boolean(r.requires_owner),
+            ...approverInput,
+          }),
         ),
         current: current
           ? { ...current, email: db.staffEmails[r.user_id] ?? "" }
@@ -4534,7 +4734,9 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" }).handl
 });
 
 export const reviewProfileChange = createServerFn({ method: "POST" })
-  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) => parseInput(schemas.ReviewProfileChange, data))
+  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) =>
+    parseInput(schemas.ReviewProfileChange, data),
+  )
   .handler(async ({ data }) => {
     const me = requireCapability("team.approve_changes");
     const req = profileChangeRequests.find((r) => r.id === data.id);
@@ -4551,7 +4753,8 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
         profile.job_title = req.job_title;
         profile.registration_body = req.registration_body;
         profile.registration_number = req.registration_number;
-        if (req.registration_expiry !== undefined) profile.registration_expiry = req.registration_expiry;
+        if (req.registration_expiry !== undefined)
+          profile.registration_expiry = req.registration_expiry;
         if (req.working_arrangement != null) profile.working_arrangement = req.working_arrangement;
       }
       if (req.work_email) {
@@ -4577,7 +4780,9 @@ export const dismissProfileChangeRequest = createServerFn({ method: "POST" })
   });
 
 export const setMyAvatar = createServerFn({ method: "POST" })
-  .validator((data: { path: string | null; targetUserId?: string }) => parseInput(schemas.SetMyAvatar, data))
+  .validator((data: { path: string | null; targetUserId?: string }) =>
+    parseInput(schemas.SetMyAvatar, data),
+  )
   .handler(async ({ data }) => {
     const me = requireStaff();
     const profile = profiles.find((p) => p.id === (data.targetUserId ?? me.userId));
@@ -4649,10 +4854,12 @@ export const getStaffProfile = createServerFn({ method: "GET" })
     const presentCategories = [...new Set(docs.map((d) => d.category).filter(Boolean))];
     const profile = profiles.find((p) => p.id === data.userId) ?? null;
     const archived = exTeamMembers.find(
-      (r) => r.userId === data.userId && !r.purgedAt && new Date(r.retainUntil).getTime() > Date.now(),
+      (r) =>
+        r.userId === data.userId && !r.purgedAt && new Date(r.retainUntil).getTime() > Date.now(),
     );
     const email = archived?.email || db.staffEmails[data.userId] || "";
-    const fullName = String(archived?.fullName ?? "").trim() || String(profile?.full_name ?? "").trim() || email;
+    const fullName =
+      String(archived?.fullName ?? "").trim() || String(profile?.full_name ?? "").trim() || email;
     const safeProfile = profile
       ? {
           ...profile,
@@ -4688,75 +4895,80 @@ export const getStaffProfile = createServerFn({ method: "GET" })
 /* ---------------------------------------------------------------- */
 
 export const getRetention = createServerFn({ method: "GET" })
-  .validator((data: { from?: string; to?: string; key?: string }) => parseInput(schemas.GetRetention, data))
+  .validator((data: { from?: string; to?: string; key?: string }) =>
+    parseInput(schemas.GetRetention, data),
+  )
   .handler(async ({ data }) => {
-  const me = requireStaff();
-  if (!me.isOwner && !me.permissions.includes("reports.retention")) {
-    throw new Error("You do not have access to retention reports");
-  }
-  const { buildRetention } = await import("./retention.server");
-  const practitionerNames = new Map<string, string>(
-    profiles.map((p) => [p.id as string, p.full_name as string]),
-  );
-  // 5-year chart + 365-day rolling lookback (same cutoff as live).
-  const sixYearsAgo = isoDaysAgo(6 * 365);
+    const me = requireStaff();
+    if (!me.isOwner && !me.permissions.includes("reports.retention")) {
+      throw new Error("You do not have access to retention reports");
+    }
+    const { buildRetention } = await import("./retention.server");
+    const practitionerNames = new Map<string, string>(
+      profiles.map((p) => [p.id as string, p.full_name as string]),
+    );
+    // 5-year chart + 365-day rolling lookback (same cutoff as live).
+    const sixYearsAgo = isoDaysAgo(6 * 365);
 
-  const result = buildRetention({
-    patients: patients.map((p) => ({
-      id: p.id,
-      title: p.title,
-      first_name: p.first_name,
-      last_name: p.last_name,
-      status: p.status,
-      email: p.email,
-      phone: p.phone,
-      created_at: p.created_at,
-    })),
-    treatments: treatments
-      .filter((t) => t.performed_at >= sixYearsAgo)
-      .map((t) => ({
-        patient_id: t.patient_id,
-        practitioner_id: t.practitioner_id,
-        name: t.name,
-        price: t.price,
-        performed_at: t.performed_at,
-        next_due_at: t.next_due_at,
+    const result = buildRetention({
+      patients: patients.map((p) => ({
+        id: p.id,
+        title: p.title,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        status: p.status,
+        email: p.email,
+        phone: p.phone,
+        created_at: p.created_at,
       })),
-    appointments: appointments.map((a) => ({
-      patient_id: a.patient_id,
-      practitioner_id: a.practitioner_id,
-      starts_at: a.starts_at,
-      status: a.status,
-    })),
-    outreach: retentionOutreach.map((o) => ({
-      patient_id: o.patient_id,
-      created_at: o.created_at,
-    })),
-    practitionerNames,
-    // Only a practitioner has a book of their own to scope to; other staff who
-    // hold the permission (e.g. a coordinator) see the whole clinic.
-    practitionerId: me.isManager || !me.roles.includes("practitioner") ? null : me.userId,
-    window:
-      data.from && data.to
-        ? {
-            from: new Date(data.from).getTime(),
-            to: new Date(data.to).getTime(),
-            key: (["day", "week", "month", "year"] as const).find((k) => k === data.key) ?? "year",
-          }
-        : undefined,
+      treatments: treatments
+        .filter((t) => t.performed_at >= sixYearsAgo)
+        .map((t) => ({
+          patient_id: t.patient_id,
+          practitioner_id: t.practitioner_id,
+          name: t.name,
+          price: t.price,
+          performed_at: t.performed_at,
+          next_due_at: t.next_due_at,
+        })),
+      appointments: appointments.map((a) => ({
+        patient_id: a.patient_id,
+        practitioner_id: a.practitioner_id,
+        starts_at: a.starts_at,
+        status: a.status,
+      })),
+      outreach: retentionOutreach.map((o) => ({
+        patient_id: o.patient_id,
+        created_at: o.created_at,
+      })),
+      practitionerNames,
+      // Only a practitioner has a book of their own to scope to; other staff who
+      // hold the permission (e.g. a coordinator) see the whole clinic.
+      practitionerId: me.isManager || !me.roles.includes("practitioner") ? null : me.userId,
+      window:
+        data.from && data.to
+          ? {
+              from: new Date(data.from).getTime(),
+              to: new Date(data.to).getTime(),
+              key:
+                (["day", "week", "month", "year"] as const).find((k) => k === data.key) ?? "year",
+            }
+          : undefined,
+    });
+
+    return {
+      ...result,
+      isManager: me.isManager,
+      practitioners: me.isManager
+        ? [...practitionerNames.entries()].map(([userId, fullName]) => ({ userId, fullName }))
+        : [],
+    };
   });
 
-  return {
-    ...result,
-    isManager: me.isManager,
-    practitioners: me.isManager
-      ? [...practitionerNames.entries()].map(([userId, fullName]) => ({ userId, fullName }))
-      : [],
-  };
-});
-
 export const logRetentionOutreach = createServerFn({ method: "POST" })
-  .validator((data: { patient_id: string; channel?: string; note?: string }) => parseInput(schemas.LogRetentionOutreach, data))
+  .validator((data: { patient_id: string; channel?: string; note?: string }) =>
+    parseInput(schemas.LogRetentionOutreach, data),
+  )
   .handler(async ({ data }) => {
     const me = requireStaff();
     retentionOutreach.push({
@@ -4804,8 +5016,12 @@ export const sendRecall = createServerFn({ method: "POST" })
 
 export const createRecallTask = createServerFn({ method: "POST" })
   .validator(
-    (data: { patient_id: string; note?: string; recipients: { id: string; label: string }[]; due_at?: string }) =>
-      parseInput(schemas.CreateRecallTask, data),
+    (data: {
+      patient_id: string;
+      note?: string;
+      recipients: { id: string; label: string }[];
+      due_at?: string;
+    }) => parseInput(schemas.CreateRecallTask, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -4828,8 +5044,7 @@ export const createRecallTask = createServerFn({ method: "POST" })
         group_id: (sameNote[0] ?? openTasks[0])?.group_id ?? null,
       };
     }
-    const groupId =
-      sameNote[0]?.group_id || sameNote[0]?.id || newId("k8");
+    const groupId = sameNote[0]?.group_id || sameNote[0]?.id || newId("k8");
     const now = new Date().toISOString();
     for (const r of recipients) {
       recallTasks.unshift({
@@ -4858,11 +5073,8 @@ export const createRecallTask = createServerFn({ method: "POST" })
 
 export const updateRecallTask = createServerFn({ method: "POST" })
   .validator(
-    (data: {
-      task_id: string;
-      recipients: { id: string; label: string }[];
-      note?: string;
-    }) => parseInput(schemas.UpdateRecallTask, data),
+    (data: { task_id: string; recipients: { id: string; label: string }[]; note?: string }) =>
+      parseInput(schemas.UpdateRecallTask, data),
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
@@ -4936,7 +5148,9 @@ export const updateRecallTask = createServerFn({ method: "POST" })
   });
 
 export const setRecallTaskStatus = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; status: "open" | "contacted" | "completed" }) => parseInput(schemas.SetRecallTaskStatus, data))
+  .validator((data: { task_id: string; status: "open" | "contacted" | "completed" }) =>
+    parseInput(schemas.SetRecallTaskStatus, data),
+  )
   .handler(async ({ data }) => {
     const me = requireStaff();
     const now = new Date().toISOString();
@@ -4968,7 +5182,9 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
   });
 
 export const deleteRecallTask = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; assignee_ids?: string[] }) => parseInput(schemas.DeleteRecallTask, data))
+  .validator((data: { task_id: string; assignee_ids?: string[] }) =>
+    parseInput(schemas.DeleteRecallTask, data),
+  )
   .handler(async ({ data }) => {
     const me = identity();
     if (!me.isOwner && !me.permissions.includes("tasks.delete")) {
@@ -5072,7 +5288,9 @@ export const listTreatmentColours = createServerFn({ method: "GET" }).handler(as
 });
 
 export const saveTreatmentColour = createServerFn({ method: "POST" })
-  .validator((data: { treatment_name: string; lane: number | null; hex?: string | null }) => parseInput(schemas.SaveTreatmentColour, data))
+  .validator((data: { treatment_name: string; lane: number | null; hex?: string | null }) =>
+    parseInput(schemas.SaveTreatmentColour, data),
+  )
   .handler(async ({ data }) => {
     const me = requireSettings();
     const key = data.treatment_name.trim().toLowerCase();
@@ -5214,7 +5432,9 @@ export const saveCatalogueItem = createServerFn({ method: "POST" })
   });
 
 export const setCatalogueItemActive = createServerFn({ method: "POST" })
-  .validator((data: { id: string; active: boolean }) => parseInput(schemas.SetCatalogueItemActive, data))
+  .validator((data: { id: string; active: boolean }) =>
+    parseInput(schemas.SetCatalogueItemActive, data),
+  )
   .handler(async ({ data }) => {
     requireSettings();
     const row = catalogue.find((c) => c.id === data.id);
@@ -5319,8 +5539,11 @@ export const listRolePermissions = createServerFn({ method: "GET" }).handler(asy
 
 export const setRolePermission = createServerFn({ method: "POST" })
   .validator(
-    (data: { role: "manager" | "front_desk" | "practitioner" | "patient"; permission: string; enabled: boolean }) =>
-      parseInput(schemas.SetRolePermission, data),
+    (data: {
+      role: "manager" | "front_desk" | "practitioner" | "patient";
+      permission: string;
+      enabled: boolean;
+    }) => parseInput(schemas.SetRolePermission, data),
   )
   .handler(async ({ data }) => {
     const me = requireAccessAdmin();
@@ -5359,7 +5582,9 @@ export const setRolePermission = createServerFn({ method: "POST" })
   });
 
 export const completeOwnerSetup = createServerFn({ method: "POST" })
-  .validator((data: { hasSeparateManager: boolean }) => parseInput(schemas.CompleteOwnerSetup, data))
+  .validator((data: { hasSeparateManager: boolean }) =>
+    parseInput(schemas.CompleteOwnerSetup, data),
+  )
   .handler(async ({ data }) => {
     requireOwner();
     if (db.clinic.owner_setup_at && !ownerSetupPendingCookie()) {
@@ -5502,11 +5727,13 @@ export const getStaffChat = createServerFn({ method: "GET" })
       .filter((m) => m.conversation_id === conversation.id)
       .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
     const peerReadAt =
-      staffConversationReads.find((r) => r.conversation_id === conversation.id && r.user_id === data.peerUserId)
-        ?.last_read_at ?? null;
+      staffConversationReads.find(
+        (r) => r.conversation_id === conversation.id && r.user_id === data.peerUserId,
+      )?.last_read_at ?? null;
     const myReadAt =
-      staffConversationReads.find((r) => r.conversation_id === conversation.id && r.user_id === me.userId)
-        ?.last_read_at ?? null;
+      staffConversationReads.find(
+        (r) => r.conversation_id === conversation.id && r.user_id === me.userId,
+      )?.last_read_at ?? null;
     const peer = data.peerUserId;
     const alerts = staffNotifications
       .filter(
@@ -5552,7 +5779,9 @@ export const getStaffChat = createServerFn({ method: "GET" })
         created_at: m.created_at as string,
         mine: m.sender_id === me.userId,
         readByPeer:
-          m.sender_id === me.userId && peerReadAt != null && String(peerReadAt) >= String(m.created_at),
+          m.sender_id === me.userId &&
+          peerReadAt != null &&
+          String(peerReadAt) >= String(m.created_at),
       })),
       alerts,
     };
@@ -5571,7 +5800,11 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
     const attachments = (data.attachments ?? []).slice(0, 5);
     const body =
       data.body.trim() ||
-      (attachments.length === 1 ? "Sent an attachment" : attachments.length > 1 ? "Sent attachments" : "");
+      (attachments.length === 1
+        ? "Sent an attachment"
+        : attachments.length > 1
+          ? "Sent attachments"
+          : "");
     if (!body && attachments.length === 0) throw new Error("Write a message first");
     if (data.peerUserId === me.userId) throw new Error("Choose a teammate to message");
     const conversation = getOrCreateDemoConversation(me.userId, data.peerUserId);
@@ -5591,7 +5824,12 @@ export const sendStaffChatMessage = createServerFn({ method: "POST" })
       (r) => r.conversation_id === conversation.id && r.user_id === me.userId,
     );
     if (existingRead) existingRead.last_read_at = now;
-    else staffConversationReads.push({ conversation_id: conversation.id, user_id: me.userId, last_read_at: now });
+    else
+      staffConversationReads.push({
+        conversation_id: conversation.id,
+        user_id: me.userId,
+        last_read_at: now,
+      });
 
     const from = me.profile?.full_name || "A colleague";
     for (let i = staffNotifications.length - 1; i >= 0; i--) {
@@ -5636,7 +5874,12 @@ export const markStaffChatRead = createServerFn({ method: "POST" })
       (r) => r.conversation_id === conversation.id && r.user_id === me.userId,
     );
     if (existing) existing.last_read_at = now;
-    else staffConversationReads.push({ conversation_id: conversation.id, user_id: me.userId, last_read_at: now });
+    else
+      staffConversationReads.push({
+        conversation_id: conversation.id,
+        user_id: me.userId,
+        last_read_at: now,
+      });
 
     for (const n of staffNotifications) {
       if (
@@ -5673,10 +5916,35 @@ export const listStaffThreads = createServerFn({ method: "GET" }).handler(async 
           )
         : [];
       const readAt = conversation
-        ? staffConversationReads.find((r) => r.conversation_id === conversation.id && r.user_id === me.userId)
-            ?.last_read_at
+        ? staffConversationReads.find(
+            (r) => r.conversation_id === conversation.id && r.user_id === me.userId,
+          )?.last_read_at
         : null;
-      const latest = thread[0];
+      const latestChat = thread[0];
+      const latestAlert = sortDesc(
+        staffNotifications.filter(
+          (n) =>
+            (n.kind === "urgent" || n.kind === "staff_message") &&
+            ((n.sender_id === me.userId && n.recipient_id === peerId) ||
+              (n.sender_id === peerId && n.recipient_id === me.userId)),
+        ),
+        "created_at",
+      )[0];
+      const alertIsNewer =
+        latestAlert != null &&
+        (!latestChat || String(latestAlert.created_at) > String(latestChat.created_at));
+      const latest = alertIsNewer
+        ? {
+            body: teamAlertPreview({
+              title: latestAlert.title as string,
+              body: latestAlert.body as string | null,
+              kind: latestAlert.kind as string,
+              urgent: latestAlert.urgent as boolean | null,
+            }),
+            created_at: latestAlert.created_at,
+            sender_id: latestAlert.sender_id,
+          }
+        : latestChat;
       return {
         userId: peerId,
         name: (profile?.full_name as string | undefined) || "Teammate",
@@ -5710,7 +5978,9 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
     const todayISO = clinicDayKey(new Date());
     const nowISO = new Date().toISOString();
     const hasUpcoming = new Set(
-      appointments.filter((a) => a.status === "booked" && a.starts_at >= nowISO).map((a) => a.patient_id),
+      appointments
+        .filter((a) => a.status === "booked" && a.starts_at >= nowISO)
+        .map((a) => a.patient_id),
     );
     // Earliest live booking per patient, for the card's "Booked 28 Sep" label.
     const nextBookingByPatient = new Map<string, string>();
@@ -5735,7 +6005,10 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
           "idx",
         );
         const done = mine.filter((m) => m.status === "done" || m.status === "skipped").length;
-        const next = mine.find((m) => m.status === "current") ?? mine.find((m) => m.status === "upcoming") ?? null;
+        const next =
+          mine.find((m) => m.status === "current") ??
+          mine.find((m) => m.status === "upcoming") ??
+          null;
         const overdue = Boolean(next?.due_date && next.due_date < todayISO);
         const atRisk = overdue || !hasUpcoming.has(p.patient_id);
         return {
@@ -5766,7 +6039,8 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
 
     if (needle) {
       rows = rows.filter(
-        (r) => r.patientName.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle),
+        (r) =>
+          r.patientName.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle),
       );
     }
     if (data.at_risk_only) rows = rows.filter((r) => r.atRisk);
@@ -5848,7 +6122,10 @@ function demoSetMilestoneStatus(
   milestone.completed_at = status === "done" ? new Date().toISOString() : null;
   Object.assign(milestone, extra);
 
-  const siblings = sortAsc(planMilestones.filter((m) => m.plan_id === milestone.plan_id), "idx");
+  const siblings = sortAsc(
+    planMilestones.filter((m) => m.plan_id === milestone.plan_id),
+    "idx",
+  );
   if (status === "done" || status === "skipped") {
     const hasCurrent = siblings.some((m) => m.status === "current");
     const nextUp = siblings.find((m) => m.status === "upcoming");
@@ -5875,7 +6152,10 @@ function demoSessionView(row: any) {
     id: row.id,
     status: row.status as "started" | "treating" | "aftercare" | "complete",
     treatmentId: row.treatment_id ?? null,
-    preChecks: (row.pre_checks ?? {}) as Record<string, { answer: "yes" | "no" | "na"; note?: string }>,
+    preChecks: (row.pre_checks ?? {}) as Record<
+      string,
+      { answer: "yes" | "no" | "na"; note?: string }
+    >,
     results: (row.results ?? {}) as { area?: string; product?: string; dose?: string },
     treatmentNotes: row.treatment_notes ?? null,
     visitNotes: row.visit_notes ?? null,
@@ -5908,16 +6188,27 @@ function demoMilestoneForVisit(appt: any) {
       milestone =
         sortAsc(
           planMilestones.filter(
-            (m) => m.plan_id === plan.id && m.kind === "session" && (m.status === "current" || m.status === "upcoming"),
+            (m) =>
+              m.plan_id === plan.id &&
+              m.kind === "session" &&
+              (m.status === "current" || m.status === "upcoming"),
           ),
           "idx",
         )[0] ?? null;
     }
   }
   if (!milestone || !planId) return null;
-  const sessions = sortAsc(planMilestones.filter((m) => m.plan_id === planId && m.kind === "session"), "idx");
+  const sessions = sortAsc(
+    planMilestones.filter((m) => m.plan_id === planId && m.kind === "session"),
+    "idx",
+  );
   const n = sessions.findIndex((m) => m.id === milestone!.id) + 1;
-  return { id: milestone.id as string, title: milestone.title as string, sessionNumber: n || null, sessionTotal: sessions.length || null };
+  return {
+    id: milestone.id as string,
+    title: milestone.title as string,
+    sessionNumber: n || null,
+    sessionTotal: sessions.length || null,
+  };
 }
 
 function demoUpsertSession(appt: any, patch: Record<string, unknown>) {
@@ -5960,7 +6251,9 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
     const appt = demoFormAppointment(data.appointment_id);
     const patient = patientById(appt.patient_id) ?? {};
     const item = appt.catalogue_id ? catalogue.find((c) => c.id === appt.catalogue_id) : null;
-    const doc = appt.consent_document_id ? documents.find((d) => d.id === appt.consent_document_id) : null;
+    const doc = appt.consent_document_id
+      ? documents.find((d) => d.id === appt.consent_document_id)
+      : null;
     const consent = demoConsentStateOf(appt);
     const session = treatmentSessions.find((s) => s.appointment_id === appt.id) ?? null;
     const milestone = demoMilestoneForVisit(appt);
@@ -5974,7 +6267,12 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
         id: appt.id,
         startsAt: appt.starts_at,
         endsAt: appt.ends_at ?? null,
-        date: starts.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }),
+        date: starts.toLocaleDateString("en-GB", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }),
         time: starts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
         stage: appt.stage ?? "booked",
         status: appt.status,
@@ -6009,7 +6307,9 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
       },
       canStart: canStartTreatment({ stage: appt.stage ?? "booked", consent }),
       session: demoSessionView(session),
-      bookingNote: String(appt.notes ?? "").replace(/^Cancelled:[^\n]*(?:\n\n)?/, "").trim(),
+      bookingNote: String(appt.notes ?? "")
+        .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
+        .trim(),
       resultFields: fieldsFor(appt.treatment_name, item?.result_template ?? null),
       lastSameTreatment: lastSame
         ? {
@@ -6026,7 +6326,10 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
         category: item?.category ?? null,
       }),
       checks: PRE_TREATMENT_CHECKS,
-      photos: sortAsc(photos.filter((p: any) => p.appointment_id === appt.id), "taken_at").map((p: any) => ({
+      photos: sortAsc(
+        photos.filter((p: any) => p.appointment_id === appt.id),
+        "taken_at",
+      ).map((p: any) => ({
         id: p.id,
         kind: p.kind,
         takenAt: p.taken_at,
@@ -6038,17 +6341,27 @@ export const getTreatmentSession = createServerFn({ method: "GET" })
   });
 
 export const startTreatment = createServerFn({ method: "POST" })
-  .validator((data: { appointment_id: string; pre_checks: Record<string, { answer: "yes" | "no" | "na"; note?: string }> }) =>
-    parseInput(schemas.StartTreatment, data),
+  .validator(
+    (data: {
+      appointment_id: string;
+      pre_checks: Record<string, { answer: "yes" | "no" | "na"; note?: string }>;
+    }) => parseInput(schemas.StartTreatment, data),
   )
   .handler(async ({ data }) => {
     requireCapability("treatments.record");
     requireStaff();
     const appt = demoFormAppointment(data.appointment_id);
-    const gate = canStartTreatment({ stage: appt.stage ?? "booked", consent: demoConsentStateOf(appt) });
+    const gate = canStartTreatment({
+      stage: appt.stage ?? "booked",
+      consent: demoConsentStateOf(appt),
+    });
     if (!gate.ok) throw new Error(gate.reason);
     const now = new Date().toISOString();
-    const row = demoUpsertSession(appt, { pre_checks: data.pre_checks, status: "treating", treating_at: now });
+    const row = demoUpsertSession(appt, {
+      pre_checks: data.pre_checks,
+      status: "treating",
+      treating_at: now,
+    });
     appt.stage = "in_treatment";
     appt.status = "attended";
     appt.updated_at = now;
@@ -6086,8 +6399,11 @@ export const moveToAftercare = createServerFn({ method: "POST" })
 
 export const completeTreatment = createServerFn({ method: "POST" })
   .validator(
-    (data: { appointment_id: string; aftercare_points: { label: string; covered: boolean }[]; aftercare_extra?: string }) =>
-      parseInput(schemas.CompleteTreatment, data),
+    (data: {
+      appointment_id: string;
+      aftercare_points: { label: string; covered: boolean }[];
+      aftercare_extra?: string;
+    }) => parseInput(schemas.CompleteTreatment, data),
   )
   .handler(async ({ data }) => {
     requireCapability("treatments.record");
@@ -6095,12 +6411,16 @@ export const completeTreatment = createServerFn({ method: "POST" })
     const appt = demoFormAppointment(data.appointment_id);
     const session = treatmentSessions.find((s) => s.appointment_id === appt.id);
     if (!session) throw new Error("Start the treatment form before completing it");
-    if (session.treatment_id) return { ok: true, treatmentId: session.treatment_id as string, stage: "complete" as const };
+    if (session.treatment_id)
+      return { ok: true, treatmentId: session.treatment_id as string, stage: "complete" as const };
     const now = new Date().toISOString();
     const practitionerId = appt.practitioner_id ?? me.userId;
     const item = appt.catalogue_id ? catalogue.find((c) => c.id === appt.catalogue_id) : null;
     const results = (session.results ?? {}) as Record<string, string>;
-    const folded = foldResults(fieldsFor(appt.treatment_name, item?.result_template ?? null), results);
+    const folded = foldResults(
+      fieldsFor(appt.treatment_name, item?.result_template ?? null),
+      results,
+    );
     const interval = (item?.interval_days as number | null | undefined) ?? null;
     const treatmentId = newId("e9");
     treatments.push({
@@ -6118,11 +6438,14 @@ export const completeTreatment = createServerFn({ method: "POST" })
       price: appt.price ?? null,
       performed_at: appt.starts_at,
       next_due_at: interval
-        ? new Date(new Date(appt.starts_at).getTime() + interval * 86400000).toISOString().slice(0, 10)
+        ? new Date(new Date(appt.starts_at).getTime() + interval * 86400000)
+            .toISOString()
+            .slice(0, 10)
         : null,
       status: "completed",
       consent_document_id: appt.consent_document_id ?? null,
-      commission_rate_snapshot: profiles.find((p) => p.id === practitionerId)?.commission_rate ?? 40,
+      commission_rate_snapshot:
+        profiles.find((p) => p.id === practitionerId)?.commission_rate ?? 40,
       created_at: now,
       updated_at: now,
     });
@@ -6171,10 +6494,14 @@ export const saveTreatmentSessionDraft = createServerFn({ method: "POST" })
     const patch: Record<string, unknown> = {};
     if (data.pre_checks) patch["pre_checks"] = data.pre_checks;
     if (data.results) patch["results"] = data.results;
-    if (data.treatment_notes !== undefined) patch["treatment_notes"] = data.treatment_notes.trim() || null;
-    if (data.visit_notes !== undefined) patch["visit_notes"] = plainVisitNote(sanitizeNoteHtml(data.visit_notes)).slice(0, 20000) || null;
+    if (data.treatment_notes !== undefined)
+      patch["treatment_notes"] = data.treatment_notes.trim() || null;
+    if (data.visit_notes !== undefined)
+      patch["visit_notes"] =
+        plainVisitNote(sanitizeNoteHtml(data.visit_notes)).slice(0, 20000) || null;
     if (data.aftercare_points) patch["aftercare_points"] = data.aftercare_points;
-    if (data.aftercare_extra !== undefined) patch["aftercare_extra"] = data.aftercare_extra.trim() || null;
+    if (data.aftercare_extra !== undefined)
+      patch["aftercare_extra"] = data.aftercare_extra.trim() || null;
     demoUpsertSession(appt, patch);
     return { ok: true, saved: true };
   });
@@ -6189,7 +6516,9 @@ export const getTreatmentRecord = createServerFn({ method: "GET" })
     const patient = patientById(t.patient_id);
     const item = t.catalogue_id ? catalogue.find((c) => c.id === t.catalogue_id) : null;
     const session = treatmentSessions.find((s) => s.treatment_id === t.id) ?? null;
-    const consent = t.consent_document_id ? documents.find((d) => d.id === t.consent_document_id) : null;
+    const consent = t.consent_document_id
+      ? documents.find((d) => d.id === t.consent_document_id)
+      : null;
     return {
       treatment: {
         id: t.id,
@@ -6214,7 +6543,10 @@ export const getTreatmentRecord = createServerFn({ method: "GET" })
         dateOfBirth: patient?.date_of_birth ?? null,
       },
       session: demoSessionView(session),
-      photos: sortAsc(photos.filter((p: any) => p.treatment_id === t.id), "taken_at").map((p: any) => ({
+      photos: sortAsc(
+        photos.filter((p: any) => p.treatment_id === t.id),
+        "taken_at",
+      ).map((p: any) => ({
         id: p.id,
         kind: p.kind,
         takenAt: p.taken_at,
@@ -6338,7 +6670,9 @@ export const saveRetailProduct = createServerFn({ method: "POST" })
   });
 
 export const setRetailProductActive = createServerFn({ method: "POST" })
-  .validator((data: { id: string; active: boolean }) => parseInput(schemas.SetRetailProductActive, data))
+  .validator((data: { id: string; active: boolean }) =>
+    parseInput(schemas.SetRetailProductActive, data),
+  )
   .handler(async ({ data }) => {
     requireSettings();
     const row = retailProducts.find((p) => p.id === data.id);
@@ -6382,7 +6716,10 @@ function demoOfferCohortInput() {
 }
 
 function demoOfferStore(origin?: string | null, opts: { closeTasks?: boolean } = {}): OfferStore {
-  const resolvedOrigin = (origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(/\/$/, "");
+  const resolvedOrigin = (origin?.trim() || process.env["APP_ORIGIN"]?.trim() || "").replace(
+    /\/$/,
+    "",
+  );
   return {
     // Manual sends close the patient's open recall tasks; the automation does not.
     ...(opts.closeTasks
@@ -6459,7 +6796,9 @@ function demoOfferStore(origin?: string | null, opts: { closeTasks?: boolean } =
 /** The demo twin of runOfferAutomation, over the in-memory arrays. */
 async function runDemoOfferAutomation() {
   const summary = { templates: 0, sent: 0, skipped: 0 };
-  const enabled = offerTemplates.filter((t) => t.automation_enabled && !t.archived_at && t.stage !== "custom");
+  const enabled = offerTemplates.filter(
+    (t) => t.automation_enabled && !t.archived_at && t.stage !== "custom",
+  );
   if (enabled.length === 0) return summary;
   const input = demoOfferCohortInput();
   const members = buildStageCohorts(input);
@@ -6512,7 +6851,13 @@ export const listOfferTemplates = createServerFn({ method: "GET" }).handler(asyn
     offerTemplates.filter((t) => !t.archived_at),
     "created_at",
   ).map((t) => {
-    const counts: Record<string, number> = { sent: 0, viewed: 0, claimed: 0, expired: 0, cancelled: 0 };
+    const counts: Record<string, number> = {
+      sent: 0,
+      viewed: 0,
+      claimed: 0,
+      expired: 0,
+      cancelled: 0,
+    };
     for (const o of patientOffers.filter((o) => o.template_id === t.id)) {
       const status = effectiveOfferStatus(o, now);
       counts[status] = (counts[status] ?? 0) + 1;
@@ -6526,7 +6871,8 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
     (data: {
       id?: string;
       name: string;
-      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
+      stage:
+        "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
       subject: string;
       headline: string;
       body: string;
@@ -6547,8 +6893,13 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = requireOffersManage();
     if (data.stage !== "custom") {
-      const clash = offerTemplates.find((t) => t.stage === data.stage && !t.archived_at && t.id !== data.id);
-      if (clash) throw new Error(`There is already a ${STAGE_LABEL[data.stage]} template. Edit that one or archive it first.`);
+      const clash = offerTemplates.find(
+        (t) => t.stage === data.stage && !t.archived_at && t.id !== data.id,
+      );
+      if (clash)
+        throw new Error(
+          `There is already a ${STAGE_LABEL[data.stage]} template. Edit that one or archive it first.`,
+        );
     }
     const payload = {
       name: data.name,
@@ -6564,7 +6915,7 @@ export const saveOfferTemplate = createServerFn({ method: "POST" })
       send_sms: data.send_sms,
       show_in_portal: data.show_in_portal,
       image_url: data.image_url?.trim() || null,
-      image_placement: data.image_url?.trim() ? data.image_placement ?? "top" : null,
+      image_placement: data.image_url?.trim() ? (data.image_placement ?? "top") : null,
       applies_to_catalogue_ids: data.applies_to_catalogue_ids ?? [],
       one_per_patient: data.one_per_patient ?? true,
       no_stacking: data.no_stacking ?? true,
@@ -6603,15 +6954,15 @@ export const archiveOfferTemplate = createServerFn({ method: "POST" })
   });
 
 export const setOfferAutomation = createServerFn({ method: "POST" })
-  .validator(
-    (data: { id: string; enabled: boolean; delay_days: number }) =>
-      parseInput(schemas.SetOfferAutomation, data),
+  .validator((data: { id: string; enabled: boolean; delay_days: number }) =>
+    parseInput(schemas.SetOfferAutomation, data),
   )
   .handler(async ({ data }) => {
     requireOffersManage();
     const row = offerTemplates.find((t) => t.id === data.id);
     if (!row) throw new Error("Template not found");
-    if (row.stage === "custom" && data.enabled) throw new Error("One-off templates cannot run automatically.");
+    if (row.stage === "custom" && data.enabled)
+      throw new Error("One-off templates cannot run automatically.");
     row.automation_enabled = data.enabled;
     row.automation_delay_days = data.delay_days;
     row.updated_at = new Date().toISOString();
@@ -6621,7 +6972,8 @@ export const setOfferAutomation = createServerFn({ method: "POST" })
 export const draftOfferTemplate = createServerFn({ method: "POST" })
   .validator(
     (data: {
-      stage: "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
+      stage:
+        "pre_consultation" | "post_consultation" | "single_treatment" | "plan_ending" | "custom";
       brief: string;
       tone: "warm" | "playful" | "clinical";
     }) => parseInput(schemas.DraftOfferTemplate, data),
@@ -6629,7 +6981,12 @@ export const draftOfferTemplate = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     requireOffersManage();
     const { draftOffer } = await import("./offers/draft.server");
-    return draftOffer({ stage: data.stage, brief: data.brief, tone: data.tone, clinicName: db.clinic["name"] ?? "the clinic" });
+    return draftOffer({
+      stage: data.stage,
+      brief: data.brief,
+      tone: data.tone,
+      clinicName: db.clinic["name"] ?? "the clinic",
+    });
   });
 
 export const previewOfferStage = createServerFn({ method: "GET" })
@@ -6644,7 +7001,9 @@ export const previewOfferStage = createServerFn({ method: "GET" })
     const input = demoOfferCohortInput();
     const members = buildStageCohorts(input);
     const tmpl = offerTemplates.find((t) => t.stage === data.stage && !t.archived_at);
-    const delay = Number(data.delay_days ?? tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays);
+    const delay = Number(
+      data.delay_days ?? tmpl?.automation_delay_days ?? STAGE_META[data.stage].defaultDelayDays,
+    );
     return {
       ...previewStage(members, patients, patientOffers, data.stage, delay, new Date(), {
         templateId: tmpl?.id ?? null,

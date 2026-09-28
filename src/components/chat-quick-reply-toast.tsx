@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 type ChatQuickReplyToastProps = {
   toastId: string | number;
-  title: string;
+  peerName: string;
   tag: string;
   description?: string | undefined;
   onOpen: () => void;
@@ -138,14 +138,13 @@ function useQuickReplyToastDock(contentRef: React.RefObject<HTMLDivElement | nul
 /** Team/chat ping: preview plus Open Chat. Replies live in the chat bubble. */
 function ChatQuickReplyToast({
   toastId,
-  title,
+  peerName,
   tag,
   description,
   onOpen,
 }: ChatQuickReplyToastProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const { docked } = useQuickReplyToastDock(rootRef);
-  const peerName = peerFromTitle(title);
   const preview = description?.replace(/^["“]|["”]$/g, "") || "";
 
   useEffect(() => {
@@ -236,19 +235,41 @@ export function showChatQuickReplyToast(opts: {
     kind: opts.kind,
     urgent: opts.urgent,
   });
+  showChatToast({
+    id: `team-alert-${opts.notificationId}`,
+    peerName: peerFromTitle(copy.title),
+    tag: isStaffAlertReply(opts.title)
+      ? "Replied to your alert"
+      : opts.urgent || opts.kind === "urgent"
+        ? "Urgent alert"
+        : opts.kind === "staff_chat"
+          ? "New message"
+          : "Team alert",
+    description: copy.description,
+    onOpen: opts.onOpen,
+  });
+}
 
+/** Any chat toast (team or patient): who, what kind, a preview, and Open Chat. */
+export function showChatToast(opts: {
+  id: string;
+  peerName: string;
+  tag: string;
+  description?: string | undefined;
+  onOpen: () => void;
+}) {
   toast.custom(
     (toastId) => (
       <ChatQuickReplyToast
         toastId={toastId}
-        title={copy.title}
-        tag={isStaffAlertReply(opts.title) ? "Replied to your alert" : "New message"}
-        description={copy.description}
+        peerName={opts.peerName}
+        tag={opts.tag}
+        description={opts.description}
         onOpen={opts.onOpen}
       />
     ),
     {
-      id: `team-alert-${opts.notificationId}`,
+      id: opts.id,
       duration: Infinity,
       dismissible: false,
       closeButton: false,
@@ -259,7 +280,7 @@ export function showChatQuickReplyToast(opts: {
         "!font-sans cursor-grab active:cursor-grabbing",
       ),
       onDismiss: () => {
-        unpinAetheriaToast(`team-alert-${opts.notificationId}`);
+        unpinAetheriaToast(opts.id);
       },
     },
   );
