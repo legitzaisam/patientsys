@@ -1,0 +1,189 @@
+{
+  "index": 7,
+  "sha": "d625c36",
+  "parent": "46dff1a",
+  "subject": "Enhance practitioner hovercard and chat functionalities",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/07-d625c36",
+  "scenes": {
+    "sidebar-hovercard": {
+      "chromium-1440": {
+        "before": "states/46dff1a/sidebar-hovercard--chromium-1440.jpg",
+        "after": "states/d625c36/sidebar-hovercard--chromium-1440.jpg",
+        "missingBefore": [
+          "sidebar practitioner avatar"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Practitioner card from the sidebar avatar"
+      },
+      "ipad-landscape": {
+        "before": "states/46dff1a/sidebar-hovercard--ipad-landscape.jpg",
+        "after": "states/d625c36/sidebar-hovercard--ipad-landscape.jpg",
+        "missingBefore": [
+          "sidebar practitioner avatar"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Practitioner card from the sidebar avatar"
+      },
+      "ipad-portrait": {
+        "before": "states/46dff1a/sidebar-hovercard--ipad-portrait.jpg",
+        "after": "states/d625c36/sidebar-hovercard--ipad-portrait.jpg",
+        "missingBefore": [
+          "sidebar practitioner avatar"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Practitioner card from the sidebar avatar"
+      }
+    },
+    "dock-chat": {
+      "chromium-1440": {
+        "before": "states/46dff1a/dock-chat--chromium-1440.jpg",
+        "after": "states/d625c36/dock-chat--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Floating dock, chat window"
+      },
+      "ipad-landscape": {
+        "before": "states/46dff1a/dock-chat--ipad-landscape.jpg",
+        "after": "states/d625c36/dock-chat--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Floating dock, chat window"
+      },
+      "ipad-portrait": {
+        "before": "states/46dff1a/dock-chat--ipad-portrait.jpg",
+        "after": "states/d625c36/dock-chat--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Floating dock, chat window"
+      }
+    },
+    "dock-chat-team": {
+      "chromium-1440": {
+        "before": "states/46dff1a/dock-chat-team--chromium-1440.jpg",
+        "after": "states/d625c36/dock-chat-team--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, Team tab"
+      },
+      "ipad-landscape": {
+        "before": "states/46dff1a/dock-chat-team--ipad-landscape.jpg",
+        "after": "states/d625c36/dock-chat-team--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, Team tab"
+      },
+      "ipad-portrait": {
+        "before": "states/46dff1a/dock-chat-team--ipad-portrait.jpg",
+        "after": "states/d625c36/dock-chat-team--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, Team tab"
+      }
+    },
+    "bell": {
+      "chromium-1440": {
+        "before": "states/46dff1a/bell--chromium-1440.jpg",
+        "after": "states/d625c36/bell--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      },
+      "ipad-landscape": {
+        "before": "states/46dff1a/bell--ipad-landscape.jpg",
+        "after": "states/d625c36/bell--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      },
+      "ipad-portrait": {
+        "before": "states/46dff1a/bell--ipad-portrait.jpg",
+        "after": "states/d625c36/bell--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      }
+    },
+    "team-member": {
+      "chromium-1440": {
+        "before": "states/46dff1a/team-member--chromium-1440.jpg",
+        "after": "states/d625c36/team-member--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "A team member's page"
+      },
+      "ipad-landscape": {
+        "before": "states/46dff1a/team-member--ipad-landscape.jpg",
+        "after": "states/d625c36/team-member--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "A team member's page"
+      },
+      "ipad-portrait": {
+        "before": "states/46dff1a/team-member--ipad-portrait.jpg",
+        "after": "states/d625c36/team-member--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "A team member's page"
+      }
+    },
+    "dashboard-owner": {
+      "chromium-1440": {
+        "before": "states/46dff1a/dashboard-owner--chromium-1440.jpg",
+        "after": "states/d625c36/dashboard-owner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-landscape": {
+        "before": "states/46dff1a/dashboard-owner--ipad-landscape.jpg",
+        "after": "states/d625c36/dashboard-owner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-portrait": {
+        "before": "states/46dff1a/dashboard-owner--ipad-portrait.jpg",
+        "after": "states/d625c36/dashboard-owner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      }
+    }
+  }
+}

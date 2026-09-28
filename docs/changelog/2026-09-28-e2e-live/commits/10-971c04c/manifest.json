@@ -1,0 +1,183 @@
+{
+  "index": 10,
+  "sha": "971c04c",
+  "parent": "a4c6f6d",
+  "subject": "Enhance chat and alert functionalities (reply to alerts)",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/10-971c04c",
+  "scenes": {
+    "dock-chat-thread": {
+      "chromium-1440": {
+        "before": "states/a4c6f6d/dock-chat-thread--chromium-1440.jpg",
+        "after": "states/971c04c/dock-chat-thread--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, a team conversation open"
+      },
+      "ipad-landscape": {
+        "before": "states/a4c6f6d/dock-chat-thread--ipad-landscape.jpg",
+        "after": "states/971c04c/dock-chat-thread--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, a team conversation open"
+      },
+      "ipad-portrait": {
+        "before": "states/a4c6f6d/dock-chat-thread--ipad-portrait.jpg",
+        "after": "states/971c04c/dock-chat-thread--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, a team conversation open"
+      }
+    },
+    "alerts": {
+      "chromium-1440": {
+        "before": "states/a4c6f6d/alerts--chromium-1440.jpg",
+        "after": "states/971c04c/alerts--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Clinic alerts panel"
+      },
+      "ipad-landscape": {
+        "before": "states/a4c6f6d/alerts--ipad-landscape.jpg",
+        "after": "states/971c04c/alerts--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Clinic alerts panel"
+      },
+      "ipad-portrait": {
+        "before": "states/a4c6f6d/alerts--ipad-portrait.jpg",
+        "after": "states/971c04c/alerts--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Clinic alerts panel"
+      }
+    },
+    "bell": {
+      "chromium-1440": {
+        "before": "states/a4c6f6d/bell--chromium-1440.jpg",
+        "after": "states/971c04c/bell--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      },
+      "ipad-landscape": {
+        "before": "states/a4c6f6d/bell--ipad-landscape.jpg",
+        "after": "states/971c04c/bell--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      },
+      "ipad-portrait": {
+        "before": "states/a4c6f6d/bell--ipad-portrait.jpg",
+        "after": "states/971c04c/bell--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      }
+    },
+    "journey-board": {
+      "chromium-1440": {
+        "before": "states/a4c6f6d/journey-board--chromium-1440.jpg",
+        "after": "states/971c04c/journey-board--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Journey board"
+      },
+      "ipad-landscape": {
+        "before": "states/a4c6f6d/journey-board--ipad-landscape.jpg",
+        "after": "states/971c04c/journey-board--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Journey board"
+      },
+      "ipad-portrait": {
+        "before": "states/a4c6f6d/journey-board--ipad-portrait.jpg",
+        "after": "states/971c04c/journey-board--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Journey board"
+      }
+    },
+    "patient-record": {
+      "chromium-1440": {
+        "before": "states/a4c6f6d/patient-record--chromium-1440.jpg",
+        "after": "states/971c04c/patient-record--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record (Olivia Bennett), overview"
+      },
+      "ipad-landscape": {
+        "before": "states/a4c6f6d/patient-record--ipad-landscape.jpg",
+        "after": "states/971c04c/patient-record--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record (Olivia Bennett), overview"
+      },
+      "ipad-portrait": {
+        "before": "states/a4c6f6d/patient-record--ipad-portrait.jpg",
+        "after": "states/971c04c/patient-record--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record (Olivia Bennett), overview"
+      }
+    },
+    "dashboard-owner": {
+      "chromium-1440": {
+        "before": "states/a4c6f6d/dashboard-owner--chromium-1440.jpg",
+        "after": "states/971c04c/dashboard-owner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-landscape": {
+        "before": "states/a4c6f6d/dashboard-owner--ipad-landscape.jpg",
+        "after": "states/971c04c/dashboard-owner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-portrait": {
+        "before": "states/a4c6f6d/dashboard-owner--ipad-portrait.jpg",
+        "after": "states/971c04c/dashboard-owner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      }
+    }
+  }
+}

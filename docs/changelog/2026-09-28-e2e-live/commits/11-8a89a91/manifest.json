@@ -1,0 +1,96 @@
+{
+  "index": 11,
+  "sha": "8a89a91",
+  "parent": "971c04c",
+  "subject": "Refactor journey board and treatment plan components (overdue)",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/11-8a89a91",
+  "scenes": {
+    "journey-board": {
+      "chromium-1440": {
+        "before": "states/971c04c/journey-board--chromium-1440.jpg",
+        "after": "states/8a89a91/journey-board--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Journey board"
+      },
+      "ipad-landscape": {
+        "before": "states/971c04c/journey-board--ipad-landscape.jpg",
+        "after": "states/8a89a91/journey-board--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Journey board"
+      },
+      "ipad-portrait": {
+        "before": "states/971c04c/journey-board--ipad-portrait.jpg",
+        "after": "states/8a89a91/journey-board--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Journey board"
+      }
+    },
+    "patient-record": {
+      "chromium-1440": {
+        "before": "states/971c04c/patient-record--chromium-1440.jpg",
+        "after": "states/8a89a91/patient-record--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record (Olivia Bennett), overview"
+      },
+      "ipad-landscape": {
+        "before": "states/971c04c/patient-record--ipad-landscape.jpg",
+        "after": "states/8a89a91/patient-record--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record (Olivia Bennett), overview"
+      },
+      "ipad-portrait": {
+        "before": "states/971c04c/patient-record--ipad-portrait.jpg",
+        "after": "states/8a89a91/patient-record--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record (Olivia Bennett), overview"
+      }
+    },
+    "dock-chat-team": {
+      "chromium-1440": {
+        "before": "states/971c04c/dock-chat-team--chromium-1440.jpg",
+        "after": "states/8a89a91/dock-chat-team--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, Team tab"
+      },
+      "ipad-landscape": {
+        "before": "states/971c04c/dock-chat-team--ipad-landscape.jpg",
+        "after": "states/8a89a91/dock-chat-team--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, Team tab"
+      },
+      "ipad-portrait": {
+        "before": "states/971c04c/dock-chat-team--ipad-portrait.jpg",
+        "after": "states/8a89a91/dock-chat-team--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, Team tab"
+      }
+    }
+  }
+}

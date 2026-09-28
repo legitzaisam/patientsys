@@ -1,0 +1,96 @@
+{
+  "index": 3,
+  "sha": "d15817d",
+  "parent": "3b3d678",
+  "subject": "Implement profile change request approval system",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/03-d15817d",
+  "scenes": {
+    "team": {
+      "chromium-1440": {
+        "before": "states/3b3d678/team--chromium-1440.jpg",
+        "after": "states/d15817d/team--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      },
+      "ipad-landscape": {
+        "before": "states/3b3d678/team--ipad-landscape.jpg",
+        "after": "states/d15817d/team--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      },
+      "ipad-portrait": {
+        "before": "states/3b3d678/team--ipad-portrait.jpg",
+        "after": "states/d15817d/team--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      }
+    },
+    "team-access": {
+      "chromium-1440": {
+        "before": "states/3b3d678/team-access--chromium-1440.jpg",
+        "after": "states/d15817d/team-access--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page with every access panel expanded"
+      },
+      "ipad-landscape": {
+        "before": "states/3b3d678/team-access--ipad-landscape.jpg",
+        "after": "states/d15817d/team-access--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page with every access panel expanded"
+      },
+      "ipad-portrait": {
+        "before": "states/3b3d678/team-access--ipad-portrait.jpg",
+        "after": "states/d15817d/team-access--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page with every access panel expanded"
+      }
+    },
+    "invite-staff": {
+      "chromium-1440": {
+        "before": "states/3b3d678/invite-staff--chromium-1440.jpg",
+        "after": "states/d15817d/invite-staff--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Invite staff dialog"
+      },
+      "ipad-landscape": {
+        "before": "states/3b3d678/invite-staff--ipad-landscape.jpg",
+        "after": "states/d15817d/invite-staff--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Invite staff dialog"
+      },
+      "ipad-portrait": {
+        "before": "states/3b3d678/invite-staff--ipad-portrait.jpg",
+        "after": "states/d15817d/invite-staff--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Invite staff dialog"
+      }
+    }
+  }
+}

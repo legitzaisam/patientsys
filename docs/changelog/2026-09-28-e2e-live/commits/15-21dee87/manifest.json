@@ -1,0 +1,241 @@
+{
+  "index": 15,
+  "sha": "21dee87",
+  "parent": "58d3dbe",
+  "subject": "Remove obsolete check scripts; metrics refactor",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/15-21dee87",
+  "scenes": {
+    "insights-marketing": {
+      "chromium-1440": {
+        "before": "states/58d3dbe/insights-marketing--chromium-1440.jpg",
+        "after": "states/21dee87/insights-marketing--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Marketing"
+      },
+      "ipad-landscape": {
+        "before": "states/58d3dbe/insights-marketing--ipad-landscape.jpg",
+        "after": "states/21dee87/insights-marketing--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Marketing"
+      },
+      "ipad-portrait": {
+        "before": "states/58d3dbe/insights-marketing--ipad-portrait.jpg",
+        "after": "states/21dee87/insights-marketing--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Marketing"
+      }
+    },
+    "insights-book": {
+      "chromium-1440": {
+        "before": "states/58d3dbe/insights-book--chromium-1440.jpg",
+        "after": "states/21dee87/insights-book--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Patient base"
+      },
+      "ipad-landscape": {
+        "before": "states/58d3dbe/insights-book--ipad-landscape.jpg",
+        "after": "states/21dee87/insights-book--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Patient base"
+      },
+      "ipad-portrait": {
+        "before": "states/58d3dbe/insights-book--ipad-portrait.jpg",
+        "after": "states/21dee87/insights-book--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Patient base"
+      }
+    },
+    "earnings": {
+      "chromium-1440": {
+        "before": "states/58d3dbe/earnings--chromium-1440.jpg",
+        "after": "states/21dee87/earnings--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My earnings (practitioner)"
+      },
+      "ipad-landscape": {
+        "before": "states/58d3dbe/earnings--ipad-landscape.jpg",
+        "after": "states/21dee87/earnings--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My earnings (practitioner)"
+      },
+      "ipad-portrait": {
+        "before": "states/58d3dbe/earnings--ipad-portrait.jpg",
+        "after": "states/21dee87/earnings--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My earnings (practitioner)"
+      }
+    },
+    "performance": {
+      "chromium-1440": {
+        "before": "states/58d3dbe/performance--chromium-1440.jpg",
+        "after": "states/21dee87/performance--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance (owner)"
+      },
+      "ipad-landscape": {
+        "before": "states/58d3dbe/performance--ipad-landscape.jpg",
+        "after": "states/21dee87/performance--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance (owner)"
+      },
+      "ipad-portrait": {
+        "before": "states/58d3dbe/performance--ipad-portrait.jpg",
+        "after": "states/21dee87/performance--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance (owner)"
+      }
+    },
+    "performance-practitioner": {
+      "chromium-1440": {
+        "before": "states/58d3dbe/performance-practitioner--chromium-1440.jpg",
+        "after": "states/21dee87/performance-practitioner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance as a practitioner"
+      },
+      "ipad-landscape": {
+        "before": "states/58d3dbe/performance-practitioner--ipad-landscape.jpg",
+        "after": "states/21dee87/performance-practitioner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance as a practitioner"
+      },
+      "ipad-portrait": {
+        "before": "states/58d3dbe/performance-practitioner--ipad-portrait.jpg",
+        "after": "states/21dee87/performance-practitioner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance as a practitioner"
+      }
+    },
+    "retention": {
+      "chromium-1440": {
+        "before": "states/58d3dbe/retention--chromium-1440.jpg",
+        "after": "states/21dee87/retention--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Retention"
+      },
+      "ipad-landscape": {
+        "before": "states/58d3dbe/retention--ipad-landscape.jpg",
+        "after": "states/21dee87/retention--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Retention"
+      },
+      "ipad-portrait": {
+        "before": "states/58d3dbe/retention--ipad-portrait.jpg",
+        "after": "states/21dee87/retention--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Retention"
+      }
+    },
+    "dashboard-owner": {
+      "chromium-1440": {
+        "before": "states/58d3dbe/dashboard-owner--chromium-1440.jpg",
+        "after": "states/21dee87/dashboard-owner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-landscape": {
+        "before": "states/58d3dbe/dashboard-owner--ipad-landscape.jpg",
+        "after": "states/21dee87/dashboard-owner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-portrait": {
+        "before": "states/58d3dbe/dashboard-owner--ipad-portrait.jpg",
+        "after": "states/21dee87/dashboard-owner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      }
+    },
+    "patients-list": {
+      "chromium-1440": {
+        "before": "states/58d3dbe/patients-list--chromium-1440.jpg",
+        "after": "states/21dee87/patients-list--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patients list"
+      },
+      "ipad-landscape": {
+        "before": "states/58d3dbe/patients-list--ipad-landscape.jpg",
+        "after": "states/21dee87/patients-list--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patients list"
+      },
+      "ipad-portrait": {
+        "before": "states/58d3dbe/patients-list--ipad-portrait.jpg",
+        "after": "states/21dee87/patients-list--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patients list"
+      }
+    }
+  }
+}

@@ -1,0 +1,183 @@
+{
+  "index": 13,
+  "sha": "9202460",
+  "parent": "789f666",
+  "subject": "Enhance treatment plan and dashboard functionalities",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/13-9202460",
+  "scenes": {
+    "patient-record": {
+      "chromium-1440": {
+        "before": "states/789f666/patient-record--chromium-1440.jpg",
+        "after": "states/9202460/patient-record--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record (Olivia Bennett), overview"
+      },
+      "ipad-landscape": {
+        "before": "states/789f666/patient-record--ipad-landscape.jpg",
+        "after": "states/9202460/patient-record--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record (Olivia Bennett), overview"
+      },
+      "ipad-portrait": {
+        "before": "states/789f666/patient-record--ipad-portrait.jpg",
+        "after": "states/9202460/patient-record--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record (Olivia Bennett), overview"
+      }
+    },
+    "patient-record-treatments": {
+      "chromium-1440": {
+        "before": "states/789f666/patient-record-treatments--chromium-1440.jpg",
+        "after": "states/9202460/patient-record-treatments--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record, Treatments tab"
+      },
+      "ipad-landscape": {
+        "before": "states/789f666/patient-record-treatments--ipad-landscape.jpg",
+        "after": "states/9202460/patient-record-treatments--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record, Treatments tab"
+      },
+      "ipad-portrait": {
+        "before": "states/789f666/patient-record-treatments--ipad-portrait.jpg",
+        "after": "states/9202460/patient-record-treatments--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient record, Treatments tab"
+      }
+    },
+    "journey-board": {
+      "chromium-1440": {
+        "before": "states/789f666/journey-board--chromium-1440.jpg",
+        "after": "states/9202460/journey-board--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Journey board"
+      },
+      "ipad-landscape": {
+        "before": "states/789f666/journey-board--ipad-landscape.jpg",
+        "after": "states/9202460/journey-board--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Journey board"
+      },
+      "ipad-portrait": {
+        "before": "states/789f666/journey-board--ipad-portrait.jpg",
+        "after": "states/9202460/journey-board--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Journey board"
+      }
+    },
+    "dashboard-owner": {
+      "chromium-1440": {
+        "before": "states/789f666/dashboard-owner--chromium-1440.jpg",
+        "after": "states/9202460/dashboard-owner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-landscape": {
+        "before": "states/789f666/dashboard-owner--ipad-landscape.jpg",
+        "after": "states/9202460/dashboard-owner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-portrait": {
+        "before": "states/789f666/dashboard-owner--ipad-portrait.jpg",
+        "after": "states/9202460/dashboard-owner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      }
+    },
+    "quick-add": {
+      "chromium-1440": {
+        "before": "states/789f666/quick-add--chromium-1440.jpg",
+        "after": "states/9202460/quick-add--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "New booking dialog from the diary"
+      },
+      "ipad-landscape": {
+        "before": "states/789f666/quick-add--ipad-landscape.jpg",
+        "after": "states/9202460/quick-add--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "New booking dialog from the diary"
+      },
+      "ipad-portrait": {
+        "before": "states/789f666/quick-add--ipad-portrait.jpg",
+        "after": "states/9202460/quick-add--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "New booking dialog from the diary"
+      }
+    },
+    "team": {
+      "chromium-1440": {
+        "before": "states/789f666/team--chromium-1440.jpg",
+        "after": "states/9202460/team--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      },
+      "ipad-landscape": {
+        "before": "states/789f666/team--ipad-landscape.jpg",
+        "after": "states/9202460/team--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      },
+      "ipad-portrait": {
+        "before": "states/789f666/team--ipad-portrait.jpg",
+        "after": "states/9202460/team--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      }
+    }
+  }
+}

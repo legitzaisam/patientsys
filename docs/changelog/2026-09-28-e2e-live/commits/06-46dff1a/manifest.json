@@ -1,0 +1,169 @@
+{
+  "index": 6,
+  "sha": "46dff1a",
+  "parent": "142563a",
+  "subject": "Implement team chat functionality and enhance chat UI",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/06-46dff1a",
+  "scenes": {
+    "dock-chat": {
+      "chromium-1440": {
+        "before": "states/142563a/dock-chat--chromium-1440.jpg",
+        "after": "states/46dff1a/dock-chat--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Floating dock, chat window"
+      },
+      "ipad-landscape": {
+        "before": "states/142563a/dock-chat--ipad-landscape.jpg",
+        "after": "states/46dff1a/dock-chat--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Floating dock, chat window"
+      },
+      "ipad-portrait": {
+        "before": "states/142563a/dock-chat--ipad-portrait.jpg",
+        "after": "states/46dff1a/dock-chat--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Floating dock, chat window"
+      }
+    },
+    "dock-chat-team": {
+      "chromium-1440": {
+        "before": "states/142563a/dock-chat-team--chromium-1440.jpg",
+        "after": "states/46dff1a/dock-chat-team--chromium-1440.jpg",
+        "missingBefore": [
+          "Team tab in the chat window"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, Team tab"
+      },
+      "ipad-landscape": {
+        "before": "states/142563a/dock-chat-team--ipad-landscape.jpg",
+        "after": "states/46dff1a/dock-chat-team--ipad-landscape.jpg",
+        "missingBefore": [
+          "Team tab in the chat window"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, Team tab"
+      },
+      "ipad-portrait": {
+        "before": "states/142563a/dock-chat-team--ipad-portrait.jpg",
+        "after": "states/46dff1a/dock-chat-team--ipad-portrait.jpg",
+        "missingBefore": [
+          "Team tab in the chat window"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, Team tab"
+      }
+    },
+    "dock-chat-thread": {
+      "chromium-1440": {
+        "before": "states/142563a/dock-chat-thread--chromium-1440.jpg",
+        "after": "states/46dff1a/dock-chat-thread--chromium-1440.jpg",
+        "missingBefore": [
+          "Team tab in the chat window",
+          "first team conversation"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, a team conversation open"
+      },
+      "ipad-landscape": {
+        "before": "states/142563a/dock-chat-thread--ipad-landscape.jpg",
+        "after": "states/46dff1a/dock-chat-thread--ipad-landscape.jpg",
+        "missingBefore": [
+          "Team tab in the chat window",
+          "first team conversation"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, a team conversation open"
+      },
+      "ipad-portrait": {
+        "before": "states/142563a/dock-chat-thread--ipad-portrait.jpg",
+        "after": "states/46dff1a/dock-chat-thread--ipad-portrait.jpg",
+        "missingBefore": [
+          "Team tab in the chat window",
+          "first team conversation"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Chat window, a team conversation open"
+      }
+    },
+    "bell": {
+      "chromium-1440": {
+        "before": "states/142563a/bell--chromium-1440.jpg",
+        "after": "states/46dff1a/bell--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      },
+      "ipad-landscape": {
+        "before": "states/142563a/bell--ipad-landscape.jpg",
+        "after": "states/46dff1a/bell--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      },
+      "ipad-portrait": {
+        "before": "states/142563a/bell--ipad-portrait.jpg",
+        "after": "states/46dff1a/bell--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      }
+    },
+    "alerts": {
+      "chromium-1440": {
+        "before": "states/142563a/alerts--chromium-1440.jpg",
+        "after": "states/46dff1a/alerts--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Clinic alerts panel"
+      },
+      "ipad-landscape": {
+        "before": "states/142563a/alerts--ipad-landscape.jpg",
+        "after": "states/46dff1a/alerts--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Clinic alerts panel"
+      },
+      "ipad-portrait": {
+        "before": "states/142563a/alerts--ipad-portrait.jpg",
+        "after": "states/46dff1a/alerts--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Clinic alerts panel"
+      }
+    }
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "index": 2,
+  "sha": "3b3d678",
+  "parent": "a9913cc",
+  "subject": "Enhance access control and role management",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/02-3b3d678",
+  "scenes": {
+    "team": {
+      "chromium-1440": {
+        "before": "states/a9913cc/team--chromium-1440.jpg",
+        "after": "states/3b3d678/team--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      },
+      "ipad-landscape": {
+        "before": "states/a9913cc/team--ipad-landscape.jpg",
+        "after": "states/3b3d678/team--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      },
+      "ipad-portrait": {
+        "before": "states/a9913cc/team--ipad-portrait.jpg",
+        "after": "states/3b3d678/team--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      }
+    },
+    "team-access": {
+      "chromium-1440": {
+        "before": "states/a9913cc/team-access--chromium-1440.jpg",
+        "after": "states/3b3d678/team-access--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page with every access panel expanded"
+      },
+      "ipad-landscape": {
+        "before": "states/a9913cc/team-access--ipad-landscape.jpg",
+        "after": "states/3b3d678/team-access--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page with every access panel expanded"
+      },
+      "ipad-portrait": {
+        "before": "states/a9913cc/team-access--ipad-portrait.jpg",
+        "after": "states/3b3d678/team-access--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page with every access panel expanded"
+      }
+    },
+    "invite-staff": {
+      "chromium-1440": {
+        "before": "states/a9913cc/invite-staff--chromium-1440.jpg",
+        "after": "states/3b3d678/invite-staff--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Invite staff dialog"
+      },
+      "ipad-landscape": {
+        "before": "states/a9913cc/invite-staff--ipad-landscape.jpg",
+        "after": "states/3b3d678/invite-staff--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Invite staff dialog"
+      },
+      "ipad-portrait": {
+        "before": "states/a9913cc/invite-staff--ipad-portrait.jpg",
+        "after": "states/3b3d678/invite-staff--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Invite staff dialog"
+      }
+    },
+    "dashboard-owner": {
+      "chromium-1440": {
+        "before": "states/a9913cc/dashboard-owner--chromium-1440.jpg",
+        "after": "states/3b3d678/dashboard-owner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-landscape": {
+        "before": "states/a9913cc/dashboard-owner--ipad-landscape.jpg",
+        "after": "states/3b3d678/dashboard-owner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-portrait": {
+        "before": "states/a9913cc/dashboard-owner--ipad-portrait.jpg",
+        "after": "states/3b3d678/dashboard-owner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      }
+    }
+  }
+}

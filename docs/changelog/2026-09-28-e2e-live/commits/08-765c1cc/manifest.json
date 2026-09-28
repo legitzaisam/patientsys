@@ -1,0 +1,96 @@
+{
+  "index": 8,
+  "sha": "765c1cc",
+  "parent": "d625c36",
+  "subject": "Enhance team chat and alert functionalities",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/08-765c1cc",
+  "scenes": {
+    "sidebar-hovercard": {
+      "chromium-1440": {
+        "before": "states/d625c36/sidebar-hovercard--chromium-1440.jpg",
+        "after": "states/765c1cc/sidebar-hovercard--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Practitioner card from the sidebar avatar"
+      },
+      "ipad-landscape": {
+        "before": "states/d625c36/sidebar-hovercard--ipad-landscape.jpg",
+        "after": "states/765c1cc/sidebar-hovercard--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Practitioner card from the sidebar avatar"
+      },
+      "ipad-portrait": {
+        "before": "states/d625c36/sidebar-hovercard--ipad-portrait.jpg",
+        "after": "states/765c1cc/sidebar-hovercard--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Practitioner card from the sidebar avatar"
+      }
+    },
+    "dashboard-owner": {
+      "chromium-1440": {
+        "before": "states/d625c36/dashboard-owner--chromium-1440.jpg",
+        "after": "states/765c1cc/dashboard-owner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-landscape": {
+        "before": "states/d625c36/dashboard-owner--ipad-landscape.jpg",
+        "after": "states/765c1cc/dashboard-owner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-portrait": {
+        "before": "states/d625c36/dashboard-owner--ipad-portrait.jpg",
+        "after": "states/765c1cc/dashboard-owner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      }
+    },
+    "alerts": {
+      "chromium-1440": {
+        "before": "states/d625c36/alerts--chromium-1440.jpg",
+        "after": "states/765c1cc/alerts--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Clinic alerts panel"
+      },
+      "ipad-landscape": {
+        "before": "states/d625c36/alerts--ipad-landscape.jpg",
+        "after": "states/765c1cc/alerts--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Clinic alerts panel"
+      },
+      "ipad-portrait": {
+        "before": "states/d625c36/alerts--ipad-portrait.jpg",
+        "after": "states/765c1cc/alerts--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Clinic alerts panel"
+      }
+    }
+  }
+}

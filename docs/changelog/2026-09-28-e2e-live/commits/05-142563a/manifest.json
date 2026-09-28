@@ -1,0 +1,125 @@
+{
+  "index": 5,
+  "sha": "142563a",
+  "parent": "20a1e58",
+  "subject": "Enhance UI and functionality in various components",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/05-142563a",
+  "scenes": {
+    "team": {
+      "chromium-1440": {
+        "before": "states/20a1e58/team--chromium-1440.jpg",
+        "after": "states/142563a/team--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      },
+      "ipad-landscape": {
+        "before": "states/20a1e58/team--ipad-landscape.jpg",
+        "after": "states/142563a/team--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      },
+      "ipad-portrait": {
+        "before": "states/20a1e58/team--ipad-portrait.jpg",
+        "after": "states/142563a/team--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page (owner)"
+      }
+    },
+    "team-access": {
+      "chromium-1440": {
+        "before": "states/20a1e58/team-access--chromium-1440.jpg",
+        "after": "states/142563a/team-access--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page with every access panel expanded"
+      },
+      "ipad-landscape": {
+        "before": "states/20a1e58/team-access--ipad-landscape.jpg",
+        "after": "states/142563a/team-access--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page with every access panel expanded"
+      },
+      "ipad-portrait": {
+        "before": "states/20a1e58/team-access--ipad-portrait.jpg",
+        "after": "states/142563a/team-access--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Team page with every access panel expanded"
+      }
+    },
+    "bell": {
+      "chromium-1440": {
+        "before": "states/20a1e58/bell--chromium-1440.jpg",
+        "after": "states/142563a/bell--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      },
+      "ipad-landscape": {
+        "before": "states/20a1e58/bell--ipad-landscape.jpg",
+        "after": "states/142563a/bell--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      },
+      "ipad-portrait": {
+        "before": "states/20a1e58/bell--ipad-portrait.jpg",
+        "after": "states/142563a/bell--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Notification bell open"
+      }
+    },
+    "portal-home": {
+      "chromium-1440": {
+        "before": "states/20a1e58/portal-home--chromium-1440.jpg",
+        "after": "states/142563a/portal-home--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient portal home"
+      },
+      "ipad-landscape": {
+        "before": "states/20a1e58/portal-home--ipad-landscape.jpg",
+        "after": "states/142563a/portal-home--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient portal home"
+      },
+      "ipad-portrait": {
+        "before": "states/20a1e58/portal-home--ipad-portrait.jpg",
+        "after": "states/142563a/portal-home--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient portal home"
+      }
+    }
+  }
+}

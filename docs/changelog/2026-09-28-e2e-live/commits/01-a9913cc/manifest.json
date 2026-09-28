@@ -1,0 +1,421 @@
+{
+  "index": 1,
+  "sha": "a9913cc",
+  "parent": "d5a5789",
+  "subject": "Refactor profile and earnings components",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/01-a9913cc",
+  "scenes": {
+    "profile": {
+      "chromium-1440": {
+        "before": "states/d5a5789/profile--chromium-1440.jpg",
+        "after": "states/a9913cc/profile--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My profile (practitioner)"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/profile--ipad-landscape.jpg",
+        "after": "states/a9913cc/profile--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My profile (practitioner)"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/profile--ipad-portrait.jpg",
+        "after": "states/a9913cc/profile--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My profile (practitioner)"
+      }
+    },
+    "profile-performance": {
+      "chromium-1440": {
+        "before": "states/d5a5789/profile-performance--chromium-1440.jpg",
+        "after": "states/a9913cc/profile-performance--chromium-1440.jpg",
+        "missingBefore": [
+          "Performance tab on My profile"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My profile, Performance tab"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/profile-performance--ipad-landscape.jpg",
+        "after": "states/a9913cc/profile-performance--ipad-landscape.jpg",
+        "missingBefore": [
+          "Performance tab on My profile"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My profile, Performance tab"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/profile-performance--ipad-portrait.jpg",
+        "after": "states/a9913cc/profile-performance--ipad-portrait.jpg",
+        "missingBefore": [
+          "Performance tab on My profile"
+        ],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My profile, Performance tab"
+      }
+    },
+    "profile-security": {
+      "chromium-1440": {
+        "before": "states/d5a5789/profile-security--chromium-1440.jpg",
+        "after": "states/a9913cc/profile-security--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My profile, Security tab"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/profile-security--ipad-landscape.jpg",
+        "after": "states/a9913cc/profile-security--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My profile, Security tab"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/profile-security--ipad-portrait.jpg",
+        "after": "states/a9913cc/profile-security--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My profile, Security tab"
+      }
+    },
+    "earnings": {
+      "chromium-1440": {
+        "before": "states/d5a5789/earnings--chromium-1440.jpg",
+        "after": "states/a9913cc/earnings--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My earnings (practitioner)"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/earnings--ipad-landscape.jpg",
+        "after": "states/a9913cc/earnings--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My earnings (practitioner)"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/earnings--ipad-portrait.jpg",
+        "after": "states/a9913cc/earnings--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "My earnings (practitioner)"
+      }
+    },
+    "performance": {
+      "chromium-1440": {
+        "before": "states/d5a5789/performance--chromium-1440.jpg",
+        "after": "states/a9913cc/performance--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance (owner)"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/performance--ipad-landscape.jpg",
+        "after": "states/a9913cc/performance--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance (owner)"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/performance--ipad-portrait.jpg",
+        "after": "states/a9913cc/performance--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance (owner)"
+      }
+    },
+    "performance-practitioner": {
+      "chromium-1440": {
+        "before": "states/d5a5789/performance-practitioner--chromium-1440.jpg",
+        "after": "states/a9913cc/performance-practitioner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance as a practitioner"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/performance-practitioner--ipad-landscape.jpg",
+        "after": "states/a9913cc/performance-practitioner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance as a practitioner"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/performance-practitioner--ipad-portrait.jpg",
+        "after": "states/a9913cc/performance-practitioner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Performance as a practitioner"
+      }
+    },
+    "team-member": {
+      "chromium-1440": {
+        "before": "states/d5a5789/team-member--chromium-1440.jpg",
+        "after": "states/a9913cc/team-member--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "A team member's page"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/team-member--ipad-landscape.jpg",
+        "after": "states/a9913cc/team-member--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "A team member's page"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/team-member--ipad-portrait.jpg",
+        "after": "states/a9913cc/team-member--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "A team member's page"
+      }
+    },
+    "quick-add": {
+      "chromium-1440": {
+        "before": "states/d5a5789/quick-add--chromium-1440.jpg",
+        "after": "states/a9913cc/quick-add--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "New booking dialog from the diary"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/quick-add--ipad-landscape.jpg",
+        "after": "states/a9913cc/quick-add--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "New booking dialog from the diary"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/quick-add--ipad-portrait.jpg",
+        "after": "states/a9913cc/quick-add--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "New booking dialog from the diary"
+      }
+    },
+    "portal-records": {
+      "chromium-1440": {
+        "before": "states/d5a5789/portal-records--chromium-1440.jpg",
+        "after": "states/a9913cc/portal-records--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient portal, Records"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/portal-records--ipad-landscape.jpg",
+        "after": "states/a9913cc/portal-records--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient portal, Records"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/portal-records--ipad-portrait.jpg",
+        "after": "states/a9913cc/portal-records--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patient portal, Records"
+      }
+    },
+    "diary-day": {
+      "chromium-1440": {
+        "before": "states/d5a5789/diary-day--chromium-1440.jpg",
+        "after": "states/a9913cc/diary-day--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Diary, day view"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/diary-day--ipad-landscape.jpg",
+        "after": "states/a9913cc/diary-day--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Diary, day view"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/diary-day--ipad-portrait.jpg",
+        "after": "states/a9913cc/diary-day--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Diary, day view"
+      }
+    },
+    "dashboard-owner": {
+      "chromium-1440": {
+        "before": "states/d5a5789/dashboard-owner--chromium-1440.jpg",
+        "after": "states/a9913cc/dashboard-owner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/dashboard-owner--ipad-landscape.jpg",
+        "after": "states/a9913cc/dashboard-owner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/dashboard-owner--ipad-portrait.jpg",
+        "after": "states/a9913cc/dashboard-owner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      }
+    },
+    "settings": {
+      "chromium-1440": {
+        "before": "states/d5a5789/settings--chromium-1440.jpg",
+        "after": "states/a9913cc/settings--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Settings, Clinic"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/settings--ipad-landscape.jpg",
+        "after": "states/a9913cc/settings--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Settings, Clinic"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/settings--ipad-portrait.jpg",
+        "after": "states/a9913cc/settings--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Settings, Clinic"
+      }
+    },
+    "insights-marketing": {
+      "chromium-1440": {
+        "before": "states/d5a5789/insights-marketing--chromium-1440.jpg",
+        "after": "states/a9913cc/insights-marketing--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Marketing"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/insights-marketing--ipad-landscape.jpg",
+        "after": "states/a9913cc/insights-marketing--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Marketing"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/insights-marketing--ipad-portrait.jpg",
+        "after": "states/a9913cc/insights-marketing--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Marketing"
+      }
+    },
+    "patients-list": {
+      "chromium-1440": {
+        "before": "states/d5a5789/patients-list--chromium-1440.jpg",
+        "after": "states/a9913cc/patients-list--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patients list"
+      },
+      "ipad-landscape": {
+        "before": "states/d5a5789/patients-list--ipad-landscape.jpg",
+        "after": "states/a9913cc/patients-list--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patients list"
+      },
+      "ipad-portrait": {
+        "before": "states/d5a5789/patients-list--ipad-portrait.jpg",
+        "after": "states/a9913cc/patients-list--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patients list"
+      }
+    }
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "index": 14,
+  "sha": "58d3dbe",
+  "parent": "9202460",
+  "subject": "Update insights data and recalculate logic",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/14-58d3dbe",
+  "scenes": {
+    "settings-payments": {
+      "chromium-1440": {
+        "before": "states/9202460/settings-payments--chromium-1440.jpg",
+        "after": "states/58d3dbe/settings-payments--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Settings, Payments and deposits"
+      },
+      "ipad-landscape": {
+        "before": "states/9202460/settings-payments--ipad-landscape.jpg",
+        "after": "states/58d3dbe/settings-payments--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Settings, Payments and deposits"
+      },
+      "ipad-portrait": {
+        "before": "states/9202460/settings-payments--ipad-portrait.jpg",
+        "after": "states/58d3dbe/settings-payments--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Settings, Payments and deposits"
+      }
+    },
+    "dashboard-owner": {
+      "chromium-1440": {
+        "before": "states/9202460/dashboard-owner--chromium-1440.jpg",
+        "after": "states/58d3dbe/dashboard-owner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-landscape": {
+        "before": "states/9202460/dashboard-owner--ipad-landscape.jpg",
+        "after": "states/58d3dbe/dashboard-owner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-portrait": {
+        "before": "states/9202460/dashboard-owner--ipad-portrait.jpg",
+        "after": "states/58d3dbe/dashboard-owner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      }
+    },
+    "insights-book": {
+      "chromium-1440": {
+        "before": "states/9202460/insights-book--chromium-1440.jpg",
+        "after": "states/58d3dbe/insights-book--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Patient base"
+      },
+      "ipad-landscape": {
+        "before": "states/9202460/insights-book--ipad-landscape.jpg",
+        "after": "states/58d3dbe/insights-book--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Patient base"
+      },
+      "ipad-portrait": {
+        "before": "states/9202460/insights-book--ipad-portrait.jpg",
+        "after": "states/58d3dbe/insights-book--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Patient base"
+      }
+    },
+    "insights-marketing": {
+      "chromium-1440": {
+        "before": "states/9202460/insights-marketing--chromium-1440.jpg",
+        "after": "states/58d3dbe/insights-marketing--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Marketing"
+      },
+      "ipad-landscape": {
+        "before": "states/9202460/insights-marketing--ipad-landscape.jpg",
+        "after": "states/58d3dbe/insights-marketing--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Marketing"
+      },
+      "ipad-portrait": {
+        "before": "states/9202460/insights-marketing--ipad-portrait.jpg",
+        "after": "states/58d3dbe/insights-marketing--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Insights, Marketing"
+      }
+    },
+    "patients-list": {
+      "chromium-1440": {
+        "before": "states/9202460/patients-list--chromium-1440.jpg",
+        "after": "states/58d3dbe/patients-list--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patients list"
+      },
+      "ipad-landscape": {
+        "before": "states/9202460/patients-list--ipad-landscape.jpg",
+        "after": "states/58d3dbe/patients-list--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patients list"
+      },
+      "ipad-portrait": {
+        "before": "states/9202460/patients-list--ipad-portrait.jpg",
+        "after": "states/58d3dbe/patients-list--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Patients list"
+      }
+    }
+  }
+}

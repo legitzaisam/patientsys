@@ -1,0 +1,125 @@
+{
+  "index": 9,
+  "sha": "a4c6f6d",
+  "parent": "765c1cc",
+  "subject": "Refactor schedule and chat components",
+  "dir": "docs/changelog/2026-09-28-e2e-live/commits/09-a4c6f6d",
+  "scenes": {
+    "diary-day": {
+      "chromium-1440": {
+        "before": "states/765c1cc/diary-day--chromium-1440.jpg",
+        "after": "states/a4c6f6d/diary-day--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Diary, day view"
+      },
+      "ipad-landscape": {
+        "before": "states/765c1cc/diary-day--ipad-landscape.jpg",
+        "after": "states/a4c6f6d/diary-day--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Diary, day view"
+      },
+      "ipad-portrait": {
+        "before": "states/765c1cc/diary-day--ipad-portrait.jpg",
+        "after": "states/a4c6f6d/diary-day--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Diary, day view"
+      }
+    },
+    "sidebar-hovercard": {
+      "chromium-1440": {
+        "before": "states/765c1cc/sidebar-hovercard--chromium-1440.jpg",
+        "after": "states/a4c6f6d/sidebar-hovercard--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Practitioner card from the sidebar avatar"
+      },
+      "ipad-landscape": {
+        "before": "states/765c1cc/sidebar-hovercard--ipad-landscape.jpg",
+        "after": "states/a4c6f6d/sidebar-hovercard--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Practitioner card from the sidebar avatar"
+      },
+      "ipad-portrait": {
+        "before": "states/765c1cc/sidebar-hovercard--ipad-portrait.jpg",
+        "after": "states/a4c6f6d/sidebar-hovercard--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Practitioner card from the sidebar avatar"
+      }
+    },
+    "dashboard-owner": {
+      "chromium-1440": {
+        "before": "states/765c1cc/dashboard-owner--chromium-1440.jpg",
+        "after": "states/a4c6f6d/dashboard-owner--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-landscape": {
+        "before": "states/765c1cc/dashboard-owner--ipad-landscape.jpg",
+        "after": "states/a4c6f6d/dashboard-owner--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      },
+      "ipad-portrait": {
+        "before": "states/765c1cc/dashboard-owner--ipad-portrait.jpg",
+        "after": "states/a4c6f6d/dashboard-owner--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "Owner dashboard"
+      }
+    },
+    "quick-add": {
+      "chromium-1440": {
+        "before": "states/765c1cc/quick-add--chromium-1440.jpg",
+        "after": "states/a4c6f6d/quick-add--chromium-1440.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "New booking dialog from the diary"
+      },
+      "ipad-landscape": {
+        "before": "states/765c1cc/quick-add--ipad-landscape.jpg",
+        "after": "states/a4c6f6d/quick-add--ipad-landscape.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "New booking dialog from the diary"
+      },
+      "ipad-portrait": {
+        "before": "states/765c1cc/quick-add--ipad-portrait.jpg",
+        "after": "states/a4c6f6d/quick-add--ipad-portrait.jpg",
+        "missingBefore": [],
+        "missingAfter": [],
+        "errorBefore": null,
+        "errorAfter": null,
+        "what": "New booking dialog from the diary"
+      }
+    }
+  }
+}

@@ -13,7 +13,7 @@ export default defineConfig({
   testDir: "./e2e",
   // The device matrix, the rendered-number check and the review captures have
   // their own configs (playwright.responsive / .metrics / .review.config.ts).
-  testIgnore: ["**/responsive/**", "**/metrics/**", "**/review/**"],
+  testIgnore: ["**/responsive/**", "**/metrics/**", "**/review/**", "**/changelog/**"],
   // The demo data layer is one shared in-memory fixture set on the dev server,
   // so parallel workers would race each other's mutations. Run serially.
   fullyParallel: false,

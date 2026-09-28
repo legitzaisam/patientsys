@@ -37,6 +37,26 @@ npm run dev:demo
 
 Open [http://localhost:8080](http://localhost:8080). Demo mode swaps `src/lib/clinic.functions.ts` for fixture data in `src/lib/clinic.functions.demo.ts`.
 
+### Demo accounts and roles
+
+The root `/` is the app's public landing page (Staff sign in, Patient portal) and looks the same in demo and live mode; the demo itself starts at [`/dashboard`](http://localhost:8080/dashboard) for staff and [`/my-record`](http://localhost:8080/my-record) for the patient. In demo mode the server trusts a `demo_role` cookie, so **no password is checked**. Pick a role in any of three ways:
+
+1. **The Demo pill** (bottom-left of every page) switches persona in place.
+2. **A URL**, when the app runs behind `launch-plan/gateway`: `/demo/enter?role=owner|practitioner|front_desk|patient` (the gateway does not route `manager` or `admin`; use the pill for those).
+3. **Signing in** at `/auth` (staff) or `/portal` (patients) with one of the emails below: the app maps the email onto the persona. This route needs a real Supabase project in `.env` where the account exists. The passwords listed are the ones `scripts/provision-staff.mjs` creates there; roles marked "pill only" have no account provisioned by the scripts.
+
+| Role (`demo_role`) | Persona you become | Sign-in email | Password | Lands on |
+| ------------------ | ------------------ | ------------- | -------- | -------- |
+| `owner` (clinic owner) | Dr Amara Osei, Clinic Director | `amara.osei@aetheria.clinic` | Whatever `OWNER_PASSWORD` was given to `scripts/provision-remote.mjs` or `scripts/ensure-owner.mjs`; not stored in the repo | `/dashboard` |
+| `manager` | Maya Chen, Clinic manager | `maya.chen@aetheria.clinic` | Pill only (no account provisioned) | `/dashboard` |
+| `practitioner` | Dr Nadia Rahman, Aesthetic Practitioner | `nadia.rahman@aetheria.clinic` | `Practitioner1!` | `/dashboard` |
+| `practitioner` | Dr Tom Whitfield, Aesthetic Doctor | `tom.whitfield@aetheria.clinic` | `Practitioner2!` | `/dashboard` |
+| `front_desk` (receptionist) | Sofia Marchetti, Patient Coordinator | `sofia.marchetti@aetheria.clinic` | `Reception1!` | `/dashboard` |
+| `patient` | Olivia Bennett | `olivia.bennett@example.com` | Pill only (no account provisioned); sign in at `/portal` if one is created | `/my-record` |
+| `admin` (software admin) | Software developer | `developer@aetheria.clinic` | `Developer1!` | `/access` |
+
+The fixture clinic is Aetheria; all names, patients and numbers are demo data. Emails and texts stay in a sandbox.
+
 ## Local development (live Supabase)
 
 ```sh
@@ -97,6 +117,26 @@ node scripts/provision-remote.mjs
 This creates buckets `patient-photos`, `message-attachments`, and `staff-files`, confirms the user, and grants the **owner** (manager) role.
 
 Sign in at [http://localhost:8080/auth](http://localhost:8080/auth).
+
+### Live accounts and roles
+
+The linked project is `aljozsxrdqfxiqczhbqn`, clinic **Aetheria Medical**. This roster was read from the project on 28 September 2026 (Auth users joined to `user_roles` and `profiles`). Supabase only stores password hashes, so a password appears below only when the repo sets it: the four staff logins that `scripts/provision-staff.mjs` creates (`ONLY=<email> node scripts/provision-staff.mjs` resets one of them to the scripted value). Anyone whose password the owner has since changed from **Team** keeps the changed one. The live roster is not the demo cast: there is no Amara Osei, Maya Chen or Olivia Bennett account here.
+
+| Role (`user_roles`) | Account | Sign-in email | Password | Signs in at → lands on | Last sign-in |
+| ------------------- | ------- | ------------- | -------- | ---------------------- | ------------ |
+| `owner` | Zaisam Al-Dulimi, Clinic Owner | `zaisam_aldulimi@hotmail.co.uk` | Set by `OWNER_PASSWORD` when the project was provisioned; held by Zaisam | `/auth` → `/dashboard` | 27 Sep 2026 |
+| `manager` | Test Manager, Practice Manager | `test.manager@aetheria.clinic` | Held outside the repo (see `docs/WORKLOG.md`, Phase 1 roster); a disposable test account | `/auth` → `/dashboard` | 26 Aug 2026 |
+| `practitioner` | Dr Nadia Rahman, Aesthetic Practitioner | `nadia.rahman@aetheria.clinic` | `Practitioner1!` (scripted) | `/auth` → `/dashboard` | 19 Sep 2026 |
+| `practitioner` | Dr Tom Whitfield, Aesthetic Doctor | `tom.whitfield@aetheria.clinic` | `Practitioner2!` (scripted) | `/auth` → `/dashboard` | never |
+| `front_desk` | Sofia Marchetti, Receptionist | `sofia.marchetti@aetheria.clinic` | `Reception1!` (scripted) | `/auth` → `/dashboard` | 25 Sep 2026 |
+| `admin` | Software developer | `developer@aetheria.clinic` | `Developer1!` (scripted) | `/auth` → `/access` | 25 Sep 2026 |
+| `patient` | Damon Salvatore | `damonsalvatore@hotmail.com` | Held outside the repo (`docs/WORKLOG.md`) | `/portal` → `/my-record` | 26 Aug 2026 |
+| none | Zainab Bassim (profile says Manager) | `z.bassim@hotmail.com` | Cannot sign in: no `user_roles` row, so every sign-in ends in "Your clinic access has been removed" until the owner grants a role from Team | — | 23 Aug 2026 |
+
+Two things the roster showed, worth acting on:
+
+- **The live database is behind the code.** `profiles.clinic_role_id` does not exist in the project, so the five migrations dated `20260930…` (profile governance, clinic set-up and named roles, approvals opt-in, inbox cleared, alert replies) have not been applied. The current code will fail on the Team page and anywhere it reads those columns until `supabase db push` or `scripts/apply-migrations.mjs` has run.
+- `z.bassim@hotmail.com` is an orphaned account (auth user and profile, no role), as first noted in `docs/WORKLOG.md`.
 
 ## npm scripts
 
