@@ -184,7 +184,7 @@ export function DocumentsTab({
       <Card className="flex items-center gap-5 p-6" data-qc="documents-progress">
         <ProgressRing done={done} total={ESSENTIAL_DOC_CATEGORIES.length} />
         <div className="min-w-0 flex-1">
-          <h2 className="section-title" data-qc="metric:documents.headline">
+          <h2 className="section-title" data-qc="documents-headline">
             {headline}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">

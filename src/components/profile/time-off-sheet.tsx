@@ -241,7 +241,7 @@ export function TimeOffSheet({
                       <button
                         type="button"
                         aria-label="Previous month"
-                        className="grid h-7 w-7 cursor-pointer place-items-center rounded-full hover:bg-glass-2"
+                        className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full hover:bg-glass-2"
                         onClick={() => setView(previousMonth(view.year, view.month))}
                         data-qc="timeoff-prev-month"
                       >
@@ -253,7 +253,7 @@ export function TimeOffSheet({
                       <button
                         type="button"
                         aria-label="Next month"
-                        className="grid h-7 w-7 cursor-pointer place-items-center rounded-full hover:bg-glass-2"
+                        className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full hover:bg-glass-2"
                         onClick={() =>
                           setView(
                             view.month === 12

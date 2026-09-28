@@ -165,7 +165,7 @@ const SCENES: Scene[] = [
   {
     id: "earnings",
     persona: "practitioner",
-    path: "/profile",
+    path: "/profile?tab=earnings",
     settle: '[data-qc="metric:earnings.share"]',
     sections: ["My earnings and My profile"],
   },
@@ -173,7 +173,7 @@ const SCENES: Scene[] = [
     id: "profile",
     persona: "practitioner",
     path: "/profile",
-    settle: '[data-qc="registration-body"]',
+    settle: '[data-qc="registration-block"]',
     sections: ["My earnings and My profile"],
   },
   {

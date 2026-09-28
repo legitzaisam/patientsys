@@ -5,7 +5,7 @@
  * days as `YYYY-MM-DD` strings; nothing here reads the clock or the network.
  */
 
-import { CLINIC_TIME_ZONE } from "@/lib/metrics/period";
+import { CLINIC_TIME_ZONE, londonMidnight } from "@/lib/metrics/period";
 
 // ---------------------------------------------------------------- dates
 
@@ -374,6 +374,17 @@ export function initialsOf(fullName: string): string {
 /** "INV-NR-2026-09". */
 export function invoiceNumber(initials: string, year: number, month: number): string {
   return `INV-${initials}-${year}-${pad(month)}`;
+}
+
+/**
+ * The calendar month as clinic-time instants (ISO): the window getMyEarnings,
+ * the invoice amount and the metrics snapshot all read.
+ */
+export function monthWindowIso(year: number, month: number): { from: string; to: string } {
+  return {
+    from: new Date(londonMidnight(year, month, 1)).toISOString(),
+    to: new Date(londonMidnight(year, month + 1, 1) - 1).toISOString(),
+  };
 }
 
 /** First and last calendar day of a month. */

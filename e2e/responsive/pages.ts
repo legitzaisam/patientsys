@@ -301,21 +301,43 @@ const needsActionOpen: PageState = {
   },
 };
 
-/** My profile's Security / Documents / Performance tabs on the account card. */
-function profileTab(key: "security" | "documents"): PageState {
+/** The staff profile's tabs (own page and a colleague's page in manage mode). */
+function profileTab(key: "earnings" | "schedule" | "documents" | "security" | "access"): PageState {
   return {
     id: `profile-${key}`,
     open: async (page) => {
       if (!(await clickIfVisible(page, `[data-qc="profile-tab-${key}"]`, 3_000))) return false;
-      await wait(page, 500);
+      await wait(page, 700);
       return true;
     },
     close: async (page) => {
-      await clickIfVisible(page, '[data-qc="profile-tab-security"]', 2_000);
+      await clickIfVisible(page, '[data-qc="profile-tab-overview"]', 2_000);
       await wait(page, 300);
     },
   };
 }
+
+/** The time-off sheet from the profile hero. */
+const timeOffSheet: PageState = {
+  id: "time-off-sheet",
+  open: async (page) => {
+    if (!(await clickIfVisible(page, '[data-qc="hero-time-off"]', 3_000))) return false;
+    await page.locator('[data-qc="timeoff-sheet"]').waitFor({ state: "visible", timeout: 5_000 });
+    await wait(page, 500);
+    return true;
+  },
+};
+
+/** The invoice dialog from the profile hero (people who treat). */
+const invoiceDialog: PageState = {
+  id: "invoice-dialog",
+  open: async (page) => {
+    if (!(await clickIfVisible(page, '[data-qc="hero-invoice"]', 3_000))) return false;
+    await page.locator('[data-qc="invoice-dialog"]').waitFor({ state: "visible", timeout: 5_000 });
+    await wait(page, 700);
+    return true;
+  },
+};
 
 const newBooking: PageState = {
   id: "new-booking",
@@ -604,7 +626,7 @@ export const PAGES: PageEntry[] = [
   },
   {
     id: "earnings",
-    path: "/profile",
+    path: "/profile?tab=earnings",
     roles: ["practitioner"],
     settle: '[data-qc="metric:earnings.share"]',
     states: [sidebarClosed],
@@ -625,11 +647,19 @@ export const PAGES: PageEntry[] = [
     coreStates: ["sidebar-closed"],
   },
   {
+    // Owner: the manage layout with every tab; practitioner and front desk: the Front desk layout.
     id: "team-member",
     path: (ctx) => (ctx.teamMemberId ? `/team/${ctx.teamMemberId}` : null),
-    roles: ["owner", "practitioner"],
-    settle: ".page-title",
-    states: [sidebarClosed],
+    roles: ["owner", "practitioner", "front_desk"],
+    settle: '[data-qc^="profile-page-"]',
+    states: [
+      sidebarClosed,
+      profileTab("earnings"),
+      profileTab("schedule"),
+      profileTab("documents"),
+      profileTab("access"),
+    ],
+    coreStates: ["sidebar-closed"],
   },
   {
     id: "settings",
@@ -642,9 +672,17 @@ export const PAGES: PageEntry[] = [
     id: "profile",
     path: "/profile",
     roles: STAFF,
-    settle: ".page-title",
-    states: [sidebarClosed, profileTab("security"), profileTab("documents")],
-    coreStates: ["sidebar-closed"],
+    settle: '[data-qc="profile-page-self"]',
+    states: [
+      sidebarClosed,
+      profileTab("earnings"),
+      profileTab("schedule"),
+      profileTab("documents"),
+      profileTab("security"),
+      timeOffSheet,
+      invoiceDialog,
+    ],
+    coreStates: ["sidebar-closed", "profile-schedule", "profile-documents"],
   },
   {
     id: "access",

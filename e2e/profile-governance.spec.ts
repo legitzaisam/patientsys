@@ -56,7 +56,7 @@ test.describe("my profile field rules", () => {
     await page.goto("/team");
     const inbox = page.locator("#profile-change-requests");
     await expect(inbox.getByText("Needs clinic owner")).toBeVisible();
-    await expect(inbox.getByText("Maya Chen")).toBeVisible();
+    await expect(inbox.getByText("Maya Chen").first()).toBeVisible();
   });
 
   test("qualifications save without a request", async ({ page, context, baseURL }) => {

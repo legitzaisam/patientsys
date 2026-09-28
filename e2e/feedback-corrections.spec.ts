@@ -233,29 +233,25 @@ test.describe("as the owner", () => {
     );
   });
 
-  test("my profile: registration fields stay on the page; Security, Documents and Performance are tabs", async ({
+  test("my profile: registration and insurance stay on the Overview; earnings, schedule, documents and security are tabs", async ({
     page,
   }) => {
     await page.goto("/profile");
     await expect(page.getByRole("heading", { level: 1, name: "My profile" })).toBeVisible();
-    await expect(page.locator('[data-qc="registration-body"] option')).toHaveCount(7);
-    await expect(page.getByLabel("Registration expiry")).toBeVisible();
-    await expect(page.getByLabel("Working arrangement")).toBeVisible();
-    await expect(page.getByLabel("Insurance provider")).toBeVisible();
-    await expect(page.getByLabel("Qualifications")).toBeVisible();
-    const tabs = page.getByRole("tablist", { name: "Account" });
-    await expect(tabs.getByRole("tab", { name: "Performance" })).toHaveAttribute(
+    await expect(page.locator('[data-qc="registration-block"]')).toBeVisible();
+    await expect(page.locator('[data-qc="insurance-block"]')).toBeVisible();
+    await expect(page.locator('[data-qc="tile-arrangement"]')).toBeVisible();
+    await expect(page.locator('[data-qc="qualifications"]')).toBeVisible();
+    await expect(page.locator('[data-qc="profile-tab-overview"]')).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await expect(page.getByRole("heading", { level: 2, name: "Your performance" })).toBeVisible();
-    await expect(page.locator('[data-qc="profile-earnings-summary"]')).toContainText(
-      "Your share",
-    );
-    await tabs.getByRole("tab", { name: "Security" }).click();
-    await expect(page.getByRole("heading", { level: 2, name: "Security" })).toBeVisible();
-    await tabs.getByRole("tab", { name: "Documents" }).click();
-    await expect(page.getByRole("heading", { level: 2, name: "Documents" })).toBeVisible();
+    await page.locator('[data-qc="profile-tab-earnings"]').click();
+    await expect(page.locator('[data-qc="metric:earnings.share"]')).toBeVisible();
+    await page.locator('[data-qc="profile-tab-security"]').click();
+    await expect(page.locator('[data-qc="profile-security-tab"]')).toBeVisible();
+    await page.locator('[data-qc="profile-tab-documents"]').click();
+    await expect(page.locator('[data-qc="documents-headline"]')).toBeVisible();
   });
 
   test("diary notes on upcoming appointments read as the pre-read", async ({ page }) => {
@@ -273,20 +269,18 @@ test.describe("as the owner", () => {
 test.describe("as a practitioner", () => {
   test.use({ role: "practitioner" });
 
-  test("My earnings reads in share terms with rate, payout status and export", async ({ page }) => {
-    await page.goto("/profile");
+  test("My earnings reads in share terms with rate, collected, outstanding and export", async ({
+    page,
+  }) => {
+    await page.goto("/profile?tab=earnings");
     await expect(page.getByRole("heading", { level: 1, name: "My profile" })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Your performance" })).toBeVisible();
-    await expect(page.getByText("Your share", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Your earnings", { exact: true })).toBeVisible();
     await expect(page.getByText("Earned", { exact: true })).toHaveCount(0);
-    await expect(page.locator('[data-qc="earnings-rate"]')).toContainText(/your rate is \d+%/);
-    await expect(page.locator('[data-qc="payout-summary"]')).toContainText(
-      /\d+ paid · \d+ pending/,
-    );
+    await expect(page.locator('[data-qc="earnings-rate"]')).toContainText(/Your share at \d+%/);
+    await expect(page.locator('[data-qc="metric:earnings.collected"]')).toContainText("£");
+    await expect(page.locator('[data-qc="metric:earnings.outstanding"]')).toContainText("£");
     await expect(page.locator('[data-qc="earnings-export-csv"]')).toBeEnabled();
-    await expect(page.locator('[data-qc="earnings-print"]')).toBeVisible();
-    // Every card in the two rows carries its own icon.
-    expect(await page.locator(".glass-card svg.lucide").count()).toBeGreaterThanOrEqual(8);
+    await expect(page.locator('[data-qc="earnings-invoice"]')).toBeVisible();
   });
 
   test("KPI cards are scoped to their own book and say so", async ({ page }) => {

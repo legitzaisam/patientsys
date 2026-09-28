@@ -43,19 +43,19 @@ export function TimeOffSummaryCard({
       <h2 className="section-title">Time off in {year}</h2>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="rounded-2xl bg-glass-2 px-1.5 py-3 shadow-inset-hi">
-          <p className="text-2xl font-semibold text-foreground" data-qc="metric:timeoff.taken">
+          <p className="text-2xl font-semibold text-foreground" data-qc="timeoff-taken">
             {t.taken}
           </p>
           <p className="text-xs text-muted-foreground">taken</p>
         </div>
         <div className="rounded-2xl bg-success-bg px-1.5 py-3">
-          <p className="text-2xl font-semibold text-success-ink" data-qc="metric:timeoff.booked">
+          <p className="text-2xl font-semibold text-success-ink" data-qc="timeoff-booked">
             {t.booked}
           </p>
           <p className="text-xs text-success-ink">booked</p>
         </div>
         <div className="rounded-2xl bg-accent-soft px-1.5 py-3">
-          <p className="text-2xl font-semibold text-accent-ink" data-qc="metric:timeoff.pending">
+          <p className="text-2xl font-semibold text-accent-ink" data-qc="timeoff-pending">
             {t.pending}
           </p>
           <p className="text-xs text-accent-ink">pending</p>

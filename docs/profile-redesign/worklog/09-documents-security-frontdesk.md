@@ -41,3 +41,5 @@ Captures: [`captures/p9-documents-frontdesk/`](../captures/p9-documents-frontdes
 | Lint | delta 0 on every touched file; `staff-files.tsx` 25 → 12 |
 
 Files: `src/components/profile/{documents-tab.tsx, front-desk-view.tsx}` (new), `src/lib/staff-file-storage.ts` (new), `src/components/profile/{staff-profile-page.tsx, profile-helpers.ts, profile-types.ts}`, `src/components/staff-files.tsx`, `src/lib/clinic.functions.ts`, `src/lib/clinic.functions.demo.ts`, `src/routes/_authenticated/{profile.tsx, team.$id.tsx}`, five components removed, captures under `captures/p9-documents-frontdesk/`.
+
+> Revised in P10: the documents headline hook is `documents-headline`; the register link has a 24 px tap height.

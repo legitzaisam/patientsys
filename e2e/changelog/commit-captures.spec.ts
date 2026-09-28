@@ -176,28 +176,62 @@ export const SCENES: Scene[] = [
   },
 
   // Profile, earnings, performance
-  { id: "profile", persona: "practitioner", path: "/profile", settle: '[data-qc="profile-tab-profile"], h1', what: "My profile (practitioner)" },
+  {
+    id: "profile",
+    persona: "practitioner",
+    path: "/profile",
+    settle: '[data-qc="profile-tab-overview"], h1',
+    what: "My profile (practitioner)",
+  },
   {
     id: "profile-performance",
     persona: "practitioner",
     path: "/profile",
-    settle: '[data-qc="profile-tab-profile"], h1',
-    what: "My profile, Performance tab",
+    settle: '[data-qc="profile-tab-overview"], h1',
+    what: "My profile, Performance & earnings tab",
     open: async (c) => {
-      if (await c.click(c.page.locator('[data-qc="profile-tab-performance"]'), "Performance tab on My profile")) await c.wait(800);
+      if (
+        await c.click(
+          c.page.locator('[data-qc="profile-tab-earnings"]'),
+          "Performance & earnings tab on My profile",
+        )
+      )
+        await c.wait(800);
+    },
+  },
+  {
+    id: "profile-schedule",
+    persona: "practitioner",
+    path: "/profile",
+    settle: '[data-qc="profile-tab-overview"], h1',
+    what: "My profile, Schedule & time off tab",
+    open: async (c) => {
+      if (
+        await c.click(
+          c.page.locator('[data-qc="profile-tab-schedule"]'),
+          "Schedule tab on My profile",
+        )
+      )
+        await c.wait(800);
     },
   },
   {
     id: "profile-security",
     persona: "practitioner",
     path: "/profile",
-    settle: '[data-qc="profile-tab-profile"], h1',
+    settle: '[data-qc="profile-tab-overview"], h1',
     what: "My profile, Security tab",
     open: async (c) => {
       if (await c.click(c.page.locator('[data-qc="profile-tab-security"]'), "Security tab on My profile")) await c.wait(600);
     },
   },
-  { id: "earnings", persona: "practitioner", path: "/earnings", settle: '[data-qc="metric:earnings.share"], h1', what: "My earnings (practitioner)" },
+  {
+    id: "earnings",
+    persona: "practitioner",
+    path: "/earnings",
+    settle: '[data-qc="profile-tab-overview"], h1',
+    what: "/earnings redirects to My profile",
+  },
   { id: "performance", persona: "owner", path: "/performance", settle: '[data-qc="metric:performance.earned"], h1', what: "Performance (owner)" },
   { id: "performance-practitioner", persona: "practitioner", path: "/performance", settle: "h1", what: "Performance as a practitioner" },
 

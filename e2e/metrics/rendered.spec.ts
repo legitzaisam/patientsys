@@ -37,7 +37,7 @@ type Snapshot = {
         earned: number;
         collected: number;
         treatmentsCompleted: number;
-        share: { earned: number; collected: number };
+        share: { earned: number; collected: number; outstanding: number };
       }
     >;
   };
@@ -58,7 +58,12 @@ function numberIn(text: string): number {
  * promise. `snap` is scoped to the persona (a practitioner's own book);
  * `clinic` is the whole clinic, which the Patients list always counts.
  */
-function expected(id: string, snap: Snapshot, clinic: Snapshot): number | undefined {
+function expected(
+  id: string,
+  snap: Snapshot,
+  clinic: Snapshot,
+  month: Snapshot,
+): number | undefined {
   const [area, ...rest] = id.split(".");
   const key = rest.join(".");
   switch (area) {
@@ -108,11 +113,14 @@ function expected(id: string, snap: Snapshot, clinic: Snapshot): number | undefi
       return typeof v === "number" ? Math.round(v) : undefined;
     }
     case "earnings": {
-      const mine = snap.performance.perPractitioner[USERS.practitioner];
+      // The profile's earnings figures are one calendar month: `month` is the
+      // snapshot over this month, for the Overview card and the earnings tab alike.
+      const mine = month.performance.perPractitioner[USERS.practitioner];
       if (!mine) return undefined;
-      if (key === "share") return Math.round(mine.share.earned);
+      if (key === "share" || key === "month.share") return Math.round(mine.share.earned);
       if (key === "collected") return Math.round(mine.share.collected);
-      if (key === "treatments") return mine.treatmentsCompleted;
+      if (key === "outstanding") return Math.round(mine.share.outstanding);
+      if (key === "treatments" || key === "month.treatments") return mine.treatmentsCompleted;
       return undefined;
     }
     case "offers": {
@@ -150,10 +158,15 @@ async function renderedMetrics(page: Page) {
   });
 }
 
-async function snapshotFor(page: Page, persona: Persona | "clinic"): Promise<Snapshot> {
+async function snapshotFor(
+  page: Page,
+  persona: Persona | "clinic",
+  period?: "month",
+): Promise<Snapshot> {
   const params = new URLSearchParams();
   if (persona === "practitioner") params.set("practitioner", USERS.practitioner);
   if (persona === "patient") params.set("patientUser", USERS.patient);
+  if (period) params.set("period", period);
   const response = await page.request.get(`/api/demo/metrics?${params.toString()}`);
   expect(response.ok()).toBeTruthy();
   return (await response.json()) as Snapshot;
@@ -176,7 +189,13 @@ const PAGES: Record<Persona, string[]> = {
     "/offers",
   ],
   admin: ["/dashboard", "/patients", "/performance", "/offers"],
-  practitioner: ["/dashboard", "/patients", "/insights?tab=book", "/profile"],
+  practitioner: [
+    "/dashboard",
+    "/patients",
+    "/insights?tab=book",
+    "/profile",
+    "/profile?tab=earnings",
+  ],
   front_desk: ["/dashboard", "/patients"],
   patient: ["/my-record"],
 };
@@ -201,11 +220,12 @@ for (const persona of Object.keys(PAGES) as Persona[]) {
 
         const snap = await snapshotFor(page, persona);
         const clinic = persona === "practitioner" ? await snapshotFor(page, "clinic") : snap;
+        const month = persona === "practitioner" ? await snapshotFor(page, persona, "month") : snap;
         const rendered = await renderedMetrics(page);
         expect(rendered.length).toBeGreaterThan(0);
 
         const unknown = rendered
-          .filter((m) => expected(m.id, snap, clinic) === undefined)
+          .filter((m) => expected(m.id, snap, clinic, month) === undefined)
           .map((m) => m.id);
         expect(
           unknown,
@@ -213,8 +233,13 @@ for (const persona of Object.keys(PAGES) as Persona[]) {
         ).toEqual([]);
 
         const mismatches = rendered
-          .map((m) => ({ ...m, want: expected(m.id, snap, clinic)!, got: numberIn(m.text) }))
-          .filter((m) => m.got !== m.want)
+          .map((m) => ({
+            ...m,
+            want: expected(m.id, snap, clinic, month)!,
+            got: numberIn(m.text),
+          }))
+          // Money renders to the penny on the profile; the snapshot promises whole pounds.
+          .filter((m) => Math.round(m.got) !== m.want)
           .map((m) => `${m.id}: page ${m.got} ("${m.text}") vs snapshot ${m.want}`);
         expect(mismatches, mismatches.join("\n")).toEqual([]);
       });

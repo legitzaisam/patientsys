@@ -3472,7 +3472,8 @@ export const profileChangeRequests: Row[] = [
     job_title: "Senior Aesthetic Practitioner",
     registration_body: "NMC",
     registration_number: "18C4471E",
-    registration_expiry: null,
+    // Carries her current expiry: approving a job-title change must not clear it.
+    registration_expiry: dateOnly(45),
     work_email: null,
     working_arrangement: null,
     requires_owner: false,

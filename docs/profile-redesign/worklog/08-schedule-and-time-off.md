@@ -43,3 +43,5 @@ Captures: [`captures/p8-schedule/`](../captures/p8-schedule/) — `p8-schedule-p
 Files: `src/components/profile/{schedule-tab.tsx, working-pattern-card.tsx, time-off-calendar.tsx, time-off-cards.tsx, time-off-sheet.tsx}` (new); `staff-profile-page.tsx`, `profile-helpers.ts` (`useStaffSchedule(year?)`); captures under `captures/p8-schedule/`.
 
 Left for later: the front-desk layout (P9) replaces this tab for viewers who cannot manage; e2e coverage of these flows lands in `e2e/profile-redesign.spec.ts` (P10).
+
+> Revised in P10: the totals and weekly-hours hooks are plain (`timeoff-taken|booked|pending`, `pattern-weekly-hours`); the sheet's month stepper buttons are 32 px and `shrink-0` (tap-target gate).

@@ -19,8 +19,10 @@ test.describe("as owner", () => {
       .click();
     await expect(page).toHaveURL(/\/team\/.+/);
     await expect(page.getByRole("heading", { level: 1, name: "Staff profile" })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Performance" })).toBeVisible();
-    await expect(page.getByText("Their share", { exact: true }).first()).toBeVisible();
+    await expect(page.locator('[data-qc="profile-page-manage"]')).toBeVisible();
+    await expect(page.locator('[data-qc="tile-commission"]')).toContainText("%");
+    await page.locator('[data-qc="profile-tab-earnings"]').click();
+    await expect(page.getByText("Their earnings", { exact: true })).toBeVisible();
   });
 
   test("each member shows last active, compliance status and, for the owner, commission; access changes are logged", async ({

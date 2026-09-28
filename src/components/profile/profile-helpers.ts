@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { getStaffSchedule } from "@/lib/clinic.functions";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import { CLINIC_TIME_ZONE } from "@/lib/metrics/period";
-import { MONTHS_SHORT, parseDayKey } from "@/lib/staff-schedule";
+import { MONTHS_SHORT, monthWindowIso, parseDayKey } from "@/lib/staff-schedule";
 import type {
   EarningsLine,
   InvoiceRowLike,
@@ -127,9 +127,7 @@ export function monthRangeOf(todayKey: string): {
   month: number;
 } {
   const { year, month } = parseDayKey(todayKey);
-  const from = new Date(Date.UTC(year, month - 1, 1)).toISOString();
-  const to = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
-  return { from, to, year, month };
+  return { ...monthWindowIso(year, month), year, month };
 }
 
 /** The qualifications text is a comma-separated list; the card shows it as chips. */

@@ -322,7 +322,7 @@ export function RegistrationInsuranceCard({
                   href={link.href}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-accent-ink underline-offset-4 hover:underline"
+                  className="inline-flex min-h-6 items-center gap-1 py-1 text-xs font-semibold text-accent-ink underline-offset-4 hover:underline"
                 >
                   {link.label} <ExternalLink className="h-3 w-3" aria-hidden />
                 </a>

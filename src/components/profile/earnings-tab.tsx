@@ -12,6 +12,7 @@ import {
   groupLinesByMonth,
   groupLinesByTreatment,
   invoicePeriod,
+  monthWindowIso,
   previousMonth,
   shortDay,
   yearMonthOf,
@@ -32,14 +33,6 @@ const GROUPINGS: { key: Grouping; label: string }[] = [
 ];
 
 const MONTHS_BACK = 11;
-
-/** ISO range for a calendar month in clinic time (the same bounds getMyEarnings expects). */
-function monthIsoRange(year: number, month: number): { from: string; to: string } {
-  return {
-    from: new Date(Date.UTC(year, month - 1, 1)).toISOString(),
-    to: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString(),
-  };
-}
 
 function monthsBetween(a: { year: number; month: number }, b: { year: number; month: number }) {
   return (b.year - a.year) * 12 + (b.month - a.month);
@@ -117,7 +110,7 @@ export function EarningsTab({
   const fetchInvoices = useServerFn(listPractitionerInvoices);
   const target = self ? {} : { userId: subject.userId };
 
-  const range = useMemo(() => monthIsoRange(period.year, period.month), [period]);
+  const range = useMemo(() => monthWindowIso(period.year, period.month), [period]);
   const earnings = useQuery({
     queryKey: ["my-earnings", self ? "self" : subject.userId, range.from, range.to],
     queryFn: () => fetchEarnings({ data: { ...range, ...target } }),
@@ -128,7 +121,7 @@ export function EarningsTab({
     let start = period;
     for (let i = 0; i < 5; i++) start = previousMonth(start.year, start.month);
     return {
-      from: monthIsoRange(start.year, start.month).from,
+      from: monthWindowIso(start.year, start.month).from,
       to: range.to,
     };
   }, [period, range.to]);
@@ -327,7 +320,7 @@ export function EarningsTab({
             {picked ? (
               <>
                 <p className="text-[13px] text-muted-foreground">{shortDay(picked.key, true)}</p>
-                <p className="text-xl font-semibold text-foreground" data-qc="metric:earnings.day">
+                <p className="text-xl font-semibold text-foreground" data-qc="earnings-day-value">
                   {money(picked.earned)}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -342,50 +335,61 @@ export function EarningsTab({
             )}
           </div>
         </div>
-        <div
-          className="flex h-[190px] items-end gap-1.5 border-b border-edge-2 pb-1"
-          role="img"
-          aria-label={`Daily earnings for ${monthName}`}
-        >
-          {days.map((d) => {
-            if (d.key > todayKey) {
-              return (
-                <div
-                  key={d.key}
-                  className="h-[70px] min-w-0 flex-1 rounded-t-lg rounded-b border-2 border-dashed border-edge-2"
-                  aria-hidden
-                />
-              );
-            }
-            if (d.earned <= 0) {
-              return (
-                <div key={d.key} className="h-1 min-w-0 flex-1 rounded bg-glass-2" aria-hidden />
-              );
-            }
-            const on = picked?.key === d.key;
-            return (
-              <button
-                key={d.key}
-                type="button"
-                aria-label={`${shortDay(d.key, true)}, ${money(d.earned)}`}
-                aria-pressed={on}
-                onClick={() => setSelectedDay(d.key)}
-                className={cn(
-                  "min-w-0 flex-1 cursor-pointer rounded-t-lg rounded-b transition-colors",
-                  on ? "bg-accent" : "bg-foreground hover:bg-foreground/85",
-                )}
-                style={{ height: `${Math.max(6, Math.round((d.earned / maxEarned) * 170))}px` }}
-                data-qc="earnings-bar"
-              />
-            );
-          })}
-        </div>
-        <div className="flex justify-between text-xs text-muted-foreground" aria-hidden>
-          <span>1</span>
-          <span>8</span>
-          <span>15</span>
-          <span>22</span>
-          <span>{lastDay}</span>
+        {/* Each day is a full-height column (a comfortable tap target); the strip scrolls sideways on phones. */}
+        <div className="scroll-x-plain -mx-1 px-1">
+          <div className="min-w-[900px]">
+            <div
+              className="flex h-[190px] items-end gap-1.5 border-b border-edge-2 pb-1"
+              role="group"
+              aria-label={`Daily earnings for ${monthName}`}
+            >
+              {days.map((d) => {
+                if (d.key > todayKey) {
+                  return (
+                    <div key={d.key} className="flex h-full min-w-0 flex-1 items-end" aria-hidden>
+                      <div className="h-[70px] w-full rounded-t-lg rounded-b border-2 border-dashed border-edge-2" />
+                    </div>
+                  );
+                }
+                if (d.earned <= 0) {
+                  return (
+                    <div key={d.key} className="flex h-full min-w-0 flex-1 items-end" aria-hidden>
+                      <div className="h-1 w-full rounded bg-glass-2" />
+                    </div>
+                  );
+                }
+                const on = picked?.key === d.key;
+                return (
+                  <button
+                    key={d.key}
+                    type="button"
+                    aria-label={`${shortDay(d.key, true)}, ${money(d.earned)}`}
+                    aria-pressed={on}
+                    onClick={() => setSelectedDay(d.key)}
+                    className="group flex h-full min-w-0 flex-1 cursor-pointer items-end"
+                    data-qc="earnings-bar"
+                  >
+                    <span
+                      className={cn(
+                        "block w-full rounded-t-lg rounded-b transition-colors",
+                        on ? "bg-accent" : "bg-foreground group-hover:bg-foreground/85",
+                      )}
+                      style={{
+                        height: `${Math.max(6, Math.round((d.earned / maxEarned) * 170))}px`,
+                      }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground" aria-hidden>
+              <span>1</span>
+              <span>8</span>
+              <span>15</span>
+              <span>22</span>
+              <span>{lastDay}</span>
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -436,7 +440,7 @@ export function EarningsTab({
                   scope="col"
                   className="px-3 py-3 text-right text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground"
                 >
-                  Earned
+                  Share
                 </th>
                 <th
                   scope="col"
@@ -486,7 +490,7 @@ export function EarningsTab({
                 <td className="px-3 py-3 text-right font-bold tabular-nums">{treatmentsTotal}</td>
                 <td
                   className="px-3 py-3 text-right font-bold tabular-nums"
-                  data-qc="metric:earnings.table.total"
+                  data-qc="earnings-table-total"
                 >
                   {money(earnedTotal)}
                 </td>
@@ -501,23 +505,19 @@ export function EarningsTab({
         <SmallTile
           label="Patients seen"
           value={String(data?.patients ?? 0)}
-          qc="metric:earnings.patients"
+          qc="earnings-patients"
         />
         <SmallTile
           label="New patients"
           value={String(data?.newPatients ?? 0)}
-          qc="metric:earnings.newPatients"
+          qc="earnings-new-patients"
         />
         <SmallTile
           label="Attendance"
           value={`${data?.attendance ?? 0}%`}
-          qc="metric:earnings.attendance"
+          qc="earnings-attendance"
         />
-        <SmallTile
-          label="Retention"
-          value={`${data?.retention ?? 0}%`}
-          qc="metric:earnings.retention"
-        />
+        <SmallTile label="Retention" value={`${data?.retention ?? 0}%`} qc="earnings-retention" />
       </div>
     </div>
   );

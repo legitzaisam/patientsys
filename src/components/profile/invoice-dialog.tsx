@@ -16,6 +16,7 @@ import {
   initialsOf,
   invoiceNumber,
   invoicePeriod,
+  monthWindowIso,
   nextInvoiceSendDate,
   previousMonth,
   yearMonthOf,
@@ -34,13 +35,6 @@ type Stage = "form" | "scheduled" | "sent";
 
 function moneyExact(n: number): string {
   return `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function monthIsoRange(year: number, month: number): { from: string; to: string } {
-  return {
-    from: new Date(Date.UTC(year, month - 1, 1)).toISOString(),
-    to: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString(),
-  };
 }
 
 /**
@@ -99,7 +93,7 @@ export function InvoiceDialog({
     queryFn: () => fetchInvoices({ data: {} }),
     enabled: open,
   });
-  const range = useMemo(() => monthIsoRange(period.year, period.month), [period]);
+  const range = useMemo(() => monthWindowIso(period.year, period.month), [period]);
   const earnings = useQuery({
     queryKey: ["my-earnings", "self", range.from, range.to],
     queryFn: () => fetchEarnings({ data: range }),

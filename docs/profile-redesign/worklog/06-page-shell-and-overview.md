@@ -64,3 +64,5 @@ Captures for this phase: [`captures/p6-overview/`](../captures/p6-overview/) —
 Files: `src/components/profile/{profile-types.ts, profile-helpers.ts, staff-profile-page.tsx, profile-hero.tsx, profile-tabs.tsx, personal-details-card.tsx, registration-insurance-card.tsx, qualifications-card.tsx, overview-side-cards.tsx}` (new), `src/routes/_authenticated/profile.tsx`, `src/routes/_authenticated/team.$id.tsx`, `src/components/staff-files.tsx`, `e2e/profile-governance.spec.ts`, captures under `docs/profile-redesign/captures/p6-overview/`.
 
 Left for later phases: earnings tab (P7), schedule tab and the time-off sheet (P8), documents tab polish, Security/Access placement, the dedicated front-desk layout and retiring `profile-account-tabs.tsx` / `staff-record-tabs.tsx` (P9), spec updates (P10).
+
+> Revised in P10: the Documents summary count is now `data-qc="documents-count"` (a file count, not a metrics-snapshot figure); the Month-so-far range comes from `monthWindowIso` (clinic-time month bounds) so it equals the metrics snapshot's `period=month` window.

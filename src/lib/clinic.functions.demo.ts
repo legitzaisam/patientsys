@@ -52,6 +52,7 @@ import {
   invoiceNumber,
   invoicePeriod,
   minutesOf,
+  monthWindowIso,
   nextInvoiceSendDate,
   parseDayKey,
   patternSummary,
@@ -5297,8 +5298,8 @@ export const listPractitionerInvoices = createServerFn({ method: "GET" })
 
 async function demoMonthShare(userId: string, period: { start: string; end: string }) {
   const { earningsLines } = await import("./earnings.server");
-  const from = new Date(`${period.start}T00:00:00.000Z`).toISOString();
-  const to = new Date(`${period.end}T23:59:59.999Z`).toISOString();
+  const start = parseDayKey(period.start);
+  const { from, to } = monthWindowIso(start.year, start.month);
   const inputs = await earningsInputs(from, to);
   const rate = Number(profiles.find((p) => p.id === userId)?.commission_rate ?? 0);
   const mine = inputs.treatments.filter((t) => t.practitioner_id === userId);

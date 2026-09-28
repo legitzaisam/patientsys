@@ -192,6 +192,8 @@ Routing conventions (layouts, `$id` params, `<Outlet />`) are documented in [`sr
 
 Staff roles live in `user_roles`: **owner** (manager), **practitioner**, **front_desk**. Patients have no staff role and land on `/my-record`. Extra capabilities (reports, team, settings) are granted in Settings → access control.
 
+Two keys are manager-only and are switched by the owner under Team → Staff access: **Edit staff profiles** (`team.manage_profiles`) lets a manager open a colleague's full profile — details, working pattern, bookable treatments, time-off approval — and **Set staff commission** (`team.commission`) adds the commission rate and the colleague's Performance & earnings. Without the first key a manager sees the same Front desk layout of a colleague as everyone else (name, what they can be booked for, hours and unavailability). The owner and the software admin always see the full profile; see `docs/profile-redesign/README.md`.
+
 ## Scripts (repo root)
 
 | Script | Purpose |

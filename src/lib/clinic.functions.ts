@@ -21,6 +21,7 @@ import {
   invoiceNumber,
   invoicePeriod,
   minutesOf,
+  monthWindowIso,
   nextInvoiceSendDate,
   parseDayKey,
   patternSummary,
@@ -7189,8 +7190,8 @@ async function practitionerMonthShare(
     supabaseAdmin.from("profiles").select("commission_rate").eq("id", userId).maybeSingle(),
     earningsSource(supabaseAdmin, clinicIdOf(ctx)),
   ]);
-  const from = new Date(`${period.start}T00:00:00.000Z`).toISOString();
-  const to = new Date(`${period.end}T23:59:59.999Z`).toISOString();
+  const start = parseDayKey(period.start);
+  const { from, to } = monthWindowIso(start.year, start.month);
   const inputs = earningsInputs({ ...source, from, to });
   const rate = Number(profile?.commission_rate ?? 0);
   const mine = inputs.treatments.filter((t) => t.practitioner_id === userId);

@@ -262,7 +262,7 @@ export function WorkingPatternCard({
           })}
           <p
             className="mt-2.5 text-right text-sm text-muted-foreground"
-            data-qc="metric:schedule.weeklyHours"
+            data-qc="pattern-weekly-hours"
           >
             {hours} hours a week
           </p>

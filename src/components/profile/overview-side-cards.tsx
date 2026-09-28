@@ -195,7 +195,7 @@ export function DocumentsSummaryCard({
     <Card className="flex flex-col gap-2.5 p-6" data-qc="documents-summary">
       <div className="flex items-center justify-between gap-2">
         <h2 className="section-title">Documents</h2>
-        <span className="text-sm font-semibold text-foreground" data-qc="metric:documents.onFile">
+        <span className="text-sm font-semibold text-foreground" data-qc="documents-count">
           {done} of {total}
         </span>
       </div>

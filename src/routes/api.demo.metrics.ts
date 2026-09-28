@@ -7,7 +7,7 @@ import { DEMO_MODE } from "@/lib/demo/enabled";
  * 12 calendar months ending this month). `e2e/metrics/rendered.spec.ts` compares every `data-qc="metric:*"`
  * number on the pages to this. Not registered outside demo mode.
  *
- *   GET /api/demo/metrics?practitioner=<userId>&patient=<patientId>|patientUser=<userId>
+ *   GET /api/demo/metrics?practitioner=<userId>&patient=<patientId>|patientUser=<userId>&period=month
  */
 export const Route = createFileRoute("/api/demo/metrics")({
   server: {
@@ -28,9 +28,15 @@ export const Route = createFileRoute("/api/demo/metrics")({
             (db.patients.find((p) => p["user_id"] === patientUser)?.["id"] as string | undefined) ??
             null;
         }
+        // `period=month` narrows the money window to this calendar month (the
+        // profile's Performance & earnings tab); the default stays the 12 months.
+        const period =
+          url.searchParams.get("period") === "month"
+            ? { key: "month" as const, offset: 0 }
+            : DEFAULT_PERIOD;
         const { dueStates: _states, ...snapshot } = metricsSnapshot(demoSnapshotRows(), {
           nowMs,
-          window: resolvePeriod(DEFAULT_PERIOD, nowMs),
+          window: resolvePeriod(period, nowMs),
           practitionerId: url.searchParams.get("practitioner"),
           patientId,
         });
