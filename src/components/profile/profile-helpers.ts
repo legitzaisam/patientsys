@@ -4,6 +4,7 @@ import { getStaffSchedule } from "@/lib/clinic.functions";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import { CLINIC_TIME_ZONE } from "@/lib/metrics/period";
 import { MONTHS_SHORT, monthWindowIso, parseDayKey } from "@/lib/staff-schedule";
+import type { InvoiceDocument } from "@/lib/invoice-document";
 import type {
   EarningsLine,
   InvoiceRowLike,
@@ -243,4 +244,23 @@ export function isPrescriber(subject: Pick<ProfileSubject, "registrationBody" | 
     return /prescriber|v300/i.test(subject.qualifications ?? "");
   }
   return false;
+}
+
+/**
+ * Prints only the invoice: the sheet is portalled onto <body> and shown under
+ * `@media print` while `body[data-printing="invoice"]` hides everything else.
+ */
+export function printInvoice(doc: InvoiceDocument) {
+  if (typeof document === "undefined") return;
+  const previousTitle = document.title;
+  document.title = doc.number;
+  document.body.dataset["printing"] = "invoice";
+  const restore = () => {
+    delete document.body.dataset["printing"];
+    document.title = previousTitle;
+    window.removeEventListener("afterprint", restore);
+  };
+  window.addEventListener("afterprint", restore);
+  // The dialog's own print listener runs after the browser has laid the sheet out.
+  window.setTimeout(() => window.print(), 50);
 }

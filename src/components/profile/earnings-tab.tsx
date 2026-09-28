@@ -307,6 +307,25 @@ export function EarningsTab({
         />
       </div>
 
+      <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4" data-qc="earnings-tiles">
+        <SmallTile
+          label="Patients seen"
+          value={String(data?.patients ?? 0)}
+          qc="earnings-patients"
+        />
+        <SmallTile
+          label="New patients"
+          value={String(data?.newPatients ?? 0)}
+          qc="earnings-new-patients"
+        />
+        <SmallTile
+          label="Attendance"
+          value={`${data?.attendance ?? 0}%`}
+          qc="earnings-attendance"
+        />
+        <SmallTile label="Retention" value={`${data?.retention ?? 0}%`} qc="earnings-retention" />
+      </div>
+
       <Card className="flex flex-col gap-4 p-6" data-qc="earnings-daily">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -500,25 +519,6 @@ export function EarningsTab({
           </table>
         </div>
       </Card>
-
-      <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
-        <SmallTile
-          label="Patients seen"
-          value={String(data?.patients ?? 0)}
-          qc="earnings-patients"
-        />
-        <SmallTile
-          label="New patients"
-          value={String(data?.newPatients ?? 0)}
-          qc="earnings-new-patients"
-        />
-        <SmallTile
-          label="Attendance"
-          value={`${data?.attendance ?? 0}%`}
-          qc="earnings-attendance"
-        />
-        <SmallTile label="Retention" value={`${data?.retention ?? 0}%`} qc="earnings-retention" />
-      </div>
     </div>
   );
 }

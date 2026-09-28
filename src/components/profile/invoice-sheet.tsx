@@ -1,0 +1,136 @@
+import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
+import { invoiceDate, invoiceMoney, type InvoiceDocument } from "@/lib/invoice-document";
+import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/brand-mark";
+
+/**
+ * The invoice document as the dialog's preview and as the sheet that prints.
+ * One component, so the two can never disagree.
+ */
+export function InvoiceSheet({ doc, className }: { doc: InvoiceDocument; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-6 rounded-lg bg-card p-8 text-sm text-foreground shadow-card",
+        className,
+      )}
+      data-qc="invoice-preview"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <BrandMark />
+            <span className="text-[26px] font-bold tracking-[0.12em] text-foreground">INVOICE</span>
+          </div>
+          <p className="mt-2 font-mono text-[13px] text-muted-foreground" data-qc="invoice-number">
+            {doc.number}
+          </p>
+        </div>
+        <div className="text-right text-[13px] leading-7 text-muted-foreground">
+          <p>
+            Issued{" "}
+            <strong className="font-semibold text-foreground" data-qc="invoice-issued">
+              {invoiceDate(doc.issuedOn)}
+            </strong>
+          </p>
+          <p>
+            Due{" "}
+            <strong className="font-semibold text-foreground" data-qc="invoice-due">
+              {invoiceDate(doc.dueOn)}
+            </strong>
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-5 leading-relaxed">
+        <div>
+          <p className="mb-1 text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            From
+          </p>
+          <p className="font-semibold text-foreground" data-qc="invoice-from">
+            {doc.from.name}
+          </p>
+          {doc.from.line1 ? <p className="text-muted-foreground">{doc.from.line1}</p> : null}
+          {doc.from.line2 ? <p className="text-muted-foreground">{doc.from.line2}</p> : null}
+        </div>
+        <div>
+          <p className="mb-1 text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            Bill to
+          </p>
+          <p className="font-semibold text-foreground">{doc.billTo.name}</p>
+          {doc.billTo.line1 ? <p className="text-muted-foreground">{doc.billTo.line1}</p> : null}
+          {doc.billTo.line2 ? <p className="text-muted-foreground">{doc.billTo.line2}</p> : null}
+        </div>
+      </div>
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b-2 border-foreground text-left">
+            <th scope="col" className="py-2 text-2xs uppercase tracking-[0.06em]">
+              Description
+            </th>
+            <th scope="col" className="py-2 text-right text-2xs uppercase tracking-[0.06em]">
+              Qty
+            </th>
+            <th scope="col" className="py-2 text-right text-2xs uppercase tracking-[0.06em]">
+              Amount
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-b border-edge-2">
+            <td className="py-3">
+              <p className="font-semibold text-foreground">
+                Treatments delivered, practitioner share
+              </p>
+              <p className="text-[13px] text-muted-foreground">{doc.periodLabel}</p>
+            </td>
+            <td className="py-3 text-right tabular-nums" data-qc="invoice-qty">
+              {doc.qty}
+            </td>
+            <td className="py-3 text-right tabular-nums" data-qc="invoice-amount">
+              {invoiceMoney(doc.amount)}
+            </td>
+          </tr>
+          <tr className="border-b border-edge-2">
+            <td className="py-3">
+              <p className="font-semibold text-foreground">Adjustments</p>
+              <p className="text-[13px] text-muted-foreground">Refunds, product charges</p>
+            </td>
+            <td className="py-3 text-right">—</td>
+            <td className="py-3 text-right">£0.00</td>
+          </tr>
+        </tbody>
+      </table>
+      <div className="flex justify-end">
+        <div className="flex w-[260px] items-baseline justify-between">
+          <span className="font-semibold text-foreground">Total due</span>
+          <span className="text-2xl font-bold text-foreground" data-qc="invoice-total">
+            {invoiceMoney(doc.amount)}
+          </span>
+        </div>
+      </div>
+      {doc.note ? (
+        <p className="rounded-xl bg-glass-2 px-3.5 py-3 text-[13px] text-foreground shadow-inset-hi">
+          <strong>Note</strong> · {doc.note}
+        </p>
+      ) : null}
+      <div className="flex-1" />
+      <p className="border-t border-edge-2 pt-3 text-xs text-muted-foreground">
+        Generated by SQINOS from completed treatments in the diary.
+      </p>
+    </div>
+  );
+}
+
+/** The body-level print sheet; renders nothing on screen. */
+export function InvoicePrintSheet({ doc }: { doc: InvoiceDocument | null }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted || !doc) return null;
+  return createPortal(
+    <div data-print-sheet="" className="hidden print:block" aria-hidden>
+      <InvoiceSheet doc={doc} className="shadow-none" />
+    </div>,
+    document.body,
+  );
+}

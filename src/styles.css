@@ -1230,3 +1230,27 @@ input:-webkit-autofill {
     background-attachment: local, local, scroll, scroll;
   }
 }
+
+/*
+ * Printing an invoice from the profile: `printInvoice()` sets
+ * body[data-printing="invoice"], portals the sheet onto <body> and calls
+ * window.print(). Only the sheet prints, on A4, with the invoice number as
+ * the document title (so Save as PDF names the file).
+ */
+@media print {
+  body[data-printing="invoice"] > :not([data-print-sheet]) {
+    display: none !important;
+  }
+  body[data-printing="invoice"] [data-print-sheet] {
+    display: block !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body[data-printing="invoice"] {
+    background: #fff !important;
+  }
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+}

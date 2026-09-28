@@ -12,7 +12,6 @@ import {
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import {
   MONTHS_LONG,
-  addDays,
   initialsOf,
   invoiceNumber,
   invoicePeriod,
@@ -22,20 +21,17 @@ import {
   yearMonthOf,
 } from "@/lib/staff-schedule";
 import { cn } from "@/lib/utils";
-import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { shortDate } from "./profile-helpers";
+import { buildInvoiceDocument } from "@/lib/invoice-document";
+import { InvoicePrintSheet, InvoiceSheet } from "./invoice-sheet";
+import { printInvoice, shortDate } from "./profile-helpers";
 import type { InvoiceRowLike, ProfileSubject } from "./profile-types";
 
 type Recipient = "payroll" | "owner";
 type Stage = "form" | "scheduled" | "sent";
-
-function moneyExact(n: number): string {
-  return `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 /**
  * Create & send invoice: the current month (schedule for the 1st, or send now)
@@ -114,13 +110,50 @@ export function InvoiceDialog({
   const number =
     existing?.number ?? invoiceNumber(initialsOf(subject.fullName), period.year, period.month);
   const issued = existing?.sent_at?.slice(0, 10) ?? (inProgress ? sendDate : todayKey);
-  const due = addDays(issued, 14);
 
   const clinicName = (clinic.data?.name as string | undefined) ?? "Your clinic";
   const clinicEmail = (clinic.data?.email as string | null | undefined) ?? null;
   const recipientName = recipient === "payroll" ? "Payroll team" : "Clinic owner";
   const recipientLine =
     recipient === "payroll" ? (clinicEmail ?? "Clinic email not set") : "Clinic owner";
+
+  const doc = useMemo(
+    () =>
+      buildInvoiceDocument({
+        number,
+        issuedOn: issued,
+        year: period.year,
+        month: period.month,
+        from: { name: subject.fullName, line1: subject.jobTitle, line2: subject.email },
+        billTo: { name: clinicName, line1: recipientName, line2: recipientLine },
+        qty,
+        amount,
+        note: alreadySent ? (existing.note ?? null) : note.trim() || null,
+        status: alreadySent
+          ? (existing.status as "sent" | "paid")
+          : scheduled
+            ? "scheduled"
+            : "draft",
+      }),
+    [
+      number,
+      issued,
+      period.year,
+      period.month,
+      subject.fullName,
+      subject.jobTitle,
+      subject.email,
+      clinicName,
+      recipientName,
+      recipientLine,
+      qty,
+      amount,
+      existing,
+      note,
+      alreadySent,
+      scheduled,
+    ],
+  );
 
   const submit = useMutation({
     mutationFn: (mode: "send" | "schedule") =>
@@ -153,6 +186,7 @@ export function InvoiceDialog({
   return (
     <>
       {leaveGuard}
+      <InvoicePrintSheet doc={open ? doc : null} />
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className="max-h-[calc(100dvh-2rem)] max-w-[1000px] gap-0 overflow-y-auto p-0 md:grid-cols-[380px_minmax(0,1fr)]"
@@ -308,7 +342,7 @@ export function InvoiceDialog({
                     type="button"
                     variant="outline"
                     className="h-12 w-full"
-                    onClick={() => window.print()}
+                    onClick={() => printInvoice(doc)}
                     data-qc="invoice-download"
                   >
                     Download PDF
@@ -341,7 +375,7 @@ export function InvoiceDialog({
                         type="button"
                         variant="outline"
                         className="h-11"
-                        onClick={() => window.print()}
+                        onClick={() => printInvoice(doc)}
                         data-qc="invoice-download"
                       >
                         Download PDF
@@ -363,7 +397,7 @@ export function InvoiceDialog({
                       type="button"
                       variant="outline"
                       className="h-12"
-                      onClick={() => window.print()}
+                      onClick={() => printInvoice(doc)}
                       data-qc="invoice-download"
                     >
                       Download PDF
@@ -400,118 +434,7 @@ export function InvoiceDialog({
             <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               Preview
             </p>
-            <div
-              className="flex flex-1 flex-col gap-6 rounded-lg bg-card p-8 shadow-card"
-              data-qc="invoice-preview"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2.5">
-                    <BrandMark />
-                    <span className="text-[26px] font-bold tracking-[0.12em] text-foreground">
-                      INVOICE
-                    </span>
-                  </div>
-                  <p
-                    className="mt-2 font-mono text-[13px] text-muted-foreground"
-                    data-qc="invoice-number"
-                  >
-                    {number}
-                  </p>
-                </div>
-                <div className="text-right text-[13px] leading-7 text-muted-foreground">
-                  <p>
-                    Issued{" "}
-                    <strong className="font-semibold text-foreground">
-                      {shortDate(issued, true)}
-                    </strong>
-                  </p>
-                  <p>
-                    Due{" "}
-                    <strong className="font-semibold text-foreground">
-                      {shortDate(due, true)}
-                    </strong>
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-5 text-sm leading-relaxed">
-                <div>
-                  <p className="mb-1 text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    From
-                  </p>
-                  <p className="font-semibold text-foreground">{subject.fullName}</p>
-                  <p className="text-muted-foreground">{subject.jobTitle}</p>
-                  <p className="text-muted-foreground">{subject.email}</p>
-                </div>
-                <div>
-                  <p className="mb-1 text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    Bill to
-                  </p>
-                  <p className="font-semibold text-foreground">{clinicName}</p>
-                  <p className="text-muted-foreground">{recipientName}</p>
-                  <p className="text-muted-foreground">{recipientLine}</p>
-                </div>
-              </div>
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b-2 border-foreground text-left">
-                    <th scope="col" className="py-2 text-2xs uppercase tracking-[0.06em]">
-                      Description
-                    </th>
-                    <th
-                      scope="col"
-                      className="py-2 text-right text-2xs uppercase tracking-[0.06em]"
-                    >
-                      Qty
-                    </th>
-                    <th
-                      scope="col"
-                      className="py-2 text-right text-2xs uppercase tracking-[0.06em]"
-                    >
-                      Amount
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-edge-2">
-                    <td className="py-3">
-                      <p className="font-semibold text-foreground">
-                        Treatments delivered, practitioner share
-                      </p>
-                      <p className="text-[13px] text-muted-foreground">
-                        1–{Number(bounds.end.slice(8, 10))} {monthName} {period.year}
-                      </p>
-                    </td>
-                    <td className="py-3 text-right tabular-nums" data-qc="invoice-qty">
-                      {qty}
-                    </td>
-                    <td className="py-3 text-right tabular-nums" data-qc="invoice-amount">
-                      {moneyExact(amount)}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-edge-2">
-                    <td className="py-3">
-                      <p className="font-semibold text-foreground">Adjustments</p>
-                      <p className="text-[13px] text-muted-foreground">Refunds, product charges</p>
-                    </td>
-                    <td className="py-3 text-right">—</td>
-                    <td className="py-3 text-right">£0.00</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div className="flex justify-end">
-                <div className="flex w-[260px] items-baseline justify-between">
-                  <span className="font-semibold text-foreground">Total due</span>
-                  <span className="text-2xl font-bold text-foreground" data-qc="invoice-total">
-                    {moneyExact(amount)}
-                  </span>
-                </div>
-              </div>
-              <div className="flex-1" />
-              <p className="border-t border-edge-2 pt-3 text-xs text-muted-foreground">
-                Generated by SQINOS from completed treatments in the diary.
-              </p>
-            </div>
+            <InvoiceSheet doc={doc} className="flex-1" />
           </div>
         </DialogContent>
       </Dialog>
