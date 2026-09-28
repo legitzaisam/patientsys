@@ -4,7 +4,8 @@
  * `deliverScheduledInvoices` from their outbox drain with their own store.
  */
 import { sendEmail } from "@/lib/comms/email.server";
-import { MONTHS_LONG, parseDayKey } from "@/lib/staff-schedule";
+import { buildInvoiceDocument, invoiceDocumentHtml } from "@/lib/invoice-document";
+import { MONTHS_LONG, dayKeyOf, parseDayKey } from "@/lib/staff-schedule";
 
 export type InvoiceRow = {
   id: string;
@@ -87,7 +88,26 @@ export async function sendInvoiceNow(
   let emailed = false;
   if (to) {
     const mail = invoiceEmail(inv, from, store.clinicName);
-    const result = await sendEmail({ to, subject: mail.subject, body: mail.body });
+    const { year, month } = parseDayKey(inv.period_start);
+    const html = invoiceDocumentHtml(
+      buildInvoiceDocument({
+        number: inv.number,
+        issuedOn: dayKeyOf(now),
+        year,
+        month,
+        from: { name: from.name, line1: from.jobTitle ?? null, line2: from.email },
+        billTo: {
+          name: store.clinicName,
+          line1: inv.recipient === "owner" ? "Clinic owner" : "Payroll team",
+          line2: to,
+        },
+        qty: inv.treatments,
+        amount: inv.amount,
+        note: inv.note ?? null,
+        status: "sent",
+      }),
+    );
+    const result = await sendEmail({ to, subject: mail.subject, body: mail.body, html });
     emailed = result.ok;
     if (!result.ok) console.error(`[invoices] email for ${inv.number} failed: ${result.error}`);
   }

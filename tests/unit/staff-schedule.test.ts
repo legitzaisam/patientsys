@@ -15,8 +15,12 @@ import {
   monthGrid,
   nextDays,
   nextInvoiceSendDate,
+  patternChangeSummary,
+  patternChanges,
+  patternRowsFromJson,
   patternSummary,
   previousMonth,
+  samePattern,
   rowLabel,
   shortDay,
   timeOffLabel,
@@ -291,5 +295,41 @@ describe("earnings grouping", () => {
     expect(days).toHaveLength(30);
     expect(days[25]).toMatchObject({ day: 26, earned: 410, treatments: 2, outstanding: 300 });
     expect(days[0]).toMatchObject({ day: 1, earned: 0, treatments: 0 });
+  });
+});
+
+describe("pattern change summary", () => {
+  const current: PatternRow[] = [
+    { weekday: 0, start: "10:00", end: "19:00" },
+    { weekday: 2, start: null, end: null },
+    { weekday: 5, start: "09:00", end: "14:00" },
+  ];
+  const proposed: PatternRow[] = [
+    { weekday: 0, start: "10:00", end: "19:00" },
+    { weekday: 2, start: "10:00", end: "18:00" },
+    { weekday: 5, start: null, end: null },
+  ];
+  it("lists only the days that differ, Monday-first", () => {
+    expect(patternChanges(current, proposed)).toEqual([
+      { weekday: 2, from: "Off", to: "10:00–18:00" },
+      { weekday: 5, from: "09:00–14:00", to: "Off" },
+    ]);
+    expect(patternChangeSummary(current, proposed)).toBe(
+      "Wed 10:00–18:00 (was Off) · Sat Off (was 09:00–14:00)",
+    );
+    expect(patternChangeSummary(current, current)).toBe("No change");
+    expect(samePattern(current, fullPattern(current))).toBe(true);
+    expect(samePattern(current, proposed)).toBe(false);
+  });
+  it("reads stored jsonb rows and treats malformed entries as days off", () => {
+    const rows = patternRowsFromJson([
+      { weekday: 0, start: "09:00", end: "17:00" },
+      { weekday: 1, start: 9, end: null },
+      "junk",
+    ]);
+    expect(rows).toHaveLength(7);
+    expect(rows[0]).toEqual({ weekday: 0, start: "09:00", end: "17:00" });
+    expect(rows[1]).toEqual({ weekday: 1, start: null, end: null });
+    expect(patternRowsFromJson(null)).toHaveLength(7);
   });
 });

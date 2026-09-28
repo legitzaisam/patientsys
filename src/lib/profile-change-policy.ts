@@ -146,3 +146,70 @@ export function profileChangeAttentionItems(
       href: "/team#profile-change-requests",
     }));
 }
+
+/* ---------------------------------------------------------------- staff requests to approve */
+
+type StaffRequestPatternRow = {
+  id: string;
+  user_id: string;
+  status?: string | null;
+  requires_owner?: boolean | null;
+  /** Ready-made "Wed 10:00–18:00 (was Off)" line, built by the caller from the two patterns. */
+  summary: string;
+};
+
+type StaffRequestTimeOffRow = {
+  id: string;
+  user_id: string;
+  status?: string | null;
+  /** "Holiday · 4 working days" */
+  what: string;
+  /** "Mon 19 – Fri 23 Oct" */
+  when: string;
+};
+
+/**
+ * One Attention row per pending working-pattern or time-off request, for the
+ * people who can approve it. The viewer's own requests are left out, and a
+ * request a non-owner manager raised about themselves (requires_owner) is
+ * shown to the owner and admin only. Every row opens the colleague's
+ * Schedule tab, where Approve / Decline live.
+ */
+export function staffRequestAttentionItems(
+  input: {
+    patternRequests: StaffRequestPatternRow[];
+    timeOff: StaffRequestTimeOffRow[];
+    nameOf: (userId: string) => string;
+  },
+  viewer: { userId: string; isOwner?: boolean; isAdmin?: boolean },
+) {
+  const visible = (row: {
+    user_id: string;
+    status?: string | null;
+    requires_owner?: boolean | null;
+  }) => {
+    if (row.status && row.status !== "pending") return false;
+    if (row.user_id === viewer.userId) return false;
+    if (row.requires_owner && !viewer.isOwner && !viewer.isAdmin) return false;
+    return true;
+  };
+  const name = (userId: string) => input.nameOf(userId).trim() || "Team member";
+  return [
+    ...input.patternRequests.filter(visible).map((row) => ({
+      id: `pattern-request-${row.id}`,
+      kind: "staff_request",
+      urgency: "this_week" as const,
+      title: `${name(row.user_id)} — working pattern`,
+      subtitle: row.summary,
+      href: `/team/${row.user_id}?tab=schedule`,
+    })),
+    ...input.timeOff.filter(visible).map((row) => ({
+      id: `time-off-request-${row.id}`,
+      kind: "staff_request",
+      urgency: "this_week" as const,
+      title: `${name(row.user_id)} — time off`,
+      subtitle: `${row.what} · ${row.when}`,
+      href: `/team/${row.user_id}?tab=schedule`,
+    })),
+  ];
+}

@@ -444,20 +444,34 @@ export const GetStaffSchedule = z.object({
   year: z.number().int().min(2000).max(2100).optional(),
 });
 
+const patternRows = z
+  .array(
+    z.object({
+      weekday: z.number().int().min(0).max(6),
+      start: clockTime.nullable(),
+      end: clockTime.nullable(),
+    }),
+  )
+  .length(7);
+
 export const SetWorkingPattern = z.object({
   userId: id,
-  rows: z
-    .array(
-      z.object({
-        weekday: z.number().int().min(0).max(6),
-        start: clockTime.nullable(),
-        end: clockTime.nullable(),
-      }),
-    )
-    .length(7),
+  rows: patternRows,
 });
 
-export const RequestWorkingPatternChange = z.object({ note: requiredText(2_000) });
+/** Proposed hours (seven rows) and/or a note; the handler insists on at least one. */
+export const RequestWorkingPatternChange = z.object({
+  rows: patternRows.optional(),
+  note: optionalText(2_000),
+});
+
+export const WithdrawWorkingPatternChange = z.object({ id });
+
+export const ReviewWorkingPatternChange = z.object({
+  id,
+  approve: z.boolean(),
+  reviewerNote: optionalText(2_000),
+});
 
 export const RequestTimeOff = z.object({
   type: timeOffType,
@@ -496,6 +510,8 @@ export const SetBookableTreatments = z.object({
 export const ListPractitionerInvoices = z.object({ userId: optionalId });
 
 export const CreatePractitionerInvoice = z.object({
+  /** Another practitioner's invoice — needs Set staff commission. Defaults to the caller. */
+  userId: optionalId,
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12),
   recipient: z.enum(["payroll", "owner"]),

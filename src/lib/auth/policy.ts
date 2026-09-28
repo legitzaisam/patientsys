@@ -211,6 +211,8 @@ export const POLICY = {
   getStaffSchedule: { kind: "staff" },
   setWorkingPattern: { kind: "managerCapability", key: "team.manage_profiles" },
   requestWorkingPatternChange: { kind: "staff" },
+  withdrawWorkingPatternChange: { kind: "staff" },
+  reviewWorkingPatternChange: { kind: "managerCapability", key: "team.manage_profiles" },
   requestTimeOff: { kind: "staff" },
   withdrawTimeOff: { kind: "staff" },
   reviewTimeOff: { kind: "managerCapability", key: "team.manage_profiles" },

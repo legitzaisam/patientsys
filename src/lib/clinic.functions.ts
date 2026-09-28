@@ -24,7 +24,10 @@ import {
   monthWindowIso,
   nextInvoiceSendDate,
   parseDayKey,
+  patternChangeSummary,
+  patternRowsFromJson,
   patternSummary,
+  samePattern,
   timeOffLabel,
   timeOffTotals,
   timeOffWhat,
@@ -42,6 +45,7 @@ import {
   type InvoiceRow,
   type InvoiceStore,
 } from "@/lib/invoices.server";
+import { invoiceDate } from "@/lib/invoice-document";
 import {
   calendarMonthsWindow,
   dashboardKpis,
@@ -122,6 +126,7 @@ import {
   profileChangeApproverIds,
   profileChangeAttentionItems,
   profileChangeRequiresOwner,
+  staffRequestAttentionItems,
   profileChangeShowsReviewer,
 } from "@/lib/profile-change-policy";
 
@@ -784,6 +789,67 @@ export const getDashboard = createServerFn({ method: "GET" })
       for (const item of complianceReminders((staffRows ?? []) as any[], todayISO)) {
         attentionItems.push(item);
       }
+    }
+
+    if (canManageProfiles(identity)) {
+      const supabaseAdmin = await adminClient(context);
+      const [{ data: patternReqs }, { data: timeOffReqs }, { data: staffNames }] =
+        await Promise.all([
+          supabaseAdmin
+            .from("staff_pattern_requests")
+            .select("id, user_id, rows, requires_owner, status")
+            .eq("status", "pending"),
+          supabaseAdmin
+            .from("staff_time_off")
+            .select("id, user_id, type, starts_on, ends_on, working_days, status")
+            .eq("status", "pending"),
+          supabaseAdmin.from("profiles").select("id, full_name"),
+        ]);
+      const nameById = new Map(
+        ((staffNames ?? []) as { id: string; full_name: string | null }[]).map((p) => [
+          p.id,
+          p.full_name ?? "",
+        ]),
+      );
+      const currentPatterns = new Map<string, PatternRow[]>();
+      for (const r of (patternReqs ?? []) as { user_id: string }[]) {
+        if (!currentPatterns.has(r.user_id)) {
+          currentPatterns.set(r.user_id, await staffPatternRows(supabaseAdmin, r.user_id));
+        }
+      }
+      attentionItems.push(
+        ...staffRequestAttentionItems(
+          {
+            patternRequests: (
+              (patternReqs ?? []) as {
+                id: string;
+                user_id: string;
+                rows: unknown;
+                requires_owner: boolean | null;
+                status: string;
+              }[]
+            ).map((r) => ({
+              id: r.id,
+              user_id: r.user_id,
+              status: r.status,
+              requires_owner: Boolean(r.requires_owner),
+              summary: patternChangeSummary(
+                currentPatterns.get(r.user_id) ?? [],
+                patternRowsFromJson(r.rows),
+              ),
+            })),
+            timeOff: ((timeOffReqs ?? []) as TimeOffLike[]).map((r) => ({
+              id: r.id,
+              user_id: (r as TimeOffLike & { user_id: string }).user_id,
+              status: r.status,
+              what: timeOffWhat(r),
+              when: timeOffLabel(r),
+            })),
+            nameOf: (id) => nameById.get(id) ?? "",
+          },
+          { userId: identity.userId, isOwner: identity.isOwner, isAdmin: identity.isAdmin },
+        ),
+      );
     }
 
     if (canSeeProfileChangeAttention(identity)) {
@@ -6728,6 +6794,7 @@ async function staffPatternRows(
 async function profileManagerIds(
   supabaseAdmin: Awaited<ReturnType<typeof adminClient>>,
   exceptUserId: string,
+  opts: { ownersOnly?: boolean } = {},
 ): Promise<string[]> {
   const [{ data: roles }, { data: grant }] = await Promise.all([
     supabaseAdmin.from("user_roles").select("user_id, role"),
@@ -6738,7 +6805,7 @@ async function profileManagerIds(
       .eq("permission", "team.manage_profiles")
       .maybeSingle(),
   ]);
-  const managersHold = Boolean(grant?.enabled);
+  const managersHold = Boolean(grant?.enabled) && !opts.ownersOnly;
   const ids = new Set<string>();
   for (const r of roles ?? []) {
     if (r.role === "owner" || r.role === "admin" || (r.role === "manager" && managersHold)) {
@@ -6794,7 +6861,7 @@ export const getStaffSchedule = createServerFn({ method: "GET" })
     const todayKey = clinicDayKey();
     const year = data.year ?? parseDayKey(todayKey).year;
     const supabaseAdmin = await adminClient(context);
-    const [pattern, { data: rows }] = await Promise.all([
+    const [pattern, { data: rows }, { data: requestRow }] = await Promise.all([
       staffPatternRows(supabaseAdmin, target),
       supabaseAdmin
         .from("staff_time_off")
@@ -6803,8 +6870,30 @@ export const getStaffSchedule = createServerFn({ method: "GET" })
         .gte("ends_on", `${year}-01-01`)
         .lte("starts_on", `${year}-12-31`)
         .order("starts_on", { ascending: false }),
+      full
+        ? supabaseAdmin
+            .from("staff_pattern_requests")
+            .select("id, user_id, rows, note, requires_owner, status, requested_at, reviewer_note")
+            .eq("user_id", target)
+            .eq("status", "pending")
+            .order("requested_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
     const all = (rows ?? []) as TimeOffLike[];
+    const patternRequest = requestRow
+      ? {
+          id: requestRow.id as string,
+          user_id: requestRow.user_id as string,
+          rows: patternRowsFromJson(requestRow.rows),
+          note: (requestRow.note as string | null) ?? null,
+          requires_owner: Boolean(requestRow.requires_owner),
+          status: requestRow.status as string,
+          requested_at: (requestRow.requested_at as string | null) ?? null,
+          summary: patternChangeSummary(pattern, patternRowsFromJson(requestRow.rows)),
+        }
+      : null;
     const timeOff = full
       ? all
       : all
@@ -6816,13 +6905,73 @@ export const getStaffSchedule = createServerFn({ method: "GET" })
       todayKey,
       canManage: full,
       pattern,
+      patternRequest,
       timeOff,
       totals: full ? timeOffTotals(all, year, todayKey) : null,
       pendingCount: full ? all.filter((r) => r.status === "pending").length : 0,
     };
   });
 
-/** Owner or a manager with Edit staff profiles sets someone's weekly hours. */
+type PatternRowInput = { weekday: number; start: string | null; end: string | null };
+
+function assertPatternRows(rows: readonly PatternRowInput[]) {
+  for (const row of rows) {
+    if ((row.start && !row.end) || (!row.start && row.end)) {
+      throw new Error("Give both a start and an end time, or leave the day off.");
+    }
+    if (row.start && row.end && minutesOf(row.end) <= minutesOf(row.start)) {
+      throw new Error("The end time must be after the start time.");
+    }
+  }
+}
+
+/** Replace a person's seven pattern rows — the one write both the direct edit and an approval go through. */
+async function writeWorkingPattern(
+  ctx: Ctx,
+  supabaseAdmin: Awaited<ReturnType<typeof adminClient>>,
+  userId: string,
+  rows: readonly PatternRowInput[],
+) {
+  assertPatternRows(rows);
+  await supabaseAdmin.from("staff_working_patterns").delete().eq("user_id", userId);
+  const now = new Date().toISOString();
+  const { error } = await supabaseAdmin.from("staff_working_patterns").insert(
+    rows.map((row) => ({
+      clinic_id: clinicIdOf(ctx),
+      user_id: userId,
+      weekday: row.weekday,
+      start_time: row.start,
+      end_time: row.end,
+      updated_by: ctx.userId,
+      updated_at: now,
+    })),
+  );
+  if (error) throw new Error(error.message);
+}
+
+/** Any pending pattern request for the person is closed with the given status and note. */
+async function closePendingPatternRequests(
+  ctx: Ctx,
+  supabaseAdmin: Awaited<ReturnType<typeof adminClient>>,
+  userId: string,
+  status: "withdrawn" | "declined",
+  reviewerNote: string,
+) {
+  const now = new Date().toISOString();
+  await supabaseAdmin
+    .from("staff_pattern_requests")
+    .update({
+      status,
+      reviewed_by: ctx.userId,
+      reviewed_at: now,
+      reviewer_note: reviewerNote,
+      updated_at: now,
+    })
+    .eq("user_id", userId)
+    .eq("status", "pending");
+}
+
+/** Owner or a manager with Edit staff profiles sets someone's weekly hours. A pending request from that person is superseded. */
 export const setWorkingPattern = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -6834,51 +6983,177 @@ export const setWorkingPattern = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "setWorkingPattern");
-    for (const row of data.rows) {
-      if ((row.start && !row.end) || (!row.start && row.end)) {
-        throw new Error("Give both a start and an end time, or leave the day off.");
-      }
-      if (row.start && row.end && minutesOf(row.end) <= minutesOf(row.start)) {
-        throw new Error("The end time must be after the start time.");
-      }
-    }
     const supabaseAdmin = await adminClient(context);
-    await supabaseAdmin.from("staff_working_patterns").delete().eq("user_id", data.userId);
-    const now = new Date().toISOString();
-    const { error } = await supabaseAdmin.from("staff_working_patterns").insert(
-      data.rows.map((row) => ({
-        clinic_id: clinicIdOf(ctx),
-        user_id: data.userId,
-        weekday: row.weekday,
-        start_time: row.start,
-        end_time: row.end,
-        updated_by: ctx.userId,
-        updated_at: now,
-      })),
+    await writeWorkingPattern(ctx, supabaseAdmin, data.userId, data.rows);
+    await closePendingPatternRequests(
+      ctx,
+      supabaseAdmin,
+      data.userId,
+      "withdrawn",
+      "Superseded by a direct change",
     );
-    if (error) throw new Error(error.message);
     await audit(ctx, "staff.pattern_set", "staff_working_patterns", data.userId, null);
     return { ok: true };
   });
 
-/** A staff member asks for different hours; the owner and managers with Edit staff profiles hear about it. */
+/**
+ * A staff member proposes new hours (and/or explains what should change). The
+ * owner and the software admin apply their own straight away; everyone else's
+ * proposal waits as a pending request for the owner or a manager with Edit
+ * staff profiles — a non-owner manager's own goes to the owner only. A new
+ * request withdraws the person's previous pending one.
+ */
 export const requestWorkingPatternChange = createServerFn({ method: "POST" })
-  .validator((data: { note: string }) => parseInput(schemas.RequestWorkingPatternChange, data))
+  .validator(
+    (data: {
+      rows?: { weekday: number; start: string | null; end: string | null }[];
+      note?: string;
+    }) => parseInput(schemas.RequestWorkingPatternChange, data),
+  )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "requestWorkingPatternChange");
+    const identity = await authorize(ctx, "requestWorkingPatternChange");
+    const note = data.note?.trim() || null;
+    if (!data.rows && !note) throw new Error("Propose new hours or say what should change.");
     const supabaseAdmin = await adminClient(context);
-    const [recipients, name] = await Promise.all([
+    const [current, recipients, name] = await Promise.all([
+      staffPatternRows(supabaseAdmin, ctx.userId),
       profileManagerIds(supabaseAdmin, ctx.userId),
       staffDisplayName(supabaseAdmin, ctx.userId),
     ]);
+    if (data.rows) {
+      assertPatternRows(data.rows);
+      const proposed = fullPattern(data.rows as PatternRow[]);
+      if (samePattern(current, proposed)) throw new Error("Those are already your hours.");
+      if (identity.isOwner || identity.isAdmin) {
+        await writeWorkingPattern(ctx, supabaseAdmin, ctx.userId, proposed);
+        await audit(ctx, "staff.pattern_set", "staff_working_patterns", ctx.userId, null);
+        return { ok: true, applied: true, notified: 0 };
+      }
+      const requiresOwner = profileChangeRequiresOwner(identity);
+      await closePendingPatternRequests(
+        ctx,
+        supabaseAdmin,
+        ctx.userId,
+        "withdrawn",
+        "Replaced by a newer request",
+      );
+      const { data: inserted, error } = await supabaseAdmin
+        .from("staff_pattern_requests")
+        .insert({
+          clinic_id: clinicIdOf(ctx),
+          user_id: ctx.userId,
+          rows: proposed,
+          note,
+          requires_owner: requiresOwner,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      const approvers = requiresOwner
+        ? await profileManagerIds(supabaseAdmin, ctx.userId, { ownersOnly: true })
+        : recipients;
+      const summary = patternChangeSummary(current, proposed);
+      await notifyStaffMembers(ctx, approvers, {
+        kind: "pattern_change",
+        title: "Working pattern change request",
+        body: `${name} asked for new hours: ${summary}.${note ? ` "${note}"` : ""} Approve or decline it from their profile's Schedule tab.`,
+      });
+      await audit(
+        ctx,
+        "staff.pattern_requested",
+        "staff_pattern_requests",
+        inserted.id as string,
+        null,
+      );
+      return { ok: true, applied: false, id: inserted.id as string, notified: approvers.length };
+    }
     await notifyStaffMembers(ctx, recipients, {
       kind: "pattern_change",
       title: "Working pattern change request",
-      body: `${name} asked to change their working hours: "${data.note.trim()}". Open their profile's Schedule tab to update the pattern.`,
+      body: `${name} asked to change their working hours: "${note}". Open their profile's Schedule tab to update the pattern.`,
     });
-    return { ok: true, notified: recipients.length };
+    return { ok: true, applied: false, notified: recipients.length };
+  });
+
+/** Withdraw your own pending working-pattern request. */
+export const withdrawWorkingPatternChange = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.WithdrawWorkingPatternChange, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "withdrawWorkingPatternChange");
+    const supabaseAdmin = await adminClient(context);
+    const now = new Date().toISOString();
+    const { data: updated, error } = await supabaseAdmin
+      .from("staff_pattern_requests")
+      .update({ status: "withdrawn", updated_at: now })
+      .eq("id", data.id)
+      .eq("user_id", ctx.userId)
+      .eq("status", "pending")
+      .select("id");
+    if (error) throw new Error(error.message);
+    if (!updated || updated.length === 0)
+      throw new Error("Only your own pending requests can be withdrawn.");
+    return { ok: true };
+  });
+
+/** Approve (writes the seven rows) or decline a colleague's proposed hours; the requester is told. */
+export const reviewWorkingPatternChange = createServerFn({ method: "POST" })
+  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) =>
+    parseInput(schemas.ReviewWorkingPatternChange, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "reviewWorkingPatternChange");
+    const supabaseAdmin = await adminClient(context);
+    const { data: row } = await supabaseAdmin
+      .from("staff_pattern_requests")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (!row) throw new Error("Request not found");
+    if (row.status !== "pending") throw new Error("This request has already been decided.");
+    if (row.requires_owner && !identity.isOwner && !identity.isAdmin) {
+      throw new Error("Only the clinic owner can decide this request.");
+    }
+    if (row.user_id === ctx.userId) throw new Error("You cannot approve your own request.");
+    const proposed = patternRowsFromJson(row.rows);
+    const current = await staffPatternRows(supabaseAdmin, row.user_id as string);
+    const now = new Date().toISOString();
+    if (data.approve) {
+      await writeWorkingPattern(ctx, supabaseAdmin, row.user_id as string, proposed);
+    }
+    const { error } = await supabaseAdmin
+      .from("staff_pattern_requests")
+      .update({
+        status: data.approve ? "approved" : "declined",
+        reviewed_by: ctx.userId,
+        reviewed_at: now,
+        reviewer_note: data.reviewerNote?.trim() || null,
+        updated_at: now,
+      })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    const reviewer = await staffDisplayName(supabaseAdmin, ctx.userId);
+    const summary = patternChangeSummary(current, proposed);
+    await notifyStaffMembers(ctx, [row.user_id as string], {
+      kind: "pattern_reviewed",
+      title: data.approve ? "Working pattern approved" : "Working pattern declined",
+      body: `${reviewer} ${data.approve ? "approved" : "declined"} your new hours (${summary}).${data.reviewerNote?.trim() ? ` "${data.reviewerNote.trim()}"` : ""}`,
+    });
+    if (data.approve) {
+      await audit(ctx, "staff.pattern_set", "staff_working_patterns", row.user_id as string, null, {
+        via: "request",
+        requestId: data.id,
+      });
+    } else {
+      await audit(ctx, "staff.pattern_declined", "staff_pattern_requests", data.id, null);
+    }
+    return { ok: true };
   });
 
 async function timeOffRowFor(
@@ -7142,7 +7417,7 @@ async function invoiceStoreFor(ctx: Ctx): Promise<InvoiceStore> {
     async notifyOwners(inv, fromName) {
       const recipients = (ownerRoles ?? [])
         .map((r) => r.user_id as string)
-        .filter((id) => id !== inv.user_id);
+        .filter((id) => id !== inv.user_id && id !== ctx.userId);
       if (recipients.length === 0) return;
       await supabaseAdmin.from("staff_notifications").insert(
         recipients.map((recipient_id) => ({
@@ -7200,10 +7475,15 @@ async function practitionerMonthShare(
   return { amount, treatments: lines.length };
 }
 
-/** A practitioner creates their monthly invoice: send it now, or schedule it for the 1st of next month. */
+/**
+ * A practitioner creates their monthly invoice — send it now, or schedule it
+ * for the 1st of next month. The owner, the software admin or a manager with
+ * Set staff commission can raise it for a colleague; the practitioner is told.
+ */
 export const createPractitionerInvoice = createServerFn({ method: "POST" })
   .validator(
     (data: {
+      userId?: string;
       year: number;
       month: number;
       recipient: "payroll" | "owner";
@@ -7214,7 +7494,12 @@ export const createPractitionerInvoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "createPractitionerInvoice");
+    const identity = await authorize(ctx, "createPractitionerInvoice");
+    const target = data.userId || ctx.userId;
+    const onBehalf = target !== ctx.userId;
+    if (onBehalf && !canSetCommission(identity)) {
+      throw new Error("You do not have access to raise another person's invoice");
+    }
     const supabaseAdmin = await adminClient(context);
     const period = invoicePeriod(data.year, data.month);
     const todayKey = clinicDayKey();
@@ -7222,21 +7507,21 @@ export const createPractitionerInvoice = createServerFn({ method: "POST" })
     const { data: existing } = await supabaseAdmin
       .from("practitioner_invoices")
       .select("id, status")
-      .eq("user_id", ctx.userId)
+      .eq("user_id", target)
       .eq("period_start", period.start)
       .maybeSingle();
     if (existing && existing.status !== "scheduled") {
       throw new Error("An invoice for that month has already been sent.");
     }
     const [{ amount, treatments }, name] = await Promise.all([
-      practitionerMonthShare(ctx, ctx.userId, period),
-      staffDisplayName(supabaseAdmin, ctx.userId),
+      practitionerMonthShare(ctx, target, period),
+      staffDisplayName(supabaseAdmin, target),
     ]);
     const now = new Date();
     const sendAt = data.mode === "schedule" ? nextInvoiceSendDate(data.year, data.month) : null;
     const row = {
       clinic_id: clinicIdOf(ctx),
-      user_id: ctx.userId,
+      user_id: target,
       number: invoiceNumber(initialsOf(name), data.year, data.month),
       period_start: period.start,
       period_end: period.end,
@@ -7258,6 +7543,18 @@ export const createPractitionerInvoice = createServerFn({ method: "POST" })
       : await supabaseAdmin.from("practitioner_invoices").insert(row).select("*").single();
     if (saved.error) throw new Error(saved.error.message);
     const invoice = saved.data as InvoiceRow;
+    if (onBehalf) {
+      const creator = await staffDisplayName(supabaseAdmin, ctx.userId);
+      const where = data.recipient === "payroll" ? "payroll" : "the clinic owner";
+      await notifyStaffMembers(ctx, [target], {
+        kind: "invoice",
+        title: `Invoice ${invoice.number}`,
+        body:
+          data.mode === "send"
+            ? `${creator} raised your ${invoicePeriodLabel(invoice)} invoice · ${invoiceMoney(amount)} · sent to ${where}.`
+            : `${creator} scheduled your ${invoicePeriodLabel(invoice)} invoice · ${invoiceMoney(amount)} · to ${where} on ${invoiceDate(sendAt ?? todayKey)}.`,
+      });
+    }
     if (data.mode === "send") {
       const store = await invoiceStoreFor(ctx);
       await sendInvoiceNow(store, invoice, now);

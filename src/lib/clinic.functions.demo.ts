@@ -55,7 +55,10 @@ import {
   monthWindowIso,
   nextInvoiceSendDate,
   parseDayKey,
+  patternChangeSummary,
+  patternRowsFromJson,
   patternSummary,
+  samePattern,
   timeOffLabel,
   timeOffTotals,
   timeOffWhat,
@@ -73,6 +76,7 @@ import {
   type InvoiceRow,
   type InvoiceStore,
 } from "@/lib/invoices.server";
+import { invoiceDate } from "@/lib/invoice-document";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
@@ -111,6 +115,7 @@ import {
   profileChangeAttentionItems,
   profileChangeRequiresOwner,
   profileChangeShowsReviewer,
+  staffRequestAttentionItems,
 } from "@/lib/profile-change-policy";
 // Re-exported rather than redeclared: a second copy of the key list silently
 // drifted from the real one, so demo mode enforced a different set of
@@ -659,6 +664,46 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
   // Owner reminder: registrations and insurance expiring within 60 days.
   if (isManager) {
     for (const item of complianceReminders(profiles, todayISO)) attentionItems.push(item);
+  }
+
+  if (canManageProfiles(me)) {
+    attentionItems.push(
+      ...staffRequestAttentionItems(
+        {
+          patternRequests: (
+            db.staffPatternRequests as {
+              id: string;
+              user_id: string;
+              rows: unknown;
+              requires_owner: boolean | null;
+              status: string;
+            }[]
+          )
+            .filter((r) => r.status === "pending")
+            .map((r) => ({
+              id: r.id,
+              user_id: r.user_id,
+              status: r.status,
+              requires_owner: Boolean(r.requires_owner),
+              summary: patternChangeSummary(
+                demoPatternRows(r.user_id),
+                patternRowsFromJson(r.rows),
+              ),
+            })),
+          timeOff: (db.staffTimeOff as (TimeOffLike & { user_id: string })[])
+            .filter((r) => r.status === "pending")
+            .map((r) => ({
+              id: r.id,
+              user_id: r.user_id,
+              status: r.status,
+              what: timeOffWhat(r),
+              when: timeOffLabel(r),
+            })),
+          nameOf: (id) => profileName(id) || "",
+        },
+        { userId: me.userId, isOwner: me.isOwner, isAdmin: me.isAdmin },
+      ),
+    );
   }
 
   if (canSeeProfileChangeAttention(me)) {
@@ -4926,6 +4971,22 @@ export const getStaffProfile = createServerFn({ method: "GET" })
 /* ---------------------------------------------------------------- */
 
 const staffWorkingPatterns = db.staffWorkingPatterns as any[];
+type DemoPatternRequest = {
+  id: string;
+  clinic_id: string;
+  user_id: string;
+  rows: unknown;
+  note: string | null;
+  requires_owner: boolean;
+  status: string;
+  requested_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  reviewer_note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+const staffPatternRequests = db.staffPatternRequests as DemoPatternRequest[];
 const staffTimeOff = db.staffTimeOff as any[];
 const practitionerTreatments = db.practitionerTreatments as any[];
 const practitionerInvoices = db.practitionerInvoices as any[];
@@ -4943,10 +5004,15 @@ function demoPatternRows(userId: string): PatternRow[] {
 }
 
 /** Owners, admins and managers holding Edit staff profiles. */
-function demoProfileManagerIds(exceptUserId: string): string[] {
-  const managersHold = rolePermissions.some(
-    (r) => r.role === "manager" && r.permission === "team.manage_profiles" && r.enabled,
-  );
+function demoProfileManagerIds(
+  exceptUserId: string,
+  opts: { ownersOnly?: boolean } = {},
+): string[] {
+  const managersHold =
+    !opts.ownersOnly &&
+    rolePermissions.some(
+      (r) => r.role === "manager" && r.permission === "team.manage_profiles" && r.enabled,
+    );
   const ids = new Set<string>();
   for (const r of userRoles) {
     if (r.role === "owner" || r.role === "admin" || (r.role === "manager" && managersHold)) {
@@ -5017,17 +5083,92 @@ export const getStaffSchedule = createServerFn({ method: "GET" })
       : all
           .filter((r) => r.status === "approved" && r.ends_on >= todayKey)
           .map((r) => ({ ...r, type: "other", note: null }));
+    const pattern = demoPatternRows(target);
+    const requestRow = full
+      ? sortDesc(
+          staffPatternRequests.filter((r) => r.user_id === target && r.status === "pending"),
+          "requested_at",
+        )[0]
+      : null;
+    const patternRequest = requestRow
+      ? {
+          id: requestRow.id as string,
+          user_id: requestRow.user_id as string,
+          rows: patternRowsFromJson(requestRow.rows),
+          note: (requestRow.note as string | null) ?? null,
+          requires_owner: Boolean(requestRow.requires_owner),
+          status: requestRow.status as string,
+          requested_at: (requestRow.requested_at as string | null) ?? null,
+          summary: patternChangeSummary(pattern, patternRowsFromJson(requestRow.rows)),
+        }
+      : null;
     return {
       userId: target,
       year,
       todayKey,
       canManage: full,
-      pattern: demoPatternRows(target),
+      pattern,
+      patternRequest,
       timeOff,
       totals: full ? timeOffTotals(all, year, todayKey) : null,
       pendingCount: full ? all.filter((r) => r.status === "pending").length : 0,
     };
   });
+
+type DemoPatternRowInput = { weekday: number; start: string | null; end: string | null };
+
+function demoAssertPatternRows(rows: readonly DemoPatternRowInput[]) {
+  for (const row of rows) {
+    if ((row.start && !row.end) || (!row.start && row.end)) {
+      throw new Error("Give both a start and an end time, or leave the day off.");
+    }
+    if (row.start && row.end && minutesOf(row.end) <= minutesOf(row.start)) {
+      throw new Error("The end time must be after the start time.");
+    }
+  }
+}
+
+function demoWriteWorkingPattern(
+  actorId: string,
+  userId: string,
+  rows: readonly DemoPatternRowInput[],
+) {
+  demoAssertPatternRows(rows);
+  for (let i = staffWorkingPatterns.length - 1; i >= 0; i--) {
+    if (staffWorkingPatterns[i].user_id === userId) staffWorkingPatterns.splice(i, 1);
+  }
+  const now = new Date().toISOString();
+  for (const row of rows) {
+    staffWorkingPatterns.push({
+      id: newId("w1"),
+      clinic_id: CLINIC_ID,
+      user_id: userId,
+      weekday: row.weekday,
+      start_time: row.start,
+      end_time: row.end,
+      updated_by: actorId,
+      updated_at: now,
+    });
+  }
+}
+
+function demoClosePendingPatternRequests(
+  actorId: string,
+  userId: string,
+  status: "withdrawn" | "declined",
+  reviewerNote: string,
+) {
+  const now = new Date().toISOString();
+  for (const r of staffPatternRequests) {
+    if (r.user_id === userId && r.status === "pending") {
+      r.status = status;
+      r.reviewed_by = actorId;
+      r.reviewed_at = now;
+      r.reviewer_note = reviewerNote;
+      r.updated_at = now;
+    }
+  }
+}
 
 export const setWorkingPattern = createServerFn({ method: "POST" })
   .validator(
@@ -5038,44 +5179,123 @@ export const setWorkingPattern = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = requireManagerCapability("team.manage_profiles");
-    for (const row of data.rows) {
-      if ((row.start && !row.end) || (!row.start && row.end)) {
-        throw new Error("Give both a start and an end time, or leave the day off.");
-      }
-      if (row.start && row.end && minutesOf(row.end) <= minutesOf(row.start)) {
-        throw new Error("The end time must be after the start time.");
-      }
-    }
-    for (let i = staffWorkingPatterns.length - 1; i >= 0; i--) {
-      if (staffWorkingPatterns[i].user_id === data.userId) staffWorkingPatterns.splice(i, 1);
-    }
-    const now = new Date().toISOString();
-    for (const row of data.rows) {
-      staffWorkingPatterns.push({
-        id: newId("w1"),
-        clinic_id: CLINIC_ID,
-        user_id: data.userId,
-        weekday: row.weekday,
-        start_time: row.start,
-        end_time: row.end,
-        updated_by: me.userId,
-        updated_at: now,
-      });
-    }
+    demoWriteWorkingPattern(me.userId, data.userId, data.rows);
+    demoClosePendingPatternRequests(
+      me.userId,
+      data.userId,
+      "withdrawn",
+      "Superseded by a direct change",
+    );
     return { ok: true };
   });
 
 export const requestWorkingPatternChange = createServerFn({ method: "POST" })
-  .validator((data: { note: string }) => parseInput(schemas.RequestWorkingPatternChange, data))
+  .validator(
+    (data: {
+      rows?: { weekday: number; start: string | null; end: string | null }[];
+      note?: string;
+    }) => parseInput(schemas.RequestWorkingPatternChange, data),
+  )
   .handler(async ({ data }) => {
     const me = requireStaff();
+    const note = data.note?.trim() || null;
+    if (!data.rows && !note) throw new Error("Propose new hours or say what should change.");
+    const name = profileName(me.userId) || "A colleague";
     const recipients = demoProfileManagerIds(me.userId);
+    if (data.rows) {
+      demoAssertPatternRows(data.rows);
+      const current = demoPatternRows(me.userId);
+      const proposed = fullPattern(data.rows as PatternRow[]);
+      if (samePattern(current, proposed)) throw new Error("Those are already your hours.");
+      if (me.isOwner || me.isAdmin) {
+        demoWriteWorkingPattern(me.userId, me.userId, proposed);
+        return { ok: true, applied: true, notified: 0 };
+      }
+      const requiresOwner = profileChangeRequiresOwner(me);
+      demoClosePendingPatternRequests(
+        me.userId,
+        me.userId,
+        "withdrawn",
+        "Replaced by a newer request",
+      );
+      const now = new Date().toISOString();
+      const row = {
+        id: newId("w5"),
+        clinic_id: CLINIC_ID,
+        user_id: me.userId,
+        rows: proposed,
+        note,
+        requires_owner: requiresOwner,
+        status: "pending",
+        requested_at: now,
+        reviewed_by: null as string | null,
+        reviewed_at: null as string | null,
+        reviewer_note: null as string | null,
+        created_at: now,
+        updated_at: now,
+      };
+      staffPatternRequests.unshift(row);
+      const approvers = requiresOwner
+        ? demoProfileManagerIds(me.userId, { ownersOnly: true })
+        : recipients;
+      const summary = patternChangeSummary(current, proposed);
+      demoNotifyStaff(me.userId, approvers, {
+        kind: "pattern_change",
+        title: "Working pattern change request",
+        body: `${name} asked for new hours: ${summary}.${note ? ` "${note}"` : ""} Approve or decline it from their profile's Schedule tab.`,
+      });
+      return { ok: true, applied: false, id: row.id, notified: approvers.length };
+    }
     demoNotifyStaff(me.userId, recipients, {
       kind: "pattern_change",
       title: "Working pattern change request",
-      body: `${profileName(me.userId) || "A colleague"} asked to change their working hours: "${data.note.trim()}". Open their profile's Schedule tab to update the pattern.`,
+      body: `${name} asked to change their working hours: "${note}". Open their profile's Schedule tab to update the pattern.`,
     });
-    return { ok: true, notified: recipients.length };
+    return { ok: true, applied: false, notified: recipients.length };
+  });
+
+export const withdrawWorkingPatternChange = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.WithdrawWorkingPatternChange, data))
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const row = staffPatternRequests.find(
+      (r) => r.id === data.id && r.user_id === me.userId && r.status === "pending",
+    );
+    if (!row) throw new Error("Only your own pending requests can be withdrawn.");
+    row.status = "withdrawn";
+    row.updated_at = new Date().toISOString();
+    return { ok: true };
+  });
+
+export const reviewWorkingPatternChange = createServerFn({ method: "POST" })
+  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) =>
+    parseInput(schemas.ReviewWorkingPatternChange, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireManagerCapability("team.manage_profiles");
+    const row = staffPatternRequests.find((r) => r.id === data.id);
+    if (!row) throw new Error("Request not found");
+    if (row.status !== "pending") throw new Error("This request has already been decided.");
+    if (row.requires_owner && !me.isOwner && !me.isAdmin) {
+      throw new Error("Only the clinic owner can decide this request.");
+    }
+    if (row.user_id === me.userId) throw new Error("You cannot approve your own request.");
+    const proposed = patternRowsFromJson(row.rows);
+    const current = demoPatternRows(row.user_id);
+    if (data.approve) demoWriteWorkingPattern(me.userId, row.user_id, proposed);
+    const now = new Date().toISOString();
+    row.status = data.approve ? "approved" : "declined";
+    row.reviewed_by = me.userId;
+    row.reviewed_at = now;
+    row.reviewer_note = data.reviewerNote?.trim() || null;
+    row.updated_at = now;
+    const summary = patternChangeSummary(current, proposed);
+    demoNotifyStaff(me.userId, [row.user_id], {
+      kind: "pattern_reviewed",
+      title: data.approve ? "Working pattern approved" : "Working pattern declined",
+      body: `${profileName(me.userId) || "Your manager"} ${data.approve ? "approved" : "declined"} your new hours (${summary}).${data.reviewerNote?.trim() ? ` "${data.reviewerNote.trim()}"` : ""}`,
+    });
+    return { ok: true };
   });
 
 function demoTimeOffRow(
@@ -5238,7 +5458,7 @@ export const setBookableTreatments = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-function demoInvoiceStore(): InvoiceStore {
+function demoInvoiceStore(creatorId?: string): InvoiceStore {
   const owners = userRoles
     .filter((r) => r.role === "owner")
     .map((r) => ({ id: r.user_id as string, email: db.staffEmails[r.user_id] ?? null }));
@@ -5266,7 +5486,7 @@ function demoInvoiceStore(): InvoiceStore {
     async notifyOwners(inv, fromName) {
       demoNotifyStaff(
         inv.user_id,
-        owners.map((o) => o.id).filter((id) => id !== inv.user_id),
+        owners.map((o) => o.id).filter((id) => id !== inv.user_id && id !== creatorId),
         {
           kind: "invoice",
           title: `Invoice ${inv.number}`,
@@ -5313,6 +5533,7 @@ async function demoMonthShare(userId: string, period: { start: string; end: stri
 export const createPractitionerInvoice = createServerFn({ method: "POST" })
   .validator(
     (data: {
+      userId?: string;
       year: number;
       month: number;
       recipient: "payroll" | "owner";
@@ -5322,21 +5543,26 @@ export const createPractitionerInvoice = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
+    const target = data.userId || me.userId;
+    const onBehalf = target !== me.userId;
+    if (onBehalf && !canSetCommission(me)) {
+      throw new Error("You do not have access to raise another person's invoice");
+    }
     const period = invoicePeriod(data.year, data.month);
     const todayKey = clinicDayKey();
     if (period.start > todayKey) throw new Error("That month has not started yet.");
     const existing = practitionerInvoices.find(
-      (r) => r.user_id === me.userId && r.period_start === period.start,
+      (r) => r.user_id === target && r.period_start === period.start,
     );
     if (existing && existing.status !== "scheduled") {
       throw new Error("An invoice for that month has already been sent.");
     }
-    const { amount, treatments } = await demoMonthShare(me.userId, period);
+    const { amount, treatments } = await demoMonthShare(target, period);
     const now = new Date();
     const sendAt = data.mode === "schedule" ? nextInvoiceSendDate(data.year, data.month) : null;
     const patch = {
       number: invoiceNumber(
-        initialsOf(profileName(me.userId) || "Practitioner"),
+        initialsOf(profileName(target) || "Practitioner"),
         data.year,
         data.month,
       ),
@@ -5360,15 +5586,26 @@ export const createPractitionerInvoice = createServerFn({ method: "POST" })
       const row = {
         id: newId("w4"),
         clinic_id: CLINIC_ID,
-        user_id: me.userId,
+        user_id: target,
         created_at: now.toISOString(),
         ...patch,
       };
       practitionerInvoices.unshift(row);
       invoice = row as InvoiceRow;
     }
+    if (onBehalf) {
+      const where = data.recipient === "payroll" ? "payroll" : "the clinic owner";
+      demoNotifyStaff(me.userId, [target], {
+        kind: "invoice",
+        title: `Invoice ${invoice.number}`,
+        body:
+          data.mode === "send"
+            ? `${profileName(me.userId) || "A manager"} raised your ${invoicePeriodLabel(invoice)} invoice · ${invoiceMoney(amount)} · sent to ${where}.`
+            : `${profileName(me.userId) || "A manager"} scheduled your ${invoicePeriodLabel(invoice)} invoice · ${invoiceMoney(amount)} · to ${where} on ${invoiceDate(sendAt ?? todayKey)}.`,
+      });
+    }
     if (data.mode === "send") {
-      await sendInvoiceNow(demoInvoiceStore(), invoice, now);
+      await sendInvoiceNow(demoInvoiceStore(me.userId), invoice, now);
       return {
         ok: true,
         id: invoice.id,

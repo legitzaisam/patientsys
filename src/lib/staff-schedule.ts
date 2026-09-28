@@ -170,6 +170,76 @@ export function rowLabel(row: PatternRow): string {
   return row.start && row.end ? `${row.start}–${row.end}` : "Off";
 }
 
+/** True when two patterns describe the same seven days. */
+export function samePattern(a: readonly PatternRow[], b: readonly PatternRow[]): boolean {
+  const fa = fullPattern(a);
+  const fb = fullPattern(b);
+  return fa.every((row, i) => row.start === fb[i]!.start && row.end === fb[i]!.end);
+}
+
+export type PatternDayChange = {
+  weekday: Weekday;
+  /** "09:00–17:00" or "Off" */
+  from: string;
+  to: string;
+};
+
+/** The days that differ between the current and the proposed pattern, Monday-first. */
+export function patternChanges(
+  current: readonly PatternRow[],
+  proposed: readonly PatternRow[],
+): PatternDayChange[] {
+  const a = fullPattern(current);
+  const b = fullPattern(proposed);
+  const out: PatternDayChange[] = [];
+  for (let i = 0; i < 7; i++) {
+    const from = rowLabel(a[i]!);
+    const to = rowLabel(b[i]!);
+    if (from !== to) out.push({ weekday: i as Weekday, from, to });
+  }
+  return out;
+}
+
+/** "Wed 10:00–18:00 (was Off) · Sat Off (was 09:00–14:00)"; "No change" when equal. */
+export function patternChangeSummary(
+  current: readonly PatternRow[],
+  proposed: readonly PatternRow[],
+): string {
+  const changes = patternChanges(current, proposed);
+  if (changes.length === 0) return "No change";
+  return changes.map((c) => `${WEEKDAYS[c.weekday]} ${c.to} (was ${c.from})`).join(" · ");
+}
+
+export type PatternRequestLike = {
+  id: string;
+  user_id: string;
+  rows: readonly PatternRow[];
+  note?: string | null;
+  requires_owner?: boolean | null;
+  status: string;
+  requested_at?: string | null;
+  reviewer_note?: string | null;
+};
+
+/** The stored jsonb rows as a full seven-row pattern; anything malformed is a day off. */
+export function patternRowsFromJson(value: unknown): PatternRow[] {
+  const list = Array.isArray(value) ? value : [];
+  return fullPattern(
+    list
+      .filter(
+        (r): r is { weekday: number; start?: unknown; end?: unknown } =>
+          Boolean(r) &&
+          typeof r === "object" &&
+          typeof (r as { weekday?: unknown }).weekday === "number",
+      )
+      .map((r) => ({
+        weekday: r.weekday as Weekday,
+        start: typeof r.start === "string" ? r.start : null,
+        end: typeof r.end === "string" ? r.end : null,
+      })),
+  );
+}
+
 // ---------------------------------------------------------------- time off
 
 export const TIME_OFF_TYPES = ["holiday", "training", "sickness", "other"] as const;
