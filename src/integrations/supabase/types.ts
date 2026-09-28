@@ -2373,6 +2373,76 @@ export type Database = {
         };
         Relationships: [];
       };
+      staff_pattern_requests: {
+        Row: {
+          clinic_id: string;
+          created_at: string;
+          id: string;
+          note: string | null;
+          requested_at: string;
+          requires_owner: boolean;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          reviewer_note: string | null;
+          rows: Json;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          clinic_id: string;
+          created_at?: string;
+          id?: string;
+          note?: string | null;
+          requested_at?: string;
+          requires_owner?: boolean;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          reviewer_note?: string | null;
+          rows: Json;
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          clinic_id?: string;
+          created_at?: string;
+          id?: string;
+          note?: string | null;
+          requested_at?: string;
+          requires_owner?: boolean;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          reviewer_note?: string | null;
+          rows?: Json;
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_pattern_requests_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "staff_pattern_requests_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "staff_pattern_requests_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       staff_time_off: {
         Row: {
           clinic_id: string;

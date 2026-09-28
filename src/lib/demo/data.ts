@@ -3820,6 +3820,37 @@ const TIME_OFF_SPECS: TimeOffSpec[] = [
   },
 ];
 
+/**
+ * A pending working-pattern change: Dr Tom Whitfield asks to swap his Saturday
+ * for a Wednesday, so the owner's and manager's dashboards show a request to
+ * approve out of the box.
+ */
+export const staffPatternRequests: Row[] = [
+  {
+    id: id("w5"),
+    clinic_id: CLINIC_ID,
+    user_id: USERS.practitioner2,
+    rows: [
+      { weekday: 0, start: "10:00", end: "19:00" },
+      { weekday: 1, start: "10:00", end: "19:00" },
+      { weekday: 2, start: "10:00", end: "18:00" },
+      { weekday: 3, start: "10:00", end: "19:00" },
+      { weekday: 4, start: "10:00", end: "19:00" },
+      { weekday: 5, start: null, end: null },
+      { weekday: 6, start: null, end: null },
+    ],
+    note: "Saturdays off from next month please — I can cover Wednesdays instead.",
+    requires_owner: false,
+    status: "pending",
+    requested_at: iso(-2, 17, 40),
+    reviewed_by: null,
+    reviewed_at: null,
+    reviewer_note: null,
+    created_at: iso(-2, 17, 40),
+    updated_at: iso(-2, 17, 40),
+  },
+];
+
 export const staffTimeOff: Row[] = TIME_OFF_SPECS.map((spec) => {
   const approved = spec.status === "approved" || spec.status === "declined";
   return {
@@ -5490,6 +5521,7 @@ export const db = {
   profileChangeRequests,
   staffDocuments,
   staffWorkingPatterns,
+  staffPatternRequests,
   staffTimeOff,
   practitionerTreatments,
   practitionerInvoices,

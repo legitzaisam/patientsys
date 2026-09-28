@@ -51,6 +51,7 @@ export const CLINIC_SCOPED_TABLES = [
   "staff_chat_messages",
   "staff_conversations",
   "staff_notifications",
+  "staff_pattern_requests",
   "staff_time_off",
   "staff_working_patterns",
   "treatment_catalogue",
