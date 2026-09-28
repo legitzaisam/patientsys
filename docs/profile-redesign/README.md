@@ -2,6 +2,8 @@
 
 Plan: `.cursor/plans/profile_redesign_and_sqinos_logo_b98fcada.plan.md`. Mockup: `Claude outputs/Option 1 · Classic-html/`. Logo: `Claude outputs/sqinos-logo/`. Branch `e2e_live`.
 
+> Round 2 (pickers, working-pattern approval, earnings order, invoice on behalf, invoice document, website ↔ demo stitching QC): [`r2/README.md`](r2/README.md).
+
 Every phase has a worklog with one `### <todo-id>` section per to-do (files changed, what and why, how it was checked) and a phase summary (verification table, commit). Captures under `captures/before/` (P0) and `captures/after/` (P10) share file names so the regression proof is side by side.
 
 ## Phases
