@@ -91,7 +91,7 @@ test.describe("as a patient", () => {
 
   test("the brand link returns to the portal home", async ({ page }) => {
     await page.goto("/my-record/records");
-    await page.getByRole("link", { name: /Aetheria/i }).first().click();
+    await page.getByRole("link", { name: /SQINOS/i }).first().click();
     await expect(page).toHaveURL(/\/my-record$/);
   });
 
