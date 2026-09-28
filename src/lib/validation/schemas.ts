@@ -425,6 +425,86 @@ export const AddMyDocument = z.object({
 
 export const DeleteMyDocument = z.object({ id });
 
+/* Staff schedule, time off, bookable treatments, invoices (profile redesign) */
+
+const dateOnly = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/);
+const clockTime = z
+  .string()
+  .trim()
+  .regex(/^\d{2}:\d{2}$/);
+const halfDay = z.enum(["full", "half"]);
+const timeOffType = z.enum(["holiday", "training", "sickness", "other"]);
+
+/** Empty userId = the caller; year defaults to the clinic's current year. */
+export const GetStaffSchedule = z.object({
+  userId: optionalId,
+  year: z.number().int().min(2000).max(2100).optional(),
+});
+
+export const SetWorkingPattern = z.object({
+  userId: id,
+  rows: z
+    .array(
+      z.object({
+        weekday: z.number().int().min(0).max(6),
+        start: clockTime.nullable(),
+        end: clockTime.nullable(),
+      }),
+    )
+    .length(7),
+});
+
+export const RequestWorkingPatternChange = z.object({ note: requiredText(2_000) });
+
+export const RequestTimeOff = z.object({
+  type: timeOffType,
+  startsOn: dateOnly,
+  endsOn: dateOnly,
+  startHalf: halfDay.optional(),
+  endHalf: halfDay.optional(),
+  note: optionalText(2_000),
+});
+
+export const WithdrawTimeOff = z.object({ id });
+
+export const ReviewTimeOff = z.object({
+  id,
+  approve: z.boolean(),
+  reviewerNote: optionalText(2_000),
+});
+
+export const AddTimeOff = z.object({
+  userId: id,
+  type: timeOffType,
+  startsOn: dateOnly,
+  endsOn: dateOnly,
+  startHalf: halfDay.optional(),
+  endHalf: halfDay.optional(),
+  note: optionalText(2_000),
+});
+
+export const ListBookableTreatments = z.object({ userId: id });
+
+export const SetBookableTreatments = z.object({
+  userId: id,
+  catalogueIds: z.array(id).max(200),
+});
+
+export const ListPractitionerInvoices = z.object({ userId: optionalId });
+
+export const CreatePractitionerInvoice = z.object({
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  recipient: z.enum(["payroll", "owner"]),
+  note: optionalText(2_000),
+  mode: z.enum(["send", "schedule"]),
+});
+
+export const MarkInvoicePaid = z.object({ id });
+
 /* Retention and recall */
 
 export const LogRetentionOutreach = z.object({

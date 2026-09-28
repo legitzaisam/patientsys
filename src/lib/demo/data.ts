@@ -3902,16 +3902,13 @@ export const practitionerInvoices: Row[] = (() => {
       String(t["performed_at"]).slice(0, 10) >= period.start &&
       String(t["performed_at"]).slice(0, 10) <= period.end,
   );
+  // Same maths as My earnings: every line at the practitioner's current rate.
+  const rate = Number(
+    profiles.find((p) => p["id"] === USERS.practitioner)?.["commission_rate"] ?? 45,
+  );
   const amount =
-    lines.reduce(
-      (sum, t) =>
-        sum +
-        shareOf(
-          Math.round(Number(t["price"] ?? 0) * 100),
-          Number(t["commission_rate_snapshot"] ?? 45),
-        ),
-      0,
-    ) / 100;
+    lines.reduce((sum, t) => sum + shareOf(Math.round(Number(t["price"] ?? 0) * 100), rate), 0) /
+    100;
   return [
     {
       id: id("w4"),

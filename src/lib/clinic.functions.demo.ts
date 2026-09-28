@@ -46,6 +46,32 @@ import {
 import { complianceReminders } from "@/lib/metrics/compliance";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import { canManageProfiles, canSetCommission } from "@/lib/staff-access";
+import {
+  fullPattern,
+  initialsOf,
+  invoiceNumber,
+  invoicePeriod,
+  minutesOf,
+  nextInvoiceSendDate,
+  parseDayKey,
+  patternSummary,
+  timeOffLabel,
+  timeOffTotals,
+  timeOffWhat,
+  workingDaysBetween,
+  type HalfDay,
+  type PatternRow,
+  type TimeOffLike,
+  type Weekday,
+} from "@/lib/staff-schedule";
+import {
+  deliverScheduledInvoices,
+  invoiceMoney,
+  invoicePeriodLabel,
+  sendInvoiceNow,
+  type InvoiceRow,
+  type InvoiceStore,
+} from "@/lib/invoices.server";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
@@ -2688,6 +2714,7 @@ export const drainCommunications = createServerFn({ method: "POST" }).handler(as
   if (!can(me, "comms.send")) throw new Error("You do not have access to this area");
   const { drainInMemory } = await import("./comms/dispatch.server");
   const { clinic } = await import("@/lib/demo/data");
+  await deliverDemoInvoices();
   await runDemoOfferAutomation();
   return drainInMemory(
     communications,
@@ -4641,6 +4668,9 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
       profileChangeRequests.filter((r) => r.user_id === me.userId),
       "created_at",
     ).slice(0, 20),
+    pattern: demoPatternRows(me.userId),
+    patternSummary: patternSummary(demoPatternRows(me.userId)),
+    bookable: demoBookable(me.userId),
   };
 });
 
@@ -4808,8 +4838,12 @@ export const getStaffProfile = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const me = requireStaff();
     const isSelf = data.userId === me.userId;
-    const canViewPrivateDetails = true;
-    const canViewDocuments = me.isManager || isSelf;
+    // Owner and admin always; a manager while the owner grants Edit staff
+    // profiles; everyone else gets the front-desk view of a colleague.
+    const canManage = isSelf || canManageProfiles(me);
+    const canCommission = !isSelf && canSetCommission(me);
+    const canViewPrivateDetails = canManage;
+    const canViewDocuments = canManage;
     const docs = sortDesc(
       staffDocuments.filter((d) => d.user_id === data.userId),
       "created_at",
@@ -4827,9 +4861,20 @@ export const getStaffProfile = createServerFn({ method: "GET" })
       ? {
           ...profile,
           full_name: fullName || profile.full_name,
-          commission_rate: me.isManager ? profile.commission_rate : null,
+          commission_rate: canCommission ? profile.commission_rate : null,
+          // The front-desk view carries no registration numbers, expiry or insurance.
+          ...(canViewPrivateDetails
+            ? {}
+            : {
+                registration_number: null,
+                registration_expiry: null,
+                insurance_provider: null,
+                insurance_expiry: null,
+              }),
         }
       : null;
+    const todayKey = clinicDayKey();
+    const pattern = demoPatternRows(data.userId);
 
     return {
       profile: safeProfile,
@@ -4843,14 +4888,513 @@ export const getStaffProfile = createServerFn({ method: "GET" })
       presentCategories,
       canViewDocuments,
       canViewPrivateDetails,
+      canManage,
+      canCommission,
+      pattern,
+      patternSummary: patternSummary(pattern),
+      bookable: demoBookable(data.userId),
+      upcomingUnavailable: sortAsc(
+        staffTimeOff.filter(
+          (r) => r.user_id === data.userId && r.status === "approved" && r.ends_on >= todayKey,
+        ),
+        "starts_on",
+      )
+        .slice(0, 6)
+        .map((r) => ({ starts_on: r.starts_on as string, ends_on: r.ends_on as string })),
       requests: me.isOwner
         ? sortDesc(
             profileChangeRequests.filter((r) => r.user_id === data.userId),
             "created_at",
           ).slice(0, 20)
         : [],
-      capabilities: me.isManager && !archived ? effectiveCapabilities(data.userId) : null,
+      capabilities: canManage && !archived ? effectiveCapabilities(data.userId) : null,
     };
+  });
+
+/* ---------------------------------------------------------------- */
+/* staff schedule, time off, bookable treatments, invoices            */
+/* ---------------------------------------------------------------- */
+
+const staffWorkingPatterns = db.staffWorkingPatterns as any[];
+const staffTimeOff = db.staffTimeOff as any[];
+const practitionerTreatments = db.practitionerTreatments as any[];
+const practitionerInvoices = db.practitionerInvoices as any[];
+
+function demoPatternRows(userId: string): PatternRow[] {
+  return fullPattern(
+    staffWorkingPatterns
+      .filter((r) => r.user_id === userId)
+      .map((r) => ({
+        weekday: r.weekday as Weekday,
+        start: r.start_time as string | null,
+        end: r.end_time as string | null,
+      })),
+  );
+}
+
+/** Owners, admins and managers holding Edit staff profiles. */
+function demoProfileManagerIds(exceptUserId: string): string[] {
+  const managersHold = rolePermissions.some(
+    (r) => r.role === "manager" && r.permission === "team.manage_profiles" && r.enabled,
+  );
+  const ids = new Set<string>();
+  for (const r of userRoles) {
+    if (r.role === "owner" || r.role === "admin" || (r.role === "manager" && managersHold)) {
+      ids.add(r.user_id);
+    }
+  }
+  ids.delete(exceptUserId);
+  return [...ids];
+}
+
+function demoNotifyStaff(
+  senderId: string,
+  recipients: string[],
+  note: { kind: string; title: string; body: string },
+) {
+  const now = new Date().toISOString();
+  for (const rid of recipients) {
+    staffNotifications.unshift({
+      id: newId("l9"),
+      clinic_id: CLINIC_ID,
+      recipient_id: rid,
+      sender_id: senderId,
+      urgent: false,
+      kind: note.kind,
+      title: note.title,
+      body: note.body,
+      patient_id: null,
+      appointment_id: null,
+      read_at: null,
+      created_at: now,
+    });
+  }
+}
+
+function demoBookable(userId: string) {
+  return practitionerTreatments
+    .filter((r) => r.user_id === userId)
+    .map((r) => {
+      const item = catalogue.find((c) => c.id === r.catalogue_id);
+      return {
+        catalogueId: r.catalogue_id as string,
+        name: String(item?.name ?? ""),
+        category: (item?.category as string | null) ?? null,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export const getStaffSchedule = createServerFn({ method: "GET" })
+  .validator((data: { userId?: string; year?: number }) =>
+    parseInput(schemas.GetStaffSchedule, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const target = data.userId || me.userId;
+    const full = target === me.userId || canManageProfiles(me);
+    const todayKey = clinicDayKey();
+    const year = data.year ?? parseDayKey(todayKey).year;
+    const all = sortDesc(
+      staffTimeOff.filter(
+        (r) =>
+          r.user_id === target && r.ends_on >= `${year}-01-01` && r.starts_on <= `${year}-12-31`,
+      ),
+      "starts_on",
+    ) as TimeOffLike[];
+    const timeOff = full
+      ? all
+      : all
+          .filter((r) => r.status === "approved" && r.ends_on >= todayKey)
+          .map((r) => ({ ...r, type: "other", note: null }));
+    return {
+      userId: target,
+      year,
+      todayKey,
+      canManage: full,
+      pattern: demoPatternRows(target),
+      timeOff,
+      totals: full ? timeOffTotals(all, year, todayKey) : null,
+      pendingCount: full ? all.filter((r) => r.status === "pending").length : 0,
+    };
+  });
+
+export const setWorkingPattern = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      userId: string;
+      rows: { weekday: number; start: string | null; end: string | null }[];
+    }) => parseInput(schemas.SetWorkingPattern, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireManagerCapability("team.manage_profiles");
+    for (const row of data.rows) {
+      if ((row.start && !row.end) || (!row.start && row.end)) {
+        throw new Error("Give both a start and an end time, or leave the day off.");
+      }
+      if (row.start && row.end && minutesOf(row.end) <= minutesOf(row.start)) {
+        throw new Error("The end time must be after the start time.");
+      }
+    }
+    for (let i = staffWorkingPatterns.length - 1; i >= 0; i--) {
+      if (staffWorkingPatterns[i].user_id === data.userId) staffWorkingPatterns.splice(i, 1);
+    }
+    const now = new Date().toISOString();
+    for (const row of data.rows) {
+      staffWorkingPatterns.push({
+        id: newId("w1"),
+        clinic_id: CLINIC_ID,
+        user_id: data.userId,
+        weekday: row.weekday,
+        start_time: row.start,
+        end_time: row.end,
+        updated_by: me.userId,
+        updated_at: now,
+      });
+    }
+    return { ok: true };
+  });
+
+export const requestWorkingPatternChange = createServerFn({ method: "POST" })
+  .validator((data: { note: string }) => parseInput(schemas.RequestWorkingPatternChange, data))
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const recipients = demoProfileManagerIds(me.userId);
+    demoNotifyStaff(me.userId, recipients, {
+      kind: "pattern_change",
+      title: "Working pattern change request",
+      body: `${profileName(me.userId) || "A colleague"} asked to change their working hours: "${data.note.trim()}". Open their profile's Schedule tab to update the pattern.`,
+    });
+    return { ok: true, notified: recipients.length };
+  });
+
+function demoTimeOffRow(
+  userId: string,
+  input: {
+    type: string;
+    startsOn: string;
+    endsOn: string;
+    startHalf?: string | undefined;
+    endHalf?: string | undefined;
+    note?: string | undefined;
+  },
+) {
+  if (input.endsOn < input.startsOn) throw new Error("The last day must not be before the first.");
+  const startHalf = (input.startHalf ?? "full") as HalfDay;
+  const endHalf = (input.endHalf ?? "full") as HalfDay;
+  const now = new Date().toISOString();
+  return {
+    id: newId("w2"),
+    clinic_id: CLINIC_ID,
+    user_id: userId,
+    type: input.type,
+    starts_on: input.startsOn,
+    ends_on: input.endsOn,
+    start_half: startHalf,
+    end_half: endHalf,
+    working_days: workingDaysBetween(
+      input.startsOn,
+      input.endsOn,
+      demoPatternRows(userId),
+      startHalf,
+      endHalf,
+    ),
+    note: input.note?.trim() || null,
+    requested_at: now,
+    reviewed_by: null as string | null,
+    reviewed_at: null as string | null,
+    reviewer_note: null as string | null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export const requestTimeOff = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      type: "holiday" | "training" | "sickness" | "other";
+      startsOn: string;
+      endsOn: string;
+      startHalf?: "full" | "half";
+      endHalf?: "full" | "half";
+      note?: string;
+    }) => parseInput(schemas.RequestTimeOff, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const row = { ...demoTimeOffRow(me.userId, data), status: "pending" };
+    staffTimeOff.unshift(row);
+    demoNotifyStaff(me.userId, demoProfileManagerIds(me.userId), {
+      kind: "time_off_request",
+      title: "Time off request",
+      body: `${profileName(me.userId) || "A colleague"} asked for ${timeOffWhat(row)} (${timeOffLabel(row)}). Approve or decline it from their profile's Schedule tab.`,
+    });
+    return { ok: true, id: row.id, workingDays: row.working_days };
+  });
+
+export const withdrawTimeOff = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.WithdrawTimeOff, data))
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const row = staffTimeOff.find((r) => r.id === data.id && r.user_id === me.userId);
+    if (!row || row.status !== "pending") {
+      throw new Error("Only your own pending requests can be withdrawn.");
+    }
+    row.status = "withdrawn";
+    row.updated_at = new Date().toISOString();
+    return { ok: true };
+  });
+
+export const reviewTimeOff = createServerFn({ method: "POST" })
+  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) =>
+    parseInput(schemas.ReviewTimeOff, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireManagerCapability("team.manage_profiles");
+    const row = staffTimeOff.find((r) => r.id === data.id);
+    if (!row) throw new Error("Request not found");
+    if (row.status !== "pending") throw new Error("This request has already been decided.");
+    const now = new Date().toISOString();
+    row.status = data.approve ? "approved" : "declined";
+    row.reviewed_by = me.userId;
+    row.reviewed_at = now;
+    row.reviewer_note = data.reviewerNote?.trim() || null;
+    row.updated_at = now;
+    demoNotifyStaff(me.userId, [row.user_id], {
+      kind: "time_off_reviewed",
+      title: data.approve ? "Time off approved" : "Time off declined",
+      body: `${profileName(me.userId) || "Your manager"} ${data.approve ? "approved" : "declined"} your ${timeOffWhat(row).toLowerCase()} (${timeOffLabel(row)}).${data.reviewerNote?.trim() ? ` "${data.reviewerNote.trim()}"` : ""}`,
+    });
+    return { ok: true };
+  });
+
+export const addTimeOff = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      userId: string;
+      type: "holiday" | "training" | "sickness" | "other";
+      startsOn: string;
+      endsOn: string;
+      startHalf?: "full" | "half";
+      endHalf?: "full" | "half";
+      note?: string;
+    }) => parseInput(schemas.AddTimeOff, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireManagerCapability("team.manage_profiles");
+    const now = new Date().toISOString();
+    const row = {
+      ...demoTimeOffRow(data.userId, data),
+      status: "approved",
+      reviewed_by: me.userId,
+      reviewed_at: now,
+    };
+    staffTimeOff.unshift(row);
+    if (data.userId !== me.userId) {
+      demoNotifyStaff(me.userId, [data.userId], {
+        kind: "time_off_reviewed",
+        title: "Time off added",
+        body: `${profileName(me.userId) || "Your manager"} added ${timeOffWhat(row).toLowerCase()} (${timeOffLabel(row)}) to your schedule.`,
+      });
+    }
+    return { ok: true, id: row.id, workingDays: row.working_days };
+  });
+
+export const listBookableTreatments = createServerFn({ method: "GET" })
+  .validator((data: { userId: string }) => parseInput(schemas.ListBookableTreatments, data))
+  .handler(async ({ data }) => {
+    requireStaff();
+    return demoBookable(data.userId);
+  });
+
+export const setBookableTreatments = createServerFn({ method: "POST" })
+  .validator((data: { userId: string; catalogueIds: string[] }) =>
+    parseInput(schemas.SetBookableTreatments, data),
+  )
+  .handler(async ({ data }) => {
+    requireManagerCapability("team.manage_profiles");
+    for (let i = practitionerTreatments.length - 1; i >= 0; i--) {
+      if (practitionerTreatments[i].user_id === data.userId) practitionerTreatments.splice(i, 1);
+    }
+    for (const catalogue_id of new Set(data.catalogueIds)) {
+      practitionerTreatments.push({
+        id: newId("w3"),
+        clinic_id: CLINIC_ID,
+        user_id: data.userId,
+        catalogue_id,
+        created_at: new Date().toISOString(),
+      });
+    }
+    return { ok: true };
+  });
+
+function demoInvoiceStore(): InvoiceStore {
+  const owners = userRoles
+    .filter((r) => r.role === "owner")
+    .map((r) => ({ id: r.user_id as string, email: db.staffEmails[r.user_id] ?? null }));
+  return {
+    clinicName: db.clinic["name"] ?? "Your clinic",
+    clinicEmail: (db.clinic["email"] as string | null) ?? null,
+    owners,
+    async practitioner(userId) {
+      const p = profiles.find((x) => x.id === userId);
+      return {
+        name: (p?.full_name as string | undefined) ?? "Practitioner",
+        email: db.staffEmails[userId] ?? null,
+        jobTitle: (p?.job_title as string | null) ?? null,
+      };
+    },
+    async markSent(id, sentAt) {
+      const inv = practitionerInvoices.find((x) => x.id === id);
+      if (inv) {
+        inv.status = "sent";
+        inv.sent_at = sentAt;
+        inv.scheduled_for = null;
+        inv.updated_at = sentAt;
+      }
+    },
+    async notifyOwners(inv, fromName) {
+      demoNotifyStaff(
+        inv.user_id,
+        owners.map((o) => o.id).filter((id) => id !== inv.user_id),
+        {
+          kind: "invoice",
+          title: `Invoice ${inv.number}`,
+          body: `${fromName} sent their ${invoicePeriodLabel(inv)} invoice: ${inv.treatments} treatments, ${invoiceMoney(inv.amount)}. Mark it paid from their profile once settled.`,
+        },
+      );
+    },
+  };
+}
+
+/** The demo twin of the drain's invoice step. */
+export async function deliverDemoInvoices() {
+  return deliverScheduledInvoices(demoInvoiceStore(), practitionerInvoices, clinicDayKey());
+}
+
+export const listPractitionerInvoices = createServerFn({ method: "GET" })
+  .validator((data: { userId?: string }) => parseInput(schemas.ListPractitionerInvoices, data))
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const target = data.userId || me.userId;
+    if (target !== me.userId && !canSetCommission(me)) {
+      throw new Error("You do not have access to another person's invoices");
+    }
+    return sortDesc(
+      practitionerInvoices.filter((r) => r.user_id === target),
+      "period_start",
+    ) as InvoiceRow[];
+  });
+
+async function demoMonthShare(userId: string, period: { start: string; end: string }) {
+  const { earningsLines } = await import("./earnings.server");
+  const from = new Date(`${period.start}T00:00:00.000Z`).toISOString();
+  const to = new Date(`${period.end}T23:59:59.999Z`).toISOString();
+  const inputs = await earningsInputs(from, to);
+  const rate = Number(profiles.find((p) => p.id === userId)?.commission_rate ?? 0);
+  const mine = inputs.treatments.filter((t) => t.practitioner_id === userId);
+  const lines = earningsLines(mine as never, inputs.appointments as never, rate, inputs.money);
+  return {
+    amount: Math.round(lines.reduce((sum, l) => sum + l.share, 0) * 100) / 100,
+    treatments: lines.length,
+  };
+}
+
+export const createPractitionerInvoice = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      year: number;
+      month: number;
+      recipient: "payroll" | "owner";
+      note?: string;
+      mode: "send" | "schedule";
+    }) => parseInput(schemas.CreatePractitionerInvoice, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const period = invoicePeriod(data.year, data.month);
+    const todayKey = clinicDayKey();
+    if (period.start > todayKey) throw new Error("That month has not started yet.");
+    const existing = practitionerInvoices.find(
+      (r) => r.user_id === me.userId && r.period_start === period.start,
+    );
+    if (existing && existing.status !== "scheduled") {
+      throw new Error("An invoice for that month has already been sent.");
+    }
+    const { amount, treatments } = await demoMonthShare(me.userId, period);
+    const now = new Date();
+    const sendAt = data.mode === "schedule" ? nextInvoiceSendDate(data.year, data.month) : null;
+    const patch = {
+      number: invoiceNumber(
+        initialsOf(profileName(me.userId) || "Practitioner"),
+        data.year,
+        data.month,
+      ),
+      period_start: period.start,
+      period_end: period.end,
+      recipient: data.recipient,
+      note: data.note?.trim() || null,
+      status: "scheduled",
+      scheduled_for: sendAt ?? todayKey,
+      sent_at: null as string | null,
+      paid_at: null as string | null,
+      amount,
+      treatments,
+      updated_at: now.toISOString(),
+    };
+    let invoice: InvoiceRow;
+    if (existing) {
+      Object.assign(existing, patch);
+      invoice = existing as InvoiceRow;
+    } else {
+      const row = {
+        id: newId("w4"),
+        clinic_id: CLINIC_ID,
+        user_id: me.userId,
+        created_at: now.toISOString(),
+        ...patch,
+      };
+      practitionerInvoices.unshift(row);
+      invoice = row as InvoiceRow;
+    }
+    if (data.mode === "send") {
+      await sendInvoiceNow(demoInvoiceStore(), invoice, now);
+      return {
+        ok: true,
+        id: invoice.id,
+        status: "sent",
+        number: invoice.number,
+        amount,
+        treatments,
+      };
+    }
+    return {
+      ok: true,
+      id: invoice.id,
+      status: "scheduled",
+      scheduledFor: sendAt,
+      number: invoice.number,
+      amount,
+      treatments,
+    };
+  });
+
+export const markInvoicePaid = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.MarkInvoicePaid, data))
+  .handler(async ({ data }) => {
+    const me = requireManagerCapability("team.commission");
+    const inv = practitionerInvoices.find((r) => r.id === data.id);
+    if (!inv || inv.status !== "sent") throw new Error("Only a sent invoice can be marked paid.");
+    const now = new Date().toISOString();
+    inv.status = "paid";
+    inv.paid_at = now;
+    inv.updated_at = now;
+    demoNotifyStaff(me.userId, [inv.user_id], {
+      kind: "invoice",
+      title: `Invoice ${inv.number} paid`,
+      body: `Your invoice ${inv.number} has been marked paid.`,
+    });
+    return { ok: true };
   });
 
 /* ---------------------------------------------------------------- */

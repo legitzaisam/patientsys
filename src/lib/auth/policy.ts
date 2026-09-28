@@ -207,6 +207,20 @@ export const POLICY = {
   getMyNote: { kind: "self" },
   saveMyNote: { kind: "self" },
 
+  /* Staff schedule, time off, bookable treatments, invoices */
+  getStaffSchedule: { kind: "staff" },
+  setWorkingPattern: { kind: "managerCapability", key: "team.manage_profiles" },
+  requestWorkingPatternChange: { kind: "staff" },
+  requestTimeOff: { kind: "staff" },
+  withdrawTimeOff: { kind: "staff" },
+  reviewTimeOff: { kind: "managerCapability", key: "team.manage_profiles" },
+  addTimeOff: { kind: "managerCapability", key: "team.manage_profiles" },
+  listBookableTreatments: { kind: "staff" },
+  setBookableTreatments: { kind: "managerCapability", key: "team.manage_profiles" },
+  listPractitionerInvoices: { kind: "staff" },
+  createPractitionerInvoice: { kind: "staff" },
+  markInvoicePaid: { kind: "managerCapability", key: "team.commission" },
+
   /* Reports */
   getInsights: { kind: "capability", key: "reports.insights" },
   getPractitionerPerformance: { kind: "capability", key: "reports.performance" },

@@ -16,6 +16,32 @@ import { complianceReminders } from "@/lib/metrics/compliance";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import { canManageProfiles, canSetCommission } from "@/lib/staff-access";
 import {
+  fullPattern,
+  initialsOf,
+  invoiceNumber,
+  invoicePeriod,
+  minutesOf,
+  nextInvoiceSendDate,
+  parseDayKey,
+  patternSummary,
+  timeOffLabel,
+  timeOffTotals,
+  timeOffWhat,
+  workingDaysBetween,
+  type HalfDay,
+  type PatternRow,
+  type TimeOffLike,
+  type Weekday,
+} from "@/lib/staff-schedule";
+import {
+  deliverScheduledInvoices,
+  invoiceMoney,
+  invoicePeriodLabel,
+  sendInvoiceNow,
+  type InvoiceRow,
+  type InvoiceStore,
+} from "@/lib/invoices.server";
+import {
   calendarMonthsWindow,
   dashboardKpis,
   DEFAULT_PERIOD,
@@ -6202,15 +6228,21 @@ export const getMyProfile = createServerFn({ method: "GET" })
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "getMyProfile");
     const supabaseAdmin = await adminClient(context);
-    const [{ data: requests }, { data: roleRows }] = await Promise.all([
-      ctx.supabase
-        .from("profile_change_requests")
-        .select("*")
-        .eq("user_id", ctx.userId)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      supabaseAdmin.from("user_roles").select("user_id, role").in("role", ["owner", "manager"]),
-    ]);
+    const [{ data: requests }, { data: roleRows }, pattern, { data: bookableRows }] =
+      await Promise.all([
+        ctx.supabase
+          .from("profile_change_requests")
+          .select("*")
+          .eq("user_id", ctx.userId)
+          .order("created_at", { ascending: false })
+          .limit(20),
+        supabaseAdmin.from("user_roles").select("user_id, role").in("role", ["owner", "manager"]),
+        staffPatternRows(supabaseAdmin, ctx.userId),
+        supabaseAdmin
+          .from("practitioner_treatments")
+          .select("catalogue_id, treatment_catalogue(name, category)")
+          .eq("user_id", ctx.userId),
+      ]);
     return {
       profile: identity.profile,
       email: identity.email,
@@ -6222,6 +6254,20 @@ export const getMyProfile = createServerFn({ method: "GET" })
         (roleRows ?? []) as { user_id: string; role: string }[],
       ),
       requests: requests ?? [],
+      pattern,
+      patternSummary: patternSummary(pattern),
+      bookable: (
+        (bookableRows ?? []) as {
+          catalogue_id: string;
+          treatment_catalogue: { name: string; category: string | null } | null;
+        }[]
+      )
+        .map((r) => ({
+          catalogueId: r.catalogue_id,
+          name: r.treatment_catalogue?.name ?? "",
+          category: r.treatment_catalogue?.category ?? null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     };
   });
 
@@ -6498,9 +6544,13 @@ export const getStaffProfile = createServerFn({ method: "GET" })
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "getStaffProfile");
     const isSelf = data.userId === ctx.userId;
-    const canViewPrivateDetails = true;
-    const canViewDocuments = identity.isManager || isSelf;
-    const canViewCommission = identity.isManager;
+    // Owner and admin always; a manager while the owner grants Edit staff
+    // profiles; everyone else gets the front-desk view of a colleague.
+    const canManage = isSelf || canManageProfiles(identity);
+    const canCommission = !isSelf && canSetCommission(identity);
+    const canViewPrivateDetails = canManage;
+    const canViewDocuments = canManage;
+    const canViewCommission = canCommission;
 
     const supabaseAdmin = await adminClient(context);
     const now = new Date().toISOString();
@@ -6508,6 +6558,10 @@ export const getStaffProfile = createServerFn({ method: "GET" })
       { data: profile },
       { data: roles },
       { data: docs },
+      _unused,
+      pattern,
+      { data: bookableRows },
+      { data: unavailableRows },
       users,
       { data: requests },
       { data: archived },
@@ -6519,6 +6573,20 @@ export const getStaffProfile = createServerFn({ method: "GET" })
         .select(canViewDocuments ? "*" : "category")
         .eq("user_id", data.userId)
         .order("created_at", { ascending: false }),
+      canViewDocuments ? Promise.resolve(null) : Promise.resolve(null),
+      staffPatternRows(supabaseAdmin, data.userId),
+      supabaseAdmin
+        .from("practitioner_treatments")
+        .select("catalogue_id, treatment_catalogue(name, category)")
+        .eq("user_id", data.userId),
+      supabaseAdmin
+        .from("staff_time_off")
+        .select("id, starts_on, ends_on, status")
+        .eq("user_id", data.userId)
+        .eq("status", "approved")
+        .gte("ends_on", clinicDayKey())
+        .order("starts_on", { ascending: true })
+        .limit(6),
       supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
       identity.isOwner
         ? supabaseAdmin
@@ -6554,6 +6622,15 @@ export const getStaffProfile = createServerFn({ method: "GET" })
           ...profile,
           full_name: filled.fullName || profile.full_name,
           commission_rate: canViewCommission ? profile.commission_rate : null,
+          // The front-desk view carries no registration numbers, expiry or insurance.
+          ...(canViewPrivateDetails
+            ? {}
+            : {
+                registration_number: null,
+                registration_expiry: null,
+                insurance_provider: null,
+                insurance_expiry: null,
+              }),
         }
       : filled.fullName
         ? {
@@ -6577,14 +6654,711 @@ export const getStaffProfile = createServerFn({ method: "GET" })
       presentCategories,
       canViewDocuments,
       canViewPrivateDetails,
+      canManage,
+      canCommission,
+      pattern,
+      patternSummary: patternSummary(pattern),
+      bookable: (
+        (bookableRows ?? []) as {
+          catalogue_id: string;
+          treatment_catalogue: { name: string; category: string | null } | null;
+        }[]
+      )
+        .map((r) => ({
+          catalogueId: r.catalogue_id,
+          name: r.treatment_catalogue?.name ?? "",
+          category: r.treatment_catalogue?.category ?? null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      upcomingUnavailable: (
+        (unavailableRows ?? []) as { starts_on: string; ends_on: string }[]
+      ).map((r) => ({ starts_on: r.starts_on, ends_on: r.ends_on })),
       requests: identity.isOwner ? (requests ?? []) : [],
       // "What can this person actually do" — only the management tier needs it,
       // and only they can act on the answer.
-      capabilities:
-        identity.isManager && !archived ? await effectiveCapabilities(ctx, data.userId) : null,
+      capabilities: canManage && !archived ? await effectiveCapabilities(ctx, data.userId) : null,
     };
   });
 
+/* ---------------------------------------------------------------- */
+/* staff schedule, time off, bookable treatments, invoices            */
+/* ---------------------------------------------------------------- */
+
+type PatternRowDb = { weekday: number; start_time: string | null; end_time: string | null };
+
+/** "09:00:00" from Postgres → "09:00". */
+function clock(value: string | null): string | null {
+  return value ? value.slice(0, 5) : null;
+}
+
+function patternRowsOf(rows: readonly PatternRowDb[] | null | undefined): PatternRow[] {
+  return fullPattern(
+    (rows ?? []).map((r) => ({
+      weekday: r.weekday as Weekday,
+      start: clock(r.start_time),
+      end: clock(r.end_time),
+    })),
+  );
+}
+
+async function staffPatternRows(
+  supabaseAdmin: Awaited<ReturnType<typeof adminClient>>,
+  userId: string,
+): Promise<PatternRow[]> {
+  const { data } = await supabaseAdmin
+    .from("staff_working_patterns")
+    .select("weekday, start_time, end_time")
+    .eq("user_id", userId);
+  return patternRowsOf(data as PatternRowDb[] | null);
+}
+
+/** Owners, admins and managers holding Edit staff profiles — who approves time off and pattern changes. */
+async function profileManagerIds(
+  supabaseAdmin: Awaited<ReturnType<typeof adminClient>>,
+  exceptUserId: string,
+): Promise<string[]> {
+  const [{ data: roles }, { data: grant }] = await Promise.all([
+    supabaseAdmin.from("user_roles").select("user_id, role"),
+    supabaseAdmin
+      .from("role_permissions")
+      .select("enabled")
+      .eq("role", "manager")
+      .eq("permission", "team.manage_profiles")
+      .maybeSingle(),
+  ]);
+  const managersHold = Boolean(grant?.enabled);
+  const ids = new Set<string>();
+  for (const r of roles ?? []) {
+    if (r.role === "owner" || r.role === "admin" || (r.role === "manager" && managersHold)) {
+      ids.add(r.user_id);
+    }
+  }
+  ids.delete(exceptUserId);
+  return [...ids];
+}
+
+async function notifyStaffMembers(
+  ctx: Ctx,
+  recipients: string[],
+  note: { kind: string; title: string; body: string },
+) {
+  if (recipients.length === 0) return;
+  const supabaseAdmin = await adminClient(ctx);
+  await supabaseAdmin.from("staff_notifications").insert(
+    recipients.map((recipient_id) => ({
+      clinic_id: clinicIdOf(ctx),
+      recipient_id,
+      sender_id: ctx.userId,
+      kind: note.kind,
+      title: note.title,
+      body: note.body,
+    })),
+  );
+}
+
+async function staffDisplayName(
+  supabaseAdmin: Awaited<ReturnType<typeof adminClient>>,
+  userId: string,
+): Promise<string> {
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("full_name")
+    .eq("id", userId)
+    .maybeSingle();
+  return (data?.full_name as string | undefined)?.trim() || "A colleague";
+}
+
+/** A staff member's working pattern and time off for one year; colleagues without Edit staff profiles get dates only. */
+export const getStaffSchedule = createServerFn({ method: "GET" })
+  .validator((data: { userId?: string; year?: number }) =>
+    parseInput(schemas.GetStaffSchedule, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "getStaffSchedule");
+    const target = data.userId || ctx.userId;
+    const full = target === ctx.userId || canManageProfiles(identity);
+    const todayKey = clinicDayKey();
+    const year = data.year ?? parseDayKey(todayKey).year;
+    const supabaseAdmin = await adminClient(context);
+    const [pattern, { data: rows }] = await Promise.all([
+      staffPatternRows(supabaseAdmin, target),
+      supabaseAdmin
+        .from("staff_time_off")
+        .select("*")
+        .eq("user_id", target)
+        .gte("ends_on", `${year}-01-01`)
+        .lte("starts_on", `${year}-12-31`)
+        .order("starts_on", { ascending: false }),
+    ]);
+    const all = (rows ?? []) as TimeOffLike[];
+    const timeOff = full
+      ? all
+      : all
+          .filter((r) => r.status === "approved" && r.ends_on >= todayKey)
+          .map((r) => ({ ...r, type: "other", note: null, working_days: r.working_days }));
+    return {
+      userId: target,
+      year,
+      todayKey,
+      canManage: full,
+      pattern,
+      timeOff,
+      totals: full ? timeOffTotals(all, year, todayKey) : null,
+      pendingCount: full ? all.filter((r) => r.status === "pending").length : 0,
+    };
+  });
+
+/** Owner or a manager with Edit staff profiles sets someone's weekly hours. */
+export const setWorkingPattern = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      userId: string;
+      rows: { weekday: number; start: string | null; end: string | null }[];
+    }) => parseInput(schemas.SetWorkingPattern, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "setWorkingPattern");
+    for (const row of data.rows) {
+      if ((row.start && !row.end) || (!row.start && row.end)) {
+        throw new Error("Give both a start and an end time, or leave the day off.");
+      }
+      if (row.start && row.end && minutesOf(row.end) <= minutesOf(row.start)) {
+        throw new Error("The end time must be after the start time.");
+      }
+    }
+    const supabaseAdmin = await adminClient(context);
+    await supabaseAdmin.from("staff_working_patterns").delete().eq("user_id", data.userId);
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin.from("staff_working_patterns").insert(
+      data.rows.map((row) => ({
+        clinic_id: clinicIdOf(ctx),
+        user_id: data.userId,
+        weekday: row.weekday,
+        start_time: row.start,
+        end_time: row.end,
+        updated_by: ctx.userId,
+        updated_at: now,
+      })),
+    );
+    if (error) throw new Error(error.message);
+    await audit(ctx, "staff.pattern_set", "staff_working_patterns", data.userId, null);
+    return { ok: true };
+  });
+
+/** A staff member asks for different hours; the owner and managers with Edit staff profiles hear about it. */
+export const requestWorkingPatternChange = createServerFn({ method: "POST" })
+  .validator((data: { note: string }) => parseInput(schemas.RequestWorkingPatternChange, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "requestWorkingPatternChange");
+    const supabaseAdmin = await adminClient(context);
+    const [recipients, name] = await Promise.all([
+      profileManagerIds(supabaseAdmin, ctx.userId),
+      staffDisplayName(supabaseAdmin, ctx.userId),
+    ]);
+    await notifyStaffMembers(ctx, recipients, {
+      kind: "pattern_change",
+      title: "Working pattern change request",
+      body: `${name} asked to change their working hours: "${data.note.trim()}". Open their profile's Schedule tab to update the pattern.`,
+    });
+    return { ok: true, notified: recipients.length };
+  });
+
+async function timeOffRowFor(
+  ctx: Ctx,
+  supabaseAdmin: Awaited<ReturnType<typeof adminClient>>,
+  userId: string,
+  input: {
+    type: string;
+    startsOn: string;
+    endsOn: string;
+    startHalf?: string | undefined;
+    endHalf?: string | undefined;
+    note?: string | undefined;
+  },
+) {
+  if (input.endsOn < input.startsOn) throw new Error("The last day must not be before the first.");
+  const pattern = await staffPatternRows(supabaseAdmin, userId);
+  const startHalf = (input.startHalf ?? "full") as HalfDay;
+  const endHalf = (input.endHalf ?? "full") as HalfDay;
+  return {
+    clinic_id: clinicIdOf(ctx),
+    user_id: userId,
+    type: input.type,
+    starts_on: input.startsOn,
+    ends_on: input.endsOn,
+    start_half: startHalf,
+    end_half: endHalf,
+    working_days: workingDaysBetween(input.startsOn, input.endsOn, pattern, startHalf, endHalf),
+    note: input.note?.trim() || null,
+  };
+}
+
+/** Staff request time off; it waits as pending until the owner or a manager with Edit staff profiles reviews it. */
+export const requestTimeOff = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      type: "holiday" | "training" | "sickness" | "other";
+      startsOn: string;
+      endsOn: string;
+      startHalf?: "full" | "half";
+      endHalf?: "full" | "half";
+      note?: string;
+    }) => parseInput(schemas.RequestTimeOff, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "requestTimeOff");
+    const supabaseAdmin = await adminClient(context);
+    const row = await timeOffRowFor(ctx, supabaseAdmin, ctx.userId, data);
+    const { data: inserted, error } = await supabaseAdmin
+      .from("staff_time_off")
+      .insert({ ...row, status: "pending" })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    const [recipients, name] = await Promise.all([
+      profileManagerIds(supabaseAdmin, ctx.userId),
+      staffDisplayName(supabaseAdmin, ctx.userId),
+    ]);
+    await notifyStaffMembers(ctx, recipients, {
+      kind: "time_off_request",
+      title: "Time off request",
+      body: `${name} asked for ${timeOffWhat({ ...row, id: inserted.id, status: "pending" })} (${timeOffLabel(row)}). Approve or decline it from their profile's Schedule tab.`,
+    });
+    return { ok: true, id: inserted.id as string, workingDays: row.working_days };
+  });
+
+/** Withdraw your own pending request. */
+export const withdrawTimeOff = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.WithdrawTimeOff, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "withdrawTimeOff");
+    const supabaseAdmin = await adminClient(context);
+    const { data: updated, error } = await supabaseAdmin
+      .from("staff_time_off")
+      .update({ status: "withdrawn", updated_at: new Date().toISOString() })
+      .eq("id", data.id)
+      .eq("user_id", ctx.userId)
+      .eq("status", "pending")
+      .select("id");
+    if (error) throw new Error(error.message);
+    if (!updated || updated.length === 0)
+      throw new Error("Only your own pending requests can be withdrawn.");
+    return { ok: true };
+  });
+
+/** Approve or decline a colleague's request; the requester is told. */
+export const reviewTimeOff = createServerFn({ method: "POST" })
+  .validator((data: { id: string; approve: boolean; reviewerNote?: string }) =>
+    parseInput(schemas.ReviewTimeOff, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "reviewTimeOff");
+    const supabaseAdmin = await adminClient(context);
+    const { data: row } = await supabaseAdmin
+      .from("staff_time_off")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (!row) throw new Error("Request not found");
+    if (row.status !== "pending") throw new Error("This request has already been decided.");
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin
+      .from("staff_time_off")
+      .update({
+        status: data.approve ? "approved" : "declined",
+        reviewed_by: ctx.userId,
+        reviewed_at: now,
+        reviewer_note: data.reviewerNote?.trim() || null,
+        updated_at: now,
+      })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    const reviewer = await staffDisplayName(supabaseAdmin, ctx.userId);
+    await notifyStaffMembers(ctx, [row.user_id as string], {
+      kind: "time_off_reviewed",
+      title: data.approve ? "Time off approved" : "Time off declined",
+      body: `${reviewer} ${data.approve ? "approved" : "declined"} your ${timeOffWhat(row as TimeOffLike).toLowerCase()} (${timeOffLabel(row as TimeOffLike)}).${data.reviewerNote?.trim() ? ` "${data.reviewerNote.trim()}"` : ""}`,
+    });
+    await audit(
+      ctx,
+      data.approve ? "staff.time_off_approved" : "staff.time_off_declined",
+      "staff_time_off",
+      data.id,
+      null,
+    );
+    return { ok: true };
+  });
+
+/** Owner or a manager with Edit staff profiles records time off for a colleague; it lands approved. */
+export const addTimeOff = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      userId: string;
+      type: "holiday" | "training" | "sickness" | "other";
+      startsOn: string;
+      endsOn: string;
+      startHalf?: "full" | "half";
+      endHalf?: "full" | "half";
+      note?: string;
+    }) => parseInput(schemas.AddTimeOff, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "addTimeOff");
+    const supabaseAdmin = await adminClient(context);
+    const row = await timeOffRowFor(ctx, supabaseAdmin, data.userId, data);
+    const now = new Date().toISOString();
+    const { data: inserted, error } = await supabaseAdmin
+      .from("staff_time_off")
+      .insert({ ...row, status: "approved", reviewed_by: ctx.userId, reviewed_at: now })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    if (data.userId !== ctx.userId) {
+      const by = await staffDisplayName(supabaseAdmin, ctx.userId);
+      await notifyStaffMembers(ctx, [data.userId], {
+        kind: "time_off_reviewed",
+        title: "Time off added",
+        body: `${by} added ${timeOffWhat({ ...row, id: inserted.id, status: "approved" }).toLowerCase()} (${timeOffLabel(row)}) to your schedule.`,
+      });
+    }
+    return { ok: true, id: inserted.id as string, workingDays: row.working_days };
+  });
+
+/** The catalogue treatments a practitioner can be booked for. */
+export const listBookableTreatments = createServerFn({ method: "GET" })
+  .validator((data: { userId: string }) => parseInput(schemas.ListBookableTreatments, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "listBookableTreatments");
+    const supabaseAdmin = await adminClient(context);
+    const { data: rows } = await supabaseAdmin
+      .from("practitioner_treatments")
+      .select("catalogue_id, treatment_catalogue(name, category)")
+      .eq("user_id", data.userId);
+    return (
+      (rows ?? []) as {
+        catalogue_id: string;
+        treatment_catalogue: { name: string; category: string | null } | null;
+      }[]
+    )
+      .map((r) => ({
+        catalogueId: r.catalogue_id,
+        name: r.treatment_catalogue?.name ?? "",
+        category: r.treatment_catalogue?.category ?? null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+/** Owner or a manager with Edit staff profiles chooses what the front desk can book someone for. */
+export const setBookableTreatments = createServerFn({ method: "POST" })
+  .validator((data: { userId: string; catalogueIds: string[] }) =>
+    parseInput(schemas.SetBookableTreatments, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "setBookableTreatments");
+    const supabaseAdmin = await adminClient(context);
+    await supabaseAdmin.from("practitioner_treatments").delete().eq("user_id", data.userId);
+    const ids = [...new Set(data.catalogueIds)];
+    if (ids.length > 0) {
+      const { error } = await supabaseAdmin.from("practitioner_treatments").insert(
+        ids.map((catalogue_id) => ({
+          clinic_id: clinicIdOf(ctx),
+          user_id: data.userId,
+          catalogue_id,
+        })),
+      );
+      if (error) throw new Error(error.message);
+    }
+    await audit(ctx, "staff.bookable_set", "practitioner_treatments", data.userId, null, {
+      count: ids.length,
+    });
+    return { ok: true };
+  });
+
+async function invoiceStoreFor(ctx: Ctx): Promise<InvoiceStore> {
+  const supabaseAdmin = await adminClient(ctx);
+  const [{ data: clinicRow }, { data: ownerRoles }, users] = await Promise.all([
+    supabaseAdmin.from("clinics").select("name, email").eq("id", clinicIdOf(ctx)).maybeSingle(),
+    supabaseAdmin.from("user_roles").select("user_id").eq("role", "owner"),
+    supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 }),
+  ]);
+  const emailOf = new Map((users.data?.users ?? []).map((u) => [u.id, u.email ?? null]));
+  return {
+    clinicName: (clinicRow?.name as string | null) ?? "Your clinic",
+    clinicEmail: (clinicRow?.email as string | null) ?? null,
+    owners: (ownerRoles ?? []).map((r) => ({
+      id: r.user_id as string,
+      email: emailOf.get(r.user_id) ?? null,
+    })),
+    async practitioner(userId) {
+      const [{ data: p }] = await Promise.all([
+        supabaseAdmin
+          .from("profiles")
+          .select("full_name, job_title")
+          .eq("id", userId)
+          .maybeSingle(),
+      ]);
+      return {
+        name: (p?.full_name as string | null) ?? "Practitioner",
+        email: emailOf.get(userId) ?? null,
+        jobTitle: (p?.job_title as string | null) ?? null,
+      };
+    },
+    async markSent(id, sentAt) {
+      await supabaseAdmin
+        .from("practitioner_invoices")
+        .update({ status: "sent", sent_at: sentAt, scheduled_for: null, updated_at: sentAt })
+        .eq("id", id);
+    },
+    async notifyOwners(inv, fromName) {
+      const recipients = (ownerRoles ?? [])
+        .map((r) => r.user_id as string)
+        .filter((id) => id !== inv.user_id);
+      if (recipients.length === 0) return;
+      await supabaseAdmin.from("staff_notifications").insert(
+        recipients.map((recipient_id) => ({
+          clinic_id: clinicIdOf(ctx),
+          recipient_id,
+          sender_id: inv.user_id,
+          kind: "invoice",
+          title: `Invoice ${inv.number}`,
+          body: `${fromName} sent their ${invoicePeriodLabel(inv)} invoice: ${inv.treatments} treatments, ${invoiceMoney(inv.amount)}. Mark it paid from their profile once settled.`,
+        })),
+      );
+    },
+  };
+}
+
+/** A practitioner's own invoices, or a colleague's with Set staff commission. */
+export const listPractitionerInvoices = createServerFn({ method: "GET" })
+  .validator((data: { userId?: string }) => parseInput(schemas.ListPractitionerInvoices, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "listPractitionerInvoices");
+    const target = data.userId || ctx.userId;
+    if (target !== ctx.userId && !canSetCommission(identity)) {
+      throw new Error("You do not have access to another person's invoices");
+    }
+    const supabaseAdmin = await adminClient(context);
+    const { data: rows } = await supabaseAdmin
+      .from("practitioner_invoices")
+      .select("*")
+      .eq("user_id", target)
+      .order("period_start", { ascending: false });
+    return (rows ?? []) as InvoiceRow[];
+  });
+
+/** The share a practitioner earned in a month, by the same maths as My earnings. */
+async function practitionerMonthShare(
+  ctx: Ctx,
+  userId: string,
+  period: { start: string; end: string },
+): Promise<{ amount: number; treatments: number }> {
+  const supabaseAdmin = await adminClient(ctx);
+  const { earningsInputs, earningsLines } = await import("./earnings.server");
+  const [{ data: profile }, source] = await Promise.all([
+    supabaseAdmin.from("profiles").select("commission_rate").eq("id", userId).maybeSingle(),
+    earningsSource(supabaseAdmin, clinicIdOf(ctx)),
+  ]);
+  const from = new Date(`${period.start}T00:00:00.000Z`).toISOString();
+  const to = new Date(`${period.end}T23:59:59.999Z`).toISOString();
+  const inputs = earningsInputs({ ...source, from, to });
+  const rate = Number(profile?.commission_rate ?? 0);
+  const mine = inputs.treatments.filter((t) => t.practitioner_id === userId);
+  const lines = earningsLines(mine as never, inputs.appointments as never, rate, inputs.money);
+  const amount = Math.round(lines.reduce((sum, l) => sum + l.share, 0) * 100) / 100;
+  return { amount, treatments: lines.length };
+}
+
+/** A practitioner creates their monthly invoice: send it now, or schedule it for the 1st of next month. */
+export const createPractitionerInvoice = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      year: number;
+      month: number;
+      recipient: "payroll" | "owner";
+      note?: string;
+      mode: "send" | "schedule";
+    }) => parseInput(schemas.CreatePractitionerInvoice, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "createPractitionerInvoice");
+    const supabaseAdmin = await adminClient(context);
+    const period = invoicePeriod(data.year, data.month);
+    const todayKey = clinicDayKey();
+    if (period.start > todayKey) throw new Error("That month has not started yet.");
+    const { data: existing } = await supabaseAdmin
+      .from("practitioner_invoices")
+      .select("id, status")
+      .eq("user_id", ctx.userId)
+      .eq("period_start", period.start)
+      .maybeSingle();
+    if (existing && existing.status !== "scheduled") {
+      throw new Error("An invoice for that month has already been sent.");
+    }
+    const [{ amount, treatments }, name] = await Promise.all([
+      practitionerMonthShare(ctx, ctx.userId, period),
+      staffDisplayName(supabaseAdmin, ctx.userId),
+    ]);
+    const now = new Date();
+    const sendAt = data.mode === "schedule" ? nextInvoiceSendDate(data.year, data.month) : null;
+    const row = {
+      clinic_id: clinicIdOf(ctx),
+      user_id: ctx.userId,
+      number: invoiceNumber(initialsOf(name), data.year, data.month),
+      period_start: period.start,
+      period_end: period.end,
+      recipient: data.recipient,
+      note: data.note?.trim() || null,
+      status: "scheduled",
+      scheduled_for: sendAt ?? todayKey,
+      amount,
+      treatments,
+      updated_at: now.toISOString(),
+    };
+    const saved = existing
+      ? await supabaseAdmin
+          .from("practitioner_invoices")
+          .update(row)
+          .eq("id", existing.id)
+          .select("*")
+          .single()
+      : await supabaseAdmin.from("practitioner_invoices").insert(row).select("*").single();
+    if (saved.error) throw new Error(saved.error.message);
+    const invoice = saved.data as InvoiceRow;
+    if (data.mode === "send") {
+      const store = await invoiceStoreFor(ctx);
+      await sendInvoiceNow(store, invoice, now);
+      return {
+        ok: true,
+        id: invoice.id,
+        status: "sent",
+        number: invoice.number,
+        amount,
+        treatments,
+      };
+    }
+    return {
+      ok: true,
+      id: invoice.id,
+      status: "scheduled",
+      scheduledFor: sendAt,
+      number: invoice.number,
+      amount,
+      treatments,
+    };
+  });
+
+/** Owner or a manager with Set staff commission marks an invoice paid. */
+export const markInvoicePaid = createServerFn({ method: "POST" })
+  .validator((data: { id: string }) => parseInput(schemas.MarkInvoicePaid, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "markInvoicePaid");
+    const supabaseAdmin = await adminClient(context);
+    const now = new Date().toISOString();
+    const { data: updated, error } = await supabaseAdmin
+      .from("practitioner_invoices")
+      .update({ status: "paid", paid_at: now, updated_at: now })
+      .eq("id", data.id)
+      .eq("status", "sent")
+      .select("id, user_id, number");
+    if (error) throw new Error(error.message);
+    const inv = updated?.[0];
+    if (!inv) throw new Error("Only a sent invoice can be marked paid.");
+    await notifyStaffMembers(ctx, [inv.user_id as string], {
+      kind: "invoice",
+      title: `Invoice ${inv.number} paid`,
+      body: `Your invoice ${inv.number} has been marked paid.`,
+    });
+    return { ok: true };
+  });
+
+/** Scheduled invoices due today go out; called from the outbox drain. */
+export async function deliverDueInvoices(db: { from: (table: string) => any }, clinicId?: string) {
+  const todayKey = clinicDayKey();
+  let q = db
+    .from("practitioner_invoices")
+    .select("*")
+    .eq("status", "scheduled")
+    .lte("scheduled_for", todayKey);
+  if (clinicId) q = q.eq("clinic_id", clinicId);
+  const { data: rows } = await q;
+  const due = (rows ?? []) as (InvoiceRow & { clinic_id: string })[];
+  if (due.length === 0) return 0;
+  let sent = 0;
+  const byClinic = new Map<string, (InvoiceRow & { clinic_id: string })[]>();
+  for (const r of due) byClinic.set(r.clinic_id, [...(byClinic.get(r.clinic_id) ?? []), r]);
+  for (const [cid, list] of byClinic) {
+    const [{ data: clinicRow }, { data: ownerRoles }] = await Promise.all([
+      db.from("clinics").select("name, email").eq("id", cid).maybeSingle(),
+      db.from("user_roles").select("user_id").eq("role", "owner"),
+    ]);
+    const { data: staffProfiles } = await db
+      .from("profiles")
+      .select("id, full_name, job_title")
+      .eq("clinic_id", cid);
+    const owners = ((ownerRoles ?? []) as { user_id: string }[])
+      .filter((r) => (staffProfiles ?? []).some((p: { id: string }) => p.id === r.user_id))
+      .map((r) => ({ id: r.user_id, email: null as string | null }));
+    const store: InvoiceStore = {
+      clinicName: clinicRow?.name ?? "Your clinic",
+      clinicEmail: clinicRow?.email ?? null,
+      owners,
+      async practitioner(userId) {
+        const p = (staffProfiles ?? []).find((x: { id: string }) => x.id === userId);
+        return {
+          name: p?.full_name ?? "Practitioner",
+          email: null,
+          jobTitle: p?.job_title ?? null,
+        };
+      },
+      async markSent(id, sentAt) {
+        await db
+          .from("practitioner_invoices")
+          .update({ status: "sent", sent_at: sentAt, scheduled_for: null, updated_at: sentAt })
+          .eq("id", id);
+      },
+      async notifyOwners(inv, fromName) {
+        const recipients = owners.map((o) => o.id).filter((id) => id !== inv.user_id);
+        if (recipients.length === 0) return;
+        await db.from("staff_notifications").insert(
+          recipients.map((recipient_id) => ({
+            clinic_id: cid,
+            recipient_id,
+            sender_id: inv.user_id,
+            kind: "invoice",
+            title: `Invoice ${inv.number}`,
+            body: `${fromName} sent their ${invoicePeriodLabel(inv)} invoice: ${inv.treatments} treatments, ${invoiceMoney(inv.amount)}. Mark it paid from their profile once settled.`,
+          })),
+        );
+      },
+    };
+    sent += await deliverScheduledInvoices(store, list, todayKey);
+  }
+  return sent;
+}
 /** Retention insight: rolling rate, at-risk patients, cohorts and per-treatment repeat rates. */
 /** The period picker's range as a retention window; empty means year to date. */
 function retentionWindow(data: { from?: string; to?: string; key?: string }) {

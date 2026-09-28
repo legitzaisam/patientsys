@@ -197,8 +197,19 @@ export async function drainDueCommunications(
   db: Db,
   opts?: { clinicId?: string; limit?: number },
 ): Promise<DrainSummary> {
-  // Stage offers first, so anything automation queues goes out in this run.
-  // A failure here must not stop reminders and confirmations from leaving.
+  // Practitioner invoices scheduled for today go out first (their own email,
+  // not the patient outbox), then stage offers, so anything automation queues
+  // goes out in this run. A failure in either must not stop reminders and
+  // confirmations from leaving.
+  try {
+    const { deliverDueInvoices } = await import("@/lib/clinic.functions");
+    await deliverDueInvoices(db, opts?.clinicId);
+  } catch (err) {
+    console.error(
+      "[invoices] scheduled delivery failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
   try {
     const { runOfferAutomation } = await import("@/lib/offers/automation.server");
     await runOfferAutomation(db, opts?.clinicId ? { clinicId: opts.clinicId } : {});
