@@ -1,5 +1,17 @@
 import { viewGrantRows } from "@/lib/access-catalogue";
 import { DEMO_NOW } from "@/lib/demo/enabled";
+import { shareOf } from "@/lib/metrics/money";
+import {
+  addDays,
+  invoiceNumber,
+  invoicePeriod,
+  previousMonth,
+  weekdayOf,
+  workingDaysBetween,
+  yearMonthOf,
+  type PatternRow,
+  type Weekday,
+} from "@/lib/staff-schedule";
 import { templateFor } from "@/lib/treatment-results";
 import { defaultDurationMinutes } from "@/lib/treatment-duration";
 
@@ -3636,6 +3648,292 @@ export const staffDocuments: Row[] = STAFF_FILES.map(
   }),
 );
 
+
+/* ---------------------------------------------------------------- */
+/* working patterns, time off, bookable treatments, invoices          */
+/* ---------------------------------------------------------------- */
+
+type PatternSpec = [weekday: number, start: string | null, end: string | null];
+
+/** Monday-first weekday rows; null times are a day off. */
+const PATTERN_SPECS: Record<string, PatternSpec[]> = {
+  // The mockup's practitioner: Tue and Sun off, a late Thursday.
+  [USERS.practitioner]: [
+    [0, "09:00", "17:30"],
+    [1, null, null],
+    [2, "09:00", "17:30"],
+    [3, "12:00", "20:00"],
+    [4, "09:00", "15:00"],
+    [5, "09:00", "17:00"],
+    [6, null, null],
+  ],
+  [USERS.owner]: [
+    [0, "09:00", "18:00"],
+    [1, "09:00", "18:00"],
+    [2, "09:00", "18:00"],
+    [3, "09:00", "18:00"],
+    [4, "09:00", "17:00"],
+    [5, null, null],
+    [6, null, null],
+  ],
+  [USERS.practitioner2]: [
+    [0, "10:00", "19:00"],
+    [1, "10:00", "19:00"],
+    [2, null, null],
+    [3, "10:00", "19:00"],
+    [4, "10:00", "19:00"],
+    [5, "09:00", "14:00"],
+    [6, null, null],
+  ],
+  [USERS.frontDesk]: [
+    [0, "08:30", "17:00"],
+    [1, "08:30", "17:00"],
+    [2, "08:30", "17:00"],
+    [3, "08:30", "17:00"],
+    [4, "08:30", "17:00"],
+    [5, null, null],
+    [6, null, null],
+  ],
+  [USERS.manager]: [
+    [0, "09:00", "17:30"],
+    [1, "09:00", "17:30"],
+    [2, "09:00", "17:30"],
+    [3, "09:00", "17:30"],
+    [4, "09:00", "17:30"],
+    [5, null, null],
+    [6, null, null],
+  ],
+};
+
+export const staffWorkingPatterns: Row[] = Object.entries(PATTERN_SPECS).flatMap(([userId, rows]) =>
+  rows.map(([weekday, start, end]) => ({
+    id: id("w1"),
+    clinic_id: CLINIC_ID,
+    user_id: userId,
+    weekday,
+    start_time: start,
+    end_time: end,
+    updated_by: USERS.owner,
+    updated_at: iso(-90),
+  })),
+);
+
+function patternRowsFor(userId: string): PatternRow[] {
+  return (PATTERN_SPECS[userId] ?? []).map(([weekday, start, end]) => ({
+    weekday: weekday as Weekday,
+    start,
+    end,
+  }));
+}
+
+/** The calendar day `offset` days from now, rolled forward to the wanted Monday-first weekday. */
+function dateOnlyOnWeekday(offset: number, weekday: number) {
+  let key = dateOnly(offset);
+  for (let i = 0; i < 7 && weekdayOf(key) !== weekday; i++) key = addDays(key, 1);
+  return key;
+}
+
+type TimeOffSpec = {
+  user: string;
+  type: "holiday" | "training" | "sickness" | "other";
+  from: string;
+  to: string;
+  status: "pending" | "approved" | "declined" | "withdrawn";
+  note?: string;
+  requestedDaysAgo: number;
+};
+
+const NADIA_TRAINING = dateOnlyOnWeekday(14, 2); // a Wednesday about two weeks out
+const NADIA_HOLIDAY_FROM = dateOnlyOnWeekday(19, 0); // the Monday after that
+const NADIA_PENDING = dateOnlyOnWeekday(30, 4); // a Friday about a month out
+
+const TIME_OFF_SPECS: TimeOffSpec[] = [
+  // Earlier this year: 14 working days taken (Tue is her day off, so a Mon–Fri week is 4).
+  {
+    user: USERS.practitioner,
+    type: "holiday",
+    from: dateOnlyOnWeekday(-231, 0),
+    to: addDays(dateOnlyOnWeekday(-231, 0), 11),
+    status: "approved",
+    requestedDaysAgo: 260,
+  },
+  {
+    user: USERS.practitioner,
+    type: "sickness",
+    from: dateOnlyOnWeekday(-140, 0),
+    to: addDays(dateOnlyOnWeekday(-140, 0), 3),
+    status: "approved",
+    requestedDaysAgo: 140,
+  },
+  {
+    user: USERS.practitioner,
+    type: "holiday",
+    from: dateOnlyOnWeekday(-63, 3),
+    to: addDays(dateOnlyOnWeekday(-63, 3), 1),
+    status: "approved",
+    requestedDaysAgo: 90,
+  },
+  // The mockup's October: a training day, a week off, and one day still pending.
+  {
+    user: USERS.practitioner,
+    type: "training",
+    from: NADIA_TRAINING,
+    to: NADIA_TRAINING,
+    status: "approved",
+    note: "Advanced dermal filler masterclass",
+    requestedDaysAgo: 40,
+  },
+  {
+    user: USERS.practitioner,
+    type: "holiday",
+    from: NADIA_HOLIDAY_FROM,
+    to: addDays(NADIA_HOLIDAY_FROM, 4),
+    status: "approved",
+    requestedDaysAgo: 55,
+  },
+  {
+    user: USERS.practitioner,
+    type: "holiday",
+    from: NADIA_PENDING,
+    to: NADIA_PENDING,
+    status: "pending",
+    note: "Long weekend away",
+    requestedDaysAgo: 2,
+  },
+  // Colleagues, so the diary and team pages have something to show.
+  {
+    user: USERS.practitioner2,
+    type: "holiday",
+    from: dateOnlyOnWeekday(45, 0),
+    to: addDays(dateOnlyOnWeekday(45, 0), 4),
+    status: "approved",
+    requestedDaysAgo: 20,
+  },
+  {
+    user: USERS.frontDesk,
+    type: "holiday",
+    from: dateOnlyOnWeekday(10, 3),
+    to: dateOnlyOnWeekday(10, 3),
+    status: "pending",
+    requestedDaysAgo: 1,
+  },
+];
+
+export const staffTimeOff: Row[] = TIME_OFF_SPECS.map((spec) => {
+  const approved = spec.status === "approved" || spec.status === "declined";
+  return {
+    id: id("w2"),
+    clinic_id: CLINIC_ID,
+    user_id: spec.user,
+    type: spec.type,
+    starts_on: spec.from,
+    ends_on: spec.to,
+    start_half: "full",
+    end_half: "full",
+    working_days: workingDaysBetween(spec.from, spec.to, patternRowsFor(spec.user)),
+    note: spec.note ?? null,
+    status: spec.status,
+    requested_at: iso(-spec.requestedDaysAgo, 18, 5),
+    reviewed_by: approved ? USERS.owner : null,
+    reviewed_at: approved ? iso(-spec.requestedDaysAgo + 1, 9, 20) : null,
+    reviewer_note: null,
+    created_at: iso(-spec.requestedDaysAgo, 18, 5),
+    updated_at: iso(-spec.requestedDaysAgo + (approved ? 1 : 0), 9, 20),
+  };
+});
+
+/** Treatments the front desk can book each practitioner for, by catalogue name. */
+const BOOKABLE_SPECS: Record<string, string[]> = {
+  [USERS.practitioner]: [
+    "Anti-Wrinkle Injections",
+    "Lip Filler",
+    "Skin Booster",
+    "Chemical Peel",
+    "Microneedling",
+  ],
+  [USERS.owner]: [
+    "Anti-Wrinkle Injections",
+    "Cheek Filler",
+    "Jawline Filler",
+    "Tear Trough Filler",
+    "Non-surgical Rhinoplasty",
+    "Profhilo",
+    "Skin Consultation",
+  ],
+  [USERS.practitioner2]: [
+    "Laser Hair Removal",
+    "Laser Skin Resurfacing",
+    "IPL",
+    "Fat Dissolving",
+    "Skin Consultation",
+    "Follow-up Review",
+  ],
+};
+
+export const practitionerTreatments: Row[] = Object.entries(BOOKABLE_SPECS).flatMap(
+  ([userId, names]) =>
+    names.flatMap((name) => {
+      const item = catalogueByName.get(name);
+      return item
+        ? [
+            {
+              id: id("w3"),
+              clinic_id: CLINIC_ID,
+              user_id: userId,
+              catalogue_id: item["id"],
+              created_at: iso(-90),
+            },
+          ]
+        : [];
+    }),
+);
+
+/** Nadia's invoice for last month: sent on the 1st, paid on the 5th. */
+export const practitionerInvoices: Row[] = (() => {
+  const today = dateOnly(0);
+  const { year, month } = yearMonthOf(today);
+  const prev = previousMonth(year, month);
+  const period = invoicePeriod(prev.year, prev.month);
+  const first = new Date(`${invoicePeriod(year, month).start}T06:00:00.000Z`);
+  const paid = new Date(first.getTime() + 4 * DAY + 3 * 3600_000);
+  const lines = treatments.filter(
+    (t) =>
+      t["practitioner_id"] === USERS.practitioner &&
+      String(t["performed_at"]).slice(0, 10) >= period.start &&
+      String(t["performed_at"]).slice(0, 10) <= period.end,
+  );
+  const amount =
+    lines.reduce(
+      (sum, t) =>
+        sum +
+        shareOf(
+          Math.round(Number(t["price"] ?? 0) * 100),
+          Number(t["commission_rate_snapshot"] ?? 45),
+        ),
+      0,
+    ) / 100;
+  return [
+    {
+      id: id("w4"),
+      clinic_id: CLINIC_ID,
+      user_id: USERS.practitioner,
+      number: invoiceNumber("NR", prev.year, prev.month),
+      period_start: period.start,
+      period_end: period.end,
+      recipient: "payroll",
+      note: null,
+      status: "paid",
+      scheduled_for: null,
+      sent_at: first.toISOString(),
+      paid_at: paid.toISOString(),
+      amount: Math.round(amount * 100) / 100,
+      treatments: lines.length,
+      created_at: first.toISOString(),
+      updated_at: paid.toISOString(),
+    },
+  ];
+})();
+
 export const userNotes: Row[] = [
   {
     id: id("q1"),
@@ -5193,6 +5491,10 @@ export const db = {
   colourThemes,
   profileChangeRequests,
   staffDocuments,
+  staffWorkingPatterns,
+  staffTimeOff,
+  practitionerTreatments,
+  practitionerInvoices,
   userNotes,
   staffEmails,
   staffLastActive,

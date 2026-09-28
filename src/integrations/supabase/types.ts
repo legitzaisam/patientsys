@@ -1528,6 +1528,124 @@ export type Database = {
           },
         ];
       };
+      practitioner_invoices: {
+        Row: {
+          amount: number;
+          clinic_id: string;
+          created_at: string;
+          id: string;
+          note: string | null;
+          number: string;
+          paid_at: string | null;
+          period_end: string;
+          period_start: string;
+          recipient: string;
+          scheduled_for: string | null;
+          sent_at: string | null;
+          status: string;
+          treatments: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          amount?: number;
+          clinic_id: string;
+          created_at?: string;
+          id?: string;
+          note?: string | null;
+          number: string;
+          paid_at?: string | null;
+          period_end: string;
+          period_start: string;
+          recipient: string;
+          scheduled_for?: string | null;
+          sent_at?: string | null;
+          status?: string;
+          treatments?: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          amount?: number;
+          clinic_id?: string;
+          created_at?: string;
+          id?: string;
+          note?: string | null;
+          number?: string;
+          paid_at?: string | null;
+          period_end?: string;
+          period_start?: string;
+          recipient?: string;
+          scheduled_for?: string | null;
+          sent_at?: string | null;
+          status?: string;
+          treatments?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "practitioner_invoices_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "practitioner_invoices_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      practitioner_treatments: {
+        Row: {
+          catalogue_id: string;
+          clinic_id: string;
+          created_at: string;
+          id: string;
+          user_id: string;
+        };
+        Insert: {
+          catalogue_id: string;
+          clinic_id: string;
+          created_at?: string;
+          id?: string;
+          user_id: string;
+        };
+        Update: {
+          catalogue_id?: string;
+          clinic_id?: string;
+          created_at?: string;
+          id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "practitioner_treatments_catalogue_id_fkey";
+            columns: ["catalogue_id"];
+            isOneToOne: false;
+            referencedRelation: "treatment_catalogue";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "practitioner_treatments_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "practitioner_treatments_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       profile_change_requests: {
         Row: {
           clinic_id: string;
@@ -2255,6 +2373,88 @@ export type Database = {
         };
         Relationships: [];
       };
+      staff_time_off: {
+        Row: {
+          clinic_id: string;
+          created_at: string;
+          end_half: string;
+          ends_on: string;
+          id: string;
+          note: string | null;
+          requested_at: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          reviewer_note: string | null;
+          start_half: string;
+          starts_on: string;
+          status: string;
+          type: string;
+          updated_at: string;
+          user_id: string;
+          working_days: number;
+        };
+        Insert: {
+          clinic_id: string;
+          created_at?: string;
+          end_half?: string;
+          ends_on: string;
+          id?: string;
+          note?: string | null;
+          requested_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          reviewer_note?: string | null;
+          start_half?: string;
+          starts_on: string;
+          status?: string;
+          type: string;
+          updated_at?: string;
+          user_id: string;
+          working_days?: number;
+        };
+        Update: {
+          clinic_id?: string;
+          created_at?: string;
+          end_half?: string;
+          ends_on?: string;
+          id?: string;
+          note?: string | null;
+          requested_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          reviewer_note?: string | null;
+          start_half?: string;
+          starts_on?: string;
+          status?: string;
+          type?: string;
+          updated_at?: string;
+          user_id?: string;
+          working_days?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_time_off_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "staff_time_off_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "staff_time_off_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       staff_notifications: {
         Row: {
           appointment_id: string | null;
@@ -2425,6 +2625,61 @@ export type Database = {
             columns: ["treatment_id"];
             isOneToOne: false;
             referencedRelation: "treatments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      staff_working_patterns: {
+        Row: {
+          clinic_id: string;
+          end_time: string | null;
+          id: string;
+          start_time: string | null;
+          updated_at: string;
+          updated_by: string | null;
+          user_id: string;
+          weekday: number;
+        };
+        Insert: {
+          clinic_id: string;
+          end_time?: string | null;
+          id?: string;
+          start_time?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+          user_id: string;
+          weekday: number;
+        };
+        Update: {
+          clinic_id?: string;
+          end_time?: string | null;
+          id?: string;
+          start_time?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+          user_id?: string;
+          weekday?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_working_patterns_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "staff_working_patterns_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "staff_working_patterns_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
