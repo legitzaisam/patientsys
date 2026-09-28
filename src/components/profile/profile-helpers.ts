@@ -156,11 +156,17 @@ export function invalidateProfileQueries(
 }
 
 /** Loads the subject's schedule for the cards that need it (week, chips). */
-export function useStaffSchedule(userId: string, mode: ProfileMode) {
+export function useStaffSchedule(userId: string, mode: ProfileMode, year?: number) {
   const fetchSchedule = useServerFn(getStaffSchedule);
   return useQuery({
-    queryKey: ["staff-schedule", mode === "self" ? "self" : userId],
-    queryFn: () => fetchSchedule({ data: mode === "self" ? {} : { userId } }),
+    queryKey: ["staff-schedule", mode === "self" ? "self" : userId, year ?? "current"],
+    queryFn: () =>
+      fetchSchedule({
+        data: {
+          ...(mode === "self" ? {} : { userId }),
+          ...(year ? { year } : {}),
+        },
+      }),
   });
 }
 

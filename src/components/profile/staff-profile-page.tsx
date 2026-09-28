@@ -9,6 +9,8 @@ import { StaffDocuments } from "@/components/staff-files";
 import { EarningsTab } from "./earnings-tab";
 import { InvoiceDialog } from "./invoice-dialog";
 import { ProfileHero } from "./profile-hero";
+import { ScheduleTab } from "./schedule-tab";
+import { TimeOffSheet } from "./time-off-sheet";
 import { ProfileTabs, type ProfileTabDef } from "./profile-tabs";
 import { PersonalDetailsCard } from "./personal-details-card";
 import { RegistrationInsuranceCard } from "./registration-insurance-card";
@@ -69,8 +71,8 @@ export function StaffProfilePage({
 
   const openInvoice = (period?: { year: number; month: number }) =>
     setInvoice({ open: true, period });
-  // Until Phase 8 lands the time-off sheet, the hero action opens the Schedule tab.
-  const openTimeOff = () => onTabChange("schedule");
+  const [timeOffOpen, setTimeOffOpen] = useState(false);
+  const openTimeOff = () => setTimeOffOpen(true);
 
   return (
     <div className="flex flex-col gap-5" data-qc={`profile-page-${mode}`}>
@@ -135,15 +137,15 @@ export function StaffProfilePage({
       ) : null}
 
       {active === "schedule" ? (
-        <Card className="p-6" data-qc="profile-schedule-tab">
-          <h2 className="section-title">Schedule &amp; time off</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {subject.patternSummary}
-            {schedule.data?.totals
-              ? ` · ${schedule.data.totals.taken} taken, ${schedule.data.totals.booked} booked, ${schedule.data.totals.pending} pending this year`
-              : ""}
-          </p>
-        </Card>
+        <ScheduleTab
+          mode={mode}
+          subject={subject}
+          todayKey={todayKey}
+          pattern={pattern}
+          timeOff={timeOff}
+          totals={schedule.data?.totals ?? null}
+          onTimeOff={openTimeOff}
+        />
       ) : null}
 
       {active === "documents" ? (
@@ -173,6 +175,18 @@ export function StaffProfilePage({
 
       {active === "access" && subject.capabilities ? (
         <EffectivePermissions capabilities={subject.capabilities} name={subject.fullName} />
+      ) : null}
+
+      {mode !== "frontdesk" ? (
+        <TimeOffSheet
+          open={timeOffOpen}
+          onOpenChange={setTimeOffOpen}
+          mode={mode}
+          subject={subject}
+          pattern={pattern}
+          todayKey={todayKey}
+          hasSeparateManager={hasSeparateManager}
+        />
       ) : null}
 
       {mode === "self" && viewer.treats ? (
