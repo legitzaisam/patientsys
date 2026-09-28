@@ -7,9 +7,11 @@ test.describe("my profile field rules", () => {
     baseURL,
   }) => {
     const base = baseURL ?? "http://localhost:8091";
+    const edit = page.locator('[data-qc="personal-details-edit"]');
 
     await page.goto("/profile");
     await expect(page.getByRole("heading", { level: 1, name: "My profile" })).toBeVisible();
+    await edit.click();
     await expect(page.getByLabel("Work email")).toBeEnabled();
     await expect(page.locator('[data-qc="working-arrangement"]')).toBeEnabled();
     await expect(page.getByRole("button", { name: "Save changes" })).toBeVisible();
@@ -17,6 +19,7 @@ test.describe("my profile field rules", () => {
 
     await context.addCookies([{ name: "demo_role", value: "practitioner", url: base }]);
     await page.goto("/profile");
+    await edit.click();
     await expect(page.getByLabel("Full name")).toHaveValue("Nadia Rahman");
     await expect(page.getByLabel("Work email")).toBeDisabled();
     await expect(page.locator('[data-qc="working-arrangement"]')).toBeDisabled();
@@ -27,18 +30,27 @@ test.describe("my profile field rules", () => {
     await page.getByLabel("Note for the reviewer (optional)").fill("Promotion from July.");
     await expect(page.locator('[data-qc="profile-request-approval"]')).toBeEnabled();
     await page.locator('[data-qc="profile-request-approval"]').click();
-    await expect(page.getByText("Sent for approval")).toBeVisible();
-    await expect(page.getByText("Awaiting approval").first()).toBeVisible();
+    await expect(page.locator('[data-qc="personal-details-status"]')).toContainText(
+      "Sent to your manager",
+    );
+    await expect(page.locator('[data-qc="pending-job"]')).toContainText(
+      "“Lead injector” awaiting approval",
+    );
 
     await context.addCookies([{ name: "demo_role", value: "manager", url: base }]);
     await page.goto("/profile");
+    await edit.click();
     await expect(page.getByLabel("Full name")).toHaveValue("Maya Chen");
     await expect(page.getByLabel("Work email")).toBeDisabled();
     await page.getByLabel("Job title").fill("Operations director");
     await expect(page.locator('[data-qc="profile-request-approval"]')).toBeEnabled();
     await page.locator('[data-qc="profile-request-approval"]').click();
-    await expect(page.getByText("Sent for approval")).toBeVisible();
-    await expect(page.getByText("Awaiting the clinic owner").first()).toBeVisible();
+    await expect(page.locator('[data-qc="personal-details-status"]')).toContainText(
+      "Sent to the clinic owner",
+    );
+    await expect(page.locator('[data-qc="pending-job"]')).toContainText(
+      "awaiting the clinic owner",
+    );
 
     await context.addCookies([{ name: "demo_role", value: "owner", url: base }]);
     await page.goto("/team");
@@ -51,11 +63,16 @@ test.describe("my profile field rules", () => {
     const base = baseURL ?? "http://localhost:8091";
     await context.addCookies([{ name: "demo_role", value: "front_desk", url: base }]);
     await page.goto("/profile");
-    const quals = page.getByLabel("Qualifications");
-    await quals.fill("Level 3 customer service");
-    await expect(page.getByText("Saved")).toBeVisible({ timeout: 8_000 });
+    await page.locator('[data-qc="qualification-input"]').fill("Level 3 customer service");
+    await page.locator('[data-qc="qualification-add"]').click();
+    await expect(page.locator('[data-qc="qualifications-saved"]')).toHaveText("Saved", {
+      timeout: 8_000,
+    });
     await page.reload();
-    await expect(quals).toHaveValue("Level 3 customer service");
+    await expect(
+      page.locator('[data-qc="qualification-chip"]', { hasText: "Level 3 customer service" }),
+    ).toBeVisible();
+    await page.locator('[data-qc="personal-details-edit"]').click();
     await expect(page.getByLabel("Work email")).toBeDisabled();
   });
 });

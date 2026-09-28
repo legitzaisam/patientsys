@@ -1,57 +1,28 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
-import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
-import { getStaffProfile, restoreExTeamMember, updateStaffMember } from "@/lib/clinic.functions";
-import { joinStaffName, splitStaffName, STAFF_TITLES } from "@/lib/staff-name";
-import { WORKING_ARRANGEMENTS } from "@/lib/profile-change-policy";
-import { UpdateStaffMember } from "@/lib/validation/schemas";
-import { numericText } from "@/lib/validation/primitives";
+import { getStaffProfile, restoreExTeamMember } from "@/lib/clinic.functions";
 import { can } from "@/lib/permissions";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
-import { StaffAvatar } from "@/components/staff-files";
-import { StaffRecordTabs } from "@/components/staff-record-tabs";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-
-/** Commission is typed as text; the percentage bound comes from the server schema. */
-const REGISTRATION_BODIES = ["GMC", "NMC", "GPhC", "GDC", "HCPC", "None"] as const;
-
-const StaffProfileSchema = z.object({
-  title: z.string().trim().max(20),
-  fullName: UpdateStaffMember.shape.fullName,
-  jobTitle: z.string().trim().max(200),
-  registrationBody: z.string().trim().max(200),
-  registrationNumber: z.string().trim().max(100),
-  registrationExpiry: z.string().trim().max(10),
-  insuranceProvider: z.string().trim().max(200),
-  insuranceExpiry: z.string().trim().max(10),
-  qualifications: z.string().trim().max(2_000),
-  workingArrangement: z.string().trim().max(80),
-  role: UpdateStaffMember.shape.role,
-  commissionRate: numericText(UpdateStaffMember.shape.commissionRate, 0),
-});
-type StaffProfileValues = z.infer<typeof StaffProfileSchema>;
+import { StaffProfilePage } from "@/components/profile/staff-profile-page";
+import { asProfileTab } from "@/components/profile/profile-helpers";
+import type {
+  ProfileSubject,
+  ProfileTabKey,
+  ProfileViewer,
+  StaffDocumentRow,
+} from "@/components/profile/profile-types";
 
 export const Route = createFileRoute("/_authenticated/team/$id")({
+  validateSearch: (search: Record<string, unknown>): { tab?: ProfileTabKey } => {
+    const tab = asProfileTab(search["tab"]);
+    return tab ? { tab } : {};
+  },
   head: () => ({
     meta: [
       { title: "Staff profile — Aetheria" },
@@ -63,36 +34,16 @@ export const Route = createFileRoute("/_authenticated/team/$id")({
       { property: "og:description", content: "View and manage a staff member's profile." },
     ],
   }),
-  component: StaffProfilePage,
+  component: StaffProfileRoute,
 });
 
-const ROLES = [
-  { value: "owner", label: "Clinic owner" },
-  { value: "manager", label: "Manager" },
-  { value: "practitioner", label: "Practitioner" },
-  { value: "front_desk", label: "Receptionist" },
-] as const;
-
-function roleLabel(role: string) {
-  return ROLES.find((r) => r.value === role)?.label ?? role;
-}
-
-function StaffProfilePage() {
+function StaffProfileRoute() {
   const { id } = Route.useParams();
+  const { tab } = Route.useSearch();
+  const navigate = Route.useNavigate();
   const { data: identity } = useIdentity();
   const queryClient = useQueryClient();
   const fetchProfile = useServerFn(getStaffProfile);
-
-  const save = useMutation({
-    mutationFn: useServerFn(updateStaffMember),
-    onSuccess: () => {
-      toast.success("Profile updated");
-      queryClient.invalidateQueries({ queryKey: ["staff-profile", id] });
-      queryClient.invalidateQueries({ queryKey: ["team"] });
-      queryClient.invalidateQueries({ queryKey: ["performance"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
 
   const restore = useMutation({
     mutationFn: useServerFn(restoreExTeamMember),
@@ -112,51 +63,6 @@ function StaffProfilePage() {
     enabled: Boolean(identity?.isStaff),
   });
 
-  const profileForm = useForm<StaffProfileValues>({
-    resolver: zodResolver(StaffProfileSchema),
-    defaultValues: {
-      title: "",
-      fullName: "",
-      jobTitle: "",
-      registrationBody: "",
-      registrationNumber: "",
-      registrationExpiry: "",
-      insuranceProvider: "",
-      insuranceExpiry: "",
-      qualifications: "",
-      workingArrangement: "",
-      role: "practitioner",
-      commissionRate: "0",
-    },
-    mode: "onBlur",
-    reValidateMode: "onBlur",
-  });
-  const watched = profileForm.watch();
-
-  useEffect(() => {
-    if (!data?.profile) return;
-    const split = splitStaffName(data.profile.full_name ?? "");
-    profileForm.reset({
-      title: split.title,
-      fullName: split.name,
-      jobTitle: data.profile.job_title ?? "",
-      registrationBody: data.profile.registration_body ?? "",
-      registrationNumber: data.profile.registration_number ?? "",
-      registrationExpiry: (data.profile.registration_expiry ?? "").slice(0, 10),
-      insuranceProvider: data.profile.insurance_provider ?? "",
-      insuranceExpiry: (data.profile.insurance_expiry ?? "").slice(0, 10),
-      qualifications: data.profile.qualifications ?? "",
-      workingArrangement: data.profile.working_arrangement ?? "",
-      role: (data.role as "owner" | "manager" | "practitioner" | "front_desk") || "practitioner",
-      commissionRate: String(Number(data.profile.commission_rate ?? 0)),
-    });
-    // profileForm is stable across renders; re-running on it would clobber edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.profile, data?.role]);
-
-  // react-hook-form tracks edits against the last reset(); the save resets on success via the refetch.
-  const leaveGuard = useUnsavedChanges(profileForm.formState.isDirty && !save.isPending, "staff-profile-unsaved");
-
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
   if (!identity.isStaff)
     return (
@@ -171,21 +77,57 @@ function StaffProfilePage() {
   }
 
   const revoked = Boolean(data?.revoked);
-  const canEdit = identity.isManager && !revoked;
   const canViewTeam = can(identity, "team.view");
-  const canViewDocuments = Boolean(data?.canViewDocuments) && !revoked;
-  const displayName =
-    joinStaffName(watched.title, watched.fullName) ||
-    data?.profile?.full_name ||
-    data?.email ||
-    "Team member";
-  const asideTitle = revoked
-    ? "Access removed"
-    : watched.jobTitle.trim() || (canEdit ? roleLabel(watched.role) : data?.email || "Team member");
+  const mode = data?.canManage ? "manage" : "frontdesk";
+  const profile = data?.profile as Record<string, unknown> | null | undefined;
+  const str = (v: unknown) => (v == null ? "" : String(v));
+  const displayName = str(profile?.["full_name"]) || data?.email || "Team member";
+
+  const subject: ProfileSubject | null = data
+    ? {
+        userId: id,
+        fullName: str(profile?.["full_name"]),
+        email: data.email ?? "",
+        jobTitle: str(profile?.["job_title"]),
+        role: data.role ?? "",
+        registrationBody: str(profile?.["registration_body"]),
+        registrationNumber: str(profile?.["registration_number"]),
+        registrationExpiry: str(profile?.["registration_expiry"]).slice(0, 10),
+        insuranceProvider: str(profile?.["insurance_provider"]),
+        insuranceExpiry: str(profile?.["insurance_expiry"]).slice(0, 10),
+        qualifications: str(profile?.["qualifications"]),
+        workingArrangement: str(profile?.["working_arrangement"]),
+        avatarPath: (profile?.["avatar_url"] as string | null | undefined) ?? null,
+        commissionRate:
+          profile?.["commission_rate"] == null ? null : Number(profile["commission_rate"]),
+        pattern: data.pattern ?? [],
+        patternSummary: data.patternSummary ?? "Hours not set",
+        bookable: data.bookable ?? [],
+        upcomingUnavailable: data.upcomingUnavailable ?? [],
+        requests: (data.requests ?? []) as ProfileSubject["requests"],
+        documents: (data.documents ?? []) as StaffDocumentRow[],
+        presentCategories: data.presentCategories ?? [],
+        capabilities: data.capabilities ?? null,
+        revoked,
+        daysRemaining: data.daysRemaining ?? 0,
+      }
+    : null;
+
+  const viewer: ProfileViewer = {
+    userId: identity.userId,
+    email: identity.email,
+    isOwner: identity.isOwner,
+    isAdmin: identity.isAdmin,
+    isManager: identity.isManager,
+    roles: identity.roles,
+    canSelfApply: false,
+    requiresOwner: false,
+    canCommission: Boolean(data?.canCommission),
+    treats: (data?.role ?? "") === "practitioner" || (data?.role ?? "") === "owner",
+  };
 
   return (
     <AppShell identity={identity}>
-      {leaveGuard}
       {canViewTeam ? (
         <Link
           to="/team"
@@ -195,366 +137,62 @@ function StaffProfilePage() {
         </Link>
       ) : null}
 
-      <div className="space-y-5">
-          <div>
-            <h1 className="page-title">Staff profile</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {revoked
-                ? `${displayName} was removed from the team. Their name stays on this profile so you know who they were.`
-                : canEdit
-                  ? `Review and update ${displayName}'s details.`
-                  : `View ${displayName}'s details. Only managers can edit.`}
-            </p>
-          </div>
-
-          {revoked ? (
-            <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <p className="text-sm text-muted-foreground">
-                Access removed
-                {data?.daysRemaining
-                  ? ` · ${data.daysRemaining} day${data.daysRemaining === 1 ? "" : "s"} left in the archive`
-                  : ""}
-                . Patient records they worked on stay on the system.
-              </p>
-              {identity.isOwner ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={restore.isPending}
-                  onClick={() => restore.mutate({ data: { userId: id } })}
-                >
-                  {restore.isPending ? "Restoring…" : "Restore access"}
-                </Button>
-              ) : null}
-            </Card>
-          ) : null}
-
-          <Card className="@container overflow-hidden p-0">
-            {/* Container queries, not viewport ones: this card can be narrow on an iPad. */}
-            <div className="grid @xl:grid-cols-[13.5rem_minmax(0,1fr)]">
-              <aside className="flex flex-col items-center border-b border-edge bg-glass-2/70 px-5 pt-5 pb-6 @xl:border-b-0 @xl:border-r @xl:px-6 @xl:pt-6 @xl:pb-7">
-                <div className="flex w-full max-w-[8.5rem] flex-col items-center gap-3">
-                  <div className="w-full text-center">
-                    <p className="text-balance text-sm font-semibold leading-none tracking-[-0.012em] text-foreground">
-                      {joinStaffName(watched.title, watched.fullName) || displayName}
-                    </p>
-                    <p className="mt-1 text-pretty text-2xs leading-snug text-muted-foreground">
-                      {asideTitle}
-                    </p>
-                  </div>
-                  <StaffAvatar
-                    userId={id}
-                    fullName={displayName}
-                    avatarPath={data?.profile?.avatar_url ?? null}
-                    readOnly={!canEdit}
-                    size="md"
-                    queryKey={["staff-profile", id]}
-                  />
-                </div>
-              </aside>
-
-              <div className="@container flex min-w-0 flex-col">
-                <Form {...profileForm}>
-                  <form
-                    noValidate
-                    onSubmit={profileForm.handleSubmit((values) =>
-                      save.mutate({
-                        data: {
-                          userId: id,
-                          role: values.role,
-                          fullName: joinStaffName(values.title, values.fullName),
-                          jobTitle: values.jobTitle,
-                          registrationBody: values.registrationBody,
-                          registrationNumber: values.registrationNumber,
-                          registrationExpiry: values.registrationExpiry,
-                          insuranceProvider: values.insuranceProvider,
-                          insuranceExpiry: values.insuranceExpiry,
-                          qualifications: values.qualifications,
-                          workingArrangement: values.workingArrangement,
-                          commissionRate: Number(values.commissionRate),
-                        },
-                      }),
-                    )}
-                    className="grid gap-x-5 gap-y-4 p-5 pb-4 @sm:grid-cols-2 @sm:gap-x-6 @sm:p-6 @sm:px-7 @sm:pb-4"
-                  >
-                    <FormField
-                      control={profileForm.control}
-                      name="title"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0">
-                          <FormLabel>Title</FormLabel>
-                          <FormControl>
-                            <select
-                              className="flex h-9 w-full rounded-[11px] border border-edge bg-glass-2 px-3 text-[13px] shadow-inset-hi outline-none transition-colors hover:border-edge-2 focus-visible:border-accent-deep focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                              disabled={!canEdit}
-                              {...field}
-                            >
-                              <option value="">—</option>
-                              {STAFF_TITLES.map((t) => (
-                                <option key={t} value={t}>
-                                  {t}
-                                </option>
-                              ))}
-                            </select>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="fullName"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0">
-                          <FormLabel>Full name</FormLabel>
-                          <FormControl>
-                            <Input readOnly={!canEdit} {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="jobTitle"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0">
-                          <FormLabel>Job title</FormLabel>
-                          <FormControl>
-                            <Input
-                              readOnly={!canEdit}
-                              placeholder="e.g. Aesthetic practitioner"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="field-stack min-w-0">
-                      <Label htmlFor="sp-email">Work email</Label>
-                      <Input id="sp-email" value={data?.email ?? ""} disabled />
-                    </div>
-                    <FormField
-                      control={profileForm.control}
-                      name="workingArrangement"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0">
-                          <FormLabel>Working arrangement</FormLabel>
-                          <FormControl>
-                            <select
-                              data-qc="staff-working-arrangement"
-                              className="flex h-9 w-full rounded-[11px] border border-edge bg-glass-2 px-3 text-[13px] shadow-inset-hi outline-none transition-colors hover:border-edge-2 focus-visible:border-accent-deep focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                              disabled={!canEdit}
-                              {...field}
-                            >
-                              <option value="">—</option>
-                              {WORKING_ARRANGEMENTS.map((a) => (
-                                <option key={a} value={a}>
-                                  {a}
-                                </option>
-                              ))}
-                              {field.value &&
-                              !(WORKING_ARRANGEMENTS as readonly string[]).includes(
-                                field.value as (typeof WORKING_ARRANGEMENTS)[number],
-                              ) ? (
-                                <option value={field.value}>{field.value}</option>
-                              ) : null}
-                            </select>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="registrationBody"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0">
-                          <FormLabel>Registration body</FormLabel>
-                          <FormControl>
-                            <select
-                              data-qc="staff-registration-body"
-                              className="flex h-9 w-full rounded-[11px] border border-edge bg-glass-2 px-3 text-[13px] shadow-inset-hi outline-none transition-colors hover:border-edge-2 focus-visible:border-accent-deep focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                              disabled={!canEdit}
-                              {...field}
-                            >
-                              <option value="">—</option>
-                              {REGISTRATION_BODIES.map((b) => (
-                                <option key={b} value={b}>
-                                  {b}
-                                </option>
-                              ))}
-                              {field.value &&
-                              !(REGISTRATION_BODIES as readonly string[]).includes(field.value) ? (
-                                <option value={field.value}>{field.value}</option>
-                              ) : null}
-                            </select>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="registrationNumber"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0">
-                          <FormLabel>Registration number</FormLabel>
-                          <FormControl>
-                            <Input
-                              readOnly={!canEdit}
-                              disabled={watched.registrationBody === "None"}
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="registrationExpiry"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0">
-                          <FormLabel>Registration expiry</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="date"
-                              readOnly={!canEdit}
-                              disabled={watched.registrationBody === "None"}
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="insuranceProvider"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0">
-                          <FormLabel>Insurance provider</FormLabel>
-                          <FormControl>
-                            <Input
-                              readOnly={!canEdit}
-                              placeholder="e.g. Hamilton Fraser"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="insuranceExpiry"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0">
-                          <FormLabel>Insurance expiry</FormLabel>
-                          <FormControl>
-                            <Input type="date" readOnly={!canEdit} {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="qualifications"
-                      render={({ field }) => (
-                        <FormItem className="min-w-0 @sm:col-span-2">
-                          <FormLabel>Qualifications</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              rows={2}
-                              readOnly={!canEdit}
-                              placeholder="e.g. Level 7 in Aesthetic Medicine, Foundation botulinum toxin and dermal fillers"
-                              className="rounded-xl"
-                              {...field}
-                            />
-                          </FormControl>
-                          <p className="text-xs text-muted-foreground">
-                            The clinic owner is reminded 60 days before a registration or insurance
-                            expiry.
-                          </p>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    {canEdit ? (
-                      <FormField
-                        control={profileForm.control}
-                        name="role"
-                        render={({ field }) => (
-                          <FormItem className="min-w-0">
-                            <FormLabel>Access level</FormLabel>
-                            <FormControl>
-                              <select
-                                className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 px-3 text-sm text-foreground shadow-inset-hi disabled:cursor-not-allowed disabled:opacity-50"
-                                {...field}
-                              >
-                                {ROLES.map((r) => (
-                                  <option key={r.value} value={r.value}>
-                                    {r.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    ) : null}
-                    {canEdit ? (
-                      <FormField
-                        control={profileForm.control}
-                        name="commissionRate"
-                        render={({ field }) => (
-                          <FormItem className="min-w-0">
-                            <FormLabel>Commission rate</FormLabel>
-                            <div className="flex max-w-[10rem] items-center gap-2">
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  step={1}
-                                  className="rounded-xl"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <span className="shrink-0 text-sm text-muted-foreground">%</span>
-                            </div>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    ) : null}
-                    {canEdit ? (
-                      <div className="flex items-center justify-end @sm:col-span-2">
-                        <Button type="submit" disabled={save.isPending}>
-                          {save.isPending ? "Saving…" : "Save changes"}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </form>
-                </Form>
-              </div>
-            </div>
-          </Card>
-
-          <StaffRecordTabs
-            name={displayName}
-            {...(data?.capabilities ? { capabilities: data.capabilities } : {})}
-            userId={id}
-            canViewDocuments={canViewDocuments}
-            presentCategories={data?.presentCategories ?? []}
-            identity={identity}
-            role={data?.role ?? ""}
-          />
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Staff profile</h1>
+          <p className="page-subtitle">
+            {revoked
+              ? `${displayName} was removed from the team. Their name stays on this profile so you know who they were.`
+              : mode === "manage"
+                ? `Review and update ${displayName}'s details.`
+                : `${displayName}'s hours and what you can book them for.`}
+          </p>
+        </div>
       </div>
+
+      {revoked ? (
+        <Card
+          className="mb-5 flex flex-wrap items-center justify-between gap-3 p-4"
+          data-qc="staff-revoked"
+        >
+          <p className="text-sm text-muted-foreground">
+            Access removed
+            {data?.daysRemaining
+              ? ` · ${data.daysRemaining} day${data.daysRemaining === 1 ? "" : "s"} left in the archive`
+              : ""}
+            . Patient records they worked on stay on the system.
+          </p>
+          {identity.isOwner ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={restore.isPending}
+              onClick={() => restore.mutate({ data: { userId: id } })}
+            >
+              {restore.isPending ? "Restoring…" : "Restore access"}
+            </Button>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {subject ? (
+        <StaffProfilePage
+          mode={mode}
+          subject={subject}
+          viewer={viewer}
+          hasSeparateManager={Boolean(identity.hasSeparateManager)}
+          tab={tab ?? "overview"}
+          onTabChange={(next) =>
+            navigate({
+              params: { id },
+              search: next === "overview" ? {} : { tab: next },
+              replace: true,
+            })
+          }
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      )}
     </AppShell>
   );
 }

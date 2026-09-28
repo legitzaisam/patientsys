@@ -71,6 +71,7 @@ export function StaffAvatar({
   readOnly,
   queryKey,
   size = "lg",
+  variant = "stack",
 }: {
   userId: string;
   fullName: string;
@@ -79,6 +80,8 @@ export function StaffAvatar({
   queryKey?: string[];
   /** lg = own profile; md = staff profile editor; sm = compact staff card */
   size?: "sm" | "md" | "lg";
+  /** stack = avatar with buttons under it; badge = avatar with a camera button on its corner (the profile hero). */
+  variant?: "stack" | "badge";
 }) {
   const queryClient = useQueryClient();
   const { data: identity } = useIdentity();
@@ -152,6 +155,43 @@ export function StaffAvatar({
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  if (variant === "badge") {
+    return (
+      <div className="relative w-fit shrink-0 self-start" data-qc="staff-avatar">
+        <Avatar
+          className={cn(
+            "ring-1 ring-border/60",
+            size === "sm" ? "h-[76px] w-[76px]" : "h-[104px] w-[104px]",
+          )}
+        >
+          {avatarUrl && <AvatarImage src={avatarUrl} alt={`${fullName} profile picture`} />}
+          <AvatarFallback className={size === "sm" ? "text-2xl" : "text-[32px]"}>
+            {initials || "?"}
+          </AvatarFallback>
+        </Avatar>
+        <input
+          ref={avatarRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => void handleAvatar(e.target.files?.[0])}
+        />
+        {!readOnly && (
+          <button
+            type="button"
+            aria-label={avatarPath ? "Change photo" : "Upload photo"}
+            disabled={busy}
+            onClick={() => avatarRef.current?.click()}
+            className="absolute -right-1 -bottom-1 grid h-10 w-10 place-items-center rounded-full border-[3px] border-card bg-foreground text-background shadow-sm transition-transform hover:scale-105 disabled:opacity-60"
+            data-qc="staff-avatar-change"
+          >
+            <Camera className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-full flex-col items-center gap-2.5 text-center">
