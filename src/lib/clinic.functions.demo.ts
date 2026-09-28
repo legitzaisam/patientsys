@@ -616,13 +616,14 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
 
   // Settings → Payments and deposits.
   const DEPOSIT_LEAD_DAYS = Number(db.clinic["deposit_lead_days"] ?? 3);
+  const depositHorizonDays = attentionDepositHorizonDays(DEPOSIT_LEAD_DAYS) + 1;
   let unpaidDeposits = sortAsc(
     appointments.filter(
       (a) =>
         a.payment_status === "unpaid" &&
         a.status !== "cancelled" &&
         a.starts_at >= range.startISO &&
-        a.starts_at < new Date(today.getTime() + 30 * 86400000).toISOString(),
+        a.starts_at < new Date(today.getTime() + depositHorizonDays * 86400000).toISOString(),
     ),
     "starts_at",
   ).map(appointmentView);
@@ -634,17 +635,17 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
       `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
     const apptDay = clinicDayKey(new Date(a.starts_at));
     const daysUntil = clinicDayDiff(todayISO, apptDay);
-    if (daysUntil < 0) continue;
+    const urgency = attentionDepositUrgency(daysUntil, DEPOSIT_LEAD_DAYS);
+    if (!urgency) continue;
     const when = new Date(a.starts_at).toLocaleDateString("en-GB", {
       weekday: "short",
       day: "numeric",
       month: "short",
     });
-    const urgent = daysUntil <= DEPOSIT_LEAD_DAYS;
     attentionItems.push({
       id: `deposit-${a.id}`,
       kind: "deposit_due",
-      urgency: urgent ? "urgent" : "this_week",
+      urgency,
       title: `${who} — deposit unpaid`,
       subtitle: `${a.treatment_name} · ${when}`,
       patientId: a.patient_id,

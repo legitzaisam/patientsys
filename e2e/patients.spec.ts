@@ -147,7 +147,9 @@ test.describe("journey board", () => {
     }
 
     // A step with its own booking is settled: a date, no chase, nothing late.
-    const booked = cards.filter({ hasText: "Booked " }).first();
+    const booked = cards
+      .filter({ has: page.locator('[data-qc="board-date"]').filter({ hasText: /^Booked/ }) })
+      .first();
     await expect(booked.locator('[data-qc="board-book"]')).toHaveCount(0);
     await expect(booked).not.toContainText("overdue");
 

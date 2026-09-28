@@ -11,6 +11,7 @@ import {
 } from "@/lib/metrics/definitions";
 import {
   appointmentFlags,
+  attentionDepositUrgency,
   dropThisWeekDepositsIfUrgent,
   isRunningLate,
   phaseOf,
@@ -159,6 +160,15 @@ describe("appointment flags", () => {
     expect(today.flags.has("unpaid")).toBe(true);
     expect(today.flags.has("deposit_due")).toBe(false);
     expect(today.depositUrgency).toBeNull();
+  });
+
+  it("Attention This week Deposit due is 10 clinic days out, not 11", () => {
+    expect(attentionDepositUrgency(0, 3)).toBe("urgent");
+    expect(attentionDepositUrgency(3, 3)).toBe("urgent");
+    expect(attentionDepositUrgency(4, 3)).toBe("this_week");
+    expect(attentionDepositUrgency(10, 3)).toBe("this_week");
+    expect(attentionDepositUrgency(11, 3)).toBeNull();
+    expect(attentionDepositUrgency(-1, 3)).toBeNull();
   });
 
   it("a patient already on urgent Deposit due is not listed again this week", () => {

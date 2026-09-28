@@ -149,8 +149,8 @@ export function recalc(now: number, win: AuditWindow) {
     if (a["status"] === "no_show" && a["payment_status"] === "paid") problems.push(`booking ${a["id"]} is a paid no-show`);
   }
 
-  // ---- visits: one per attended booking, plus one per day of imported
-  // treatments with no booking.
+  // ---- visits: one per attended booking, plus each treatment with no
+  // booking (a walk-in) on its own.
   type Visit = { patient: string; at: number; practitioner: string | null };
   const visits: Visit[] = [];
   for (const a of A) {
@@ -158,15 +158,10 @@ export function recalc(now: number, win: AuditWindow) {
     if (!liveIds.has(String(a["patient_id"]))) continue;
     visits.push({ patient: String(a["patient_id"]), at: ms(a["starts_at"]), practitioner: s(a["practitioner_id"]) });
   }
-  const imported = new Map<string, Visit>();
   for (const t of T) {
     if (t["appointment_id"] || ms(t["performed_at"]) > now || !liveIds.has(String(t["patient_id"]))) continue;
-    const key = `${t["patient_id"]}|${dayKey(ms(t["performed_at"]))}`;
-    const at = ms(t["performed_at"]);
-    const cur = imported.get(key);
-    if (!cur || at < cur.at) imported.set(key, { patient: String(t["patient_id"]), at, practitioner: s(t["practitioner_id"]) });
+    visits.push({ patient: String(t["patient_id"]), at: ms(t["performed_at"]), practitioner: s(t["practitioner_id"]) });
   }
-  visits.push(...imported.values());
   const byPatient = new Map<string, number[]>();
   for (const v of visits) byPatient.set(v.patient, [...(byPatient.get(v.patient) ?? []), v.at]);
   for (const list of byPatient.values()) list.sort((a, b) => a - b);

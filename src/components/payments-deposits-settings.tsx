@@ -91,7 +91,7 @@ export function PaymentsDepositsSettings({ canEdit }: { canEdit: boolean }) {
           />
           <p className="text-2xs text-muted-foreground">
             Unpaid bookings inside this window show as Urgent on the dashboard; further out they sit
-            under This week.
+            under This week until 10 days out.
           </p>
         </div>
         <div className="field-stack">

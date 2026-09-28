@@ -9,7 +9,6 @@ import {
 } from "@/lib/clinic-time";
 import {
   ATTENTION_DEPOSIT_WEEK_DAYS,
-  attentionDepositHorizonDays,
   attentionDepositUrgency,
   dropThisWeekDepositsIfUrgent,
 } from "@/lib/metrics/appointment-flags";
@@ -454,7 +453,10 @@ export const getDashboard = createServerFn({ method: "GET" })
         .eq("payment_status", "unpaid")
         .neq("status", "cancelled")
         .gte("starts_at", todayStart)
-        .lt("starts_at", new Date(today.getTime() + 30 * 86400000).toISOString())
+        .lt(
+          "starts_at",
+          new Date(today.getTime() + (ATTENTION_DEPOSIT_WEEK_DAYS + 1) * 86400000).toISOString(),
+        )
         .order("starts_at", { ascending: true })
         .limit(80),
       supabase
@@ -748,12 +750,13 @@ export const getDashboard = createServerFn({ method: "GET" })
 
     // Deposits must be paid at least `deposit_lead_days` clinic days before the
     // appointment (Settings → Payments and deposits). Inside that window →
-    // urgent chase; further out → this week.
+    // urgent chase; after that, This week up to 10 clinic days out.
     const DEPOSIT_LEAD_DAYS = Number(clinicRow.data?.deposit_lead_days ?? 3);
     for (const a of unpaidDeposits) {
       const apptDay = clinicDayKey(new Date(a.starts_at));
       const daysUntil = clinicDayDiff(todayISO, apptDay);
-      if (daysUntil < 0) continue;
+      const urgency = attentionDepositUrgency(daysUntil, DEPOSIT_LEAD_DAYS);
+      if (!urgency) continue;
       const who =
         `${a.patients?.first_name ?? ""} ${a.patients?.last_name ?? ""}`.trim() || "Patient";
       const when = new Date(a.starts_at).toLocaleDateString("en-GB", {
@@ -761,11 +764,10 @@ export const getDashboard = createServerFn({ method: "GET" })
         day: "numeric",
         month: "short",
       });
-      const urgent = daysUntil <= DEPOSIT_LEAD_DAYS;
       attentionItems.push({
         id: `deposit-${a.id}`,
         kind: "deposit_due",
-        urgency: urgent ? "urgent" : "this_week",
+        urgency,
         title: `${who} — deposit unpaid`,
         subtitle: `${a.treatment_name} · ${when}`,
         patientId: a.patient_id,
