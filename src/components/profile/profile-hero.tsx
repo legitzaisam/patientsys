@@ -18,6 +18,7 @@ export function ProfileHero({
   canEditPhoto,
   onTab,
   onInvoice,
+  canInvoice = false,
   onTimeOff,
   treats,
 }: {
@@ -27,6 +28,8 @@ export function ProfileHero({
   canEditPhoto: boolean;
   onTab: (tab: ProfileTabKey) => void;
   onInvoice: () => void;
+  /** Create & send invoice is offered: the person treats, and the viewer may raise it. */
+  canInvoice?: boolean;
   onTimeOff: () => void;
   treats: boolean;
 }) {
@@ -98,7 +101,7 @@ export function ProfileHero({
       </div>
       {mode === "self" ? (
         <div className="flex shrink-0 flex-col gap-2.5 sm:w-[230px]">
-          {treats ? (
+          {canInvoice ? (
             <Button
               size="lg"
               className="w-full font-semibold"
@@ -120,6 +123,16 @@ export function ProfileHero({
         </div>
       ) : mode === "manage" && !subject.revoked ? (
         <div className="flex shrink-0 flex-col gap-2.5 sm:w-[230px]">
+          {canInvoice ? (
+            <Button
+              size="lg"
+              className="w-full font-semibold"
+              onClick={onInvoice}
+              data-qc="hero-invoice"
+            >
+              Create &amp; send invoice
+            </Button>
+          ) : null}
           <Button
             size="lg"
             variant="outline"

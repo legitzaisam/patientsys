@@ -94,11 +94,14 @@ export function EarningsTab({
   subject,
   todayKey,
   onInvoice,
+  canInvoice = mode === "self",
 }: {
   mode: ProfileMode;
   subject: ProfileSubject;
   todayKey: string;
   onInvoice: (period: { year: number; month: number }) => void;
+  /** Whether the viewer may raise an invoice for the month on screen. */
+  canInvoice?: boolean;
 }) {
   const self = mode === "self";
   const current = useMemo(() => yearMonthOf(todayKey), [todayKey]);
@@ -263,7 +266,7 @@ export function EarningsTab({
             <Download className="h-3.5 w-3.5" aria-hidden />
             Export CSV
           </Button>
-          {self ? (
+          {canInvoice ? (
             <Button type="button" onClick={() => onInvoice(period)} data-qc="earnings-invoice">
               Create &amp; send invoice
             </Button>

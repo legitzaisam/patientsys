@@ -60,6 +60,8 @@ export function StaffProfilePage({
   const onFile = ESSENTIAL_DOC_CATEGORIES.length - missingDocs;
 
   const showEarnings = viewer.treats && (mode === "self" || viewer.canCommission);
+  // Raising an invoice: your own page, or a colleague's when you hold Set staff commission.
+  const canInvoice = showEarnings && !subject.revoked;
   const tabs: ProfileTabDef[] = [
     { key: "overview", label: "Overview" },
     ...(showEarnings ? [{ key: "earnings" as const, label: "Performance & earnings" }] : []),
@@ -96,6 +98,7 @@ export function StaffProfilePage({
         onInvoice={() => openInvoice()}
         onTimeOff={openTimeOff}
         treats={viewer.treats}
+        canInvoice={canInvoice}
       />
       <ProfileTabs tabs={tabs} value={active} onChange={onTabChange} />
 
@@ -127,6 +130,7 @@ export function StaffProfilePage({
                 todayKey={todayKey}
                 onTab={onTabChange}
                 onInvoice={() => openInvoice()}
+                canInvoice={canInvoice}
               />
             ) : null}
             <YourWeekCard
@@ -144,7 +148,13 @@ export function StaffProfilePage({
       ) : null}
 
       {active === "earnings" ? (
-        <EarningsTab mode={mode} subject={subject} todayKey={todayKey} onInvoice={openInvoice} />
+        <EarningsTab
+          mode={mode}
+          subject={subject}
+          todayKey={todayKey}
+          onInvoice={openInvoice}
+          canInvoice={canInvoice}
+        />
       ) : null}
 
       {active === "schedule" ? (
@@ -195,10 +205,11 @@ export function StaffProfilePage({
         hasSeparateManager={hasSeparateManager}
       />
 
-      {mode === "self" && viewer.treats ? (
+      {canInvoice ? (
         <InvoiceDialog
           open={invoice.open}
           onOpenChange={(open) => setInvoice((s) => ({ ...s, open }))}
+          mode={mode}
           subject={subject}
           todayKey={todayKey}
           initial={invoice.period}

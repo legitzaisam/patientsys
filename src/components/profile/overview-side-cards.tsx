@@ -29,12 +29,15 @@ export function MonthSoFarCard({
   todayKey,
   onTab,
   onInvoice,
+  canInvoice = mode === "self",
 }: {
   mode: ProfileMode;
   subject: ProfileSubject;
   todayKey: string;
   onTab: (tab: ProfileTabKey) => void;
   onInvoice: () => void;
+  /** Whether the viewer may raise this month's invoice (own page, or Set staff commission). */
+  canInvoice?: boolean;
 }) {
   const range = useMemo(() => monthRangeOf(todayKey), [todayKey]);
   const fetchEarnings = useServerFn(getMyEarnings);
@@ -75,7 +78,7 @@ export function MonthSoFarCard({
         <span data-qc="metric:earnings.month.treatments">{data?.treatments ?? 0} treatments</span>
         <span>{moneyWhole(data?.outstandingShare ?? 0)} outstanding</span>
       </p>
-      {mode === "self" ? (
+      {canInvoice ? (
         <Button className="mt-1 w-full font-semibold" onClick={onInvoice} data-qc="month-invoice">
           Create {monthName} invoice
         </Button>

@@ -28,7 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { buildInvoiceDocument } from "@/lib/invoice-document";
 import { InvoicePrintSheet, InvoiceSheet } from "./invoice-sheet";
 import { printInvoice, shortDate } from "./profile-helpers";
-import type { InvoiceRowLike, ProfileSubject } from "./profile-types";
+import type { InvoiceRowLike, ProfileMode, ProfileSubject } from "./profile-types";
 
 type Recipient = "payroll" | "owner";
 type Stage = "form" | "scheduled" | "sent";
@@ -40,17 +40,24 @@ type Stage = "form" | "scheduled" | "sent";
 export function InvoiceDialog({
   open,
   onOpenChange,
+  mode,
   subject,
   todayKey,
   initial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** self: your own invoice; manage: raising a colleague's (Set staff commission). */
+  mode: ProfileMode;
   subject: ProfileSubject;
   todayKey: string;
   initial?: { year: number; month: number } | undefined;
 }) {
   const queryClient = useQueryClient();
+  const self = mode === "self";
+  const first =
+    subject.fullName.replace(/^(Dr|Mr|Mrs|Ms|Miss|Mx|Prof)\.?\s+/i, "").split(" ")[0] ??
+    subject.fullName;
   const current = useMemo(() => yearMonthOf(todayKey), [todayKey]);
   const previous = useMemo(() => previousMonth(current.year, current.month), [current]);
   const options = useMemo(() => {
@@ -85,14 +92,14 @@ export function InvoiceDialog({
     enabled: open,
   });
   const invoices = useQuery({
-    queryKey: ["practitioner-invoices", "self"],
-    queryFn: () => fetchInvoices({ data: {} }),
+    queryKey: ["practitioner-invoices", self ? "self" : subject.userId],
+    queryFn: () => fetchInvoices({ data: self ? {} : { userId: subject.userId } }),
     enabled: open,
   });
   const range = useMemo(() => monthWindowIso(period.year, period.month), [period]);
   const earnings = useQuery({
-    queryKey: ["my-earnings", "self", range.from, range.to],
-    queryFn: () => fetchEarnings({ data: range }),
+    queryKey: ["my-earnings", self ? "self" : subject.userId, range.from, range.to],
+    queryFn: () => fetchEarnings({ data: self ? range : { ...range, userId: subject.userId } }),
     enabled: open,
   });
 
@@ -156,18 +163,19 @@ export function InvoiceDialog({
   );
 
   const submit = useMutation({
-    mutationFn: (mode: "send" | "schedule") =>
+    mutationFn: (sendMode: "send" | "schedule") =>
       create({
         data: {
           year: period.year,
           month: period.month,
           recipient,
-          mode,
+          mode: sendMode,
+          ...(self ? {} : { userId: subject.userId }),
           ...(note.trim() ? { note: note.trim() } : {}),
         },
       }),
-    onSuccess: (_res, mode) => {
-      setStage(mode === "schedule" ? "scheduled" : "sent");
+    onSuccess: (_res, sendMode) => {
+      setStage(sendMode === "schedule" ? "scheduled" : "sent");
       queryClient.invalidateQueries({ queryKey: ["practitioner-invoices"] });
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
     },
@@ -178,10 +186,11 @@ export function InvoiceDialog({
   const leaveGuard = useUnsavedChanges(dirty, "invoice-unsaved");
 
   const doneTitle = stage === "scheduled" ? `Scheduled for ${shortDate(sendDate)}` : "Invoice sent";
+  const whose = self ? "your" : `${first}’s`;
   const doneSub =
     stage === "scheduled"
-      ? `We’ll send it to the ${recipientName.toLowerCase()} on ${shortDate(sendDate)} with the final ${monthName} figures. You can change it until then.`
-      : `The ${recipientName.toLowerCase()} has your ${monthName} invoice. You’ll see it marked Paid in Performance & earnings once they settle it.`;
+      ? `We’ll send it to the ${recipientName.toLowerCase()} on ${shortDate(sendDate)} with the final ${monthName} figures.${self ? " You can change it until then." : ` ${first} has been told.`}`
+      : `The ${recipientName.toLowerCase()} has ${whose} ${monthName} invoice.${self ? " You’ll see it marked Paid in Performance & earnings once they settle it." : ` ${first} has been told; mark it paid here once it is settled.`}`;
 
   return (
     <>
@@ -198,7 +207,9 @@ export function InvoiceDialog({
                 Create invoice
               </DialogTitle>
               <DialogDescription className="mt-1 text-sm text-muted-foreground">
-                Built from your completed treatments.
+                {self
+                  ? "Built from your completed treatments."
+                  : `Built from ${first}’s completed treatments.`}
               </DialogDescription>
             </div>
 
