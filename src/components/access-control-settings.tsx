@@ -408,36 +408,50 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
                           ) : null;
                         })()}
                       </div>
-                      {roles.map((role) => (
-                        <div key={role.key} className="flex justify-center">
-                          <Switch
-                            aria-label={`${PERMISSION_META[key].label} for ${role.label}`}
-                            title={
-                              changesFor(role)?.[key]
-                                ? `Changed by ${changesFor(role)![key]!.by} · ${dateTime(changesFor(role)![key]!.at)}`
-                                : undefined
-                            }
-                            checked={grantsFor(role)?.[key] ?? false}
-                            disabled={!canEdit || saving || !data?.grants}
-                            onCheckedChange={(enabled) =>
-                              void stepUp.run(() => {
-                                if (role.named) {
-                                  return saveNamed.mutateAsync({
-                                    data: { clinicRoleId: role.key, permission: key, enabled },
-                                  });
+                        {roles.map((role) =>
+                          PERMISSION_META[key].managerOnly &&
+                          !role.named &&
+                          role.key !== "manager" ? (
+                            // A manager-only key: the other built-in roles cannot hold it.
+                            <div
+                              key={role.key}
+                              className="flex justify-center text-xs text-ink-3"
+                              data-qc="grant-manager-only"
+                              title={`${PERMISSION_META[key].label} is for managers only`}
+                            >
+                              <span aria-label="Manager only">—</span>
+                            </div>
+                          ) : (
+                            <div key={role.key} className="flex justify-center">
+                              <Switch
+                                aria-label={`${PERMISSION_META[key].label} for ${role.label}`}
+                                title={
+                                  changesFor(role)?.[key]
+                                    ? `Changed by ${changesFor(role)![key]!.by} · ${dateTime(changesFor(role)![key]!.at)}`
+                                    : undefined
                                 }
-                                return saveSystem.mutateAsync({
-                                  data: {
-                                    role: role.key as "manager" | "front_desk" | "practitioner",
-                                    permission: key,
-                                    enabled,
-                                  },
-                                });
-                              }, "permission")
-                            }
-                          />
-                        </div>
-                      ))}
+                                checked={grantsFor(role)?.[key] ?? false}
+                                disabled={!canEdit || saving || !data?.grants}
+                                onCheckedChange={(enabled) =>
+                                  void stepUp.run(() => {
+                                    if (role.named) {
+                                      return saveNamed.mutateAsync({
+                                        data: { clinicRoleId: role.key, permission: key, enabled },
+                                      });
+                                    }
+                                    return saveSystem.mutateAsync({
+                                      data: {
+                                        role: role.key as "manager" | "front_desk" | "practitioner",
+                                        permission: key,
+                                        enabled,
+                                      },
+                                    });
+                                  }, "permission")
+                                }
+                              />
+                            </div>
+                          ),
+                        )}
                     </div>
                   ))}
                 </CollapsibleContent>

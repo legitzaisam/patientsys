@@ -45,6 +45,7 @@ import {
 } from "@/lib/metrics/appointment-flags";
 import { complianceReminders } from "@/lib/metrics/compliance";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
+import { canManageProfiles, canSetCommission } from "@/lib/staff-access";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
@@ -380,6 +381,16 @@ function requireAccessAdmin() {
 function requireManager() {
   const me = identity();
   if (!me.isManager) throw new Error("Manager access required");
+  return me;
+}
+
+/** Owner or admin, or the manager role holding a manager-only key. */
+function requireManagerCapability(key: PermissionKey) {
+  const me = identity();
+  if (me.isOwner || me.isAdmin) return me;
+  if (!me.roles.includes("manager") || !can(me, key)) {
+    throw new Error("You do not have access to this area");
+  }
   return me;
 }
 
@@ -3915,8 +3926,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
     }) => parseInput(schemas.UpdateStaffMember, data),
   )
   .handler(async ({ data }) => {
-    const me = identity();
-    if (!me.isManager) throw new Error("Manager access required");
+    const me = requireManagerCapability("team.manage_profiles");
     if (data.role === "manager" && !me.hasSeparateManager) {
       throw new Error("This clinic does not have a separate manager role.");
     }
@@ -4383,7 +4393,10 @@ export const getMyEarnings = createServerFn({ method: "POST" })
     const me = requireStaff();
     const targetUserId = data.userId ?? me.userId;
     if (targetUserId !== me.userId) {
-      if (!me.isManager) throw new Error("Only managers can open another person's earnings");
+      // A colleague's earnings need Edit staff profiles and Set staff commission.
+      if (!canSetCommission(me)) {
+        throw new Error("You do not have access to another person's earnings");
+      }
     } else if (!can(me, "view.earnings")) {
       throw new Error("You do not have access to this area");
     }
@@ -4452,6 +4465,7 @@ export const setCommissionRate = createServerFn({ method: "POST" })
     parseInput(schemas.SetCommissionRate, data),
   )
   .handler(async ({ data }) => {
+    requireManagerCapability("team.commission");
     const rate = Math.min(100, Math.max(0, Number(data.rate) || 0));
     const profile = profiles.find((p) => p.id === data.userId);
     if (profile) profile.commission_rate = rate;
@@ -4728,7 +4742,11 @@ export const setMyAvatar = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
-    const profile = profiles.find((p) => p.id === (data.targetUserId ?? me.userId));
+    const targetUserId = data.targetUserId ?? me.userId;
+    if (targetUserId !== me.userId && !canManageProfiles(me)) {
+      throw new Error("Only managers with Edit staff profiles can change a colleague's photo");
+    }
+    const profile = profiles.find((p) => p.id === targetUserId);
     if (profile) profile.avatar_url = data.path;
     return { ok: true };
   });
@@ -4738,8 +4756,8 @@ export const listMyDocuments = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const me = requireStaff();
     const target = data.targetUserId ?? me.userId;
-    if (target !== me.userId && !me.isManager) {
-      throw new Error("Only managers can open staff documents");
+    if (target !== me.userId && !canManageProfiles(me)) {
+      throw new Error("Only managers with Edit staff profiles can open staff documents");
     }
     return sortDesc(
       staffDocuments.filter((d) => d.user_id === target),
@@ -4778,7 +4796,9 @@ export const addMyDocument = createServerFn({ method: "POST" })
 export const deleteMyDocument = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => parseInput(schemas.DeleteMyDocument, data))
   .handler(async ({ data }) => {
-    const index = staffDocuments.findIndex((d) => d.id === data.id);
+    // Only the owner of a document removes it, as in production.
+    const me = requireStaff();
+    const index = staffDocuments.findIndex((d) => d.id === data.id && d.user_id === me.userId);
     if (index >= 0) staffDocuments.splice(index, 1);
     return { ok: true };
   });

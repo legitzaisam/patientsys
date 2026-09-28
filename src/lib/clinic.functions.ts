@@ -14,6 +14,7 @@ import {
 } from "@/lib/metrics/appointment-flags";
 import { complianceReminders } from "@/lib/metrics/compliance";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
+import { canManageProfiles, canSetCommission } from "@/lib/staff-access";
 import {
   calendarMonthsWindow,
   dashboardKpis,
@@ -76,7 +77,6 @@ import {
   effectiveCapabilities,
   loadIdentity,
   reloadIdentity,
-  requireOwner,
   requireStaff,
   requireStepUp,
   scopeFor,
@@ -5909,7 +5909,10 @@ export const getMyEarnings = createServerFn({ method: "POST" })
     const identity = await authorize(ctx, "getMyEarnings");
     const targetUserId = data.userId ?? ctx.userId;
     if (targetUserId !== ctx.userId) {
-      if (!identity.isManager) throw new Error("Only managers can open another person's earnings");
+      // A colleague's earnings need Edit staff profiles and Set staff commission.
+      if (!canSetCommission(identity)) {
+        throw new Error("You do not have access to another person's earnings");
+      }
     } else if (!can(identity, "view.earnings")) {
       throw new Error("You do not have access to this area");
     }
@@ -6398,9 +6401,11 @@ export const setMyAvatar = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "setMyAvatar");
+    const identity = await authorize(ctx, "setMyAvatar");
     const targetUserId = data.targetUserId ?? ctx.userId;
-    if (targetUserId !== ctx.userId) await requireOwner(ctx);
+    if (targetUserId !== ctx.userId && !canManageProfiles(identity)) {
+      throw new Error("Only managers with Edit staff profiles can change a colleague's photo");
+    }
     const supabaseAdmin = await adminClient(context);
     const client = targetUserId === ctx.userId ? ctx.supabase : supabaseAdmin;
     const { error } = await client
@@ -6420,8 +6425,8 @@ export const listMyDocuments = createServerFn({ method: "GET" })
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "listMyDocuments");
     const targetUserId = data.targetUserId ?? ctx.userId;
-    if (targetUserId !== ctx.userId && !identity.isManager) {
-      throw new Error("Only managers can open staff documents");
+    if (targetUserId !== ctx.userId && !canManageProfiles(identity)) {
+      throw new Error("Only managers with Edit staff profiles can open staff documents");
     }
     const supabaseAdmin = await adminClient(context);
     const client = targetUserId === ctx.userId ? ctx.supabase : supabaseAdmin;

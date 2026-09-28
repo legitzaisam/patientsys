@@ -22,6 +22,12 @@ export type Access =
   | { kind: "capability"; key: PermissionKey }
   /** Owner or manager. */
   | { kind: "manager" }
+  /**
+   * The owner, or someone holding the manager role who also holds the key.
+   * For the manager-only keys the owner toggles under Staff access; other
+   * roles cannot pass even if a named pack grants them the key.
+   */
+  | { kind: "managerCapability"; key: PermissionKey }
   /** Clinic owner only. */
   | { kind: "owner" }
   /**
@@ -177,13 +183,13 @@ export const POLICY = {
   enableSeparateManager: { kind: "owner" },
   createClinicRole: { kind: "manager" },
   setClinicRolePermission: { kind: "accessAdmin" },
-  updateStaffMember: { kind: "manager" },
+  updateStaffMember: { kind: "managerCapability", key: "team.manage_profiles" },
   revokeStaffAccess: { kind: "owner" },
   restoreExTeamMember: { kind: "owner" },
   setStaffPassword: { kind: "owner" },
   setStaffEmail: { kind: "owner" },
   setPatientEmail: { kind: "owner" },
-  setCommissionRate: { kind: "owner" },
+  setCommissionRate: { kind: "managerCapability", key: "team.commission" },
   listAccountsMissingEmail: { kind: "manager" },
 
   /* Own staff profile */

@@ -287,6 +287,16 @@ export async function requirePermission(context: Ctx, key: PermissionKey) {
   return identity;
 }
 
+/** Owner or admin, or the manager role holding a manager-only key. */
+export async function requireManagerCapability(context: Ctx, key: PermissionKey) {
+  const identity = await requireStaff(context);
+  if (identity.isOwner || identity.isAdmin) return identity;
+  if (!identity.roles.includes("manager") || !can(identity, key)) {
+    throw new Error("You do not have access to this area");
+  }
+  return identity;
+}
+
 /**
  * The one authorization call a handler makes. It looks the handler up in
  * `POLICY` and applies that rule, so the access decision lives in the table
@@ -327,6 +337,9 @@ export async function authorize(
       break;
     case "capability":
       identity = await requirePermission(context, rule.key);
+      break;
+    case "managerCapability":
+      identity = await requireManagerCapability(context, rule.key);
       break;
     case "patientSelf":
       identity = await requirePatientSelf(context, requirePatientId(name, resource));

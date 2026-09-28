@@ -13,6 +13,8 @@ export const PERMISSION_KEYS = [
   "reports.commission",
   "team.view",
   "team.approve_changes",
+  "team.manage_profiles",
+  "team.commission",
   "settings.treatments",
   "tasks.delete",
   "offers.manage",
@@ -61,7 +63,15 @@ export const PERMISSION_KEYS = [
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
-export const PERMISSION_META: Record<PermissionKey, { label: string; description: string }> = {
+export const PERMISSION_META: Record<
+  PermissionKey,
+  {
+    label: string;
+    description: string;
+    /** Only the manager role can hold it; the access grid shows a dash for the other roles. */
+    managerOnly?: boolean;
+  }
+> = {
   "patients.edit": {
     label: "Patient records",
     description: "Create patients and keep their contact details current.",
@@ -120,6 +130,18 @@ export const PERMISSION_META: Record<PermissionKey, { label: string; description
     label: "Approve profile change requests",
     description:
       "Review staff requests to change name, job title, registration, work email or working arrangement. Off for managers unless the clinic owner hands this over.",
+  },
+  "team.manage_profiles": {
+    label: "Edit staff profiles",
+    description:
+      "Open a colleague's full profile: edit their details, working pattern and the treatments they can be booked for, and approve their time off. Without it a manager sees what the front desk sees.",
+    managerOnly: true,
+  },
+  "team.commission": {
+    label: "Set staff commission",
+    description:
+      "See and set a colleague's commission rate and open their Performance & earnings. Needs Edit staff profiles as well.",
+    managerOnly: true,
   },
   "settings.treatments": {
     label: "Treatments & colours",
@@ -187,7 +209,10 @@ export const PERMISSION_GROUPS: { label: string; keys: PermissionKey[] }[] = [
   { label: "Communication", keys: ["comms.send", "notifications.delete"] },
   { label: "Marketing", keys: ["offers.manage"] },
   { label: "Reports", keys: ["reports.insights", "reports.retention", "reports.performance", "reports.commission"] },
-  { label: "Team", keys: ["team.view", "team.approve_changes"] },
+  {
+    label: "Team",
+    keys: ["team.view", "team.approve_changes", "team.manage_profiles", "team.commission"],
+  },
   { label: "Clinic settings", keys: ["settings.treatments", "tasks.delete"] },
   {
     label: "Visibility",
