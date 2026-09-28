@@ -2,8 +2,15 @@ import { useQuery, type useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getStaffSchedule } from "@/lib/clinic.functions";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
-import { parseDayKey } from "@/lib/staff-schedule";
-import type { ProfileMode, ProfileSubject, ProfileTabKey } from "./profile-types";
+import { CLINIC_TIME_ZONE } from "@/lib/metrics/period";
+import { MONTHS_SHORT, parseDayKey } from "@/lib/staff-schedule";
+import type {
+  EarningsLine,
+  InvoiceRowLike,
+  ProfileMode,
+  ProfileSubject,
+  ProfileTabKey,
+} from "./profile-types";
 
 const DAY_MS = 86_400_000;
 
@@ -155,4 +162,69 @@ export function useStaffSchedule(userId: string, mode: ProfileMode) {
     queryKey: ["staff-schedule", mode === "self" ? "self" : userId],
     queryFn: () => fetchSchedule({ data: mode === "self" ? {} : { userId } }),
   });
+}
+
+/** "5 Sep" for a YYYY-MM-DD key; "5 Sep 2026" with the year. */
+export function shortDate(key: string, withYear = false): string {
+  const { day, month, year } = parseDayKey(key);
+  return `${day} ${MONTHS_SHORT[month - 1]}${withYear ? ` ${year}` : ""}`;
+}
+
+/** The earnings lines as a CSV: date, time, patient, treatment, share, payout. */
+export function earningsCsv(lines: readonly EarningsLine[]): string {
+  const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const header = ["Date", "Time", "Patient", "Treatment", "Share (£)", "Payout"];
+  const rows = lines.map((l) => {
+    const d = new Date(l.performedAt);
+    return [
+      d.toLocaleDateString("en-GB", { timeZone: CLINIC_TIME_ZONE }),
+      d.toLocaleTimeString("en-GB", {
+        timeZone: CLINIC_TIME_ZONE,
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      l.patient,
+      l.name,
+      l.share.toFixed(2),
+      l.payout === "paid" ? "Paid" : l.payout === "pending" ? "Pending" : "",
+    ]
+      .map(escape)
+      .join(",");
+  });
+  return [header.map(escape).join(","), ...rows].join("\n");
+}
+
+/** Triggers a download of `text` as `filename`. */
+export function downloadText(filename: string, text: string, type = "text/csv;charset=utf-8") {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** What the month note says: progress for the current month, the invoice state for a past one. */
+export function monthNote(
+  year: number,
+  month: number,
+  todayKey: string,
+  invoice: InvoiceRowLike | undefined,
+): string {
+  const today = parseDayKey(todayKey);
+  if (today.year === year && today.month === month) {
+    return `1–${today.day} ${MONTHS_SHORT[month - 1]} · month in progress`;
+  }
+  if (!invoice) return "No invoice yet";
+  if (invoice.status === "paid") {
+    return `Invoice sent · paid${invoice.paid_at ? ` ${shortDate(invoice.paid_at.slice(0, 10))}` : ""}`;
+  }
+  if (invoice.status === "sent") {
+    return `Invoice sent${invoice.sent_at ? ` ${shortDate(invoice.sent_at.slice(0, 10))}` : ""}`;
+  }
+  if (invoice.status === "scheduled" && invoice.scheduled_for) {
+    return `Invoice scheduled for ${shortDate(invoice.scheduled_for.slice(0, 10))}`;
+  }
+  return "No invoice yet";
 }

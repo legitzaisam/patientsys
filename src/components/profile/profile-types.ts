@@ -88,3 +88,31 @@ export type ProfileViewer = {
   /** The subject treats patients (practitioner role, or an owner with treatments), so earnings apply. */
   treats: boolean;
 };
+
+/** One treatment line from getMyEarnings — the practitioner's share only. */
+export type EarningsLine = {
+  id: string;
+  performedAt: string;
+  name: string;
+  patient: string;
+  patientId?: string | undefined;
+  share: number;
+  /** Paid once the linked booking is settled in full; pending until then. */
+  payout?: "paid" | "pending" | undefined;
+};
+
+/** A practitioner_invoices row as the list function returns it. */
+export type InvoiceRowLike = {
+  id: string;
+  number: string;
+  period_start: string;
+  period_end: string;
+  recipient: string;
+  note?: string | null;
+  status: string;
+  scheduled_for?: string | null;
+  sent_at?: string | null;
+  paid_at?: string | null;
+  amount: number;
+  treatments: number;
+};

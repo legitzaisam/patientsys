@@ -6,8 +6,8 @@ import { Card } from "@/components/ui/card";
 import { EffectivePermissions } from "@/components/effective-permissions";
 import { SecuritySettings } from "@/components/security-settings";
 import { StaffDocuments } from "@/components/staff-files";
-import { PractitionerEarnings } from "@/components/earnings/practitioner-earnings";
-import { CURRENT_YEAR, PeriodPicker, type PeriodSelection } from "@/components/period-picker";
+import { EarningsTab } from "./earnings-tab";
+import { InvoiceDialog } from "./invoice-dialog";
 import { ProfileHero } from "./profile-hero";
 import { ProfileTabs, type ProfileTabDef } from "./profile-tabs";
 import { PersonalDetailsCard } from "./personal-details-card";
@@ -40,7 +40,10 @@ export function StaffProfilePage({
   const schedule = useStaffSchedule(subject.userId, mode);
   const pattern = schedule.data?.pattern ?? subject.pattern;
   const timeOff = (schedule.data?.timeOff ?? []) as TimeOffLike[];
-  const [period, setPeriod] = useState<PeriodSelection>(CURRENT_YEAR);
+  const [invoice, setInvoice] = useState<{
+    open: boolean;
+    period?: { year: number; month: number } | undefined;
+  }>({ open: false });
 
   const missingDocs = ESSENTIAL_DOC_CATEGORIES.filter(
     (c) => !subject.presentCategories.includes(c.value),
@@ -64,8 +67,9 @@ export function StaffProfilePage({
   ];
   const active = tabs.some((t) => t.key === tab) ? tab : "overview";
 
-  // Until Phase 7 and 8 land their dialogs, the hero actions open the tab they belong to.
-  const openInvoice = () => onTabChange("earnings");
+  const openInvoice = (period?: { year: number; month: number }) =>
+    setInvoice({ open: true, period });
+  // Until Phase 8 lands the time-off sheet, the hero action opens the Schedule tab.
   const openTimeOff = () => onTabChange("schedule");
 
   return (
@@ -76,7 +80,7 @@ export function StaffProfilePage({
         todayKey={todayKey}
         canEditPhoto={mode !== "frontdesk" && !subject.revoked}
         onTab={onTabChange}
-        onInvoice={openInvoice}
+        onInvoice={() => openInvoice()}
         onTimeOff={openTimeOff}
         treats={viewer.treats}
       />
@@ -109,7 +113,7 @@ export function StaffProfilePage({
                 subject={subject}
                 todayKey={todayKey}
                 onTab={onTabChange}
-                onInvoice={openInvoice}
+                onInvoice={() => openInvoice()}
               />
             ) : null}
             <YourWeekCard
@@ -127,24 +131,7 @@ export function StaffProfilePage({
       ) : null}
 
       {active === "earnings" ? (
-        <section data-qc="profile-earnings-tab">
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h2 className="section-title">Performance &amp; earnings</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {mode === "self"
-                  ? "Your share of the treatments you delivered."
-                  : "Their share of the treatments they delivered."}
-              </p>
-            </div>
-            <PeriodPicker value={period} onChange={setPeriod} />
-          </div>
-          <PractitionerEarnings
-            {...(mode === "self" ? {} : { userId: subject.userId })}
-            period={period}
-            possessive={mode === "self" ? "your" : "their"}
-          />
-        </section>
+        <EarningsTab mode={mode} subject={subject} todayKey={todayKey} onInvoice={openInvoice} />
       ) : null}
 
       {active === "schedule" ? (
@@ -186,6 +173,16 @@ export function StaffProfilePage({
 
       {active === "access" && subject.capabilities ? (
         <EffectivePermissions capabilities={subject.capabilities} name={subject.fullName} />
+      ) : null}
+
+      {mode === "self" && viewer.treats ? (
+        <InvoiceDialog
+          open={invoice.open}
+          onOpenChange={(open) => setInvoice((s) => ({ ...s, open }))}
+          subject={subject}
+          todayKey={todayKey}
+          initial={invoice.period}
+        />
       ) : null}
     </div>
   );
