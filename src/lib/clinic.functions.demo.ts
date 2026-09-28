@@ -27,6 +27,16 @@ import {
   upcomingBookingSet,
   visitsByPatient,
 } from "@/lib/metrics/definitions";
+import {
+  noShowLookbackISO,
+  planStepState,
+  type PlanStepAppointment,
+} from "@/lib/plan-step-state";
+import {
+  attentionDepositHorizonDays,
+  attentionDepositUrgency,
+  dropThisWeekDepositsIfUrgent,
+} from "@/lib/metrics/appointment-flags";
 import { complianceReminders } from "@/lib/metrics/compliance";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
@@ -35,7 +45,7 @@ import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
-import { attentionDueSubtitle } from "@/components/patients/plan-step-copy";
+import { attentionDueSubtitle, skinPlanDueForAttention } from "@/components/patients/plan-step-copy";
 import {
   CONSENT_BODY_DEFAULT,
   PRE_TREATMENT_CHECKS,
@@ -60,9 +70,11 @@ import { assertPhone } from "@/lib/phone";
 import { practitionerDayAlerts, type PractitionerDayAlertRow } from "@/lib/practitioner-day-alerts";
 import { parseStaffAlertTitle, teamAlertPreview } from "@/lib/staff-alert-title";
 import {
+  canSeeProfileChangeAttention,
   canSelfApplyIdentityChanges,
   clinicHasSeparateManager,
   profileChangeApproverIds,
+  profileChangeAttentionItems,
   profileChangeRequiresOwner,
   profileChangeShowsReviewer,
 } from "@/lib/profile-change-policy";
@@ -555,11 +567,6 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     .slice(0, 10)
     .map((h) => ({ ...h, patients: patientJoin(h.patient_id) }));
 
-  const unread = sortDesc(
-    messages.filter((m) => !m.read_at && m.author === "patient"),
-    "created_at",
-  ).slice(0, 10);
-
   const pendingConsents = pendingDocs.filter((d) => d.kind === "consent").length;
 
   const attentionItems: any[] = [];
@@ -645,20 +652,19 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     });
   }
 
-  for (const m of unread) {
-    const p = patientById(m.patient_id);
-    attentionItems.push({
-      id: `msg-${m.id}`,
-      kind: "message",
-      urgency: "this_week",
-      title: `${p?.first_name ?? ""} ${p?.last_name ?? ""} — new message`,
-      subtitle: m.body.slice(0, 60) + (m.body.length > 60 ? "…" : ""),
-      patientId: m.patient_id,
-    });
-  }
   // Owner reminder: registrations and insurance expiring within 60 days.
   if (isManager) {
     for (const item of complianceReminders(profiles, todayISO)) attentionItems.push(item);
+  }
+
+  if (canSeeProfileChangeAttention(me)) {
+    attentionItems.push(
+      ...profileChangeAttentionItems(profileChangeRequests, {
+        userId: me.userId,
+        isOwner: me.isOwner,
+        isAdmin: me.isAdmin,
+      }),
+    );
   }
 
   // ---- Journeys: active plans grouped by phase (dashboard bottom section).
@@ -667,15 +673,21 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     activePlans = activePlans.filter((p) => !p.practitioner_id || p.practitioner_id === me.userId);
   }
   const todayKeyForPlans = clinicDayKey(today);
-  // Attention “Treatment due” is the board Book chase: active plan, no live booking.
+  // Attention “Skin-plan treatment due”: no booking for the next step, and
+  // that step overdue or due within 14 days. A step the patient did not turn
+  // up to is a no show instead, so nobody is chased twice.
   const nowISO = today.toISOString();
-  const bookedUpcoming = new Set(
-    appointments
-      .filter((a) => a.status === "booked" && a.starts_at >= nowISO)
-      .map((a) => a.patient_id),
-  );
+  const stepLookbackISO = noShowLookbackISO(today);
+  const stepApptsByPatient = new Map<string, PlanStepAppointment[]>();
+  for (const a of appointments) {
+    if (a.status !== "booked" && a.status !== "no_show") continue;
+    if (a.starts_at < stepLookbackISO) continue;
+    const list = stepApptsByPatient.get(a.patient_id) ?? [];
+    list.push(a as PlanStepAppointment);
+    stepApptsByPatient.set(a.patient_id, list);
+  }
+  const planStepNoShows: { patientId: string; who: string; at: string }[] = [];
   for (const p of activePlans) {
-    if (bookedUpcoming.has(p.patient_id)) continue;
     const mine = planMilestones.filter((m) => m.plan_id === p.id).sort((a, b) => a.idx - b.idx);
     const next =
       mine.find((m) => m.status === "current") ?? mine.find((m) => m.status === "upcoming") ?? null;
@@ -683,7 +695,21 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     const who = `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient";
     const title = (next?.title as string | undefined) || "Next step";
     const dueDate = (next?.due_date as string | null | undefined) ?? null;
-    const overdue = Boolean(dueDate && dueDate < todayKeyForPlans);
+    const step = planStepState({
+      nextMilestone: next
+        ? { id: next.id, kind: next.kind, dueDate, appointmentId: next.appointment_id }
+        : null,
+      planCatalogueId: p.catalogue_id,
+      appointments: stepApptsByPatient.get(p.patient_id) ?? [],
+      todayKey: todayKeyForPlans,
+      nowISO,
+    });
+    if (step.noShowAt) {
+      planStepNoShows.push({ patientId: p.patient_id, who, at: step.noShowAt });
+      continue;
+    }
+    if (step.stepBookedAt) continue;
+    if (!skinPlanDueForAttention(dueDate, todayKeyForPlans)) continue;
     attentionItems.push({
       id: `due-${p.id}`,
       kind: "treatment_due",
@@ -691,12 +717,35 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
       title: `${who} — ${title}`,
       subtitle: attentionDueSubtitle({
         nextMilestone: { title, dueDate },
-        overdue,
+        overdue: step.overdue,
         atRisk: true,
         riskReason: "No upcoming booking",
+        otherBookingTreatment: step.otherBookingTreatment,
       }),
       patientId: p.patient_id,
       href: `/patients/${p.patient_id}?tab=treatments#plan`,
+    });
+  }
+  // A missed step stays on the list past today, until it is rebooked or the
+  // booking is cancelled. Today's diary already pushed a row for some of
+  // these, so the appointment id keeps them from doubling up.
+  const listedNoShows = new Set(
+    attentionItems.filter((i) => i.kind === "no_show").map((i) => i.id as string),
+  );
+  for (const miss of planStepNoShows) {
+    const appt = (stepApptsByPatient.get(miss.patientId) ?? []).find(
+      (a) => a.starts_at === miss.at && a.status === "no_show",
+    );
+    if (!appt || listedNoShows.has(`no-show-${appt.id}`)) continue;
+    attentionItems.push({
+      id: `no-show-${appt.id}`,
+      kind: "no_show",
+      urgency: "urgent",
+      title: `${miss.who} — no show`,
+      subtitle: `${appt.treatment_name ?? "Treatment"} · ${new Date(appt.starts_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
+      patientId: miss.patientId,
+      appointmentId: appt.id,
+      href: `/patients/${miss.patientId}?tab=treatments#plan`,
     });
   }
   const journeyPhases = (["consult", "foundation", "build", "results"] as const).map((phase) => {
@@ -828,7 +877,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
       patientChange,
     },
     todayAppointments: todayAppts,
-    attentionItems,
+    attentionItems: dropThisWeekDepositsIfUrgent(attentionItems),
     journeys,
     safeToProceed,
     safeReadyCount,
@@ -1291,6 +1340,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       app_origin?: string;
       pay_kind?: PaymentLinkKind;
       details_incomplete?: boolean;
+      milestone_id?: string;
     }) => parseInput(schemas.SaveAppointment, data),
   )
   .handler(async ({ data }) => {
@@ -1380,6 +1430,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
 
     const created = { id: newId("a8"), created_at: new Date().toISOString(), ...payload };
     appointments.push(created);
+    if (data.milestone_id) linkMilestoneToAppointmentDemo(data.milestone_id, created.id);
 
     const noteBody = String(data.notes ?? "");
     if (noteBody.trim()) {
@@ -5975,22 +6026,18 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
     }) => parseInput(schemas.ListTreatmentPlans, data),
   )
   .handler(async ({ data }) => {
-    const todayISO = clinicDayKey(new Date());
-    const nowISO = new Date().toISOString();
-    const hasUpcoming = new Set(
-      appointments
-        .filter((a) => a.status === "booked" && a.starts_at >= nowISO)
-        .map((a) => a.patient_id),
-    );
-    // Earliest live booking per patient, for the card's "Booked 28 Sep" label.
-    const nextBookingByPatient = new Map<string, string>();
-    for (const a of sortAsc(
-      appointments.filter((a) => a.status === "booked" && a.starts_at >= nowISO),
-      "starts_at",
-    )) {
-      if (!nextBookingByPatient.has(a.patient_id)) {
-        nextBookingByPatient.set(a.patient_id, a.starts_at);
-      }
+    const now = new Date();
+    const todayISO = clinicDayKey(now);
+    const nowISO = now.toISOString();
+    // Live bookings plus recent misses: both decide the next step's state.
+    const lookbackISO = noShowLookbackISO(now);
+    const apptsByPatient = new Map<string, PlanStepAppointment[]>();
+    for (const a of appointments) {
+      if (a.status !== "booked" && a.status !== "no_show") continue;
+      if (a.starts_at < lookbackISO) continue;
+      const list = apptsByPatient.get(a.patient_id) ?? [];
+      list.push(a as PlanStepAppointment);
+      apptsByPatient.set(a.patient_id, list);
     }
     const needle = (data.query ?? "").trim().toLowerCase();
 
@@ -6009,8 +6056,22 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
           mine.find((m) => m.status === "current") ??
           mine.find((m) => m.status === "upcoming") ??
           null;
-        const overdue = Boolean(next?.due_date && next.due_date < todayISO);
-        const atRisk = overdue || !hasUpcoming.has(p.patient_id);
+        const step = planStepState({
+          nextMilestone: next
+            ? {
+                id: next.id,
+                kind: next.kind,
+                dueDate: next.due_date,
+                appointmentId: next.appointment_id,
+              }
+            : null,
+          planCatalogueId: p.catalogue_id,
+          appointments: apptsByPatient.get(p.patient_id) ?? [],
+          todayKey: todayISO,
+          nowISO,
+        });
+        const overdue = step.overdue;
+        const atRisk = overdue || Boolean(step.noShowAt) || !step.stepBookedAt;
         return {
           id: p.id,
           patientId: p.patient_id,
@@ -6028,12 +6089,17 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
             : null,
           overdue,
           atRisk,
-          riskReason: overdue
-            ? "Next step overdue"
-            : !hasUpcoming.has(p.patient_id)
-              ? "No upcoming booking"
-              : null,
-          nextBookingAt: nextBookingByPatient.get(p.patient_id) ?? null,
+          riskReason: step.noShowAt
+            ? "No show"
+            : overdue
+              ? "Next step overdue"
+              : !step.stepBookedAt
+                ? "No upcoming booking"
+                : null,
+          nextBookingAt: step.nextBookingAt,
+          stepBookedAt: step.stepBookedAt,
+          otherBookingTreatment: step.otherBookingTreatment,
+          noShowAt: step.noShowAt,
         };
       });
 
@@ -6109,6 +6175,15 @@ export const updatePlanMilestone = createServerFn({ method: "POST" })
     demoSetMilestoneStatus(data.id, data.status);
     return { ok: true };
   });
+
+/** Demo twin of linkMilestoneToAppointment. */
+function linkMilestoneToAppointmentDemo(milestoneId: string, appointmentId: string) {
+  for (const m of planMilestones) {
+    if (m.appointment_id === appointmentId && m.id !== milestoneId) m.appointment_id = null;
+  }
+  const milestone = planMilestones.find((m) => m.id === milestoneId);
+  if (milestone) milestone.appointment_id = appointmentId;
+}
 
 /** Demo twin of setMilestoneStatus. */
 function demoSetMilestoneStatus(

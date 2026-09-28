@@ -1,3 +1,5 @@
+import { clinicDayDiff } from "@/lib/clinic-time";
+
 /**
  * Copy for a treatment plan's next step, shared by the journey board and the
  * Treatments tab plan card so both say the same thing about the same plan.
@@ -9,7 +11,17 @@ type PlanStepInput = {
   atRisk: boolean;
   riskReason: string | null;
   nextBookingAt?: string | null;
+  /** The booking that is for this step, when there is one. */
+  stepBookedAt?: string | null;
+  /** What the patient's booking is for, when it is not this step. */
+  otherBookingTreatment?: string | null;
+  /** A booking for this step the patient did not turn up to. */
+  noShowAt?: string | null;
 };
+
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
 
 /** "Due 28 Sep" when nothing is booked, "3d overdue" once the step has slipped. */
 export function dueLabel(dueDate?: string | null) {
@@ -29,7 +41,7 @@ export function dueLabel(dueDate?: string | null) {
 
 /** "Booked 28 Sep": the date is in the diary. */
 export function bookedLabel(iso: string) {
-  return `Booked ${new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+  return `Booked ${shortDate(iso)}`;
 }
 
 /** "7 days overdue" for a slipped step; null when the step is not late. */
@@ -50,16 +62,32 @@ export function overdueLabel(plan: PlanStepInput) {
 }
 
 /**
- * The booking if there is one, else the due date. An overdue step's lateness
- * lives on the step line, so here it only gets its booking.
+ * The booking *for this step*, else the due date. A booking for something else
+ * is named by bookingMismatchLine instead, and an overdue step's lateness
+ * lives on the step line.
  */
 export function planDateLabel(plan: PlanStepInput) {
-  const booked = plan.nextBookingAt ? bookedLabel(plan.nextBookingAt) : null;
-  if (plan.overdue) return booked;
-  return booked ?? dueLabel(plan.nextMilestone?.dueDate);
+  if (plan.stepBookedAt) return bookedLabel(plan.stepBookedAt);
+  if (plan.overdue) return null;
+  return dueLabel(plan.nextMilestone?.dueDate);
+}
+
+/**
+ * "23 Oct booking is for Profhilo, not this step" — so nobody reads the diary
+ * entry as the chase being done. Null when the booking is for this step.
+ */
+export function bookingMismatchLine(plan: PlanStepInput) {
+  if (!plan.nextBookingAt || !plan.otherBookingTreatment) return null;
+  return `${shortDate(plan.nextBookingAt)} booking is for ${plan.otherBookingTreatment}, not this step`;
+}
+
+/** "Did not attend 24 Sep" for a step booking the patient missed. */
+export function noShowLine(plan: PlanStepInput) {
+  return plan.noShowAt ? `Did not attend ${shortDate(plan.noShowAt)}` : null;
 }
 
 export function riskChipLabel(plan: PlanStepInput) {
+  if (plan.noShowAt) return "No show";
   if (plan.overdue) return "Overdue";
   if (plan.atRisk) return plan.riskReason ?? "At risk";
   return "On track";
@@ -71,7 +99,24 @@ export function nextStepLine(plan: PlanStepInput) {
   return plan.overdue ? title : `Next: ${title}`;
 }
 
-/** Attention Needed “Treatment due”: lateness, else the due date, else the chase. */
+/** Attention Needed lists a skin-plan step that is overdue or due within this many clinic days. */
+export const SKIN_PLAN_ATTENTION_DAYS = 14;
+
+/** True when the next skin-plan step belongs on Attention needed. */
+export function skinPlanDueForAttention(dueDate: string | null | undefined, todayKey: string) {
+  if (!dueDate) return false;
+  return clinicDayDiff(todayKey, dueDate) <= SKIN_PLAN_ATTENTION_DAYS;
+}
+
+/**
+ * Attention Needed “Skin-plan treatment due”: what the diary is doing instead,
+ * else the lateness, else the due date, else the chase.
+ */
 export function attentionDueSubtitle(plan: PlanStepInput) {
-  return overdueLabel(plan) ?? dueLabel(plan.nextMilestone?.dueDate) ?? "No upcoming booking";
+  const late = overdueLabel(plan);
+  const mismatch = plan.otherBookingTreatment
+    ? `Booked for ${plan.otherBookingTreatment}, not this step`
+    : null;
+  if (mismatch) return late ? `${mismatch} · ${late}` : mismatch;
+  return late ?? dueLabel(plan.nextMilestone?.dueDate) ?? "No upcoming booking";
 }

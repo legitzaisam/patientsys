@@ -20,6 +20,6 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/metrics/**/*.test.ts"],
+    include: ["tests/metrics/**/*.test.ts", "docs/audits/**/*.audit.test.ts"],
   },
 });

@@ -4143,12 +4143,21 @@ for (const recipe of PLAN_RECIPES) {
   const spec = PATIENT_SPECS[recipe.patient]!;
   const planId = id("d7");
   const sessions = recipe.steps.filter((s) => (s.k ?? "task") === "session").length;
+  // The treatment this plan's sessions are. A diary booking for it counts as
+  // the plan's next step; a booking for anything else does not.
+  const strippedName = recipe.name.replace(/ (Plan|Course|Programme|Series|Track|Journey).*$/, "");
+  const planTreatmentName =
+    PLAN_TREATMENTS[recipe.name] ??
+    (catalogueByName.has(strippedName) ? strippedName : spec.favourite);
+  const planItem =
+    catalogueByName.get(planTreatmentName) ??
+    activeCatalogue.find((c) => c["category"] !== "Consultation")!;
   treatmentPlans.push({
     id: planId,
     clinic_id: CLINIC_ID,
     patient_id: patient["id"],
     practitioner_id: spec.practitioner ?? USERS.practitioner,
-    catalogue_id: null,
+    catalogue_id: planItem["id"],
     kind: recipe.kind ?? "treatment",
     name: recipe.name,
     strapline: PLAN_STRAPLINES[recipe.patient % PLAN_STRAPLINES.length],
@@ -4170,19 +4179,19 @@ for (const recipe of PLAN_RECIPES) {
   const pastVisits = appointments
     .filter((a) => a["patient_id"] === patient["id"] && a["status"] === "attended" && new Date(a["starts_at"]) < NOW)
     .sort((a, b) => (a["starts_at"] < b["starts_at"] ? -1 : 1));
+  // Only a booking for the plan's own treatment settles the next session; a
+  // booking for something else leaves that step unbooked.
   const nextVisit = appointments
     .filter((a) => a["patient_id"] === patient["id"] && a["status"] === "booked" && new Date(a["starts_at"]) >= NOW)
-    .sort((a, b) => (a["starts_at"] < b["starts_at"] ? -1 : 1))[0];
+    .sort((a, b) => (a["starts_at"] < b["starts_at"] ? -1 : 1))
+    .find((a) => a["catalogue_id"] === planItem["id"]);
   const doneSessions = recipe.steps.filter((st, i) => i < recipe.done && (st.k ?? "task") === "session").length;
   // Patients whose diary history is thin get a completed, consented visit per
   // finished session so the record behind the step is there to show.
   while (pastVisits.length < doneSessions) {
     const k = doneSessions - pastVisits.length;
     const daysAgo = 9 * k + 4;
-    const stripped = recipe.name.replace(/ (Plan|Course|Programme|Series|Track|Journey).*$/, "");
-    const treatmentName =
-      PLAN_TREATMENTS[recipe.name] ?? (catalogueByName.has(stripped) ? stripped : spec.favourite);
-    const item = catalogueByName.get(treatmentName) ?? activeCatalogue.find((c) => c["category"] !== "Consultation")!;
+    const item = planItem;
     const consultation = item["category"] === "Consultation";
     if (consultation && pastVisits.some((v) => v["treatment_name"] === item["name"])) break;
     const consultEvery = (item["interval_days"] as number | null) ?? 365;
@@ -4444,18 +4453,49 @@ for (const index of [40, 41, 43]) {
 }
 if (patients[42]) patients[42]!["date_of_birth"] = "";
 
+// A current step is booked only when the diary holds the plan's own treatment.
 const nowIsoForPlans = NOW.toISOString();
 for (const milestone of planMilestones) {
-  if (milestone["status"] !== "current") continue;
+  if (milestone["status"] !== "current" || milestone["appointment_id"]) continue;
   const plan = treatmentPlans.find((p) => p["id"] === milestone["plan_id"]);
   if (!plan) continue;
   const upcoming = appointments.find(
     (a) =>
       a["patient_id"] === plan["patient_id"] &&
       a["starts_at"] >= nowIsoForPlans &&
-      a["status"] === "booked",
+      a["status"] === "booked" &&
+      a["catalogue_id"] === plan["catalogue_id"],
   );
   if (upcoming) milestone["appointment_id"] = upcoming["id"];
+}
+
+// One plan where the patient did not turn up to their session, so the "No
+// show" tag and its Attention Needed row have something to show.
+const missedStep = planMilestones.find((m) => {
+  if (m["status"] !== "current" || m["kind"] !== "session" || m["appointment_id"]) return false;
+  const plan = treatmentPlans.find((p) => p["id"] === m["plan_id"]);
+  if (!plan) return false;
+  return !appointments.some(
+    (a) => a["patient_id"] === plan["patient_id"] && a["starts_at"] >= nowIsoForPlans,
+  );
+});
+if (missedStep) {
+  const plan = treatmentPlans.find((p) => p["id"] === missedStep["plan_id"])!;
+  const patient = patients.find((p) => p["id"] === plan["patient_id"])!;
+  const item = catalogue.find((c) => c["id"] === plan["catalogue_id"])!;
+  const missed = makeAppointment({
+    patient,
+    practitionerId: plan["practitioner_id"] as string,
+    treatmentName: item["name"] as string,
+    dayOffset: -6,
+    hour: 11,
+    minute: 30,
+    durationMinutes: 45,
+    status: "no_show",
+    stage: "no_show",
+    paymentStatus: "unpaid",
+  });
+  missedStep["appointment_id"] = missed["id"];
 }
 
 userNotes.push(

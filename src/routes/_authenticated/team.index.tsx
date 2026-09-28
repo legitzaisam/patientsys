@@ -333,6 +333,7 @@ function TeamPage() {
     void queryClient.invalidateQueries({ queryKey: ["team"] });
     void queryClient.invalidateQueries({ queryKey: ["ex-team"] });
     void queryClient.invalidateQueries({ queryKey: ["staff-profile"] });
+    void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
   };
   const stepUp = useStepUp();
 

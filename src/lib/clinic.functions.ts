@@ -7,6 +7,12 @@ import {
   clinicDayRangeForKey,
   clinicMinutesOfDay,
 } from "@/lib/clinic-time";
+import {
+  ATTENTION_DEPOSIT_WEEK_DAYS,
+  attentionDepositHorizonDays,
+  attentionDepositUrgency,
+  dropThisWeekDepositsIfUrgent,
+} from "@/lib/metrics/appointment-flags";
 import { complianceReminders } from "@/lib/metrics/compliance";
 import { ESSENTIAL_DOC_CATEGORIES } from "@/lib/staff-doc-compliance";
 import {
@@ -15,6 +21,11 @@ import {
   upcomingBookingSet,
   visitsByPatient,
 } from "@/lib/metrics/definitions";
+import {
+  noShowLookbackISO,
+  planStepState,
+  type PlanStepAppointment,
+} from "@/lib/plan-step-state";
 import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { clampDurationMinutes } from "@/lib/treatment-duration";
 import { PRACTITIONER_OVERLAP_MESSAGE } from "@/lib/appointment-overlap";
@@ -36,7 +47,7 @@ import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voic
 import { parseInput } from "@/lib/validation/parse";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
-import { attentionDueSubtitle } from "@/components/patients/plan-step-copy";
+import { attentionDueSubtitle, skinPlanDueForAttention } from "@/components/patients/plan-step-copy";
 import {
   CONSENT_BODY_DEFAULT,
   PRE_TREATMENT_CHECKS,
@@ -70,9 +81,11 @@ import { emailMfaDelivery } from "@/lib/auth/email-mfa.server";
 import { createHash, randomInt } from "node:crypto";
 import { generateInsightsIngestKey } from "@/lib/insights-ingest.server";
 import {
+  canSeeProfileChangeAttention,
   canSelfApplyIdentityChanges,
   clinicHasSeparateManager,
   profileChangeApproverIds,
+  profileChangeAttentionItems,
   profileChangeRequiresOwner,
   profileChangeShowsReviewer,
 } from "@/lib/profile-change-policy";
@@ -403,7 +416,6 @@ export const getDashboard = createServerFn({ method: "GET" })
       unpaidDepositRaw,
       prevMonthTreatments,
       prevMonthPatients,
-      unreadMessages,
       dueDatesRaw,
       upcomingApptsRaw,
       clinicRow,
@@ -456,13 +468,6 @@ export const getDashboard = createServerFn({ method: "GET" })
         .gte("created_at", prevMonthStart)
         .lt("created_at", prevMonthEnd),
       supabase
-        .from("messages")
-        .select("id, patient_id, body, created_at, patients(first_name, last_name)")
-        .is("read_at", null)
-        .eq("author", "patient")
-        .order("created_at", { ascending: false })
-        .limit(10),
-      supabase
         .from("treatments")
         .select(
           "id, name, patient_id, performed_at, next_due_at, practitioner_id, patients(first_name, last_name)",
@@ -484,15 +489,17 @@ export const getDashboard = createServerFn({ method: "GET" })
     // Journeys + Safe-to-proceed. Fetched after the main fan-out so the three
     // queries can share the ids above; plans are few, so this stays cheap.
     const dayAfterTomorrow = clinicDayRange(new Date(today.getTime() + 86400000)).endISO;
-    const [plansRaw, milestonesRaw, horizonApptsRaw] = await Promise.all([
+    const [plansRaw, milestonesRaw, horizonApptsRaw, stepApptsRaw] = await Promise.all([
       supabase
         .from("treatment_plans")
         .select(
-          "id, patient_id, practitioner_id, name, kind, phase, status, total_sessions, patients(first_name, last_name, avatar_url)",
+          "id, patient_id, practitioner_id, catalogue_id, name, kind, phase, status, total_sessions, patients(first_name, last_name, avatar_url)",
         )
         .eq("status", "active")
         .order("started_at", { ascending: true }),
-      supabase.from("plan_milestones").select("plan_id, status, kind, idx, due_date, title"),
+      supabase
+        .from("plan_milestones")
+        .select("id, plan_id, status, kind, idx, due_date, title, appointment_id"),
       supabase
         .from("appointments")
         .select(
@@ -502,6 +509,12 @@ export const getDashboard = createServerFn({ method: "GET" })
         .lt("starts_at", dayAfterTomorrow)
         .eq("status", "booked")
         .order("starts_at", { ascending: true }),
+      // Live bookings plus recent misses: both decide a plan step's state.
+      supabase
+        .from("appointments")
+        .select("id, patient_id, starts_at, status, catalogue_id, treatment_name")
+        .in("status", ["booked", "no_show"])
+        .gte("starts_at", noShowLookbackISO(today)),
     ]);
 
     let all = patients.data ?? [];
@@ -760,17 +773,6 @@ export const getDashboard = createServerFn({ method: "GET" })
       });
     }
 
-    for (const m of unreadMessages.data ?? []) {
-      attentionItems.push({
-        id: `msg-${m.id}`,
-        kind: "message",
-        urgency: "this_week",
-        title: `${m.patients?.first_name ?? ""} ${m.patients?.last_name ?? ""} — new message`,
-        subtitle: m.body.slice(0, 60) + (m.body.length > 60 ? "…" : ""),
-        patientId: m.patient_id,
-      });
-    }
-
     // Owner reminder: a team member's registration or insurance runs out within
     // 60 days (or has already). Managers see the row; it links to the profile.
     if (isManager) {
@@ -784,6 +786,26 @@ export const getDashboard = createServerFn({ method: "GET" })
       }
     }
 
+    if (canSeeProfileChangeAttention(identity)) {
+      const supabaseAdmin = await adminClient(context);
+      const { data: changeReqs } = await supabaseAdmin
+        .from("profile_change_requests")
+        .select(
+          "id, user_id, full_name, job_title, registration_body, registration_number, registration_expiry, work_email, working_arrangement, note, requires_owner, status, inbox_cleared_at",
+        )
+        .eq("status", "pending")
+        .is("inbox_cleared_at", null)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      attentionItems.push(
+        ...profileChangeAttentionItems((changeReqs ?? []) as any[], {
+          userId: identity.userId,
+          isOwner: identity.isOwner,
+          isAdmin: identity.isAdmin,
+        }),
+      );
+    }
+
     // ---- Journeys: active plans grouped by phase (dashboard bottom section).
     let plans = (plansRaw.data ?? []) as any[];
     if (scoped) plans = plans.filter((p) => !p.practitioner_id || p.practitioner_id === scoped);
@@ -794,14 +816,19 @@ export const getDashboard = createServerFn({ method: "GET" })
       list.push(m);
       milestonesByPlan.set(m.plan_id, list);
     }
-    // Attention “Treatment due” is the board Book chase: active plan, no live booking.
-    const bookedUpcoming = new Set(
-      ((upcomingApptsRaw.data ?? []) as { patient_id: string; starts_at: string; status: string }[])
-        .filter((a) => a.status === "booked")
-        .map((a) => a.patient_id),
-    );
+    // Attention “Skin-plan treatment due”: no booking for the next step, and
+    // that step overdue or due within 14 days. A step the patient did not turn
+    // up to is a no show instead, so nobody is chased twice.
+    const stepApptsByPatient = new Map<string, PlanStepAppointment[]>();
+    for (const a of (stepApptsRaw.data ?? []) as (PlanStepAppointment & {
+      patient_id: string;
+    })[]) {
+      const list = stepApptsByPatient.get(a.patient_id) ?? [];
+      list.push(a);
+      stepApptsByPatient.set(a.patient_id, list);
+    }
+    const planStepNoShows: { patientId: string; who: string; at: string }[] = [];
     for (const p of plans) {
-      if (bookedUpcoming.has(p.patient_id)) continue;
       const mine = (milestonesByPlan.get(p.id) ?? []).sort((a, b) => a.idx - b.idx);
       const next =
         mine.find((m) => m.status === "current") ??
@@ -811,7 +838,21 @@ export const getDashboard = createServerFn({ method: "GET" })
         `${p.patients?.first_name ?? ""} ${p.patients?.last_name ?? ""}`.trim() || "Patient";
       const title = (next?.title as string | undefined) || "Next step";
       const dueDate = (next?.due_date as string | null | undefined) ?? null;
-      const overdue = Boolean(dueDate && dueDate < todayKeyForPlans);
+      const step = planStepState({
+        nextMilestone: next
+          ? { id: next.id, kind: next.kind, dueDate, appointmentId: next.appointment_id }
+          : null,
+        planCatalogueId: p.catalogue_id,
+        appointments: stepApptsByPatient.get(p.patient_id) ?? [],
+        todayKey: todayKeyForPlans,
+        nowISO: today.toISOString(),
+      });
+      if (step.noShowAt) {
+        planStepNoShows.push({ patientId: p.patient_id, who, at: step.noShowAt });
+        continue;
+      }
+      if (step.stepBookedAt) continue;
+      if (!skinPlanDueForAttention(dueDate, todayKeyForPlans)) continue;
       attentionItems.push({
         id: `due-${p.id}`,
         kind: "treatment_due",
@@ -819,12 +860,35 @@ export const getDashboard = createServerFn({ method: "GET" })
         title: `${who} — ${title}`,
         subtitle: attentionDueSubtitle({
           nextMilestone: { title, dueDate },
-          overdue,
+          overdue: step.overdue,
           atRisk: true,
           riskReason: "No upcoming booking",
+          otherBookingTreatment: step.otherBookingTreatment,
         }),
         patientId: p.patient_id,
         href: `/patients/${p.patient_id}?tab=treatments#plan`,
+      });
+    }
+    // A missed step stays on the list past today, until it is rebooked or the
+    // booking is cancelled. Today's diary already pushed a row for some of
+    // these, so the appointment id keeps them from doubling up.
+    const listedNoShows = new Set(
+      attentionItems.filter((i) => i.kind === "no_show").map((i) => i.id as string),
+    );
+    for (const miss of planStepNoShows) {
+      const appt = (stepApptsByPatient.get(miss.patientId) ?? []).find(
+        (a) => a.starts_at === miss.at && a.status === "no_show",
+      );
+      if (!appt || listedNoShows.has(`no-show-${appt.id}`)) continue;
+      attentionItems.push({
+        id: `no-show-${appt.id}`,
+        kind: "no_show",
+        urgency: "urgent",
+        title: `${miss.who} — no show`,
+        subtitle: `${appt.treatment_name ?? "Treatment"} · ${new Date(appt.starts_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
+        patientId: miss.patientId,
+        appointmentId: appt.id,
+        href: `/patients/${miss.patientId}?tab=treatments#plan`,
       });
     }
     const journeyPhases = (["consult", "foundation", "build", "results"] as const).map((phase) => {
@@ -932,7 +996,7 @@ export const getDashboard = createServerFn({ method: "GET" })
         consentState: consentStateOf(a),
         claimedOffer: claimedOfferFor(a),
       })),
-      attentionItems,
+      attentionItems: dropThisWeekDepositsIfUrgent(attentionItems),
       journeys,
       safeToProceed,
       safeReadyCount,
@@ -1681,6 +1745,8 @@ export const saveAppointment = createServerFn({ method: "POST" })
       pay_kind?: PaymentLinkKind;
       /** Quick book marks the booking for reception to finish. */
       details_incomplete?: boolean;
+      /** Booked from a plan: link the new appointment to that step. */
+      milestone_id?: string;
     }) => parseInput(schemas.SaveAppointment, data),
   )
   .middleware([requireSupabaseAuth])
@@ -1772,6 +1838,7 @@ export const saveAppointment = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
     await audit(context as Ctx, "create", "appointment", created.id, data.patient_id);
+    if (data.milestone_id) await linkMilestoneToAppointment(supabase, data.milestone_id, created.id);
 
     const noteBody = String(data.notes ?? "");
     if (noteBody.trim()) {
@@ -8410,31 +8477,33 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
 
     const planIds = (plans ?? []).map((p: { id: string }) => p.id);
     const patientIds = [...new Set((plans ?? []).map((p: { patient_id: string }) => p.patient_id))];
-    const [{ data: milestones }, { data: upcomingAppts }] = await Promise.all([
+    const now = new Date();
+    const [{ data: milestones }, { data: stepAppts }] = await Promise.all([
       planIds.length
         ? supabase
             .from("plan_milestones")
-            .select("id, plan_id, idx, title, kind, status, due_date")
+            .select("id, plan_id, idx, title, kind, status, due_date, appointment_id")
             .in("plan_id", planIds)
             .order("idx", { ascending: true })
         : Promise.resolve({ data: [] as any[] }),
+      // Live bookings plus recent misses: both decide the next step's state.
       patientIds.length
         ? supabase
             .from("appointments")
-            .select("patient_id, starts_at")
+            .select("id, patient_id, starts_at, status, catalogue_id, treatment_name")
             .in("patient_id", patientIds)
-            .eq("status", "booked")
-            .gte("starts_at", new Date().toISOString())
+            .in("status", ["booked", "no_show"])
+            .gte("starts_at", noShowLookbackISO(now))
         : Promise.resolve({ data: [] as any[] }),
     ]);
 
-    const todayISO = clinicDayKey(new Date());
-    const hasUpcoming = new Set((upcomingAppts ?? []).map((a: any) => a.patient_id));
-    // Earliest live booking per patient, for the card's "Booked 28 Sep" label.
-    const nextBookingByPatient = new Map<string, string>();
-    for (const a of (upcomingAppts ?? []) as { patient_id: string; starts_at: string }[]) {
-      const cur = nextBookingByPatient.get(a.patient_id);
-      if (!cur || a.starts_at < cur) nextBookingByPatient.set(a.patient_id, a.starts_at);
+    const todayISO = clinicDayKey(now);
+    const nowISO = now.toISOString();
+    const apptsByPatient = new Map<string, PlanStepAppointment[]>();
+    for (const a of (stepAppts ?? []) as (PlanStepAppointment & { patient_id: string })[]) {
+      const list = apptsByPatient.get(a.patient_id) ?? [];
+      list.push(a);
+      apptsByPatient.set(a.patient_id, list);
     }
     const needle = (data.query ?? "").trim().toLowerCase();
 
@@ -8445,8 +8514,17 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
         mine.find((m) => m.status === "current") ??
         mine.find((m) => m.status === "upcoming") ??
         null;
-      const overdue = Boolean(next?.due_date && next.due_date < todayISO);
-      const atRisk = overdue || !hasUpcoming.has(p.patient_id);
+      const step = planStepState({
+        nextMilestone: next
+          ? { id: next.id, kind: next.kind, dueDate: next.due_date, appointmentId: next.appointment_id }
+          : null,
+        planCatalogueId: p.catalogue_id,
+        appointments: apptsByPatient.get(p.patient_id) ?? [],
+        todayKey: todayISO,
+        nowISO,
+      });
+      const overdue = step.overdue;
+      const atRisk = overdue || Boolean(step.noShowAt) || !step.stepBookedAt;
       return {
         id: p.id,
         patientId: p.patient_id,
@@ -8464,12 +8542,17 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
           : null,
         overdue,
         atRisk,
-        riskReason: overdue
-          ? "Next step overdue"
-          : !hasUpcoming.has(p.patient_id)
-            ? "No upcoming booking"
-            : null,
-        nextBookingAt: nextBookingByPatient.get(p.patient_id) ?? null,
+        riskReason: step.noShowAt
+          ? "No show"
+          : overdue
+            ? "Next step overdue"
+            : !step.stepBookedAt
+              ? "No upcoming booking"
+              : null,
+        nextBookingAt: step.nextBookingAt,
+        stepBookedAt: step.stepBookedAt,
+        otherBookingTreatment: step.otherBookingTreatment,
+        noShowAt: step.noShowAt,
       };
     });
 
@@ -8560,6 +8643,26 @@ export const updatePlanMilestone = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+/**
+ * Point a plan step at the booking made for it. One appointment can only
+ * settle one step, so any older claim on it is released first.
+ */
+async function linkMilestoneToAppointment(
+  supabase: Ctx["supabase"],
+  milestoneId: string,
+  appointmentId: string,
+) {
+  await supabase
+    .from("plan_milestones")
+    .update({ appointment_id: null })
+    .eq("appointment_id", appointmentId)
+    .neq("id", milestoneId);
+  await supabase
+    .from("plan_milestones")
+    .update({ appointment_id: appointmentId })
+    .eq("id", milestoneId);
+}
 
 /**
  * Set a milestone's status and keep the plan honest: promote the next step

@@ -219,6 +219,7 @@ export function QuickAddAppointment({
   defaultStart,
   defaultPractitionerId,
   defaultPatientId,
+  milestoneId,
   open,
   onOpenChange,
   align = "start",
@@ -234,6 +235,8 @@ export function QuickAddAppointment({
   defaultPractitionerId?: string | undefined;
   /** Pre-select a patient (the journey board's Book button). */
   defaultPatientId?: string | undefined;
+  /** Book a plan's next step: the appointment is linked to that milestone. */
+  milestoneId?: string | undefined;
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
   align?: "start" | "center" | "end";
@@ -437,6 +440,7 @@ export function QuickAddAppointment({
         pay_kind: "full",
         // Quick book captures the minimum; reception finishes the booking later.
         details_incomplete: true,
+        ...(milestoneId ? { milestone_id: milestoneId } : {}),
       },
     });
   };

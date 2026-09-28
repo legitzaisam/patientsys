@@ -84,3 +84,65 @@ export function profileChangeApproverIds(input: {
 export function profileChangeShowsReviewer(input: Parameters<typeof profileChangeApproverIds>[0]) {
   return profileChangeApproverIds(input).length > 1;
 }
+
+/** Owner, software admin, or the manager role — the people who review staff profile updates. */
+export function canSeeProfileChangeAttention(identity: {
+  isOwner?: boolean;
+  isAdmin?: boolean;
+  roles?: string[];
+}) {
+  return Boolean(identity.isOwner || identity.isAdmin || identity.roles?.includes("manager"));
+}
+
+type ProfileChangeRequestRow = {
+  id: string;
+  user_id: string;
+  full_name?: string | null;
+  job_title?: string | null;
+  registration_body?: string | null;
+  registration_number?: string | null;
+  registration_expiry?: string | null;
+  work_email?: string | null;
+  working_arrangement?: string | null;
+  note?: string | null;
+  requires_owner?: boolean | null;
+  status?: string | null;
+  inbox_cleared_at?: string | null;
+};
+
+export function profileChangeRequestSummary(row: ProfileChangeRequestRow) {
+  const note = row.note?.trim();
+  if (note) return note;
+  const bits = [
+    row.job_title ? "job title" : null,
+    row.registration_body || row.registration_number || row.registration_expiry
+      ? "registration"
+      : null,
+    row.work_email ? "work email" : null,
+    row.working_arrangement ? "working arrangement" : null,
+  ].filter(Boolean);
+  return bits.join(", ") || "Profile update";
+}
+
+/** Pending requests the viewer can act on, for Attention needed → This week. */
+export function profileChangeAttentionItems(
+  requests: ProfileChangeRequestRow[],
+  viewer: { userId: string; isOwner?: boolean; isAdmin?: boolean },
+) {
+  return requests
+    .filter((row) => {
+      if (row.status && row.status !== "pending") return false;
+      if (row.inbox_cleared_at) return false;
+      if (row.user_id === viewer.userId) return false;
+      if (row.requires_owner && !viewer.isOwner && !viewer.isAdmin) return false;
+      return true;
+    })
+    .map((row) => ({
+      id: `profile-change-${row.id}`,
+      kind: "profile_change",
+      urgency: "this_week" as const,
+      title: `${(row.full_name ?? "").trim() || "Team member"} — profile change`,
+      subtitle: profileChangeRequestSummary(row),
+      href: "/team#profile-change-requests",
+    }));
+}

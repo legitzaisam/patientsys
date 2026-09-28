@@ -3,17 +3,26 @@
  * (`#plan`): the same rows the journey board and the dashboard journeys read,
  * so sessions done, the next step and its date agree everywhere.
  */
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarClock, ClipboardList } from "lucide-react";
-import { listTreatmentPlans } from "@/lib/clinic.functions";
+import { CalendarClock, CalendarPlus, ClipboardList } from "lucide-react";
+import {
+  getCatalogue,
+  listPatients,
+  listPractitioners,
+  listTreatmentPlans,
+} from "@/lib/clinic.functions";
 import { JOURNEY_PHASE_META } from "@/lib/journey-phases";
 import {
+  bookingMismatchLine,
   nextStepLine,
+  noShowLine,
   overdueLabel,
   planDateLabel,
   riskChipLabel,
 } from "@/components/patients/plan-step-copy";
+import { QuickAddAppointment } from "@/components/quick-add-appointment";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +37,10 @@ type PlanRow = {
   atRisk: boolean;
   riskReason: string | null;
   nextBookingAt?: string | null;
+  stepBookedAt?: string | null;
+  otherBookingTreatment?: string | null;
+  noShowAt?: string | null;
+  practitionerId?: string | null;
   practitionerName?: string | null;
 };
 
@@ -37,6 +50,21 @@ export function TreatmentPlanCard({ patientId }: { patientId: string }) {
     queryKey: ["treatment-plans", "patient", patientId],
     queryFn: () => fetchPlans({ data: { patient_id: patientId } }),
   });
+  // Booking a step from here needs the same three lists as the journey board,
+  // cached under the same keys the Records tab and the diary use.
+  const fetchPatients = useServerFn(listPatients);
+  const { data: patients } = useQuery({ queryKey: ["patients"], queryFn: () => fetchPatients() });
+  const fetchPractitioners = useServerFn(listPractitioners);
+  const { data: practitioners } = useQuery({
+    queryKey: ["practitioners"],
+    queryFn: () => fetchPractitioners(),
+  });
+  const fetchCatalogue = useServerFn(getCatalogue);
+  const { data: catalogue } = useQuery({
+    queryKey: ["catalogue"],
+    queryFn: () => fetchCatalogue(),
+  });
+  const [booking, setBooking] = useState<PlanRow | null>(null);
   const plans = (data ?? []) as PlanRow[];
   if (plans.length === 0) return null;
 
@@ -53,6 +81,7 @@ export function TreatmentPlanCard({ patientId }: { patientId: string }) {
           const pct = plan.total ? Math.round((plan.done / plan.total) * 100) : 0;
           const label = planDateLabel(plan);
           const late = overdueLabel(plan);
+          const note = noShowLine(plan) ?? bookingMismatchLine(plan);
           const phase = JOURNEY_PHASE_META[plan.phase];
           return (
             <li
@@ -123,10 +152,51 @@ export function TreatmentPlanCard({ patientId }: { patientId: string }) {
                   ) : null}
                 </p>
               ) : null}
+              {note || !plan.stepBookedAt ? (
+                <div className="mt-1.5 flex items-center gap-2 pl-[1.125rem]">
+                  {note ? (
+                    <p className="min-w-0 flex-1 text-2xs text-muted-foreground" data-qc="plan-booking-note">
+                      {note}
+                    </p>
+                  ) : (
+                    <span className="flex-1" />
+                  )}
+                  {plan.stepBookedAt ? null : (
+                    <button
+                      type="button"
+                      data-qc="plan-book"
+                      onClick={() => setBooking(plan)}
+                      className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-accent px-2.5 text-2xs font-semibold text-accent-foreground shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
+                    >
+                      <CalendarPlus className="h-3 w-3" aria-hidden />
+                      Book
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </li>
           );
         })}
       </ul>
+      {booking ? (
+        <QuickAddAppointment
+          patients={(patients ?? []) as any[]}
+          practitioners={(practitioners ?? []) as any[]}
+          catalogue={(catalogue ?? []) as any[]}
+          date={new Date()}
+          defaultPatientId={patientId}
+          defaultPractitionerId={booking.practitionerId ?? undefined}
+          milestoneId={booking.nextMilestone?.id}
+          open
+          onOpenChange={(v) => {
+            if (!v) setBooking(null);
+          }}
+          title={`Book ${booking.name}`}
+          centered
+        >
+          <span className="sr-only">Book next step</span>
+        </QuickAddAppointment>
+      ) : null}
     </Card>
   );
 }

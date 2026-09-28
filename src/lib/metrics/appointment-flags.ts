@@ -126,3 +126,42 @@ export const NEEDS_ACTION_TYPES = [
   "details_incomplete",
 ] as const satisfies readonly FlagKey[];
 export type NeedsActionType = (typeof NEEDS_ACTION_TYPES)[number];
+
+/** Attention Needed This week Deposit due: at most this many clinic days after today. */
+export const ATTENTION_DEPOSIT_WEEK_DAYS = 10;
+
+/** How far ahead to load unpaid bookings for the Attention deposit lists. */
+export function attentionDepositHorizonDays(leadDays: number) {
+  return Math.max(leadDays, ATTENTION_DEPOSIT_WEEK_DAYS);
+}
+
+/** Urgent inside the lead window; This week after that, up to 10 clinic days; otherwise omit. */
+export function attentionDepositUrgency(
+  daysUntil: number,
+  leadDays: number,
+): "urgent" | "this_week" | null {
+  if (daysUntil < 0 || daysUntil > ATTENTION_DEPOSIT_WEEK_DAYS) return null;
+  return daysUntil <= leadDays ? "urgent" : "this_week";
+}
+
+/**
+ * One patient, one Deposit due card. If they already owe a deposit inside
+ * the urgent window, later unpaid bookings stay off This week.
+ */
+export function dropThisWeekDepositsIfUrgent<
+  T extends { kind?: string; urgency?: string; patientId?: string | null },
+>(items: T[]): T[] {
+  const urgentPatients = new Set(
+    items
+      .filter((item) => item.kind === "deposit_due" && item.urgency === "urgent" && item.patientId)
+      .map((item) => item.patientId as string),
+  );
+  if (urgentPatients.size === 0) return items;
+  return items.filter(
+    (item) =>
+      item.kind !== "deposit_due" ||
+      item.urgency !== "this_week" ||
+      !item.patientId ||
+      !urgentPatients.has(item.patientId),
+  );
+}

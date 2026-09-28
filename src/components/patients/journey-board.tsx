@@ -45,6 +45,11 @@ type BoardPlan = {
   riskReason: string | null;
   /** Earliest live booking, when the patient has one in the diary. */
   nextBookingAt?: string | null;
+  /** That booking when it is for this step; null when it is for something else. */
+  stepBookedAt?: string | null;
+  otherBookingTreatment?: string | null;
+  /** A booking for this step the patient did not turn up to. */
+  noShowAt?: string | null;
 };
 
 const COLUMNS: Array<{ phase: BoardPlan["phase"]; label: string; sub: string }> = JOURNEY_PHASES.map(
@@ -285,7 +290,7 @@ export function JourneyBoard({
                           ⚕ {plan.practitionerName}
                         </span>
                       ) : null}
-                      {plan.atRisk && !plan.nextBookingAt ? (
+                      {!plan.stepBookedAt ? (
                         <button
                           type="button"
                           data-qc="board-book"
@@ -317,6 +322,7 @@ export function JourneyBoard({
           date={new Date()}
           defaultPatientId={booking.patientId}
           defaultPractitionerId={booking.practitionerId ?? undefined}
+          milestoneId={booking.nextMilestone?.id}
           open
           onOpenChange={(v) => {
             if (!v) setBooking(null);

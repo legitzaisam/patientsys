@@ -141,7 +141,15 @@ test.describe("journey board", () => {
       );
       // Once on the chip, once on the step line.
       expect((await overdue.innerText()).match(/overdue/gi)).toHaveLength(2);
+      // Late means unbooked, so it carries no date and still asks to be booked.
+      await expect(overdue.locator('[data-qc="board-date"]')).toHaveCount(0);
+      await expect(overdue.locator('[data-qc="board-book"]')).toHaveCount(1);
     }
+
+    // A step with its own booking is settled: a date, no chase, nothing late.
+    const booked = cards.filter({ hasText: "Booked " }).first();
+    await expect(booked.locator('[data-qc="board-book"]')).toHaveCount(0);
+    await expect(booked).not.toContainText("overdue");
 
     const book = page.locator('[data-qc="board-book"]').first();
     const card = page.locator('[data-qc="board-card"]').filter({ has: book }).first();
@@ -260,8 +268,10 @@ test.describe("attention treatment due", () => {
   async function treatmentDueNames(page: import("@playwright/test").Page) {
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="attention-kind-message"]')).toHaveCount(0);
     const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
     await expect(kind).toBeVisible({ timeout: 15_000 });
+    await expect(kind).toHaveText("Skin-plan treatment due");
     await kind.click();
     const more = page.getByRole("button", { name: /Show \d+ more/ });
     if ((await more.count()) > 0) await more.click();
@@ -274,7 +284,7 @@ test.describe("attention treatment due", () => {
       );
   }
 
-  test("owner: every Treatment due name has a Book button on the journey board", async ({
+  test("owner: every Skin-plan treatment due name has a Book button on the journey board", async ({
     page,
   }) => {
     await page.goto("/dashboard");
@@ -290,13 +300,74 @@ test.describe("attention treatment due", () => {
         .filter(Boolean),
     );
     for (const name of names) expect(bookNames).toContain(name);
-    for (const name of new Set(bookNames)) expect(names).toContain(name);
 
     await page.goto("/dashboard");
     await page.locator('[data-qc="attention-kind-treatment_due"]').click();
     await page.locator('[data-qc="attention-treatment-due"] a').first().click();
     await expect(page).toHaveURL(/\/patients\/.+[?&]tab=treatments/);
     await expect(page.locator('[data-qc="treatment-plan-card"]')).toBeVisible();
+  });
+});
+
+test.describe("a booking only counts when it is for the step", () => {
+  test("a booking for another treatment is named on the plan card and the chase stays", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
+    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
+    await expect(kind).toBeVisible({ timeout: 15_000 });
+    await kind.click();
+    const more = page.getByRole("button", { name: /Show \d+ more/ });
+    if ((await more.count()) > 0) await more.click();
+
+    const row = page
+      .locator('[data-qc="attention-treatment-due"]')
+      .filter({ hasText: "not this step" })
+      .first();
+    await expect(row).toBeVisible();
+    await row.locator("a").first().click();
+    await expect(page).toHaveURL(/\/patients\/.+[?&]tab=treatments/);
+
+    await expect(page.locator('[data-qc="treatment-plan-card"]')).toBeVisible();
+    await expect(page.locator('[data-qc="plan-booking-note"]').first()).toHaveText(
+      /^\d{1,2} \w+ booking is for .+, not this step$/,
+    );
+    // Unsettled, so the step keeps its Book button and no "Booked" date.
+    await expect(page.locator('[data-qc="plan-book"]').first()).toBeVisible();
+    await expect(page.locator('[data-qc="plan-step"]').first()).not.toContainText("Booked");
+  });
+
+  test("a missed step is tagged No show and keeps its place on Attention needed", async ({
+    page,
+  }) => {
+    await page.goto("/patients?tab=board");
+    const card = page.locator('[data-qc="board-card"]').filter({ hasText: "No show" }).first();
+    await expect(card).toBeVisible();
+    const name = (await card.locator("p.font-semibold").first().innerText()).trim();
+    const href = (await card.locator("a").first().getAttribute("href"))!.split("?")[0];
+
+    await page.goto(`${href}?tab=treatments`);
+    const plan = page.locator('[data-qc="treatment-plan-card"]');
+    await expect(plan).toContainText("No show");
+    await expect(plan.locator('[data-qc="plan-booking-note"]').first()).toHaveText(
+      /^Did not attend \d{1,2} \w+$/,
+    );
+    await expect(page.locator('[data-qc="plan-book"]').first()).toBeVisible();
+
+    // It outlives today's diary, and is chased as a no show rather than twice.
+    await page.goto("/dashboard");
+    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    const noShow = page.locator('[data-qc="attention-kind-no_show"]');
+    await expect(noShow).toBeVisible({ timeout: 15_000 });
+    await noShow.click();
+    await expect(
+      page.locator('[data-qc="attention-no-show"]').filter({ hasText: name }),
+    ).toHaveCount(1);
+    await expect(
+      page.locator('[data-qc="attention-treatment-due"]').filter({ hasText: name }),
+    ).toHaveCount(0);
   });
 });
 
@@ -307,8 +378,10 @@ test.describe("attention treatment due as practitioner", () => {
     await page.goto("/dashboard");
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="attention-kind-message"]')).toHaveCount(0);
     const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
     await expect(kind).toBeVisible({ timeout: 15_000 });
+    await expect(kind).toHaveText("Skin-plan treatment due");
     await kind.click();
     const more = page.getByRole("button", { name: /Show \d+ more/ });
     if ((await more.count()) > 0) await more.click();
@@ -331,19 +404,20 @@ test.describe("attention treatment due as practitioner", () => {
         .filter(Boolean),
     );
     for (const name of names) expect(bookNames).toContain(name);
-    for (const name of new Set(bookNames)) expect(names).toContain(name);
   });
 });
 
 test.describe("attention treatment due as front desk", () => {
   test.use({ role: "front_desk" });
 
-  test("Sofia sees the clinic-wide unbooked plan chase", async ({ page }) => {
+  test("Sofia sees the clinic-wide skin-plan dues in the window", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="attention-kind-message"]')).toHaveCount(0);
     const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
     await expect(kind).toBeVisible({ timeout: 15_000 });
+    await expect(kind).toHaveText("Skin-plan treatment due");
     await kind.click();
     const more = page.getByRole("button", { name: /Show \d+ more/ });
     if ((await more.count()) > 0) await more.click();
@@ -358,4 +432,29 @@ test.describe("attention treatment due as front desk", () => {
     expect(names).toContain("Harriet Blackwood");
     expect(names).toContain("Marcus Delaney");
   });
+});
+
+test("a patient on urgent Deposit due is not repeated under This week", async ({ page }) => {
+  await page.goto("/dashboard");
+  await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
+  await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+
+  const urgent = page.locator('[data-qc="attention-urgent"]');
+  const week = page.locator('[data-qc="attention-this-week"]');
+
+  async function depositNames(card: import("@playwright/test").Locator) {
+    const kind = card.locator('[data-qc="attention-kind-deposit_due"]');
+    if ((await kind.count()) === 0) return [];
+    await kind.click();
+    const more = card.getByRole("button", { name: /Show \d+ more/ });
+    if ((await more.count()) > 0) await more.click();
+    return card.locator('[data-qc="attention-deposit-due"] .font-semibold').evaluateAll((els) =>
+      els.map((e) => e.textContent?.trim() ?? "").filter(Boolean),
+    );
+  }
+
+  const urgentNames = await depositNames(urgent);
+  const weekNames = await depositNames(week);
+  expect(urgentNames.length).toBeGreaterThan(0);
+  for (const name of urgentNames) expect(weekNames).not.toContain(name);
 });

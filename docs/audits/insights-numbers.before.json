@@ -1,0 +1,1932 @@
+{
+  "now": "2026-09-20T12:00:00.000Z",
+  "tz": "Europe/London",
+  "12m": {
+    "shownWindow": {
+      "from": "2025-09-19T23:00:00.000Z",
+      "to": "2026-09-20T22:59:59.999Z"
+    },
+    "recalcWindow": {
+      "from": "2025-09-30T23:00:00.000Z",
+      "to": "2026-09-30T22:59:59.999Z",
+      "asOf": "2026-09-20T12:00:00.000Z"
+    },
+    "rows": [
+      {
+        "id": "funnel.signUps",
+        "metric": "Online enquiries",
+        "where": "Insights → Funnel tile",
+        "shown": 54,
+        "recalculated": 54,
+        "match": true
+      },
+      {
+        "id": "funnel.booked",
+        "metric": "Booked",
+        "where": "Insights → Funnel tile",
+        "shown": 32,
+        "recalculated": 49,
+        "match": false
+      },
+      {
+        "id": "funnel.bookedRate",
+        "metric": "Booked rate",
+        "where": "Insights → Funnel tile",
+        "shown": 59,
+        "recalculated": 91,
+        "match": false
+      },
+      {
+        "id": "funnel.consulted",
+        "metric": "Consulted",
+        "where": "Insights → Funnel tile",
+        "shown": 7,
+        "recalculated": 7,
+        "match": true
+      },
+      {
+        "id": "funnel.consultRate",
+        "metric": "Consult rate",
+        "where": "Insights → Funnel tile",
+        "shown": 22,
+        "recalculated": 14,
+        "match": false
+      },
+      {
+        "id": "funnel.treated",
+        "metric": "Treated",
+        "where": "Insights → Funnel tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.treatRate",
+        "metric": "Treatment rate",
+        "where": "Insights → Funnel tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.notBooked",
+        "metric": "Waiting for a first booking",
+        "where": "Insights → action list",
+        "shown": 22,
+        "recalculated": 5,
+        "match": false
+      },
+      {
+        "id": "funnel.consultedNoTreatment",
+        "metric": "Consulted, no treatment",
+        "where": "Insights → action list",
+        "shown": 7,
+        "recalculated": 7,
+        "match": true
+      },
+      {
+        "id": "funnel.chart.months",
+        "metric": "Chart months",
+        "where": "Insights → funnel chart",
+        "shown": 13,
+        "recalculated": 12,
+        "match": false
+      },
+      {
+        "id": "funnel.chart.signUps",
+        "metric": "Chart enquiries (sum of bars)",
+        "where": "Insights → funnel chart",
+        "shown": 54,
+        "recalculated": 54,
+        "match": true
+      },
+      {
+        "id": "funnel.chart.booked",
+        "metric": "Chart booked (sum of bars)",
+        "where": "Insights → funnel chart",
+        "shown": 20,
+        "recalculated": 49,
+        "match": false
+      },
+      {
+        "id": "funnel.chart.consulted",
+        "metric": "Chart consulted (sum of bars)",
+        "where": "Insights → funnel chart",
+        "shown": 7,
+        "recalculated": 7,
+        "match": true
+      },
+      {
+        "id": "funnel.sources",
+        "metric": "Where enquiries came from (counts)",
+        "where": "Insights → source mix",
+        "shown": {
+          "website": 52,
+          "instagram": 1,
+          "referral": 1
+        },
+        "recalculated": {
+          "website": 52,
+          "instagram": 1,
+          "referral": 1
+        },
+        "match": true
+      },
+      {
+        "id": "funnel.sourcePercents",
+        "metric": "Where enquiries came from (%)",
+        "where": "Insights → source mix",
+        "shown": {
+          "website": 96,
+          "instagram": 2,
+          "referral": 2
+        },
+        "recalculated": {
+          "website": 96,
+          "instagram": 2,
+          "referral": 2
+        },
+        "match": true
+      },
+      {
+        "id": "funnel.bestsellers",
+        "metric": "Bestsellers (count, £)",
+        "where": "Insights → Bestsellers",
+        "shown": [
+          {
+            "name": "Laser Skin Resurfacing",
+            "count": 68,
+            "revenue": 3165000
+          },
+          {
+            "name": "PRP",
+            "count": 71,
+            "revenue": 2615000
+          },
+          {
+            "name": "Polynucleotides",
+            "count": 63,
+            "revenue": 2474000
+          },
+          {
+            "name": "Jawline Filler",
+            "count": 49,
+            "revenue": 2409500
+          },
+          {
+            "name": "Anti-Wrinkle Injections",
+            "count": 75,
+            "revenue": 2177500
+          },
+          {
+            "name": "Profhilo",
+            "count": 59,
+            "revenue": 2150000
+          },
+          {
+            "name": "Fat Dissolving",
+            "count": 63,
+            "revenue": 2002500
+          },
+          {
+            "name": "Lip Filler",
+            "count": 59,
+            "revenue": 1980500
+          }
+        ],
+        "recalculated": [
+          {
+            "name": "Laser Skin Resurfacing",
+            "count": 67,
+            "revenue": 3120000
+          },
+          {
+            "name": "PRP",
+            "count": 71,
+            "revenue": 2615000
+          },
+          {
+            "name": "Polynucleotides",
+            "count": 63,
+            "revenue": 2474000
+          },
+          {
+            "name": "Jawline Filler",
+            "count": 47,
+            "revenue": 2313500
+          },
+          {
+            "name": "Anti-Wrinkle Injections",
+            "count": 74,
+            "revenue": 2150000
+          },
+          {
+            "name": "Profhilo",
+            "count": 58,
+            "revenue": 2115000
+          },
+          {
+            "name": "Fat Dissolving",
+            "count": 63,
+            "revenue": 2002500
+          },
+          {
+            "name": "Lip Filler",
+            "count": 59,
+            "revenue": 1980500
+          }
+        ],
+        "match": false
+      },
+      {
+        "id": "funnel.retailRevenue",
+        "metric": "Retail revenue",
+        "where": "Insights → Bestsellers",
+        "shown": 40600,
+        "recalculated": 40600,
+        "match": true
+      },
+      {
+        "id": "book.total",
+        "metric": "Total patients",
+        "where": "Insights → Patient base tile",
+        "shown": 641,
+        "recalculated": 641,
+        "match": true
+      },
+      {
+        "id": "book.active",
+        "metric": "Active",
+        "where": "Insights → Patient base tile",
+        "shown": 626,
+        "recalculated": 626,
+        "match": true
+      },
+      {
+        "id": "book.inactive",
+        "metric": "Inactive",
+        "where": "Insights → Patient base tile hint",
+        "shown": 15,
+        "recalculated": 15,
+        "match": true
+      },
+      {
+        "id": "book.newRecords",
+        "metric": "New patients (records created)",
+        "where": "Insights → Patient base tile",
+        "shown": 17,
+        "recalculated": 309,
+        "match": false
+      },
+      {
+        "id": "book.newRecordsChart",
+        "metric": "New patients chart (sum of bars)",
+        "where": "Insights → New patients chart",
+        "shown": 309,
+        "recalculated": 309,
+        "match": true
+      },
+      {
+        "id": "book.dormant",
+        "metric": "Dormant",
+        "where": "Insights → Patient base tile",
+        "shown": 4,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.dormantShare",
+        "metric": "Dormant share",
+        "where": "Insights → Patient base tile hint",
+        "shown": 1,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.neverTreated",
+        "metric": "Never treated",
+        "where": "Insights → composition",
+        "shown": 4,
+        "recalculated": 4,
+        "match": true
+      },
+      {
+        "id": "book.lastVisit",
+        "metric": "Time since last visit",
+        "where": "Insights → last visit card",
+        "shown": {
+          "under3": 473,
+          "from3to6": 81,
+          "from6to12": 83,
+          "over12": 0,
+          "never": 4
+        },
+        "recalculated": {
+          "under3": 475,
+          "from3to6": 81,
+          "from6to12": 81,
+          "over12": 0,
+          "never": 4
+        },
+        "match": false
+      },
+      {
+        "id": "book.seen",
+        "metric": "Seen in the period",
+        "where": "Insights → composition",
+        "shown": 637,
+        "recalculated": 637,
+        "match": true
+      },
+      {
+        "id": "book.once",
+        "metric": "Treated once",
+        "where": "Insights → composition",
+        "shown": 123,
+        "recalculated": 123,
+        "match": true
+      },
+      {
+        "id": "book.twoPlus",
+        "metric": "Two or more visits",
+        "where": "Insights → composition",
+        "shown": 514,
+        "recalculated": 514,
+        "match": true
+      },
+      {
+        "id": "book.firstToSecond",
+        "metric": "First to second visit",
+        "where": "Insights → quality tile",
+        "shown": {
+          "cohort": 159,
+          "returned": 123,
+          "rate": 77
+        },
+        "recalculated": {
+          "cohort": 149,
+          "returned": 115,
+          "rate": 77
+        },
+        "match": false
+      },
+      {
+        "id": "book.rebooked",
+        "metric": "Rebooked",
+        "where": "Insights → quality tile",
+        "shown": 59,
+        "recalculated": 55,
+        "match": false
+      },
+      {
+        "id": "book.revenue",
+        "metric": "Revenue in the period",
+        "where": "Insights → spend inputs",
+        "shown": 44855500,
+        "recalculated": 44429000,
+        "match": false
+      },
+      {
+        "id": "book.spendPerPatient",
+        "metric": "Spend per patient",
+        "where": "Insights → quality tile",
+        "shown": 70417,
+        "recalculated": 69747,
+        "match": false
+      },
+      {
+        "id": "book.visitValue",
+        "metric": "Average visit value",
+        "where": "Insights → quality tile",
+        "shown": 25661,
+        "recalculated": 25578,
+        "match": false
+      },
+      {
+        "id": "book.visitsInWindow",
+        "metric": "Visits in the period",
+        "where": "Insights → visit value input",
+        "shown": 1748,
+        "recalculated": 1737,
+        "match": false
+      },
+      {
+        "id": "book.newVsReturning",
+        "metric": "New vs returning",
+        "where": "Insights → treated mix",
+        "shown": {
+          "new": 361,
+          "returning": 276
+        },
+        "recalculated": {
+          "new": 351,
+          "returning": 286
+        },
+        "match": false
+      },
+      {
+        "id": "book.listSources",
+        "metric": "Where patients came from (lifetime)",
+        "where": "Insights → sources card",
+        "shown": {
+          "walk_in": 366,
+          "referral": 100,
+          "website": 96,
+          "instagram": 51,
+          "other": 28
+        },
+        "recalculated": {
+          "website": 96,
+          "instagram": 51,
+          "referral": 100,
+          "walk_in": 366,
+          "other": 28
+        },
+        "match": false
+      },
+      {
+        "id": "dashboard.totalClients",
+        "metric": "Total clients",
+        "where": "Dashboard KPI",
+        "shown": 641,
+        "recalculated": 641,
+        "match": true
+      },
+      {
+        "id": "dashboard.activeClients",
+        "metric": "Active clients",
+        "where": "Dashboard KPI hint",
+        "shown": 626,
+        "recalculated": 626,
+        "match": true
+      },
+      {
+        "id": "dashboard.revenueMonth",
+        "metric": "Revenue this month",
+        "where": "Dashboard KPI",
+        "shown": 5202500,
+        "recalculated": 5202500,
+        "match": true
+      },
+      {
+        "id": "dashboard.treatmentsMonth",
+        "metric": "Treatments this month",
+        "where": "Dashboard KPI hint",
+        "shown": 215,
+        "recalculated": 215,
+        "match": true
+      },
+      {
+        "id": "retention.rate",
+        "metric": "Retention rate",
+        "where": "Retention headline / Dashboard KPI",
+        "shown": 64,
+        "recalculated": 64,
+        "match": true
+      },
+      {
+        "id": "retention.once",
+        "metric": "One visit only",
+        "where": "Retention card (= Insights treated once)",
+        "shown": 123,
+        "recalculated": 123,
+        "match": true
+      },
+      {
+        "id": "retention.twoPlus",
+        "metric": "Repeat patients",
+        "where": "Retention card (= Insights two or more)",
+        "shown": 514,
+        "recalculated": 514,
+        "match": true
+      },
+      {
+        "id": "retention.firstToSecond",
+        "metric": "First to second (Retention)",
+        "where": "Retention headline (= Insights)",
+        "shown": 77,
+        "recalculated": 77,
+        "match": true
+      },
+      {
+        "id": "money.earned",
+        "metric": "Earned",
+        "where": "Performance tile",
+        "shown": 44855500,
+        "recalculated": 44429000,
+        "match": false
+      },
+      {
+        "id": "money.collected",
+        "metric": "Collected",
+        "where": "Performance tile",
+        "shown": 44104400,
+        "recalculated": 43677900,
+        "match": false
+      },
+      {
+        "id": "money.outstanding",
+        "metric": "Outstanding",
+        "where": "Performance tile",
+        "shown": 751100,
+        "recalculated": 751100,
+        "match": true
+      },
+      {
+        "id": "money.bookedAhead",
+        "metric": "Booked ahead",
+        "where": "Performance subtitle",
+        "shown": 9540500,
+        "recalculated": 9540500,
+        "match": true
+      },
+      {
+        "id": "money.trendEarned",
+        "metric": "Earnings trend (sum of months)",
+        "where": "Performance trend chart",
+        "shown": 44855500,
+        "recalculated": 44429000,
+        "match": false
+      },
+      {
+        "id": "money.practitioners.earned",
+        "metric": "Earned per practitioner",
+        "where": "Performance table",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 10163000,
+          "10000000-0000-4000-8000-000000000002": 18119000,
+          "10000000-0000-4000-8000-000000000003": 16573500
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 10157000,
+          "10000000-0000-4000-8000-000000000002": 17989000,
+          "10000000-0000-4000-8000-000000000003": 16283000
+        },
+        "match": false
+      },
+      {
+        "id": "money.practitioners.collected",
+        "metric": "Collected per practitioner",
+        "where": "Performance table",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 10018800,
+          "10000000-0000-4000-8000-000000000002": 17836200,
+          "10000000-0000-4000-8000-000000000003": 16249400
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 10012800,
+          "10000000-0000-4000-8000-000000000002": 17706200,
+          "10000000-0000-4000-8000-000000000003": 15958900
+        },
+        "match": false
+      },
+      {
+        "id": "profile.earnedShare",
+        "metric": "Your share",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 4065200,
+          "10000000-0000-4000-8000-000000000002": 8153550,
+          "10000000-0000-4000-8000-000000000003": 6960870
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 4062800,
+          "10000000-0000-4000-8000-000000000002": 8095050,
+          "10000000-0000-4000-8000-000000000003": 6838860
+        },
+        "match": false
+      },
+      {
+        "id": "profile.collectedShare",
+        "metric": "Collected (your share)",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 4007520,
+          "10000000-0000-4000-8000-000000000002": 8026292,
+          "10000000-0000-4000-8000-000000000003": 6824748
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 4005120,
+          "10000000-0000-4000-8000-000000000002": 7967792,
+          "10000000-0000-4000-8000-000000000003": 6702738
+        },
+        "match": false
+      },
+      {
+        "id": "profile.outstandingShare",
+        "metric": "Outstanding (your share)",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 57680,
+          "10000000-0000-4000-8000-000000000002": 127258,
+          "10000000-0000-4000-8000-000000000003": 136122
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 57680,
+          "10000000-0000-4000-8000-000000000002": 127258,
+          "10000000-0000-4000-8000-000000000003": 136122
+        },
+        "match": true
+      },
+      {
+        "id": "profile.csv",
+        "metric": "CSV export (sum of shares)",
+        "where": "My Profile → Export CSV",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 4065200,
+          "10000000-0000-4000-8000-000000000002": 8153550,
+          "10000000-0000-4000-8000-000000000003": 6960870
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 4062800,
+          "10000000-0000-4000-8000-000000000002": 8095050,
+          "10000000-0000-4000-8000-000000000003": 6838860
+        },
+        "match": false
+      },
+      {
+        "id": "profile.treatments",
+        "metric": "Treatments",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 386,
+          "10000000-0000-4000-8000-000000000002": 738,
+          "10000000-0000-4000-8000-000000000003": 624
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 385,
+          "10000000-0000-4000-8000-000000000002": 734,
+          "10000000-0000-4000-8000-000000000003": 615
+        },
+        "match": false
+      },
+      {
+        "id": "profile.newPatients",
+        "metric": "New patients (first visit)",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 62,
+          "10000000-0000-4000-8000-000000000002": 131,
+          "10000000-0000-4000-8000-000000000003": 117
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 71,
+          "10000000-0000-4000-8000-000000000002": 159,
+          "10000000-0000-4000-8000-000000000003": 121
+        },
+        "match": false
+      }
+    ]
+  },
+  "1m": {
+    "shownWindow": {
+      "from": "2026-08-19T23:00:00.000Z",
+      "to": "2026-09-20T22:59:59.999Z"
+    },
+    "recalcWindow": {
+      "from": "2026-08-31T23:00:00.000Z",
+      "to": "2026-09-30T22:59:59.999Z",
+      "asOf": "2026-09-20T12:00:00.000Z"
+    },
+    "rows": [
+      {
+        "id": "funnel.signUps",
+        "metric": "Online enquiries",
+        "where": "Insights → Funnel tile",
+        "shown": 13,
+        "recalculated": 7,
+        "match": false
+      },
+      {
+        "id": "funnel.booked",
+        "metric": "Booked",
+        "where": "Insights → Funnel tile",
+        "shown": 6,
+        "recalculated": 3,
+        "match": false
+      },
+      {
+        "id": "funnel.bookedRate",
+        "metric": "Booked rate",
+        "where": "Insights → Funnel tile",
+        "shown": 46,
+        "recalculated": 43,
+        "match": false
+      },
+      {
+        "id": "funnel.consulted",
+        "metric": "Consulted",
+        "where": "Insights → Funnel tile",
+        "shown": 3,
+        "recalculated": 2,
+        "match": false
+      },
+      {
+        "id": "funnel.consultRate",
+        "metric": "Consult rate",
+        "where": "Insights → Funnel tile",
+        "shown": 50,
+        "recalculated": 67,
+        "match": false
+      },
+      {
+        "id": "funnel.treated",
+        "metric": "Treated",
+        "where": "Insights → Funnel tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.treatRate",
+        "metric": "Treatment rate",
+        "where": "Insights → Funnel tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.notBooked",
+        "metric": "Waiting for a first booking",
+        "where": "Insights → action list",
+        "shown": 7,
+        "recalculated": 4,
+        "match": false
+      },
+      {
+        "id": "funnel.consultedNoTreatment",
+        "metric": "Consulted, no treatment",
+        "where": "Insights → action list",
+        "shown": 3,
+        "recalculated": 2,
+        "match": false
+      },
+      {
+        "id": "funnel.chart.months",
+        "metric": "Chart months",
+        "where": "Insights → funnel chart",
+        "shown": 5,
+        "recalculated": 1,
+        "match": false
+      },
+      {
+        "id": "funnel.chart.signUps",
+        "metric": "Chart enquiries (sum of bars)",
+        "where": "Insights → funnel chart",
+        "shown": 13,
+        "recalculated": 7,
+        "match": false
+      },
+      {
+        "id": "funnel.chart.booked",
+        "metric": "Chart booked (sum of bars)",
+        "where": "Insights → funnel chart",
+        "shown": 2,
+        "recalculated": 3,
+        "match": false
+      },
+      {
+        "id": "funnel.chart.consulted",
+        "metric": "Chart consulted (sum of bars)",
+        "where": "Insights → funnel chart",
+        "shown": 2,
+        "recalculated": 2,
+        "match": true
+      },
+      {
+        "id": "funnel.sources",
+        "metric": "Where enquiries came from (counts)",
+        "where": "Insights → source mix",
+        "shown": {
+          "website": 11,
+          "instagram": 1,
+          "referral": 1
+        },
+        "recalculated": {
+          "website": 5,
+          "instagram": 1,
+          "referral": 1
+        },
+        "match": false
+      },
+      {
+        "id": "funnel.sourcePercents",
+        "metric": "Where enquiries came from (%)",
+        "where": "Insights → source mix",
+        "shown": {
+          "website": 85,
+          "instagram": 8,
+          "referral": 8
+        },
+        "recalculated": {
+          "website": 72,
+          "instagram": 14,
+          "referral": 14
+        },
+        "match": false
+      },
+      {
+        "id": "funnel.bestsellers",
+        "metric": "Bestsellers (count, £)",
+        "where": "Insights → Bestsellers",
+        "shown": [
+          {
+            "name": "Lip Filler",
+            "count": 18,
+            "revenue": 596000
+          },
+          {
+            "name": "Mesotherapy",
+            "count": 24,
+            "revenue": 560500
+          },
+          {
+            "name": "Jawline Filler",
+            "count": 11,
+            "revenue": 535500
+          },
+          {
+            "name": "Anti-Wrinkle Injections",
+            "count": 18,
+            "revenue": 512500
+          },
+          {
+            "name": "Polynucleotides",
+            "count": 13,
+            "revenue": 509000
+          },
+          {
+            "name": "PRP",
+            "count": 13,
+            "revenue": 475000
+          },
+          {
+            "name": "Fat Dissolving",
+            "count": 15,
+            "revenue": 472500
+          },
+          {
+            "name": "Brow Tattoo",
+            "count": 12,
+            "revenue": 440000
+          }
+        ],
+        "recalculated": [
+          {
+            "name": "Lip Filler",
+            "count": 14,
+            "revenue": 468000
+          },
+          {
+            "name": "Mesotherapy",
+            "count": 15,
+            "revenue": 357500
+          },
+          {
+            "name": "Fat Dissolving",
+            "count": 11,
+            "revenue": 352500
+          },
+          {
+            "name": "PRP",
+            "count": 9,
+            "revenue": 335000
+          },
+          {
+            "name": "Brow Tattoo",
+            "count": 9,
+            "revenue": 325000
+          },
+          {
+            "name": "Jawline Filler",
+            "count": 6,
+            "revenue": 295500
+          },
+          {
+            "name": "Laser Skin Resurfacing",
+            "count": 6,
+            "revenue": 270000
+          },
+          {
+            "name": "Polynucleotides",
+            "count": 7,
+            "revenue": 266000
+          }
+        ],
+        "match": false
+      },
+      {
+        "id": "funnel.retailRevenue",
+        "metric": "Retail revenue",
+        "where": "Insights → Bestsellers",
+        "shown": 40600,
+        "recalculated": 24000,
+        "match": false
+      },
+      {
+        "id": "book.total",
+        "metric": "Total patients",
+        "where": "Insights → Patient base tile",
+        "shown": 641,
+        "recalculated": 641,
+        "match": true
+      },
+      {
+        "id": "book.active",
+        "metric": "Active",
+        "where": "Insights → Patient base tile",
+        "shown": 626,
+        "recalculated": 626,
+        "match": true
+      },
+      {
+        "id": "book.inactive",
+        "metric": "Inactive",
+        "where": "Insights → Patient base tile hint",
+        "shown": 15,
+        "recalculated": 15,
+        "match": true
+      },
+      {
+        "id": "book.newRecords",
+        "metric": "New patients (records created)",
+        "where": "Insights → Patient base tile",
+        "shown": 17,
+        "recalculated": 17,
+        "match": true
+      },
+      {
+        "id": "book.newRecordsChart",
+        "metric": "New patients chart (sum of bars)",
+        "where": "Insights → New patients chart",
+        "shown": 309,
+        "recalculated": 17,
+        "match": false
+      },
+      {
+        "id": "book.dormant",
+        "metric": "Dormant",
+        "where": "Insights → Patient base tile",
+        "shown": 4,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.dormantShare",
+        "metric": "Dormant share",
+        "where": "Insights → Patient base tile hint",
+        "shown": 1,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.neverTreated",
+        "metric": "Never treated",
+        "where": "Insights → composition",
+        "shown": 4,
+        "recalculated": 4,
+        "match": true
+      },
+      {
+        "id": "book.lastVisit",
+        "metric": "Time since last visit",
+        "where": "Insights → last visit card",
+        "shown": {
+          "under3": 473,
+          "from3to6": 81,
+          "from6to12": 83,
+          "over12": 0,
+          "never": 4
+        },
+        "recalculated": {
+          "under3": 475,
+          "from3to6": 81,
+          "from6to12": 81,
+          "over12": 0,
+          "never": 4
+        },
+        "match": false
+      },
+      {
+        "id": "book.seen",
+        "metric": "Seen in the period",
+        "where": "Insights → composition",
+        "shown": 288,
+        "recalculated": 188,
+        "match": false
+      },
+      {
+        "id": "book.once",
+        "metric": "Treated once",
+        "where": "Insights → composition",
+        "shown": 29,
+        "recalculated": 12,
+        "match": false
+      },
+      {
+        "id": "book.twoPlus",
+        "metric": "Two or more visits",
+        "where": "Insights → composition",
+        "shown": 259,
+        "recalculated": 176,
+        "match": false
+      },
+      {
+        "id": "book.firstToSecond",
+        "metric": "First to second visit",
+        "where": "Insights → quality tile",
+        "shown": {
+          "cohort": 0,
+          "returned": 0,
+          "rate": null
+        },
+        "recalculated": {
+          "cohort": 0,
+          "returned": 0,
+          "rate": null
+        },
+        "match": true
+      },
+      {
+        "id": "book.rebooked",
+        "metric": "Rebooked",
+        "where": "Insights → quality tile",
+        "shown": 59,
+        "recalculated": 56,
+        "match": false
+      },
+      {
+        "id": "book.revenue",
+        "metric": "Revenue in the period",
+        "where": "Insights → spend inputs",
+        "shown": 8853500,
+        "recalculated": 5202500,
+        "match": false
+      },
+      {
+        "id": "book.spendPerPatient",
+        "metric": "Spend per patient",
+        "where": "Insights → quality tile",
+        "shown": 30741,
+        "recalculated": 27673,
+        "match": false
+      },
+      {
+        "id": "book.visitValue",
+        "metric": "Average visit value",
+        "where": "Insights → quality tile",
+        "shown": 24323,
+        "recalculated": 23865,
+        "match": false
+      },
+      {
+        "id": "book.visitsInWindow",
+        "metric": "Visits in the period",
+        "where": "Insights → visit value input",
+        "shown": 364,
+        "recalculated": 218,
+        "match": false
+      },
+      {
+        "id": "book.newVsReturning",
+        "metric": "New vs returning",
+        "where": "Insights → treated mix",
+        "shown": {
+          "new": 30,
+          "returning": 258
+        },
+        "recalculated": {
+          "new": 12,
+          "returning": 176
+        },
+        "match": false
+      },
+      {
+        "id": "book.listSources",
+        "metric": "Where patients came from (lifetime)",
+        "where": "Insights → sources card",
+        "shown": {
+          "walk_in": 366,
+          "referral": 100,
+          "website": 96,
+          "instagram": 51,
+          "other": 28
+        },
+        "recalculated": {
+          "website": 96,
+          "instagram": 51,
+          "referral": 100,
+          "walk_in": 366,
+          "other": 28
+        },
+        "match": false
+      },
+      {
+        "id": "dashboard.totalClients",
+        "metric": "Total clients",
+        "where": "Dashboard KPI",
+        "shown": 641,
+        "recalculated": 641,
+        "match": true
+      },
+      {
+        "id": "dashboard.activeClients",
+        "metric": "Active clients",
+        "where": "Dashboard KPI hint",
+        "shown": 626,
+        "recalculated": 626,
+        "match": true
+      },
+      {
+        "id": "dashboard.revenueMonth",
+        "metric": "Revenue this month",
+        "where": "Dashboard KPI",
+        "shown": 5202500,
+        "recalculated": 5202500,
+        "match": true
+      },
+      {
+        "id": "dashboard.treatmentsMonth",
+        "metric": "Treatments this month",
+        "where": "Dashboard KPI hint",
+        "shown": 215,
+        "recalculated": 215,
+        "match": true
+      },
+      {
+        "id": "retention.rate",
+        "metric": "Retention rate",
+        "where": "Retention headline / Dashboard KPI",
+        "shown": 64,
+        "recalculated": 64,
+        "match": true
+      },
+      {
+        "id": "retention.once",
+        "metric": "One visit only",
+        "where": "Retention card (= Insights treated once)",
+        "shown": 29,
+        "recalculated": 12,
+        "match": false
+      },
+      {
+        "id": "retention.twoPlus",
+        "metric": "Repeat patients",
+        "where": "Retention card (= Insights two or more)",
+        "shown": 259,
+        "recalculated": 176,
+        "match": false
+      },
+      {
+        "id": "retention.firstToSecond",
+        "metric": "First to second (Retention)",
+        "where": "Retention headline (= Insights)",
+        "shown": null,
+        "recalculated": null,
+        "match": true
+      },
+      {
+        "id": "money.earned",
+        "metric": "Earned",
+        "where": "Performance tile",
+        "shown": 8853500,
+        "recalculated": 5202500,
+        "match": false
+      },
+      {
+        "id": "money.collected",
+        "metric": "Collected",
+        "where": "Performance tile",
+        "shown": 8242400,
+        "recalculated": 4776200,
+        "match": false
+      },
+      {
+        "id": "money.outstanding",
+        "metric": "Outstanding",
+        "where": "Performance tile",
+        "shown": 611100,
+        "recalculated": 426300,
+        "match": false
+      },
+      {
+        "id": "money.bookedAhead",
+        "metric": "Booked ahead",
+        "where": "Performance subtitle",
+        "shown": 9540500,
+        "recalculated": 9540500,
+        "match": true
+      },
+      {
+        "id": "money.trendEarned",
+        "metric": "Earnings trend (sum of months)",
+        "where": "Performance trend chart",
+        "shown": 8853500,
+        "recalculated": 5202500,
+        "match": false
+      },
+      {
+        "id": "money.practitioners.earned",
+        "metric": "Earned per practitioner",
+        "where": "Performance table",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 2076500,
+          "10000000-0000-4000-8000-000000000002": 3326500,
+          "10000000-0000-4000-8000-000000000003": 3450500
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 1055500,
+          "10000000-0000-4000-8000-000000000002": 2048000,
+          "10000000-0000-4000-8000-000000000003": 2099000
+        },
+        "match": false
+      },
+      {
+        "id": "money.practitioners.collected",
+        "metric": "Collected per practitioner",
+        "where": "Performance table",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 1956800,
+          "10000000-0000-4000-8000-000000000002": 3108450,
+          "10000000-0000-4000-8000-000000000003": 3177150
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 968700,
+          "10000000-0000-4000-8000-000000000002": 1907650,
+          "10000000-0000-4000-8000-000000000003": 1899850
+        },
+        "match": false
+      },
+      {
+        "id": "profile.earnedShare",
+        "metric": "Your share",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 830600,
+          "10000000-0000-4000-8000-000000000002": 1496925,
+          "10000000-0000-4000-8000-000000000003": 1449210
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 422200,
+          "10000000-0000-4000-8000-000000000002": 921600,
+          "10000000-0000-4000-8000-000000000003": 881580
+        },
+        "match": false
+      },
+      {
+        "id": "profile.collectedShare",
+        "metric": "Collected (your share)",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 782720,
+          "10000000-0000-4000-8000-000000000002": 1398804,
+          "10000000-0000-4000-8000-000000000003": 1334403
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 387480,
+          "10000000-0000-4000-8000-000000000002": 858443,
+          "10000000-0000-4000-8000-000000000003": 797937
+        },
+        "match": false
+      },
+      {
+        "id": "profile.outstandingShare",
+        "metric": "Outstanding (your share)",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 47880,
+          "10000000-0000-4000-8000-000000000002": 98121,
+          "10000000-0000-4000-8000-000000000003": 114807
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 34720,
+          "10000000-0000-4000-8000-000000000002": 63157,
+          "10000000-0000-4000-8000-000000000003": 83643
+        },
+        "match": false
+      },
+      {
+        "id": "profile.csv",
+        "metric": "CSV export (sum of shares)",
+        "where": "My Profile → Export CSV",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 830600,
+          "10000000-0000-4000-8000-000000000002": 1496925,
+          "10000000-0000-4000-8000-000000000003": 1449210
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 422200,
+          "10000000-0000-4000-8000-000000000002": 921600,
+          "10000000-0000-4000-8000-000000000003": 881580
+        },
+        "match": false
+      },
+      {
+        "id": "profile.treatments",
+        "metric": "Treatments",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 81,
+          "10000000-0000-4000-8000-000000000002": 147,
+          "10000000-0000-4000-8000-000000000003": 136
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 44,
+          "10000000-0000-4000-8000-000000000002": 87,
+          "10000000-0000-4000-8000-000000000003": 84
+        },
+        "match": false
+      },
+      {
+        "id": "profile.newPatients",
+        "metric": "New patients (first visit)",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 5,
+          "10000000-0000-4000-8000-000000000002": 12,
+          "10000000-0000-4000-8000-000000000003": 11
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 1,
+          "10000000-0000-4000-8000-000000000002": 8,
+          "10000000-0000-4000-8000-000000000003": 3
+        },
+        "match": false
+      }
+    ]
+  },
+  "empty": {
+    "shownWindow": {
+      "from": "2019-01-01T00:00:00.000Z",
+      "to": "2019-01-31T23:59:59.999Z"
+    },
+    "recalcWindow": {
+      "from": "2019-01-01T00:00:00.000Z",
+      "to": "2019-01-31T23:59:59.999Z",
+      "asOf": "2019-01-31T23:59:59.999Z"
+    },
+    "rows": [
+      {
+        "id": "funnel.signUps",
+        "metric": "Online enquiries",
+        "where": "Insights → Funnel tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.booked",
+        "metric": "Booked",
+        "where": "Insights → Funnel tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.bookedRate",
+        "metric": "Booked rate",
+        "where": "Insights → Funnel tile",
+        "shown": null,
+        "recalculated": null,
+        "match": true
+      },
+      {
+        "id": "funnel.consulted",
+        "metric": "Consulted",
+        "where": "Insights → Funnel tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.consultRate",
+        "metric": "Consult rate",
+        "where": "Insights → Funnel tile",
+        "shown": null,
+        "recalculated": null,
+        "match": true
+      },
+      {
+        "id": "funnel.treated",
+        "metric": "Treated",
+        "where": "Insights → Funnel tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.treatRate",
+        "metric": "Treatment rate",
+        "where": "Insights → Funnel tile",
+        "shown": null,
+        "recalculated": null,
+        "match": true
+      },
+      {
+        "id": "funnel.notBooked",
+        "metric": "Waiting for a first booking",
+        "where": "Insights → action list",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.consultedNoTreatment",
+        "metric": "Consulted, no treatment",
+        "where": "Insights → action list",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.chart.months",
+        "metric": "Chart months",
+        "where": "Insights → funnel chart",
+        "shown": 5,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "funnel.chart.signUps",
+        "metric": "Chart enquiries (sum of bars)",
+        "where": "Insights → funnel chart",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.chart.booked",
+        "metric": "Chart booked (sum of bars)",
+        "where": "Insights → funnel chart",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.chart.consulted",
+        "metric": "Chart consulted (sum of bars)",
+        "where": "Insights → funnel chart",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "funnel.sources",
+        "metric": "Where enquiries came from (counts)",
+        "where": "Insights → source mix",
+        "shown": {},
+        "recalculated": {},
+        "match": true
+      },
+      {
+        "id": "funnel.sourcePercents",
+        "metric": "Where enquiries came from (%)",
+        "where": "Insights → source mix",
+        "shown": {},
+        "recalculated": {},
+        "match": true
+      },
+      {
+        "id": "funnel.bestsellers",
+        "metric": "Bestsellers (count, £)",
+        "where": "Insights → Bestsellers",
+        "shown": [],
+        "recalculated": [],
+        "match": true
+      },
+      {
+        "id": "funnel.retailRevenue",
+        "metric": "Retail revenue",
+        "where": "Insights → Bestsellers",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "book.total",
+        "metric": "Total patients",
+        "where": "Insights → Patient base tile",
+        "shown": 641,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.active",
+        "metric": "Active",
+        "where": "Insights → Patient base tile",
+        "shown": 626,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.inactive",
+        "metric": "Inactive",
+        "where": "Insights → Patient base tile hint",
+        "shown": 15,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.newRecords",
+        "metric": "New patients (records created)",
+        "where": "Insights → Patient base tile",
+        "shown": 17,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.newRecordsChart",
+        "metric": "New patients chart (sum of bars)",
+        "where": "Insights → New patients chart",
+        "shown": 309,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.dormant",
+        "metric": "Dormant",
+        "where": "Insights → Patient base tile",
+        "shown": 4,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.dormantShare",
+        "metric": "Dormant share",
+        "where": "Insights → Patient base tile hint",
+        "shown": 1,
+        "recalculated": null,
+        "match": false
+      },
+      {
+        "id": "book.neverTreated",
+        "metric": "Never treated",
+        "where": "Insights → composition",
+        "shown": 4,
+        "recalculated": 0,
+        "match": false
+      },
+      {
+        "id": "book.lastVisit",
+        "metric": "Time since last visit",
+        "where": "Insights → last visit card",
+        "shown": {
+          "under3": 0,
+          "from3to6": 0,
+          "from6to12": 0,
+          "over12": 0,
+          "never": 641
+        },
+        "recalculated": {
+          "under3": 0,
+          "from3to6": 0,
+          "from6to12": 0,
+          "over12": 0,
+          "never": 0
+        },
+        "match": false
+      },
+      {
+        "id": "book.seen",
+        "metric": "Seen in the period",
+        "where": "Insights → composition",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "book.once",
+        "metric": "Treated once",
+        "where": "Insights → composition",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "book.twoPlus",
+        "metric": "Two or more visits",
+        "where": "Insights → composition",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "book.firstToSecond",
+        "metric": "First to second visit",
+        "where": "Insights → quality tile",
+        "shown": {
+          "cohort": 0,
+          "returned": 0,
+          "rate": null
+        },
+        "recalculated": {
+          "cohort": 0,
+          "returned": 0,
+          "rate": null
+        },
+        "match": true
+      },
+      {
+        "id": "book.rebooked",
+        "metric": "Rebooked",
+        "where": "Insights → quality tile",
+        "shown": 59,
+        "recalculated": null,
+        "match": false
+      },
+      {
+        "id": "book.revenue",
+        "metric": "Revenue in the period",
+        "where": "Insights → spend inputs",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "book.spendPerPatient",
+        "metric": "Spend per patient",
+        "where": "Insights → quality tile",
+        "shown": null,
+        "recalculated": null,
+        "match": true
+      },
+      {
+        "id": "book.visitValue",
+        "metric": "Average visit value",
+        "where": "Insights → quality tile",
+        "shown": null,
+        "recalculated": null,
+        "match": true
+      },
+      {
+        "id": "book.visitsInWindow",
+        "metric": "Visits in the period",
+        "where": "Insights → visit value input",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "book.newVsReturning",
+        "metric": "New vs returning",
+        "where": "Insights → treated mix",
+        "shown": {
+          "new": 0,
+          "returning": 0
+        },
+        "recalculated": {
+          "new": 0,
+          "returning": 0
+        },
+        "match": true
+      },
+      {
+        "id": "book.listSources",
+        "metric": "Where patients came from (lifetime)",
+        "where": "Insights → sources card",
+        "shown": {
+          "walk_in": 366,
+          "referral": 100,
+          "website": 96,
+          "instagram": 51,
+          "other": 28
+        },
+        "recalculated": {},
+        "match": false
+      },
+      {
+        "id": "dashboard.totalClients",
+        "metric": "Total clients",
+        "where": "Dashboard KPI",
+        "shown": 641,
+        "recalculated": 641,
+        "match": true
+      },
+      {
+        "id": "dashboard.activeClients",
+        "metric": "Active clients",
+        "where": "Dashboard KPI hint",
+        "shown": 626,
+        "recalculated": 626,
+        "match": true
+      },
+      {
+        "id": "dashboard.revenueMonth",
+        "metric": "Revenue this month",
+        "where": "Dashboard KPI",
+        "shown": 5202500,
+        "recalculated": 5202500,
+        "match": true
+      },
+      {
+        "id": "dashboard.treatmentsMonth",
+        "metric": "Treatments this month",
+        "where": "Dashboard KPI hint",
+        "shown": 215,
+        "recalculated": 215,
+        "match": true
+      },
+      {
+        "id": "retention.rate",
+        "metric": "Retention rate",
+        "where": "Retention headline / Dashboard KPI",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "retention.once",
+        "metric": "One visit only",
+        "where": "Retention card (= Insights treated once)",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "retention.twoPlus",
+        "metric": "Repeat patients",
+        "where": "Retention card (= Insights two or more)",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "retention.firstToSecond",
+        "metric": "First to second (Retention)",
+        "where": "Retention headline (= Insights)",
+        "shown": null,
+        "recalculated": null,
+        "match": true
+      },
+      {
+        "id": "money.earned",
+        "metric": "Earned",
+        "where": "Performance tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "money.collected",
+        "metric": "Collected",
+        "where": "Performance tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "money.outstanding",
+        "metric": "Outstanding",
+        "where": "Performance tile",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "money.bookedAhead",
+        "metric": "Booked ahead",
+        "where": "Performance subtitle",
+        "shown": 9540500,
+        "recalculated": 9540500,
+        "match": true
+      },
+      {
+        "id": "money.trendEarned",
+        "metric": "Earnings trend (sum of months)",
+        "where": "Performance trend chart",
+        "shown": 0,
+        "recalculated": 0,
+        "match": true
+      },
+      {
+        "id": "money.practitioners.earned",
+        "metric": "Earned per practitioner",
+        "where": "Performance table",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "match": true
+      },
+      {
+        "id": "money.practitioners.collected",
+        "metric": "Collected per practitioner",
+        "where": "Performance table",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "match": true
+      },
+      {
+        "id": "profile.earnedShare",
+        "metric": "Your share",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "match": true
+      },
+      {
+        "id": "profile.collectedShare",
+        "metric": "Collected (your share)",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "match": true
+      },
+      {
+        "id": "profile.outstandingShare",
+        "metric": "Outstanding (your share)",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "match": true
+      },
+      {
+        "id": "profile.csv",
+        "metric": "CSV export (sum of shares)",
+        "where": "My Profile → Export CSV",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "match": true
+      },
+      {
+        "id": "profile.treatments",
+        "metric": "Treatments",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "match": true
+      },
+      {
+        "id": "profile.newPatients",
+        "metric": "New patients (first visit)",
+        "where": "My Profile → Performance",
+        "shown": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "recalculated": {
+          "10000000-0000-4000-8000-000000000001": 0,
+          "10000000-0000-4000-8000-000000000002": 0,
+          "10000000-0000-4000-8000-000000000003": 0
+        },
+        "match": true
+      }
+    ]
+  },
+  "seedProblems": []
+}

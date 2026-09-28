@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { profileChangeApproverIds, profileChangeShowsReviewer } from "@/lib/profile-change-policy";
+import {
+  canSeeProfileChangeAttention,
+  profileChangeApproverIds,
+  profileChangeAttentionItems,
+  profileChangeShowsReviewer,
+} from "@/lib/profile-change-policy";
 
 const owner = { user_id: "owner-1", role: "owner" };
 const manager = { user_id: "manager-1", role: "manager" };
@@ -72,5 +77,44 @@ describe("profileChangeShowsReviewer", () => {
         roleGrants: [{ role: "manager", permission: "team.approve_changes", enabled: true }],
       }),
     ).toBe(false);
+  });
+});
+
+describe("profileChangeAttentionItems", () => {
+  const pending = {
+    id: "req-1",
+    user_id: "prac-1",
+    full_name: "Dr Nadia Rahman",
+    job_title: "Senior Aesthetic Practitioner",
+    note: "Promoted to senior in July.",
+    requires_owner: false,
+    status: "pending",
+    inbox_cleared_at: null,
+  };
+
+  it("lists pending staff requests for the owner and hides the viewer's own", () => {
+    const items = profileChangeAttentionItems(
+      [pending, { ...pending, id: "req-2", user_id: "owner-1", full_name: "Dr Amara Osei" }],
+      { userId: "owner-1", isOwner: true },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0]?.title).toBe("Dr Nadia Rahman — profile change");
+    expect(items[0]?.subtitle).toBe("Promoted to senior in July.");
+    expect(items[0]?.href).toBe("/team#profile-change-requests");
+  });
+
+  it("hides owner-only requests from a manager", () => {
+    expect(
+      profileChangeAttentionItems([{ ...pending, requires_owner: true }], {
+        userId: "manager-1",
+        isOwner: false,
+      }),
+    ).toEqual([]);
+  });
+
+  it("is only for the owner, admin or manager role", () => {
+    expect(canSeeProfileChangeAttention({ isOwner: true, roles: ["owner"] })).toBe(true);
+    expect(canSeeProfileChangeAttention({ roles: ["manager"] })).toBe(true);
+    expect(canSeeProfileChangeAttention({ roles: ["practitioner"] })).toBe(false);
   });
 });

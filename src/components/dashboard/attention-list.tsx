@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { LoadError, LoadingCard, type LoadStatus } from "@/components/dashboard/load-state";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Bell, ChevronDown } from "lucide-react";
+import { dropThisWeekDepositsIfUrgent } from "@/lib/metrics/appointment-flags";
 import { cn } from "@/lib/utils";
 
 type AttentionRaw = {
@@ -47,8 +48,8 @@ const KIND_ORDER = [
   "payment_due",
   "balance_due",
   "treatment_due",
-  "message",
   "incomplete_profile",
+  "profile_change",
   "compliance_due",
 ] as const;
 
@@ -60,9 +61,9 @@ const CHIP_META: Record<string, { label: string; className: string }> = {
   consent_due: { label: "Consent due", className: "bg-warning-bg text-consent-ink" },
   payment_due: { label: "Unpaid", className: "bg-destructive-bg text-destructive-ink" },
   balance_due: { label: "Balance due", className: "bg-warning-bg text-warning-ink" },
-  treatment_due: { label: "Treatment due", className: "bg-accent-soft text-accent-ink" },
-  message: { label: "Message", className: "bg-sky-bg text-sky-ink" },
+  treatment_due: { label: "Skin-plan treatment due", className: "bg-accent-soft text-accent-ink" },
   incomplete_profile: { label: "Incomplete profile", className: "bg-warning-bg text-warning-ink" },
+  profile_change: { label: "Profile change request", className: "bg-warning-bg text-warning-ink" },
   compliance_due: {
     label: "Registration or insurance",
     className: "bg-warning-bg text-warning-ink",
@@ -168,6 +169,7 @@ function displayHref(person: TaskPerson, kind: string) {
 
 function personKey(item: AttentionRaw) {
   if (item.patientId) return `patient:${item.patientId}`;
+  if (item.kind === "profile_change") return `id:${item.id}`;
   if (item.href) return `href:${item.href}`;
   return `id:${item.id}`;
 }
@@ -231,6 +233,7 @@ export function AttentionList({
   status?: LoadStatus;
   onRetry?: () => void;
 }) {
+  items = dropThisWeekDepositsIfUrgent(items.filter((i) => i.kind !== "message"));
   const urgent = items.filter((i) => i.urgency === "urgent");
   const thisWeek = items.filter((i) => i.urgency === "this_week");
 
@@ -284,7 +287,10 @@ function AttentionSection({
   };
 
   return (
-    <div className="glass-card flex max-h-[28rem] flex-col overflow-hidden p-0">
+    <div
+      className="glass-card flex max-h-[28rem] flex-col overflow-hidden p-0"
+      data-qc={tone === "urgent" ? "attention-urgent" : "attention-this-week"}
+    >
       <div className="sticky top-0 z-[1] flex shrink-0 items-center gap-2 border-b border-glass-line bg-card/95 px-4 py-3 backdrop-blur-sm">
         {tone === "urgent" ? (
           <AlertCircle className="h-4 w-4 text-destructive" />
@@ -425,7 +431,7 @@ function AttentionPersonRow({
 
   const expandable = Boolean(subtitle) && !summarized && (truncated || expanded);
 
-  const rowQc = kind === "treatment_due" ? "attention-treatment-due" : undefined;
+  const rowQc = `attention-${kind.replace(/_/g, "-")}`;
 
   if (!expandable) {
     return (
@@ -490,9 +496,8 @@ function railFor(kind: string) {
       return "bg-consent";
     case "treatment_due":
       return "bg-accent";
-    case "message":
-      return "bg-sky";
     case "incomplete_profile":
+    case "profile_change":
     case "compliance_due":
       return "bg-warning";
     default:

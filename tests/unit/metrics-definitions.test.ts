@@ -9,7 +9,12 @@ import {
   nextDueFor,
   visitsByPatient,
 } from "@/lib/metrics/definitions";
-import { appointmentFlags, isRunningLate, phaseOf } from "@/lib/metrics/appointment-flags";
+import {
+  appointmentFlags,
+  dropThisWeekDepositsIfUrgent,
+  isRunningLate,
+  phaseOf,
+} from "@/lib/metrics/appointment-flags";
 import { bookedAhead, collectedFor, moneyTotals, shareTotals } from "@/lib/metrics/money";
 import { monthBucketsUpToNow, noFutureBuckets, trailingMonthsWindow } from "@/lib/metrics/windows";
 
@@ -154,6 +159,20 @@ describe("appointment flags", () => {
     expect(today.flags.has("unpaid")).toBe(true);
     expect(today.flags.has("deposit_due")).toBe(false);
     expect(today.depositUrgency).toBeNull();
+  });
+
+  it("a patient already on urgent Deposit due is not listed again this week", () => {
+    const items = [
+      { kind: "deposit_due", urgency: "urgent", patientId: "p1" },
+      { kind: "deposit_due", urgency: "this_week", patientId: "p1" },
+      { kind: "deposit_due", urgency: "this_week", patientId: "p2" },
+      { kind: "consent_due", urgency: "this_week", patientId: "p1" },
+    ];
+    expect(dropThisWeekDepositsIfUrgent(items)).toEqual([
+      { kind: "deposit_due", urgency: "urgent", patientId: "p1" },
+      { kind: "deposit_due", urgency: "this_week", patientId: "p2" },
+      { kind: "consent_due", urgency: "this_week", patientId: "p1" },
+    ]);
   });
 
   it("a deposit-paid booking owes the balance; a signed consent is not due; cancelled bookings carry nothing", () => {

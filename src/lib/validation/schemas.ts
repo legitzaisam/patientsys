@@ -78,6 +78,8 @@ export const SaveAppointment = z.object({
   pay_kind: paymentLinkKind.optional(),
   /** Set by Quick book and cleared by a save from the full booking dialog. */
   details_incomplete: z.boolean().optional(),
+  /** The plan step this booking is for, set by a Book button on a plan. */
+  milestone_id: optionalId,
 });
 
 export const UpdateAppointmentState = z.object({

@@ -59,3 +59,38 @@ test.describe("my profile field rules", () => {
     await expect(page.getByLabel("Work email")).toBeDisabled();
   });
 });
+
+test.describe("profile changes on Attention needed", () => {
+  test("owner and manager see pending requests; a practitioner does not", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    const base = baseURL ?? "http://localhost:8091";
+
+    await page.goto("/dashboard");
+    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    const week = page.locator("#attention .glass-card").filter({ hasText: "This week" });
+    const kind = week.locator('[data-qc="attention-kind-profile_change"]');
+    await expect(kind).toHaveText("Profile change request");
+    await kind.click();
+    await expect(week.getByRole("link", { name: /Dr Nadia Rahman/ })).toHaveCount(1);
+    await expect(week.getByRole("link", { name: /Sofia Marchetti/ })).toHaveCount(1);
+    await week.getByRole("link", { name: /Dr Nadia Rahman/ }).click();
+    await expect(page).toHaveURL(/\/team/);
+    await expect(page.locator("#profile-change-requests")).toBeVisible();
+
+    await context.addCookies([{ name: "demo_role", value: "manager", url: base }]);
+    await page.goto("/dashboard");
+    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="attention-kind-profile_change"]')).toBeVisible();
+    await page.locator('[data-qc="attention-kind-profile_change"]').click();
+    await expect(page.getByText("Dr Nadia Rahman").first()).toBeVisible();
+    await expect(page.getByText("Sofia Marchetti").first()).toBeVisible();
+
+    await context.addCookies([{ name: "demo_role", value: "practitioner", url: base }]);
+    await page.goto("/dashboard");
+    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="attention-kind-profile_change"]')).toHaveCount(0);
+  });
+});
