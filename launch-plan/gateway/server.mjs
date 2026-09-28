@@ -22,6 +22,8 @@ const APP_HOST = process.env.APP_HOST || "127.0.0.1";
 const APP_PORT = Number(process.env.APP_PORT || 8090);
 const WEBSITE_DIST = path.resolve(process.env.WEBSITE_DIST || path.join(here, "../website/dist"));
 const DEFAULT_ROLE = process.env.DEMO_DEFAULT_ROLE || "owner";
+// Redirect the app's /auth and /portal to the website's /login (demo only). Set to "false" in front of a live app.
+const SIGNIN_REDIRECT = process.env.DEMO_SIGNIN_REDIRECT !== "false";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -181,17 +183,39 @@ function proxyToApp(req, res) {
   req.pipe(upstream);
 }
 
+function redirect(res, location) {
+  res.writeHead(302, { location, "cache-control": "no-store" });
+  res.end();
+}
+
+/** A `next` value is only honoured when it is a same-origin path: "/x", never "//host" or a full URL. */
+export function safeNextPath(next) {
+  if (typeof next !== "string" || !/^\/(?![/\\])/.test(next) || /[\r\n\\]/.test(next)) return null;
+  if (next.startsWith("/demo/enter")) return null;
+  return next;
+}
+
+/** Where a sign-in path is sent in the demo; null when this path is not one of them. */
+export function signInTarget(pathname, url) {
+  if (!SIGNIN_REDIRECT) return null;
+  const target = config.signIn?.[pathname];
+  if (!target || pathname.startsWith("$")) return null;
+  // Only the idle flag travels across; a tokenised query means the app must handle it.
+  if (!url.searchParams.has("idle")) return target;
+  const [base, hash] = target.split("#");
+  return `${base}?idle=1${hash ? `#${hash}` : ""}`;
+}
+
 function demoEnter(res, url) {
   const role = url.searchParams.get("role") || DEFAULT_ROLE;
   const target = config.demoRoles[role];
-  if (!target)
-    return send(
-      res,
-      400,
-      `Unknown demo role "${role}". Use one of: ${Object.keys(config.demoRoles).join(", ")}`,
-    );
+  if (!target || role.startsWith("$")) {
+    // Send people back to the website's persona picker rather than a bare error.
+    return redirect(res, `${config.signIn?.["/auth"] ?? "/login"}?role=unknown`);
+  }
+  const next = safeNextPath(url.searchParams.get("next"));
   res.writeHead(302, {
-    location: target,
+    location: next ?? target,
     "set-cookie": `demo_role=${role}; Path=/; Max-Age=86400; SameSite=Lax`,
     "cache-control": "no-store",
   });
@@ -205,6 +229,13 @@ export function handle(req, res) {
 
   if (pathname === "/healthz") return send(res, 200, "ok");
   if (pathname === "/demo/enter") return demoEnter(res, url);
+
+  // The demo's only sign-in page is the website's /login: a full load of the
+  // app's own sign-in routes is sent there (exact paths only).
+  if (req.method === "GET" || req.method === "HEAD") {
+    const target = signInTarget(pathname, url);
+    if (target) return redirect(res, target);
+  }
 
   // Custom-domain hosts (clinic.*, my.*): their root opens the right portal.
   if (pathname === "/") {

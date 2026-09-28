@@ -4,6 +4,7 @@ import Mark from "../components/Mark.astro";
 import { links } from "../lib/links";
 const personas = [
   { label: "Clinic owner", href: links.clinic },
+  { label: "Manager", href: links.manager },
   { label: "Practitioner", href: links.practitioner },
   { label: "Front desk", href: links.frontDesk },
 ];
@@ -12,8 +13,10 @@ const personas = [
 <Base title="Sign in · SQINOS" description="Sign in to the SQINOS clinic portal or your patient portal." bare>
   <div class="login" data-login>
     <a class="login__home" href="/" aria-label="Back to SQINOS home"><Mark size={34} /><span>SQINOS</span></a>
+    <!-- Filled in by the script below from ?idle=1 (signed out after inactivity) or ?role=unknown. -->
+    <p class="login__notice" role="status" hidden data-login-notice></p>
 
-    <section class="half half--clinic" data-half aria-labelledby="clinic-h">
+    <section class="half half--clinic" id="clinic" data-half aria-labelledby="clinic-h">
       <div class="scene scene--diary" aria-hidden="true">
         {Array.from({ length: 12 }).map((_, i) => <span style={`--i:${i}`} />)}
       </div>
@@ -33,7 +36,7 @@ const personas = [
       </div>
     </section>
 
-    <section class="half half--patient" data-half aria-labelledby="patient-h">
+    <section class="half half--patient" id="patient" data-half aria-labelledby="patient-h">
       <svg class="scene scene--thread" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
         <path d="M-20 480 C 120 380, 180 520, 300 400 S 460 180, 620 120" pathLength="1"></path>
         {[0.12, 0.3, 0.5, 0.7, 0.88].map((t, i) => <circle r="7" style={`--i:${i}; offset-distance:${t * 100}%`} />)}
@@ -202,6 +205,23 @@ const personas = [
       opacity: 1;
     }
   }
+  .login__notice {
+    position: absolute;
+    top: 5.2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    margin: 0;
+    max-width: calc(100% - 2rem);
+    padding: 0.55rem 1rem;
+    border-radius: 999px;
+    background: var(--glass);
+    border: 1px solid var(--edge);
+    box-shadow: var(--shadow-glass);
+    font-size: 0.9rem;
+    color: var(--ink-2);
+    text-align: center;
+  }
   .login__note {
     position: absolute;
     left: 0;
@@ -254,4 +274,18 @@ const personas = [
   });
   // Coming back via the back button: clear the wipe.
   addEventListener("pageshow", () => layer.classList.remove("is-on"));
+
+  // The demo app hands people back here: after an idle sign-out (?idle=1) or
+  // when a demo link named a role that does not exist (?role=unknown).
+  const params = new URLSearchParams(location.search);
+  const notice = document.querySelector<HTMLElement>("[data-login-notice]")!;
+  const text = params.has("idle")
+    ? "You were signed out after a period of inactivity. Pick a door to carry on."
+    : params.get("role") === "unknown"
+      ? "That demo role does not exist. Pick one below."
+      : "";
+  if (text) {
+    notice.textContent = text;
+    notice.hidden = false;
+  }
 </script>

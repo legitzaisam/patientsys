@@ -90,7 +90,8 @@ test("unknown website path gets the site 404", async () => {
 
 test("app paths are proxied with host and proto preserved", async () => {
   for (const p of [
-    "/auth",
+    "/auth/callback",
+    "/auth/reset",
     "/dashboard",
     "/my-record/plan",
     "/api/comms/drain",
@@ -129,7 +130,72 @@ test("demo enter sets the persona cookie and redirects", async () => {
   assert.match(staff.headers["set-cookie"][0], /demo_role=front_desk/);
   const patient = await get("/demo/enter?role=patient");
   assert.equal(patient.headers.location, "/my-record");
-  assert.equal((await get("/demo/enter?role=admin")).status, 400);
+  const manager = await get("/demo/enter?role=manager");
+  assert.equal(manager.headers.location, "/dashboard");
+  assert.match(manager.headers["set-cookie"][0], /demo_role=manager/);
+});
+
+test("an unknown demo role goes back to the website login, without a cookie", async () => {
+  for (const role of ["admin", "nurse", "$comment"]) {
+    const r = await get(`/demo/enter?role=${role}`);
+    assert.equal(r.status, 302, role);
+    assert.equal(r.headers.location, "/login?role=unknown", role);
+    assert.equal(r.headers["set-cookie"], undefined, role);
+  }
+});
+
+test("demo enter honours a same-origin next path and ignores anything else", async () => {
+  const deep = await get(`/demo/enter?role=owner&next=${encodeURIComponent("/patients?tab=board")}`);
+  assert.equal(deep.headers.location, "/patients?tab=board");
+  assert.match(deep.headers["set-cookie"][0], /demo_role=owner/);
+  for (const bad of ["//evil.example.com", "https://evil.example.com/x", "/demo/enter?role=patient", "\\\\evil"]) {
+    const r = await get(`/demo/enter?role=owner&next=${encodeURIComponent(bad)}`);
+    assert.equal(r.headers.location, "/dashboard", bad);
+  }
+});
+
+test("the app's sign-in pages redirect to the website login in the demo", async () => {
+  const auth = await get("/auth");
+  assert.equal(auth.status, 302);
+  assert.equal(auth.headers.location, "/login");
+  assert.equal((await get("/portal")).headers.location, "/login#patient");
+  assert.equal((await get("/auth?idle=1")).headers.location, "/login?idle=1");
+  assert.equal((await get("/portal?idle=1")).headers.location, "/login?idle=1#patient");
+  // Deeper auth routes carry tokens and stay with the app.
+  for (const p of ["/auth/callback?code=x", "/auth/reset"]) {
+    const r = await get(p);
+    assert.equal(JSON.parse(r.body).app, true, p);
+  }
+});
+
+test("the sign-in redirect can be switched off for a live app", async () => {
+  const port = GATEWAY_PORT + 1;
+  const live = spawn(process.execPath, [path.join(here, "server.mjs")], {
+    env: {
+      ...process.env,
+      GATEWAY_PORT: String(port),
+      APP_PORT: String(APP_PORT),
+      WEBSITE_DIST: dist,
+      GATEWAY_QUIET: "1",
+      DEMO_SIGNIN_REDIRECT: "false",
+    },
+    stdio: "pipe",
+  });
+  await new Promise((resolve) => live.stdout.once("data", resolve));
+  try {
+    const r = await new Promise((resolve, reject) => {
+      http
+        .get({ host: "127.0.0.1", port, path: "/auth" }, (res) => {
+          let body = "";
+          res.on("data", (d) => (body += d)).on("end", () => resolve({ status: res.statusCode, body }));
+        })
+        .on("error", reject);
+    });
+    assert.equal(r.status, 200);
+    assert.equal(JSON.parse(r.body).app, true);
+  } finally {
+    live.kill();
+  }
 });
 
 test("custom-domain hosts open the right portal", async () => {

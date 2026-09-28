@@ -30,10 +30,17 @@
     ]
   },
   "demoRoles": {
+    "$comment": "Personas /demo/enter?role= accepts, and where each lands. Software admin is internal and deliberately absent.",
     "owner": "/dashboard",
+    "manager": "/dashboard",
     "practitioner": "/dashboard",
     "front_desk": "/dashboard",
     "patient": "/my-record"
+  },
+  "signIn": {
+    "$comment": "In the demo the website's /login is the only sign-in page. A full GET of these exact app paths is redirected there (?idle=1 is carried over). Deeper paths such as /auth/callback and /auth/reset stay with the app. Set DEMO_SIGNIN_REDIRECT=false to switch this off in front of a live app.",
+    "/auth": "/login",
+    "/portal": "/login#patient"
   },
   "hostRoots": {
     "$comment": "When a custom domain is attached later: the root of these hosts redirects into the right portal.",

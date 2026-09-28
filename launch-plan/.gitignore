@@ -12,3 +12,7 @@ dist/
 dist-preview/
 artifact/
 standalone/
+
+# QC run artefacts (launch-plan/qc); REPORT.md is committed.
+qc/.pw/
+qc/captures/

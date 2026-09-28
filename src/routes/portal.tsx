@@ -8,6 +8,7 @@ import { toastEmailError } from "@/lib/email-toast";
 import { getMe } from "@/lib/clinic.functions";
 import { assertLoginAllowed, recordLoginEvent } from "@/lib/auth/login-throttle";
 import { destinationFor, isSessionEndingIdentityError } from "@/lib/auth/surfaces";
+import { demoHandoffUrl } from "@/lib/demo/handoff";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +74,12 @@ function PortalLogin() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Public demo behind the website: its login page owns patient sign-in too.
+  const handoff = demoHandoffUrl("patient");
+  useEffect(() => {
+    if (handoff) window.location.replace(handoff);
+  }, [handoff]);
+
   useEffect(() => {
     let active = true;
     void supabase.auth.getSession().then(async ({ data }) => {
@@ -125,6 +132,8 @@ function PortalLogin() {
       setBusy(false);
     }
   }
+
+  if (handoff) return null;
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">

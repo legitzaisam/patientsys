@@ -11,6 +11,7 @@ const demo = (url: string) => (previewMode ? "#demo-note" : url);
 export const links = {
   clinic: demo(env.PUBLIC_CLINIC_SIGNIN_URL || "/demo/enter?role=owner"),
   patient: demo(env.PUBLIC_PATIENT_SIGNIN_URL || "/demo/enter?role=patient"),
+  manager: demo("/demo/enter?role=manager"),
   practitioner: demo("/demo/enter?role=practitioner"),
   frontDesk: demo("/demo/enter?role=front_desk"),
   showPersonas: (env.PUBLIC_DEMO_PERSONAS ?? "true") !== "false",

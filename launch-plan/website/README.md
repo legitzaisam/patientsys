@@ -29,7 +29,7 @@ JavaScript is about 57 KB gzipped in total (GSAP + Lenis are most of it).
 | `/`        | Home story (above)                                                                                                                                                                                             |
 | `/pricing` | Four tiers with a Monthly / Annually pill, the "on every plan" list, an unnamed market comparison and an FAQ. Every number lives in `src/lib/pricing.ts`; nothing is hard-coded in the page                     |
 | `/contact` | Talk to sales / General enquiry pill (`?topic=sales&plan=clinic` preselects it from the pricing page). Posts to a form service, or falls back to a prefilled email. Honeypot field; no key = mailto fallback  |
-| `/demo`    | Mac window with the demo clip, then four "try the live demo" persona cards. Drop the clip at `public/media/sqinos-demo.mp4` (optional poster `sqinos-demo-poster.webp`); until it exists a placeholder shows |
+| `/demo`    | Mac window with the demo clip, then five "try the live demo" persona cards (owner, manager, practitioner, front desk, patient). Drop the clip at `public/media/sqinos-demo.mp4` (optional poster `sqinos-demo-poster.webp`); until it exists a placeholder shows |
 | `/login`   | Split sign-in page (clinic team / patient)                                                                                                                                                                     |
 
 Shared pieces: `Pill.astro` (segmented control, same size and states as the app), `MacWindow.astro`, and the
@@ -44,7 +44,7 @@ Set these in `website/.env.local` (see `.env.example`). Defaults use the gateway
 | --------------------------- | -------------------------------------------------------------- |
 | `PUBLIC_CLINIC_SIGNIN_URL`  | `/demo/enter?role=owner`                                       |
 | `PUBLIC_PATIENT_SIGNIN_URL` | `/demo/enter?role=patient`                                     |
-| `PUBLIC_DEMO_PERSONAS`      | `true` (owner / practitioner / front desk buttons on `/login`) |
+| `PUBLIC_DEMO_PERSONAS`      | `true` (owner / manager / practitioner / front desk buttons on `/login`) |
 | `PUBLIC_CONTACT_EMAIL`      | empty (shown on `/contact`; the form's fallback address)       |
 | `PUBLIC_CONTACT_FORM_KEY`   | empty (Web3Forms access key; without it the form uses mailto)  |
 | `PUBLIC_CONTACT_FORM_ENDPOINT` | `https://api.web3forms.com/submit`                          |
@@ -52,6 +52,11 @@ Set these in `website/.env.local` (see `.env.example`). Defaults use the gateway
 
 The site must not use paths the app owns (`/auth`, `/portal`, `/dashboard`, `/my-record`, `/patients`, `/api`…).
 Add new top-level pages to `gateway/routes.json` as well.
+
+`/login` is the demo's only sign-in page. The gateway redirects the app's `/auth` and `/portal` here, and the app
+itself (in demo mode with `DEMO_SIGNIN_URL=/login`) comes back here on Sign out. `?idle=1` and `?role=unknown` show a
+one-line notice above the two doors; `#patient` scrolls to the patient door. `launch-plan/qc/run.sh` checks every
+link, demo entry and return path automatically.
 
 ## Accessibility and motion
 

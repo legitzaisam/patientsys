@@ -9,6 +9,7 @@ import { getMe } from "@/lib/clinic.functions";
 import { assertLoginAllowed, recordLoginEvent } from "@/lib/auth/login-throttle";
 import { destinationFor, isSessionEndingIdentityError } from "@/lib/auth/surfaces";
 import { DEMO_MODE } from "@/lib/demo/enabled";
+import { demoHandoffUrl } from "@/lib/demo/handoff";
 import { applyDemoRoleForEmail } from "@/lib/demo/persona";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
@@ -49,9 +50,15 @@ function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Public demo behind the website: the website's login page owns sign-in.
+  const handoff = demoHandoffUrl("staff", { idle: Boolean(idle) });
   useEffect(() => {
-    if (idle) toast.message("You were signed out after a period of inactivity.");
-  }, [idle]);
+    if (handoff) window.location.replace(handoff);
+  }, [handoff]);
+
+  useEffect(() => {
+    if (idle && !handoff) toast.message("You were signed out after a period of inactivity.");
+  }, [idle, handoff]);
 
   useEffect(() => {
     let active = true;
@@ -105,6 +112,8 @@ function AuthPage() {
       setBusy(false);
     }
   }
+
+  if (handoff) return null;
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">

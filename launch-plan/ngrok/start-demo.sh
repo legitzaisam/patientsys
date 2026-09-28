@@ -29,6 +29,9 @@ fi
 
 export DEMO=1
 export DEMO_NOW="${DEMO_NOW:-}"
+# Behind the gateway the website's /login owns sign-in; the app hands /auth,
+# /portal, its landing and Sign out back there. Empty keeps the app's own pages.
+export DEMO_SIGNIN_URL="${DEMO_SIGNIN_URL-/login}"
 export APP_ORIGIN="$PUBLIC_URL"
 export __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=".ngrok-free.dev,.ngrok-free.app,.ngrok.app,.ngrok.dev${NGROK_DOMAIN:+,$NGROK_DOMAIN}"
 

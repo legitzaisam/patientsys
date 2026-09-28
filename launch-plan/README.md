@@ -11,6 +11,7 @@ The app runs unmodified in demo mode behind a small gateway.
 | [`website/`](website/)      | Astro marketing site (motion hero, journey story, clinic and patient pages, Journal, Watch)           |
 | [`pitch/`](pitch/)          | 2:50 script, demo run-sheet, one-page leave-behind, optional slides                                   |
 | [`scripts/`](scripts/)      | `load-env.sh` (shared settings), `check-isolation.sh`                                                 |
+| [`qc/`](qc/REPORT.md)       | Playwright QC of the website ↔ demo stitching: `run.sh` checks every link, persona entry and return path, writes `REPORT.md` |
 | [`docs/`](docs/README.md)   | Exports of the technical documentation, launch plan and execution plan, diagrams, website screenshots |
 | [`PLAN.md`](PLAN.md)        | Execution plan, status and merge notes                                                                |
 
@@ -73,6 +74,18 @@ It checks Node, ngrok, the token and domain, the ports and the app path, and
 changes nothing. Fix any ✗ before going on; `!` lines are warnings (for example
 "Website not built": the first start builds it).
 
+After you have edited the website, the gateway routes or the demo personas, run
+the QC once before going live:
+
+```bash
+./launch-plan/qc/run.sh            # add --rebuild after website edits
+```
+
+It starts a throwaway demo app (8094) and gateway (8097), clicks every persona
+entry on `/`, `/login` and `/demo` at desktop and phone widths, checks every link
+and asset on the website, the `/auth` → `/login` return paths and Sign out, and
+writes [`qc/REPORT.md`](qc/REPORT.md). Zero failures is the bar.
+
 ### 4. Go live
 
 ```bash
@@ -92,15 +105,18 @@ The script, in order:
 | Link                                       | Opens                                        |
 | ------------------------------------------ | -------------------------------------------- |
 | `https://<domain>/`                        | Marketing website                            |
-| `https://<domain>/login`                   | Website sign-in page with the persona picker |
+| `https://<domain>/login`                   | The only sign-in page (persona picker); `/auth` and `/portal` redirect here |
 | `https://<domain>/demo/enter?role=owner`   | Clinic portal as the clinic owner            |
 | `https://<domain>/demo/enter?role=patient` | Patient portal                               |
-| `https://<domain>/auth`                    | The app's staff sign-in page                 |
 | `http://127.0.0.1:4040`                    | ngrok inspector (every request, local only)  |
 
-`/demo/enter?role=` accepts `owner`, `practitioner`, `front_desk` and `patient`
-(`DEMO_DEFAULT_ROLE` is used when the role is missing). The software-admin
-persona is not reachable from that URL; the in-app Demo pill still switches to it.
+`/demo/enter?role=` accepts `owner`, `manager`, `practitioner`, `front_desk` and `patient`
+(`DEMO_DEFAULT_ROLE` is used when the role is missing); an unknown role goes back to
+`/login?role=unknown`. Add `&next=/patients?tab=board` (URL-encoded) to land on a page
+other than the role's default. The software-admin persona is not reachable from that
+URL; the in-app Demo pill still switches to it. In the demo the app's own `/auth` and
+`/portal` redirect to the website's `/login` (exact paths only; `/auth/callback` and
+`/auth/reset` stay with the app). Set `DEMO_SIGNIN_REDIRECT=false` in front of a live app.
 
 Leave the terminal open. `Ctrl-C` stops the tunnel, the gateway and the app.
 

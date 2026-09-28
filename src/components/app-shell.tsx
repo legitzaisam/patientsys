@@ -43,6 +43,7 @@ import { PractitionerPressCard, PractitionerPressTrigger } from "@/components/pr
 import { FloatingNotes } from "@/components/dashboard/floating-notes";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
+import { clearDemoRole, demoHandoffUrl, handoffToWebsite } from "@/lib/demo/handoff";
 import { listTeam } from "@/lib/clinic.functions";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -607,6 +608,12 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     await queryClient.cancelQueries();
     queryClient.clear();
     await supabase.auth.signOut();
+    // Public demo behind the website: forget the persona and go back to its login page.
+    if (demoHandoffUrl("staff")) {
+      clearDemoRole();
+      handoffToWebsite("staff");
+      return;
+    }
     navigate({ to: "/auth", replace: true });
   }
 

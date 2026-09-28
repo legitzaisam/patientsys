@@ -15,6 +15,7 @@ const hasPoster = fs.existsSync(path.join(media, "sqinos-demo-poster.webp"));
 
 const personas = [
   { who: "Clinic owner", line: "Revenue, retention and who needs attention today.", href: links.clinic, c: "var(--butter)" },
+  { who: "Manager", line: "The team, staff access and approvals, without the owner's money view.", href: links.manager, c: "var(--consent)" },
   { who: "Practitioner", line: "Your day, your patients, your notes and earnings.", href: links.practitioner, c: "var(--mint)" },
   { who: "Front desk", line: "Arrivals, deposits, forms and reminders in one queue.", href: links.frontDesk, c: "var(--arrived)" },
   { who: "Patient", line: "Your plan, aftercare and progress, in one place.", href: links.patient, c: "var(--aftercare)" },
@@ -174,8 +175,13 @@ const personas = [
   }
   .live__grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 1rem;
+  }
+  @media (max-width: 1180px) {
+    .live__grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   }
   .persona {
     display: grid;

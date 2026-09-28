@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { ShieldCheck, Camera, MessagesSquare, ClipboardCheck } from "lucide-react";
+import { demoHandoffUrl } from "@/lib/demo/handoff";
 import { BrandLockup } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 
@@ -31,6 +33,14 @@ const features = [
 ];
 
 function Landing() {
+  // Public demo behind the website: the website is the front door, so the
+  // app's own landing (reached from the 404's Go home or a brand link) goes there.
+  const handoff = demoHandoffUrl("home");
+  useEffect(() => {
+    if (handoff) window.location.replace(handoff);
+  }, [handoff]);
+  if (handoff) return null;
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 border-b border-edge bg-sidebar shadow-inset-hi backdrop-blur-glass backdrop-saturate-150">

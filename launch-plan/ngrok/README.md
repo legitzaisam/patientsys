@@ -57,7 +57,8 @@ Other options:
 ./launch-plan/ngrok/start-demo.sh               # just the demo app on :8090
 ```
 
-Demo personas for `/demo/enter?role=`: `owner`, `practitioner`, `front_desk`, `patient`.
+Demo personas for `/demo/enter?role=`: `owner`, `manager`, `practitioner`, `front_desk`, `patient`.
+The app's `/auth` and `/portal` redirect to the website's `/login` while `DEMO_SIGNIN_REDIRECT` is not `false`.
 
 ## Settings (`launch-plan/.env.local`)
 

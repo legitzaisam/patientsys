@@ -51,4 +51,11 @@ if git -C "$LAUNCH_DIR" rev-parse >/dev/null 2>&1; then
     || warn "Changes outside launch-plan/ (run scripts/check-isolation.sh)"
 fi
 
+# Stitching QC (last pre-flight step; needs the website built and ports 8094/8097 free)
+if [[ -f "$LAUNCH_DIR/qc/REPORT.md" ]]; then
+  if grep -q 'Overall: \*\*passed\*\*' "$LAUNCH_DIR/qc/REPORT.md"; then
+    ok "QC report passed ($(sed -n 's/^Run \([0-9-]* [0-9:]* UTC\).*/\1/p' "$LAUNCH_DIR/qc/REPORT.md")); rerun ./launch-plan/qc/run.sh after website or gateway edits"
+  else warn "QC report has failures: read launch-plan/qc/REPORT.md, then rerun ./launch-plan/qc/run.sh"; fi
+else warn "No QC report yet: run ./launch-plan/qc/run.sh once before going live"; fi
+
 (( fail == 0 )) && echo "Ready: ./launch-plan/ngrok/start-public.sh" || { echo "Fix the ✗ items first."; exit 1; }
