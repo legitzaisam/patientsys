@@ -10,7 +10,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 
 | Phase | Worklog | Scope | Commit |
 | ----- | ------- | ----- | ------ |
-| P0 | [`worklog/00-baseline.md`](worklog/00-baseline.md) | Branch, docs scaffold, baselines, before-captures | |
+| P0 | [`worklog/00-baseline.md`](worklog/00-baseline.md) | Branch, docs scaffold, baselines, before-captures | `0bd63f3` |
 | P1 | [`worklog/01-foundations.md`](worklog/01-foundations.md) | Pure helpers: task types, records summary, board risk, staff lanes, urgent triage, `--noshow` tokens | |
 | P2 | [`worklog/02-schema.md`](worklog/02-schema.md) | `tasks`, `task_events`, `automation_rules` schema, types, tenancy, demo fixtures | |
 | P3 | [`worklog/03-server.md`](worklog/03-server.md) | Rule evaluator, sync, task handlers, patient summaries, RBAC, notifications, realtime | |
@@ -29,12 +29,12 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | `pt-p0-03-baselines` | P0 | tsc, unit, guards, responsive gate, pre-existing Chromium e2e failures, lint per file to be touched | done | [`00-baseline.md#pt-p0-03-baselines`](worklog/00-baseline.md#pt-p0-03-baselines) |
 | `pt-p0-04-before-captures` | P0 | before-captures on laptop-1440 (Chromium), ipad-pro-landscape and ipad-mini-portrait (WebKit) | done | [`00-baseline.md#pt-p0-04-before-captures`](worklog/00-baseline.md#pt-p0-04-before-captures) |
 | `pt-p0-05-commit` | P0 | commit docs scaffold and before-captures | done | [`00-baseline.md#pt-p0-05-commit`](worklog/00-baseline.md#pt-p0-05-commit) |
-| `pt-p1-01-task-types` | P1 | `src/lib/tasks/types.ts` + unit tests | pending | |
-| `pt-p1-02-records-summary` | P1 | `src/lib/patients/records-summary.ts` + unit tests | pending | |
-| `pt-p1-03-board-risk` | P1 | `src/lib/patients/board-risk.ts` + unit tests | pending | |
-| `pt-p1-04-staff-lane-triage` | P1 | `src/lib/staff-lane.ts`, `src/lib/tasks/urgent-triage.ts` + unit tests | pending | |
-| `pt-p1-05-noshow-tokens` | P1 | `--noshow` token family in `styles.css` | pending | |
-| `pt-p1-06-verify-commit` | P1 | unit, tsc/lint; commit | pending | |
+| `pt-p1-01-task-types` | P1 | `src/lib/tasks/types.ts` + unit tests | done | [`01-foundations.md#pt-p1-01-task-types`](worklog/01-foundations.md#pt-p1-01-task-types) |
+| `pt-p1-02-records-summary` | P1 | `src/lib/patients/records-summary.ts` + unit tests | done | [`01-foundations.md#pt-p1-02-records-summary`](worklog/01-foundations.md#pt-p1-02-records-summary) |
+| `pt-p1-03-board-risk` | P1 | `src/lib/patients/board-risk.ts` + unit tests | done | [`01-foundations.md#pt-p1-03-board-risk`](worklog/01-foundations.md#pt-p1-03-board-risk) |
+| `pt-p1-04-staff-lane-triage` | P1 | `src/lib/staff-lane.ts`, `src/lib/tasks/urgent-triage.ts` + unit tests | done | [`01-foundations.md#pt-p1-04-staff-lane-triage`](worklog/01-foundations.md#pt-p1-04-staff-lane-triage) |
+| `pt-p1-05-noshow-tokens` | P1 | `--noshow` token family in `styles.css` | done | [`01-foundations.md#pt-p1-05-noshow-tokens`](worklog/01-foundations.md#pt-p1-05-noshow-tokens) |
+| `pt-p1-06-verify-commit` | P1 | unit, tsc/lint; commit | done | [`01-foundations.md#pt-p1-06-verify-commit`](worklog/01-foundations.md#pt-p1-06-verify-commit) |
 | `pt-p2-01-migration` | P2 | `20261003000100_tasks.sql` | pending | |
 | `pt-p2-02-types-scope` | P2 | `types.ts` rows, `CLINIC_SCOPED_TABLES` | pending | |
 | `pt-p2-03-demo-fixtures` | P2 | demo `automationRules`, `tasks`, `taskEvents`; recall rows converted | pending | |

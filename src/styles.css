@@ -52,6 +52,7 @@
   --color-consent: var(--consent);
   --color-arrived: var(--arrived);
   --color-aftercare: var(--aftercare);
+  --color-noshow: var(--noshow);
   --color-subtle: var(--subtle);
 
   /* Glass vocabulary — translucent surfaces, light edges and the accent wash. */
@@ -72,6 +73,7 @@
   --color-ink-3: var(--ink-3);
   --color-success-bg: var(--success-bg);
   --color-destructive-bg: var(--destructive-bg);
+  --color-noshow-bg: var(--noshow-bg);
   --color-warning-bg: var(--warning-bg);
   --color-warning-ink: var(--warning-ink);
   --color-sky: var(--sky);
@@ -87,6 +89,7 @@
   --color-aftercare-ink: var(--aftercare-ink);
   --color-success-ink: var(--success-ink);
   --color-destructive-ink: var(--destructive-ink);
+  --color-noshow-ink: var(--noshow-ink);
 
   --color-lane-1: var(--lane-1);
   --color-lane-2: var(--lane-2);
@@ -205,6 +208,10 @@
   --aftercare-ink: #8a3d66;
   --success-ink: #2d6a4c;
   --destructive-ink: #a3456e;
+  /* No-show (peach): a missed booked step, distinct from Overdue's pink. */
+  --noshow: #e59a64;
+  --noshow-bg: rgba(255, 218, 194, 0.55);
+  --noshow-ink: #8a4a1f;
 
   --lane-1: #a6dccd;
   --lane-2: #4a9d75;
