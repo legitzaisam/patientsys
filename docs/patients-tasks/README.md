@@ -19,7 +19,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | P6 | [`worklog/06-tasks-page.md`](worklog/06-tasks-page.md) | Tasks page (C) and the sidebar item | `192844e` |
 | P7 | [`worklog/07-dashboard-rewire.md`](worklog/07-dashboard-rewire.md) | Dashboard aggregation; rewiring the old recall surfaces | `8949cf7` |
 | P8 | [`worklog/08-tests-and-verify.md`](worklog/08-tests-and-verify.md) | e2e, device matrix, full verification, after-captures, docs | `d9b66fc` (+ this hash note) |
-| QC | [`worklog/09-tasks-qc.md`](worklog/09-tasks-qc.md) | Tasks page review: demo Viewing as pill, ten-a-page pagination, nav label wrap, alignment audit | |
+| QC | [`worklog/09-tasks-qc.md`](worklog/09-tasks-qc.md) | Tasks page review: demo Viewing as pill, ten-a-page pagination, nav label wrap, alignment audit | `42f1bc1` |
 
 ## To-dos
 
