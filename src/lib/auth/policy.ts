@@ -253,6 +253,21 @@ export const POLICY = {
   listRecallTasks: { kind: "staff" },
   listOpenRecallTasks: { kind: "staff" },
 
+  /* Tasks (who sees which rows and who may do what is decided in the handlers) */
+  listTasks: { kind: "staff" },
+  getTasksSummary: { kind: "staff" },
+  listPatientTasks: { kind: "staff" },
+  createTask: { kind: "staff" },
+  assignTasks: { kind: "capability", key: "tasks.assign_any" },
+  handOffToPool: { kind: "capability", key: "tasks.handoff" },
+  claimTask: { kind: "capability", key: "tasks.claim" },
+  logTaskAttempt: { kind: "capability", key: "tasks.complete" },
+  completeTask: { kind: "capability", key: "tasks.complete" },
+  completeTasks: { kind: "capability", key: "tasks.assign_any" },
+  escalateToClinician: { kind: "capability", key: "tasks.complete" },
+  snoozeTask: { kind: "capability", key: "tasks.complete" },
+  undoTaskEvent: { kind: "staff" },
+
   /* Clinic settings */
   listTreatmentColours: { kind: "staff" },
   saveTreatmentColour: { kind: "capability", key: "settings.treatments" },

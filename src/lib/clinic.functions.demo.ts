@@ -81,6 +81,50 @@ import { plainVisitNote, sanitizeNoteHtml } from "@/lib/sanitize-note-html";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { isPatientReplyPending, schedulePatientReply } from "@/lib/demo/patient-ai.server";
 import { parseInput } from "@/lib/validation/parse";
+import { evaluateRules } from "@/lib/tasks/evaluate-rules";
+import {
+  canSeeTask,
+  groupTasks,
+  inView,
+  isOpen,
+  planAssign,
+  planAttempt,
+  planAutoClose,
+  planClaim,
+  planComplete,
+  planEscalate,
+  planHandOff,
+  planSnooze,
+  planUndo,
+  shapeTask,
+  snapshotOf,
+  summarise,
+  taskRole,
+  type PatientLite,
+  type TaskEventInput,
+  type TaskRow,
+  type TaskSnapshot,
+  type TeamMemberLike,
+  type Transition,
+} from "@/lib/tasks/service";
+import {
+  buildRuleSnapshot,
+  newTaskRow,
+  planFacts,
+  primaryPractitioners,
+  type RuleRowLike,
+} from "@/lib/tasks/snapshot";
+import {
+  dueAtForPreset,
+  ROLE_VIEWS,
+  suggestedAssignee,
+  TASK_TYPE_META,
+  type TaskRole,
+  type TaskType,
+  type TaskView,
+} from "@/lib/tasks/types";
+import { buildRecordsSummaries } from "@/lib/patients/records-rows";
+import { boardRisk, dueBucketKey } from "@/lib/patients/board-risk";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
 import { attentionDueSubtitle, skinPlanDueForAttention } from "@/components/patients/plan-step-copy";
@@ -152,7 +196,9 @@ const documents = db.documents as any[];
 const messages = db.messages as any[];
 const medicalHistory = db.medicalHistory as any[];
 const photos = db.photos as any[];
-const recallTasks = db.recallTasks as any[];
+const automationRules = db.automationRules as RuleRowLike[];
+const tasks = db.tasks as TaskRow[];
+const taskEvents = db.taskEvents as TaskEventRowLike[];
 const treatmentPlans = db.treatmentPlans as any[];
 const planMilestones = db.planMilestones as any[];
 const planMilestoneChecklist = db.planMilestoneChecklist as any[];
@@ -943,12 +989,31 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
 /* ---------------------------------------------------------------- */
 
 export const listPatients = createServerFn({ method: "GET" }).handler(async () => {
+  requireStaff();
+  demoSyncRuleTasks();
   const now = new Date();
   const nowIso = now.toISOString();
   const todayKey = clinicDayKey(now);
   // Shared definitions (metrics/definitions), same as production.
   const visits = visitsByPatient(treatments);
   const upcomingSet = upcomingBookingSet(appointments, now.getTime());
+  // Records facts: type, primary practitioner, plan, open tasks, portal signal, activity.
+  const summaries = buildRecordsSummaries({
+    now,
+    patients,
+    treatments,
+    appointments,
+    treatmentPlans,
+    planMilestones,
+    messages,
+    journalEntries,
+    journalAttachments,
+    patientOffers,
+    tasks: demoTaskRows(),
+    documents,
+    recoveryCheckins,
+    nameOf: (id) => (id ? profileName(id) || null : null),
+  });
   return [...patients]
     .sort(
       (a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name),
@@ -987,26 +1052,20 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
       }
       const practitionerNames = practitionerIds.map((pid) => profileName(pid)).filter(Boolean);
 
-      // Open items: assigned recall tasks plus derived chase items.
-      const openTasks: { id: string; label: string; kind: string }[] = recallTasks
-        .filter((t) => t.patient_id === p.id && (t.status === "open" || t.status === "contacted"))
-        .map((t) => ({
-          id: t.id,
-          label: t.note?.trim() ? String(t.note).trim().slice(0, 80) : "Follow up and rebook",
-          kind: t.status === "contacted" ? "recall_contacted" : "recall",
-        }));
+      // Open items: the patient's open tasks plus paperwork waiting for a signature.
+      const summary = summaries.get(p.id);
+      const openTasks: { id: string; label: string; kind: string }[] = (
+        summary?.openTasks ?? []
+      ).map((t) => ({
+        id: t.id,
+        label: t.title,
+        kind: t.type,
+      }));
       if (outstanding > 0) {
         openTasks.push({
           id: `docs-${p.id}`,
           label: `${outstanding} form${outstanding === 1 ? "" : "s"} awaiting signature`,
           kind: "paperwork",
-        });
-      }
-      if (state === "overdue" && dueRow) {
-        openTasks.push({
-          id: `due-${p.id}`,
-          label: `${dueRow.name} overdue`,
-          kind: "treatment_due",
         });
       }
 
@@ -1052,6 +1111,7 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
         practitionerIds,
         openTasks,
         dueState: state,
+        summary: summary ?? null,
       };
     });
 });
@@ -5773,6 +5833,615 @@ export const sendRecall = createServerFn({ method: "POST" })
     return { ok: true, communication_id: communicationId };
   });
 
+/* ---------------------------------------------------------------- */
+/* tasks: one list of what needs doing, by role                        */
+/* ---------------------------------------------------------------- */
+
+const STAFF_TASK_ROLES = ["owner", "manager", "practitioner", "front_desk"] as const;
+
+function demoOwnerId(): string | null {
+  return (userRoles.find((r) => r.role === "owner")?.user_id as string | undefined) ?? null;
+}
+
+function demoTaskTeam(): TeamMemberLike[] {
+  const out: TeamMemberLike[] = [];
+  for (const r of userRoles) {
+    if (!(STAFF_TASK_ROLES as readonly string[]).includes(r.role)) continue;
+    const profile = profiles.find((p) => p.id === r.user_id);
+    if (!profile || profile.archived_at) continue;
+    out.push({
+      id: r.user_id,
+      fullName: profile.full_name ?? "Team member",
+      role: r.role as TaskRole,
+    });
+  }
+  return out;
+}
+
+type TaskEventRowLike = {
+  id: number;
+  clinic_id: string;
+  task_id: string;
+  actor_id: string | null;
+  kind: string;
+  data: Record<string, unknown>;
+  created_at: string;
+};
+
+function demoTaskRows(): TaskRow[] {
+  return tasks;
+}
+
+function demoPatientPractitioners(now: Date) {
+  return primaryPractitioners({
+    patients,
+    treatments,
+    appointments,
+    plans: planFacts({ now, appointments, treatmentPlans, planMilestones }),
+    now,
+  });
+}
+
+function demoPatientLite(now: Date): (id: string) => PatientLite | null {
+  const practitioners = demoPatientPractitioners(now);
+  return (id: string) => {
+    const p = patientById(id);
+    if (!p) return null;
+    return {
+      id: p.id,
+      first_name: p.first_name,
+      last_name: p.last_name,
+      avatar_url: p.avatar_url ?? null,
+      phone: p.phone ?? null,
+      practitionerId: practitioners.get(id) ?? null,
+    };
+  };
+}
+
+function demoRecordTaskEvent(
+  taskId: string,
+  event: TaskEventInput,
+  actorId: string | null,
+): number {
+  const idNum = taskEvents.length ? Math.max(...taskEvents.map((e) => Number(e.id))) + 1 : 1;
+  taskEvents.push({
+    id: idNum,
+    clinic_id: CLINIC_ID,
+    task_id: taskId,
+    actor_id: actorId,
+    kind: event.kind,
+    data: event.data,
+    created_at: new Date().toISOString(),
+  });
+  return idNum;
+}
+
+function demoApplyTransition(row: TaskRow, transition: Transition, actorId: string | null): number {
+  Object.assign(row, transition.patch);
+  return demoRecordTaskEvent(row.id, transition.event, actorId);
+}
+
+let demoTaskSyncAt = 0;
+
+/**
+ * Run the rules over the fixture and reconcile the task list: create what is
+ * missing, close what no longer has a reason, escalate what has waited too
+ * long. Cheap enough to run on read; throttled so a burst of requests shares
+ * one pass.
+ */
+function demoSyncRuleTasks(force = false) {
+  const now = new Date();
+  if (!force && now.getTime() - demoTaskSyncAt < 5_000) return;
+  demoTaskSyncAt = now.getTime();
+  const nowISO = now.toISOString();
+  const snapshot = buildRuleSnapshot({
+    now,
+    ownerId: demoOwnerId(),
+    rules: automationRules,
+    patients,
+    treatments,
+    appointments,
+    treatmentPlans,
+    planMilestones,
+    messages,
+    journalEntries,
+    journalAttachments,
+    patientOffers,
+    tasks: demoTaskRows(),
+  });
+  const result = evaluateRules(snapshot);
+  for (const proposal of result.create) {
+    const row = newTaskRow(proposal, CLINIC_ID, newId("t2"), nowISO);
+    tasks.push(row);
+    demoRecordTaskEvent(
+      row.id,
+      {
+        kind: "created",
+        data: {
+          rule: proposal.ruleKey,
+          assignee_id: row.assignee_id,
+          assignee_role: row.assignee_role,
+        },
+      },
+      null,
+    );
+  }
+  for (const close of result.close) {
+    const row = tasks.find((t) => t.id === close.taskId) as TaskRow | undefined;
+    if (row) demoApplyTransition(row, planAutoClose(row, close.resolution, nowISO), null);
+  }
+  for (const esc of result.escalate) {
+    const row = tasks.find((t) => t.id === esc.taskId) as TaskRow | undefined;
+    if (!row) continue;
+    demoApplyTransition(row, planEscalate(row, esc.toId, esc.toRole, nowISO, null), null);
+    if (esc.toId) {
+      demoNotifyStaff(esc.toId, [esc.toId], {
+        kind: "task_escalated",
+        title: "A task was escalated to you",
+        body: `${row.title} for ${patientName(row.patient_id)} has waited too long and is now yours.`,
+      });
+    }
+  }
+}
+
+function demoTaskViewer() {
+  const me = requireStaff();
+  return {
+    me,
+    viewer: {
+      userId: me.userId,
+      roles: me.roles,
+      isManager: me.isManager,
+      isOwner: me.isOwner,
+      isAdmin: me.isAdmin,
+      permissions: me.permissions,
+    },
+  };
+}
+
+function demoFindTask(taskId: string): TaskRow {
+  const row = tasks.find((t) => t.id === taskId) as TaskRow | undefined;
+  if (!row) throw new Error("Task not found");
+  return row;
+}
+
+function demoNotifyAssignee(
+  actorId: string,
+  actorName: string,
+  row: TaskRow,
+  kind: "task_assigned" | "task_escalated",
+  note?: string | null,
+) {
+  if (!row.assignee_id || row.assignee_id === actorId) return;
+  demoNotifyStaff(actorId, [row.assignee_id], {
+    kind,
+    title: kind === "task_assigned" ? "A task was assigned to you" : "A task was escalated to you",
+    body: `${actorName} ${kind === "task_assigned" ? "assigned you" : "escalated"} “${row.title}” for ${patientName(row.patient_id)}.${note ? ` “${note}”` : ""} It's on your Tasks page and your dashboard.`,
+  });
+}
+
+export const listTasks = createServerFn({ method: "GET" })
+  .validator((data: { view?: TaskView; types?: TaskType[]; assigneeId?: string }) =>
+    parseInput(schemas.ListTasks, data ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const { viewer } = demoTaskViewer();
+    demoSyncRuleTasks();
+    const now = new Date();
+    const role = taskRole(viewer);
+    const views = ROLE_VIEWS[role];
+    const view: TaskView = data.assigneeId
+      ? "person"
+      : data.view && views.some((v) => v.view === data.view)
+        ? data.view
+        : views[0]!.view;
+    if (view === "person" && !viewer.isManager)
+      throw new Error("Only managers can see a colleague's list");
+    const practitioners = demoPatientPractitioners(now);
+    const lookup = (id: string) => practitioners.get(id) ?? null;
+    const lite = demoPatientLite(now);
+    const nameOf = (id: string | null) => (id ? profileName(id) || null : null);
+    const rows = demoTaskRows()
+      .filter((t) => canSeeTask(t, viewer, lookup))
+      .filter((t) => inView(t, view, viewer, data.assigneeId ?? null, lookup, now))
+      .filter((t) => !data.types?.length || data.types.includes(t.type))
+      .map((t) => shapeTask(t, viewer, lite(t.patient_id), nameOf, now));
+    return { view, tasks: rows, groups: groupTasks(rows) };
+  });
+
+export const getTasksSummary = createServerFn({ method: "GET" }).handler(async () => {
+  const { viewer } = demoTaskViewer();
+  demoSyncRuleTasks();
+  const now = new Date();
+  const practitioners = demoPatientPractitioners(now);
+  const role = taskRole(viewer);
+  return summarise(
+    demoTaskRows(),
+    viewer,
+    demoTaskTeam(),
+    (id) => practitioners.get(id) ?? null,
+    ROLE_VIEWS[role].map((v) => v.view),
+    now,
+  );
+});
+
+export const listPatientTasks = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.ListPatientTasks, data))
+  .handler(async ({ data }) => {
+    const { viewer } = demoTaskViewer();
+    demoSyncRuleTasks();
+    const now = new Date();
+    const practitioners = demoPatientPractitioners(now);
+    const lookup = (id: string) => practitioners.get(id) ?? null;
+    const lite = demoPatientLite(now);
+    const nameOf = (id: string | null) => (id ? profileName(id) || null : null);
+    return demoTaskRows()
+      .filter((t) => t.patient_id === data.patient_id)
+      .filter(
+        (t) =>
+          viewer.isManager ||
+          canSeeTask(t, viewer, lookup) ||
+          lookup(t.patient_id) === viewer.userId,
+      )
+      .sort((a, b) =>
+        isOpen(a) === isOpen(b)
+          ? (a.due_at ?? "9").localeCompare(b.due_at ?? "9")
+          : isOpen(a)
+            ? -1
+            : 1,
+      )
+      .slice(0, 30)
+      .map((t) => shapeTask(t, viewer, lite(t.patient_id), nameOf, now));
+  });
+
+export const createTask = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      type: TaskType;
+      title?: string;
+      assigneeId?: string;
+      dueAt?: string;
+      note?: string;
+      autoClose?: boolean;
+      notify?: boolean;
+      saveAsRule?: boolean;
+    }) => parseInput(schemas.CreateTask, data),
+  )
+  .handler(async ({ data }) => {
+    const { me, viewer } = demoTaskViewer();
+    const now = new Date();
+    const nowISO = now.toISOString();
+    const patient = patientById(data.patient_id);
+    if (!patient) throw new Error("Patient not found");
+    const practitioners = demoPatientPractitioners(now);
+    const suggestion = suggestedAssignee({
+      type: data.type,
+      patientPractitionerId: practitioners.get(data.patient_id) ?? null,
+      ownerId: demoOwnerId(),
+    });
+    // Assigning to someone else needs the delegate key; anyone may add to their own list or the pool.
+    if (data.assigneeId && data.assigneeId !== me.userId && !can(viewer, "tasks.assign_any")) {
+      throw new Error("You can add tasks to your own list; ask a manager to delegate to others");
+    }
+    const actorName = me.profile?.full_name ?? "A team member";
+    const title = data.title?.trim() || `${TASK_TYPE_META[data.type].label}: ${patient.first_name}`;
+    const row: TaskRow = {
+      id: newId("t3"),
+      clinic_id: CLINIC_ID,
+      patient_id: data.patient_id,
+      type: data.type,
+      title,
+      context: null,
+      source: "manual",
+      source_label: `Assigned by ${actorName}`,
+      rule_id: null,
+      dedupe_key: null,
+      assignee_id: data.assigneeId ?? suggestion.assigneeId,
+      assignee_role: data.assigneeId ? null : suggestion.assigneeRole,
+      created_by: me.userId,
+      note: data.note?.trim() || null,
+      priority: data.type === "question" ? 1 : 2,
+      due_at: data.dueAt ?? dueAtForPreset("tomorrow", now),
+      escalate_at: null,
+      escalated_at: null,
+      escalated_to: null,
+      attempts: 0,
+      next_retry_at: null,
+      snoozed_until: null,
+      status: "open",
+      resolution: null,
+      resolved_by: null,
+      resolved_at: null,
+      auto_close: data.autoClose ?? true,
+      links: {},
+      created_at: nowISO,
+      updated_at: nowISO,
+    };
+    tasks.unshift(row);
+    const eventId = demoRecordTaskEvent(
+      row.id,
+      {
+        kind: "created",
+        data: {
+          assignee_id: row.assignee_id,
+          assignee_role: row.assignee_role,
+          note: row.note,
+          save_as_rule: !!data.saveAsRule,
+        },
+      },
+      me.userId,
+    );
+    if (data.notify !== false)
+      demoNotifyAssignee(me.userId, actorName, row, "task_assigned", row.note);
+    const lite = demoPatientLite(now);
+    return {
+      ok: true,
+      eventId,
+      task: shapeTask(
+        row,
+        viewer,
+        lite(row.patient_id),
+        (id) => (id ? profileName(id) || null : null),
+        now,
+      ),
+    };
+  });
+
+export const assignTasks = createServerFn({ method: "POST" })
+  .validator((data: { taskIds: string[]; assigneeId: string; dueAt?: string; note?: string }) =>
+    parseInput(schemas.AssignTasks, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireCapability("tasks.assign_any");
+    const nowISO = new Date().toISOString();
+    const actorName = me.profile?.full_name ?? "A manager";
+    if (!demoTaskTeam().some((m) => m.id === data.assigneeId))
+      throw new Error("Pick a current team member");
+    const eventIds: number[] = [];
+    for (const taskId of data.taskIds) {
+      const row = demoFindTask(taskId);
+      if (!isOpen(row)) continue;
+      eventIds.push(
+        demoApplyTransition(
+          row,
+          planAssign(
+            row,
+            { assigneeId: data.assigneeId, dueAt: data.dueAt ?? null, note: data.note ?? null },
+            me.userId,
+            actorName,
+            nowISO,
+          ),
+          me.userId,
+        ),
+      );
+      demoNotifyAssignee(me.userId, actorName, row, "task_assigned", data.note ?? null);
+    }
+    return { ok: true, eventIds, assigneeName: profileName(data.assigneeId) };
+  });
+
+export const handOffToPool = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string; role?: "front_desk" | "practitioner" | "manager" }) =>
+    parseInput(schemas.HandOffToPool, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireCapability("tasks.handoff");
+    const row = demoFindTask(data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== me.userId && !me.isManager)
+      throw new Error("You can only hand off your own tasks");
+    if (row.type === "question") throw new Error("Clinical questions stay with a clinician");
+    const eventId = demoApplyTransition(
+      row,
+      planHandOff(row, data.role ?? "front_desk", me.userId, new Date().toISOString()),
+      me.userId,
+    );
+    return { ok: true, eventId };
+  });
+
+export const claimTask = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string }) => parseInput(schemas.ClaimTask, data))
+  .handler(async ({ data }) => {
+    const me = requireCapability("tasks.claim");
+    const row = demoFindTask(data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id && row.assignee_id !== me.userId && !me.isManager)
+      throw new Error("Someone already has this task");
+    if (row.type === "question" && !me.roles.includes("practitioner") && !me.isManager)
+      throw new Error("Clinical questions go to a clinician");
+    const eventId = demoApplyTransition(
+      row,
+      planClaim(row, me.userId, new Date().toISOString()),
+      me.userId,
+    );
+    return { ok: true, eventId };
+  });
+
+export const logTaskAttempt = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string; outcome: "no_answer" | "voicemail" | "link_sent" }) =>
+    parseInput(schemas.LogTaskAttempt, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireCapability("tasks.complete");
+    const row = demoFindTask(data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== me.userId && !me.isManager)
+      throw new Error("Only the person holding the task can log an attempt");
+    const now = new Date();
+    const plan = planAttempt(row, data.outcome, me.userId, demoOwnerId(), now);
+    const eventId = demoApplyTransition(row, plan, me.userId);
+    if (plan.escalated)
+      demoNotifyAssignee(
+        me.userId,
+        me.profile?.full_name ?? "Front desk",
+        row,
+        "task_escalated",
+        `Third missed attempt (${data.outcome.replace("_", " ")}).`,
+      );
+    return {
+      ok: true,
+      eventId,
+      escalated: plan.escalated,
+      attempts: row.attempts,
+      nextRetryAt: row.next_retry_at,
+    };
+  });
+
+export const completeTask = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string; resolution: string }) =>
+    parseInput(schemas.CompleteTask, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireCapability("tasks.complete");
+    const row = demoFindTask(data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== me.userId && !me.isManager)
+      throw new Error("Only the person holding the task can close it");
+    const eventId = demoApplyTransition(
+      row,
+      planComplete(row, data.resolution, me.userId, new Date().toISOString()),
+      me.userId,
+    );
+    return { ok: true, eventId };
+  });
+
+export const completeTasks = createServerFn({ method: "POST" })
+  .validator((data: { taskIds: string[]; resolution?: string }) =>
+    parseInput(schemas.CompleteTasks, data),
+  )
+  .handler(async ({ data }) => {
+    const me = requireCapability("tasks.assign_any");
+    const nowISO = new Date().toISOString();
+    const eventIds: number[] = [];
+    for (const taskId of data.taskIds) {
+      const row = demoFindTask(taskId);
+      if (!isOpen(row)) continue;
+      eventIds.push(
+        demoApplyTransition(
+          row,
+          planComplete(row, data.resolution ?? "handled", me.userId, nowISO),
+          me.userId,
+        ),
+      );
+    }
+    return { ok: true, eventIds };
+  });
+
+export const escalateToClinician = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string }) => parseInput(schemas.EscalateToClinician, data))
+  .handler(async ({ data }) => {
+    const me = requireCapability("tasks.complete");
+    const row = demoFindTask(data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== me.userId && !me.isManager)
+      throw new Error("Only the person holding the task can escalate it");
+    const now = new Date();
+    const practitioners = demoPatientPractitioners(now);
+    const toId = practitioners.get(row.patient_id) ?? demoOwnerId();
+    if (!toId) throw new Error("This patient has no practitioner to escalate to");
+    const eventId = demoApplyTransition(
+      row,
+      planEscalate(row, toId, "practitioner", now.toISOString(), me.userId),
+      me.userId,
+    );
+    demoNotifyAssignee(
+      me.userId,
+      me.profile?.full_name ?? "Front desk",
+      row,
+      "task_escalated",
+      "Needs a clinician.",
+    );
+    return { ok: true, eventId, toName: profileName(toId) };
+  });
+
+export const snoozeTask = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string; hours?: number }) => parseInput(schemas.SnoozeTask, data))
+  .handler(async ({ data }) => {
+    const me = requireCapability("tasks.complete");
+    const row = demoFindTask(data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== me.userId && !me.isManager)
+      throw new Error("Only the person holding the task can snooze it");
+    const eventId = demoApplyTransition(
+      row,
+      planSnooze(row, data.hours ?? 2, me.userId, new Date()),
+      me.userId,
+    );
+    return { ok: true, eventId, until: row.snoozed_until };
+  });
+
+export const undoTaskEvent = createServerFn({ method: "POST" })
+  .validator((data: { eventId: number | string }) => parseInput(schemas.UndoTaskEvent, data))
+  .handler(async ({ data }) => {
+    const me = requireStaff();
+    const event = taskEvents.find((e) => String(e.id) === String(data.eventId));
+    if (!event) throw new Error("Nothing to undo");
+    const previous = (event.data as { previous?: TaskSnapshot }).previous;
+    if (!previous) throw new Error("This change cannot be undone");
+    if (event.actor_id !== me.userId && !me.isManager)
+      throw new Error("Only the person who made the change can undo it");
+    const row = demoFindTask(event.task_id);
+    const latest = [...taskEvents]
+      .filter((e) => e.task_id === row.id && e.kind !== "undone")
+      .sort((a, b) => Number(b.id) - Number(a.id))[0];
+    if (latest && String(latest.id) !== String(event.id))
+      throw new Error("The task has changed since; refresh and try again");
+    const eventId = demoApplyTransition(
+      row,
+      planUndo(row, previous, me.userId, new Date().toISOString()),
+      me.userId,
+    );
+    return { ok: true, eventId };
+  });
+
+/* ---------------------------------------------------------------- */
+/* recall tasks: thin adapters over tasks until the surfaces move     */
+/* ---------------------------------------------------------------- */
+
+/** The old recall_tasks row shape, read from a task, so the dashboard card and record panel keep working. */
+function legacyRecallRow(t: TaskRow) {
+  const status =
+    t.status === "done" || t.status === "auto_closed" || t.status === "cancelled"
+      ? "completed"
+      : t.attempts > 0
+        ? "contacted"
+        : "open";
+  const lastAttempt = [...taskEvents]
+    .reverse()
+    .find((e) => e.task_id === t.id && e.kind === "attempt");
+  return {
+    id: t.id,
+    clinic_id: t.clinic_id,
+    patient_id: t.patient_id,
+    group_id: t.id,
+    assigned_to: t.assignee_id,
+    assigned_label: t.assignee_id
+      ? profileName(t.assignee_id)
+      : t.assignee_role === "front_desk"
+        ? "Front desk pool"
+        : null,
+    created_by: t.created_by,
+    note: t.note ?? t.title,
+    status,
+    contacted_at: status === "contacted" ? (lastAttempt?.created_at ?? t.updated_at) : null,
+    contacted_by: status === "contacted" ? (lastAttempt?.actor_id ?? null) : null,
+    completed_at: status === "completed" ? t.resolved_at : null,
+    completed_by: status === "completed" ? t.resolved_by : null,
+    status_by_label:
+      status === "completed"
+        ? t.resolved_by
+          ? profileName(t.resolved_by)
+          : "Closed automatically"
+        : status === "contacted"
+          ? profileName(lastAttempt?.actor_id ?? t.assignee_id ?? "") || null
+          : null,
+    reassigned_at: null,
+    due_at: t.due_at,
+    created_at: t.created_at,
+    updated_at: t.updated_at,
+  };
+}
+
 export const createRecallTask = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -5784,48 +6453,63 @@ export const createRecallTask = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
+    const now = new Date();
+    const nowISO = now.toISOString();
     const requested = data.recipients.length
       ? data.recipients
       : [{ id: me.userId, label: me.profile?.full_name ?? "The team" }];
-    const openTasks = recallTasks.filter(
-      (t) => t.patient_id === data.patient_id && t.status !== "completed",
-    );
     const note = (data.note ?? "").trim();
-    const sameNote = openTasks.filter((t) => (t.note ?? "").trim() === note);
-    const alreadyAssigned = new Set(
-      (sameNote.length ? sameNote : openTasks).map((t) => t.assigned_to),
+    const open = demoTaskRows().filter(
+      (t) => t.patient_id === data.patient_id && isOpen(t) && t.type === "recall",
     );
+    const sameNote = open.filter((t) => (t.note ?? t.title).trim() === note);
+    const alreadyAssigned = new Set((sameNote.length ? sameNote : open).map((t) => t.assignee_id));
     const recipients = requested.filter((r) => !alreadyAssigned.has(r.id));
-    if (!recipients.length) {
-      return {
-        ok: true,
-        duplicate: true,
-        group_id: (sameNote[0] ?? openTasks[0])?.group_id ?? null,
-      };
-    }
-    const groupId = sameNote[0]?.group_id || sameNote[0]?.id || newId("k8");
-    const now = new Date().toISOString();
+    if (!recipients.length)
+      return { ok: true, duplicate: true, group_id: (sameNote[0] ?? open[0])?.id ?? null };
+    const actorName = me.profile?.full_name ?? "A team member";
+    let groupId: string | null = null;
     for (const r of recipients) {
-      recallTasks.unshift({
-        id: newId("k9"),
+      const row: TaskRow = {
+        id: newId("t4"),
         clinic_id: CLINIC_ID,
         patient_id: data.patient_id,
-        group_id: groupId,
-        assigned_to: r.id,
-        assigned_label: r.label,
+        type: "recall",
+        title: note ? note.slice(0, 80) : "Follow up and rebook",
+        context: null,
+        source: "manual",
+        source_label: `Assigned by ${actorName}`,
+        rule_id: null,
+        dedupe_key: null,
+        assignee_id: r.id,
+        assignee_role: null,
         created_by: me.userId,
-        note: data.note ?? null,
+        note: note || null,
+        priority: 2,
+        due_at: data.due_at ?? new Date(now.getTime() + 7 * 86400000).toISOString(),
+        escalate_at: null,
+        escalated_at: null,
+        escalated_to: null,
+        attempts: 0,
+        next_retry_at: null,
+        snoozed_until: null,
         status: "open",
-        contacted_at: null,
-        contacted_by: null,
-        completed_at: null,
-        completed_by: null,
-        status_by_label: null,
-        created_at: now,
-        updated_at: now,
-        reassigned_at: null,
-        due_at: data.due_at ?? new Date(Date.now() + 7 * 86400000).toISOString(),
-      });
+        resolution: null,
+        resolved_by: null,
+        resolved_at: null,
+        auto_close: true,
+        links: {},
+        created_at: nowISO,
+        updated_at: nowISO,
+      };
+      tasks.unshift(row);
+      demoRecordTaskEvent(
+        row.id,
+        { kind: "created", data: { assignee_id: r.id, note: row.note } },
+        me.userId,
+      );
+      demoNotifyAssignee(me.userId, actorName, row, "task_assigned", row.note);
+      groupId = groupId ?? row.id;
     }
     return { ok: true, group_id: groupId };
   });
@@ -5839,71 +6523,22 @@ export const updateRecallTask = createServerFn({ method: "POST" })
     const me = requireStaff();
     if (!me.isManager) throw new Error("Manager access only");
     if (!data.recipients.length) throw new Error("Pick at least one team member");
-
-    const target = recallTasks.find((t) => t.id === data.task_id);
-    if (!target) throw new Error("Recall task not found");
-    const groupId = target.group_id || target.id;
-    const group = target.group_id
-      ? recallTasks.filter((t) => t.group_id === target.group_id)
-      : recallTasks.filter((t) => t.id === target.id || t.group_id === target.id);
-
-    const now = new Date().toISOString();
-    const note = data.note !== undefined ? data.note : (target.note ?? null);
-    const prevIds = new Set(group.map((g) => g.assigned_to));
-    const nextIds = new Set(data.recipients.map((r) => r.id));
-    const assigneesChanged =
-      prevIds.size !== nextIds.size || [...prevIds].some((id) => !nextIds.has(id));
-    const assigneesAdded = data.recipients.some((r) => !prevIds.has(r.id));
-    const assigneesRemoved = group.some((g) => !nextIds.has(g.assigned_to));
-    const reassignedAt = assigneesAdded
-      ? now
-      : assigneesRemoved
-        ? null
-        : ((target as any).reassigned_at ?? null);
-
-    const template = group[0]!;
-    for (let i = recallTasks.length - 1; i >= 0; i--) {
-      const task = recallTasks[i]!;
-      const inGroup = group.some((g) => g.id === task.id);
-      if (!inGroup) continue;
-      if (!nextIds.has(task.assigned_to)) {
-        recallTasks.splice(i, 1);
-      }
-    }
-
-    for (const r of data.recipients) {
-      const existing = recallTasks.find(
-        (t) => (t.group_id === groupId || t.id === groupId) && t.assigned_to === r.id,
-      );
-      if (existing) {
-        existing.assigned_label = r.label;
-        existing.note = note;
-        existing.group_id = groupId;
-        existing.updated_at = now;
-        (existing as any).reassigned_at = reassignedAt;
-      } else {
-        recallTasks.unshift({
-          id: newId("k9"),
-          clinic_id: CLINIC_ID,
-          patient_id: template.patient_id,
-          group_id: groupId,
-          assigned_to: r.id,
-          assigned_label: r.label,
-          created_by: template.created_by ?? me.userId,
-          note,
-          status: template.status,
-          contacted_at: template.contacted_at,
-          contacted_by: template.contacted_by,
-          completed_at: template.completed_at,
-          completed_by: template.completed_by,
-          status_by_label: template.status_by_label,
-          reassigned_at: reassignedAt,
-          created_at: template.created_at,
-          updated_at: now,
-        } as any);
-      }
-    }
-    return { ok: true, group_id: groupId, reassigned: assigneesChanged };
+    const row = demoFindTask(data.task_id);
+    const nowISO = new Date().toISOString();
+    const target = data.recipients[0]!;
+    const reassigned = row.assignee_id !== target.id;
+    demoApplyTransition(
+      row,
+      planAssign(
+        row,
+        { assigneeId: target.id, note: data.note !== undefined ? data.note : null },
+        me.userId,
+        me.profile?.full_name ?? "A manager",
+        nowISO,
+      ),
+      me.userId,
+    );
+    return { ok: true, group_id: row.id, reassigned };
   });
 
 export const setRecallTaskStatus = createServerFn({ method: "POST" })
@@ -5912,30 +6547,42 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = requireStaff();
-    const now = new Date().toISOString();
-    const actor = me.profile?.full_name || me.email || "A team member";
-    const target = recallTasks.find((t) => t.id === data.task_id);
-    if (!target) throw new Error("Recall task not found");
-    const group = target.group_id
-      ? recallTasks.filter((t) => t.group_id === target.group_id)
-      : [target];
-
-    if (!me.isManager) {
-      const isFrontDesk = me.roles.includes("front_desk");
-      const isAssignee = group.some((t) => t.assigned_to === me.userId);
-      if (!isAssignee && !isFrontDesk) {
-        throw new Error("Only the assigned team member can update this recall task");
-      }
+    const row = demoFindTask(data.task_id);
+    if (!me.isManager && row.assignee_id !== me.userId && !me.roles.includes("front_desk")) {
+      throw new Error("Only the assigned team member can update this recall task");
     }
-
-    for (const task of group) {
-      task.status = data.status;
-      task.contacted_at = data.status === "open" ? null : now;
-      task.completed_at = data.status === "completed" ? now : null;
-      task.contacted_by = data.status === "open" ? null : me.userId;
-      task.completed_by = data.status === "completed" ? me.userId : null;
-      task.status_by_label = data.status === "open" ? null : actor;
-      task.updated_at = now;
+    const nowISO = new Date().toISOString();
+    if (data.status === "completed") {
+      if (isOpen(row))
+        demoApplyTransition(row, planComplete(row, "handled", me.userId, nowISO), me.userId);
+    } else if (data.status === "contacted") {
+      demoApplyTransition(
+        row,
+        {
+          patch: { attempts: row.attempts + 1, updated_at: nowISO },
+          event: {
+            kind: "attempt",
+            data: { previous: snapshotOf(row), outcome: "contacted", actor_id: me.userId },
+          },
+        },
+        me.userId,
+      );
+    } else {
+      demoApplyTransition(
+        row,
+        {
+          patch: {
+            status: "open",
+            resolution: null,
+            resolved_by: null,
+            resolved_at: null,
+            attempts: 0,
+            updated_at: nowISO,
+          },
+          event: { kind: "reopened", data: { previous: snapshotOf(row), actor_id: me.userId } },
+        },
+        me.userId,
+      );
     }
     return { ok: true };
   });
@@ -5949,54 +6596,50 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
     if (!me.isOwner && !me.permissions.includes("tasks.delete")) {
       throw new Error("You do not have access to delete tasks");
     }
-    const target = recallTasks.find((t) => t.id === data.task_id);
-    if (!target) return { ok: true, removed: [] as string[] };
-    const group = target.group_id
-      ? recallTasks.filter((t) => t.group_id === target.group_id)
-      : [target];
-    const pick = data.assignee_ids?.length
-      ? new Set(data.assignee_ids)
-      : new Set(group.map((t) => t.assigned_to as string));
-    const removed: string[] = [];
-    for (let i = recallTasks.length - 1; i >= 0; i--) {
-      const task = recallTasks[i]!;
-      const inGroup = target.group_id ? task.group_id === target.group_id : task.id === target.id;
-      if (!inGroup || !pick.has(task.assigned_to)) continue;
-      removed.push((task.assigned_label as string) || "Assignee");
-      recallTasks.splice(i, 1);
-    }
-    const now = new Date().toISOString();
-    for (const task of recallTasks) {
-      const inGroup = target.group_id ? task.group_id === target.group_id : task.id === target.id;
-      if (inGroup) {
-        (task as any).reassigned_at = null;
-        task.updated_at = now;
-      }
-    }
-    return { ok: true, removed };
+    const row = tasks.find((t) => t.id === data.task_id) as TaskRow | undefined;
+    if (!row) return { ok: true, removed: [] as string[] };
+    const label = row.assignee_id ? profileName(row.assignee_id) : "Assignee";
+    demoApplyTransition(
+      row,
+      {
+        patch: {
+          status: "cancelled",
+          resolved_by: me.userId,
+          resolved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        event: { kind: "cancelled", data: { previous: snapshotOf(row), actor_id: me.userId } },
+      },
+      me.userId,
+    );
+    return { ok: true, removed: [label] };
   });
 
 export const listRecallTasks = createServerFn({ method: "GET" })
   .validator((data: { patient_id: string }) => parseInput(schemas.ListRecallTasks, data))
   .handler(async ({ data }) => {
     requireStaff();
+    demoSyncRuleTasks();
     return sortDesc(
-      recallTasks.filter((t) => t.patient_id === data.patient_id),
+      demoTaskRows()
+        .filter((t) => t.patient_id === data.patient_id && t.status !== "cancelled")
+        .map(legacyRecallRow),
       "created_at",
     );
   });
 
 export const listOpenRecallTasks = createServerFn({ method: "GET" }).handler(async () => {
   const me = requireStaff();
+  demoSyncRuleTasks();
   const rows = sortDesc(
-    recallTasks.filter(
-      (t) => t.status !== "completed" && (me.isManager || t.assigned_to === me.userId),
+    demoTaskRows().filter(
+      (t) => isOpen(t) && (me.isManager ? !!t.assignee_id : t.assignee_id === me.userId),
     ),
     "created_at",
-  ).map((t) => {
+  ).map((t: TaskRow) => {
     const p = patientById(t.patient_id);
     return {
-      ...t,
+      ...legacyRecallRow(t),
       patients: p
         ? {
             id: p.id,
@@ -6008,26 +6651,8 @@ export const listOpenRecallTasks = createServerFn({ method: "GET" }).handler(asy
         : null,
     };
   });
-  // One card per chase-up (group), and collapse identical patient+note duplicates.
-  const byGroup = new Map<string, (typeof rows)[number]>();
-  for (const row of rows) {
-    const key = row.group_id || row.id;
-    const prev = byGroup.get(key);
-    if (!prev || (row.assigned_to === me.userId && prev.assigned_to !== me.userId)) {
-      byGroup.set(key, row);
-    }
-  }
-  const byChase = new Map<string, (typeof rows)[number]>();
-  for (const row of byGroup.values()) {
-    const key = `${row.patient_id}::${(row.note ?? "").trim()}`;
-    const prev = byChase.get(key);
-    if (!prev || (row.assigned_to === me.userId && prev.assigned_to !== me.userId)) {
-      byChase.set(key, row);
-    }
-  }
-  return sortDesc([...byChase.values()], "created_at").slice(0, 25);
+  return rows.slice(0, 25);
 });
-
 /* ---------------------------------------------------------------- */
 /* settings: colours, catalogue, clinic, permissions, notes           */
 /* ---------------------------------------------------------------- */
@@ -6808,6 +7433,12 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
           stepBookedAt: step.stepBookedAt,
           otherBookingTreatment: step.otherBookingTreatment,
           noShowAt: step.noShowAt,
+          // The Journey board's triage vocabulary, derived from the same facts.
+          risk: boardRisk({ nextMilestone: next ? { dueDate: next.due_date } : null, ...step }),
+          dueBucket: dueBucketKey(
+            { nextMilestone: next ? { dueDate: next.due_date } : null, ...step },
+            todayISO,
+          ),
         };
       });
 
@@ -7518,11 +8149,13 @@ function demoOfferStore(origin?: string | null, opts: { closeTasks?: boolean } =
       ? {
           async closeRecallTasks(patientId: string) {
             const now = new Date().toISOString();
-            for (const t of recallTasks) {
-              if (t.patient_id === patientId && (t.status === "open" || t.status === "contacted")) {
-                t.status = "completed";
-                t.completed_at = now;
-                t.updated_at = now;
+            for (const t of demoTaskRows()) {
+              if (
+                t.patient_id === patientId &&
+                isOpen(t) &&
+                (t.type === "recall" || t.type === "send_offer")
+              ) {
+                demoApplyTransition(t, planAutoClose(t, "auto_resolved", now), null);
               }
             }
           },

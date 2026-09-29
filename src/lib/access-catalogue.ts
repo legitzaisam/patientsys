@@ -123,6 +123,14 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     permission: "comms.send",
     defaults: staff(),
   }),
+  node({
+    id: "tasks",
+    parentId: null,
+    kind: "page",
+    label: "Tasks",
+    route: "/tasks",
+    permission: "view.tasks",
+  }),
   node({ id: "patient-record", parentId: "patients", kind: "page", label: "Patient record", route: "/patients/$id", permission: "view.patients.record" }),
   node({ id: "patient-treatments", parentId: "patient-record", kind: "tab", label: "Treatments", route: "/patients/$id", permission: "view.patients.treatments" }),
   node({

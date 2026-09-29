@@ -12,7 +12,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | ----- | ------- | ----- | ------ |
 | P0 | [`worklog/00-baseline.md`](worklog/00-baseline.md) | Branch, docs scaffold, baselines, before-captures | `0bd63f3` |
 | P1 | [`worklog/01-foundations.md`](worklog/01-foundations.md) | Pure helpers: task types, records summary, board risk, staff lanes, urgent triage, `--noshow` tokens | `9fb4213` |
-| P2 | [`worklog/02-schema.md`](worklog/02-schema.md) | `tasks`, `task_events`, `automation_rules` schema, types, tenancy, demo fixtures | |
+| P2 | [`worklog/02-schema.md`](worklog/02-schema.md) | `tasks`, `task_events`, `automation_rules` schema, types, tenancy, demo fixtures | `e0987c5` |
 | P3 | [`worklog/03-server.md`](worklog/03-server.md) | Rule evaluator, sync, task handlers, patient summaries, RBAC, notifications, realtime | |
 | P4 | [`worklog/04-records.md`](worklog/04-records.md) | Patients → Records (A) and the Assign dialog (D) | |
 | P5 | [`worklog/05-journey-board.md`](worklog/05-journey-board.md) | Patients → Journey board (B) | |
@@ -39,15 +39,15 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | `pt-p2-02-types-scope` | P2 | `types.ts` rows, `CLINIC_SCOPED_TABLES` | done | [`02-schema.md#pt-p2-02-types-scope`](worklog/02-schema.md#pt-p2-02-types-scope) |
 | `pt-p2-03-demo-fixtures` | P2 | demo `automationRules`, `tasks`, `taskEvents`; recall rows converted | done | [`02-schema.md#pt-p2-03-demo-fixtures`](worklog/02-schema.md#pt-p2-03-demo-fixtures) |
 | `pt-p2-04-verify-commit` | P2 | guards, unit, tsc/lint; commit | done | [`02-schema.md#pt-p2-04-verify-commit`](worklog/02-schema.md#pt-p2-04-verify-commit) |
-| `pt-p3-01-evaluator` | P3 | `src/lib/tasks/evaluate-rules.ts` + unit tests | pending | |
-| `pt-p3-02-sync-rule-tasks` | P3 | `syncRuleTasks` prod + demo | pending | |
-| `pt-p3-03-list-and-summary` | P3 | `listTasks`, `getTasksSummary` | pending | |
-| `pt-p3-04-write-handlers` | P3 | create / assign / hand-off / claim / attempt / complete / escalate / snooze / undo | pending | |
-| `pt-p3-05-patient-summaries` | P3 | `listPatientSummaries`, `listPatientTasks`, plan risk fields | pending | |
-| `pt-p3-06-recall-adapters` | P3 | recall handlers as adapters over tasks | pending | |
-| `pt-p3-07-rbac-policy-schemas` | P3 | permission keys, policy rows, schemas, catalogue node | pending | |
-| `pt-p3-08-notify-realtime` | P3 | notifications, `use-tasks-sync` | pending | |
-| `pt-p3-09-verify-commit` | P3 | persona probes, unit, guards; commit | pending | |
+| `pt-p3-01-evaluator` | P3 | `src/lib/tasks/evaluate-rules.ts` + unit tests | done | [`03-server.md#pt-p3-01-evaluator`](worklog/03-server.md#pt-p3-01-evaluator) |
+| `pt-p3-02-sync-rule-tasks` | P3 | `syncRuleTasks` prod + demo | done | [`03-server.md#pt-p3-02-sync-rule-tasks`](worklog/03-server.md#pt-p3-02-sync-rule-tasks) |
+| `pt-p3-03-list-and-summary` | P3 | `listTasks`, `getTasksSummary` | done | [`03-server.md#pt-p3-03-list-and-summary`](worklog/03-server.md#pt-p3-03-list-and-summary) |
+| `pt-p3-04-write-handlers` | P3 | create / assign / hand-off / claim / attempt / complete / escalate / snooze / undo | done | [`03-server.md#pt-p3-04-write-handlers`](worklog/03-server.md#pt-p3-04-write-handlers) |
+| `pt-p3-05-patient-summaries` | P3 | `listPatientSummaries`, `listPatientTasks`, plan risk fields | done | [`03-server.md#pt-p3-05-patient-summaries`](worklog/03-server.md#pt-p3-05-patient-summaries) |
+| `pt-p3-06-recall-adapters` | P3 | recall handlers as adapters over tasks | done | [`03-server.md#pt-p3-06-recall-adapters`](worklog/03-server.md#pt-p3-06-recall-adapters) |
+| `pt-p3-07-rbac-policy-schemas` | P3 | permission keys, policy rows, schemas, catalogue node | done | [`03-server.md#pt-p3-07-rbac-policy-schemas`](worklog/03-server.md#pt-p3-07-rbac-policy-schemas) |
+| `pt-p3-08-notify-realtime` | P3 | notifications, `use-tasks-sync` | done | [`03-server.md#pt-p3-08-notify-realtime`](worklog/03-server.md#pt-p3-08-notify-realtime) |
+| `pt-p3-09-verify-commit` | P3 | persona probes, unit, guards; commit | done | [`03-server.md#pt-p3-09-verify-commit`](worklog/03-server.md#pt-p3-09-verify-commit) |
 | `pt-p4-01-extract-records-tab` | P4 | `records-tab.tsx` extracted from the route | pending | |
 | `pt-p4-02-filter-bar` | P4 | `records-filter-bar.tsx` | pending | |
 | `pt-p4-03-records-table` | P4 | `records-table.tsx` | pending | |

@@ -17,6 +17,10 @@ export const PERMISSION_KEYS = [
   "team.commission",
   "settings.treatments",
   "tasks.delete",
+  "tasks.assign_any",
+  "tasks.handoff",
+  "tasks.claim",
+  "tasks.complete",
   "offers.manage",
   "view.dashboard",
   "view.dashboard.diary",
@@ -28,6 +32,7 @@ export const PERMISSION_KEYS = [
   "view.patients",
   "view.patients.records",
   "view.patients.board",
+  "view.tasks",
   "view.patients.record",
   "view.patients.treatments",
   "view.patients.photos",
@@ -151,6 +156,24 @@ export const PERMISSION_META: Record<
     label: "Delete tasks",
     description: "Remove recall and follow-up tasks from the task lists.",
   },
+  "tasks.assign_any": {
+    label: "Assign tasks to anyone",
+    description:
+      "Delegate any task to any team member, in bulk or by dragging onto the Team panel, and mark tasks handled for others.",
+  },
+  "tasks.handoff": {
+    label: "Hand tasks to the front desk",
+    description: "Pass a chase, recall or rebook from your own list to the front-desk pool.",
+  },
+  "tasks.claim": {
+    label: "Claim pooled tasks",
+    description: "Take a task from the front-desk pool into your own queue.",
+  },
+  "tasks.complete": {
+    label: "Complete tasks",
+    description:
+      "Close your own tasks with an outcome, log call attempts and snooze clinical questions.",
+  },
   "offers.manage": {
     label: "Design and automate offers",
     description:
@@ -166,6 +189,10 @@ export const PERMISSION_META: Record<
   "view.patients": { label: "Patients", description: "Open the patient list." },
   "view.patients.records": { label: "Patient records tab", description: "See the records tab on the patient list." },
   "view.patients.board": { label: "Journey board", description: "See the journey board on the patient list." },
+  "view.tasks": {
+    label: "Tasks",
+    description: "Open the Tasks page: one list of what needs doing for patients, by role.",
+  },
   "view.patients.record": { label: "Patient record", description: "Open an individual patient record." },
   "view.patients.treatments": { label: "Treatments tab", description: "See the treatments tab on a patient record." },
   "view.patients.photos": { label: "Before and after tab", description: "See clinical photos on a patient record." },
@@ -213,6 +240,7 @@ export const PERMISSION_GROUPS: { label: string; keys: PermissionKey[] }[] = [
     label: "Team",
     keys: ["team.view", "team.approve_changes", "team.manage_profiles", "team.commission"],
   },
+  { label: "Tasks", keys: ["tasks.assign_any", "tasks.handoff", "tasks.claim", "tasks.complete"] },
   { label: "Clinic settings", keys: ["settings.treatments", "tasks.delete"] },
   {
     label: "Visibility",
@@ -227,6 +255,7 @@ export const PERMISSION_GROUPS: { label: string; keys: PermissionKey[] }[] = [
       "view.patients",
       "view.patients.records",
       "view.patients.board",
+      "view.tasks",
       "view.patients.record",
       "view.patients.treatments",
       "view.patients.photos",

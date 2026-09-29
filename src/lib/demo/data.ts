@@ -350,6 +350,20 @@ export const rolePermissions: Row[] = [
   { role: "manager", permission: "offers.manage", enabled: true },
   { role: "practitioner", permission: "offers.manage", enabled: false },
   { role: "front_desk", permission: "offers.manage", enabled: false },
+  // Tasks: managers delegate to anyone; practitioners hand chases to the front
+  // desk and close their own; front desk claims from the pool and logs outcomes.
+  { role: "manager", permission: "tasks.assign_any", enabled: true },
+  { role: "manager", permission: "tasks.handoff", enabled: true },
+  { role: "manager", permission: "tasks.claim", enabled: true },
+  { role: "manager", permission: "tasks.complete", enabled: true },
+  { role: "practitioner", permission: "tasks.assign_any", enabled: false },
+  { role: "practitioner", permission: "tasks.handoff", enabled: true },
+  { role: "practitioner", permission: "tasks.claim", enabled: false },
+  { role: "practitioner", permission: "tasks.complete", enabled: true },
+  { role: "front_desk", permission: "tasks.assign_any", enabled: false },
+  { role: "front_desk", permission: "tasks.handoff", enabled: false },
+  { role: "front_desk", permission: "tasks.claim", enabled: true },
+  { role: "front_desk", permission: "tasks.complete", enabled: true },
 ].map((r) => ({ ...r, id: id("b1"), updated_by: null, updated_at: iso(-12) }));
 
 // Two grants the owner changed by hand, so the access grid shows who and when.
@@ -3226,9 +3240,9 @@ addManualTask({
   dueInDays: 3,
   createdDaysAgo: 1,
 });
-// Sienna Clarke (14): a chase nobody has picked up yet (the Unassigned view).
+// Tilly Rowntree (26): a chase nobody has picked up yet (the Unassigned view).
 addManualTask({
-  patientIndex: 14,
+  patientIndex: 26,
   type: "chase_booking",
   title: "Chase to book skin consultation",
   context: "Enquired twice in the portal · nothing booked",

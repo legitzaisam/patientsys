@@ -585,6 +585,88 @@ export const DeleteRecallTask = z.object({
 
 export const ListRecallTasks = z.object({ patient_id: id });
 
+/* Tasks */
+
+const taskType = z.enum([
+  "chase_booking",
+  "recall",
+  "question",
+  "send_offer",
+  "plan_support",
+  "rebook_no_show",
+  "custom",
+]);
+const taskView = z.enum([
+  "mine",
+  "team",
+  "unassigned",
+  "pool",
+  "auto",
+  "done",
+  "assigned",
+  "questions",
+  "patients_with_others",
+  "queue",
+  "retries",
+  "person",
+]);
+
+export const ListTasks = z.object({
+  view: taskView.optional(),
+  types: z.array(taskType).max(7).optional(),
+  /** The Team panel's per-person list (managers). */
+  assigneeId: optionalId,
+});
+
+export const ListPatientTasks = z.object({ patient_id: id });
+
+export const CreateTask = z.object({
+  patient_id: id,
+  type: taskType,
+  title: optionalText(200),
+  assigneeId: optionalId,
+  dueAt: dateString.optional(),
+  note: optionalText(2_000),
+  autoClose: z.boolean().optional(),
+  notify: z.boolean().optional(),
+  saveAsRule: z.boolean().optional(),
+});
+
+export const AssignTasks = z.object({
+  taskIds: z.array(id).min(1).max(100),
+  assigneeId: id,
+  dueAt: dateString.optional(),
+  note: optionalText(2_000),
+});
+
+export const HandOffToPool = z.object({
+  taskId: id,
+  role: z.enum(["front_desk", "practitioner", "manager"]).optional(),
+});
+
+export const ClaimTask = z.object({ taskId: id });
+
+export const LogTaskAttempt = z.object({
+  taskId: id,
+  outcome: z.enum(["no_answer", "voicemail", "link_sent"]),
+});
+
+export const CompleteTask = z.object({ taskId: id, resolution: requiredText(60) });
+
+export const CompleteTasks = z.object({
+  taskIds: z.array(id).min(1).max(100),
+  resolution: requiredText(60).optional(),
+});
+
+export const EscalateToClinician = z.object({ taskId: id });
+
+export const SnoozeTask = z.object({
+  taskId: id,
+  hours: z.number().int().min(1).max(72).optional(),
+});
+
+export const UndoTaskEvent = z.object({ eventId: z.union([z.number().int(), id]) });
+
 /* Clinic settings */
 
 export const SaveTreatmentColour = z.object({

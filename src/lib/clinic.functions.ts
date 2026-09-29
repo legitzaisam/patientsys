@@ -85,6 +85,49 @@ import { assertStaffInvite, normalizeClinicRoleName } from "@/lib/clinic-roles";
 import { PERMISSION_KEYS, can, type PermissionKey } from "@/lib/permissions";
 import { mintVoiceToken, voiceAvailable, voiceTargetFor } from "@/lib/comms/voice.server";
 import { parseInput } from "@/lib/validation/parse";
+import {
+  canSeeTask,
+  groupTasks,
+  inView,
+  isOpen,
+  planAssign,
+  planAttempt,
+  planClaim,
+  planComplete,
+  planEscalate,
+  planHandOff,
+  planSnooze,
+  planUndo,
+  shapeTask,
+  snapshotOf,
+  summarise,
+  taskRole,
+  type TaskRow,
+  type TaskSnapshot,
+} from "@/lib/tasks/service";
+import {
+  applyTransition,
+  fetchTask,
+  insertTask,
+  loadPatientContext,
+  loadRecordsRows,
+  loadTaskContext,
+  loadTeam,
+  notifyStaff as notifyTaskStaff,
+  patientNameOf as taskPatientNameOf,
+  recordTaskEvent,
+  syncRuleTasks,
+} from "@/lib/tasks/tasks.server";
+import {
+  dueAtForPreset,
+  ROLE_VIEWS,
+  suggestedAssignee,
+  TASK_TYPE_META,
+  type TaskType,
+  type TaskView,
+} from "@/lib/tasks/types";
+import { buildRecordsSummaries } from "@/lib/patients/records-rows";
+import { boardRisk, dueBucketKey } from "@/lib/patients/board-risk";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
 import { attentionDueSubtitle, skinPlanDueForAttention } from "@/components/patients/plan-step-copy";
@@ -104,6 +147,7 @@ import {
 } from "@/lib/visit-stage.server";
 import {
   type Ctx,
+  type Identity,
   authorize,
   effectiveCapabilities,
   loadIdentity,
@@ -1083,10 +1127,12 @@ export const listPatients = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await authorize(context as Ctx, "listPatients");
     const supabase = (context as Ctx).supabase;
+    // Rule tasks are reconciled on read so the Tasks pills reflect today.
+    await syncRuleTasks(context as Ctx);
     const { data, error } = await supabase
       .from("patients")
       .select(
-        "id, first_name, last_name, title, date_of_birth, status, reference, last_visit_at, allergies, avatar_url, email, phone, marketing_opt_in, email_opt_in, sms_opt_in, reminders_opt_in, unsubscribed_at",
+        "id, first_name, last_name, title, date_of_birth, status, reference, last_visit_at, allergies, avatar_url, email, phone, marketing_opt_in, email_opt_in, sms_opt_in, reminders_opt_in, unsubscribed_at, user_id",
       )
       // Archived records stay in the database for the retention window but drop
       // out of every clinical view; getPatient still resolves them by id.
@@ -1098,12 +1144,13 @@ export const listPatients = createServerFn({ method: "GET" })
     const ids = (data ?? []).map((p: { id: string }) => p.id);
     if (ids.length === 0) return [];
 
+    const now = new Date();
     const [
       { data: treatments },
       { data: docs },
       { data: upcoming },
-      { data: openRecalls },
       { data: staffProfiles },
+      recordsRows,
     ] = await Promise.all([
       supabase
         .from("treatments")
@@ -1117,16 +1164,23 @@ export const listPatients = createServerFn({ method: "GET" })
         .gte("starts_at", new Date().toISOString())
         .in("status", ["booked"])
         .order("starts_at", { ascending: true }),
-      supabase
-        .from("recall_tasks")
-        .select("id, patient_id, note, status")
-        .in("patient_id", ids)
-        .in("status", ["open", "contacted"]),
       supabase.from("profiles").select("id, full_name"),
+      loadRecordsRows(context as Ctx, now),
     ]);
 
     const nameOf = new Map((staffProfiles ?? []).map((s: any) => [s.id, s.full_name as string]));
-    const now = new Date();
+    // Records facts: type, primary practitioner, plan, open tasks, portal signal, activity.
+    const summaries = buildRecordsSummaries({
+      now,
+      patients: (data ?? []) as {
+        id: string;
+        first_name?: string | null;
+        status?: string | null;
+        user_id?: string | null;
+      }[],
+      ...recordsRows,
+      nameOf: (id) => (id ? ((nameOf.get(id) as string | undefined) ?? null) : null),
+    });
     const todayKey = clinicDayKey(now);
     // Shared definitions (metrics/definitions): visits oldest first, next due
     // from the most recent treatment carrying a date, and one due state per
@@ -1173,23 +1227,17 @@ export const listPatients = createServerFn({ method: "GET" })
         .map((pid) => nameOf.get(pid))
         .filter(Boolean) as string[];
 
-      // Open items: assigned recall tasks plus derived chase items.
-      const openTasks: { id: string; label: string; kind: string }[] = (openRecalls ?? [])
-        .filter((t: any) => t.patient_id === p["id"])
-        .map((t: any) => ({
-          id: t.id,
-          label: t.note?.trim() ? t.note.trim().slice(0, 80) : "Follow up and rebook",
-          kind: t.status === "contacted" ? "recall_contacted" : "recall",
-        }));
+      // Open items: the patient's open tasks plus paperwork waiting for a signature.
+      const summary = summaries.get(id) ?? null;
+      const openTasks: { id: string; label: string; kind: string }[] = (
+        summary?.openTasks ?? []
+      ).map((t) => ({ id: t.id, label: t.title, kind: t.type }));
       if (outstanding > 0) {
         openTasks.push({
           id: `docs-${p["id"]}`,
           label: `${outstanding} form${outstanding === 1 ? "" : "s"} awaiting signature`,
           kind: "paperwork",
         });
-      }
-      if (state === "overdue" && due) {
-        openTasks.push({ id: `due-${id}`, label: `${due.name} overdue`, kind: "treatment_due" });
       }
 
       return {
@@ -1204,6 +1252,7 @@ export const listPatients = createServerFn({ method: "GET" })
         // Drives the "Treatments due" (overdue + due_soon) and "No upcoming
         // treatment" (anything but booked) filters on the list.
         dueState: state,
+        summary,
       };
     });
   });
@@ -7806,6 +7855,508 @@ export const sendRecall = createServerFn({ method: "POST" })
     return { ok: true, communication_id: communicationId };
   });
 
+/* ---------------------------------------------------------------- */
+/* tasks: one list of what needs doing, by role                        */
+/* ---------------------------------------------------------------- */
+
+function taskViewerOf(identity: Identity, ctx: Ctx) {
+  return {
+    userId: ctx.userId,
+    roles: identity.roles,
+    isManager: identity.isManager,
+    isOwner: identity.isOwner,
+    isAdmin: identity.isAdmin,
+    permissions: identity.permissions,
+  };
+}
+
+async function notifyTaskAssignee(
+  ctx: Ctx,
+  actorName: string,
+  row: TaskRow,
+  kind: "task_assigned" | "task_escalated",
+  note?: string | null,
+) {
+  if (!row.assignee_id || row.assignee_id === ctx.userId) return;
+  const patient = await taskPatientNameOf(ctx, row.patient_id);
+  await notifyTaskStaff(ctx, [row.assignee_id], {
+    kind,
+    title: kind === "task_assigned" ? "A task was assigned to you" : "A task was escalated to you",
+    body: `${actorName} ${kind === "task_assigned" ? "assigned you" : "escalated"} “${row.title}” for ${patient}.${note ? ` “${note}”` : ""} It's on your Tasks page and your dashboard.`,
+  });
+}
+
+export const listTasks = createServerFn({ method: "GET" })
+  .validator((data: { view?: TaskView; types?: TaskType[]; assigneeId?: string }) =>
+    parseInput(schemas.ListTasks, data ?? {}),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "listTasks");
+    const viewer = taskViewerOf(identity, ctx);
+    const tc = await loadTaskContext(ctx);
+    const role = taskRole(viewer);
+    const views = ROLE_VIEWS[role];
+    const view: TaskView = data.assigneeId
+      ? "person"
+      : data.view && views.some((v) => v.view === data.view)
+        ? data.view
+        : views[0]!.view;
+    if (view === "person" && !viewer.isManager)
+      throw new Error("Only managers can see a colleague's list");
+    const rows = tc.rows
+      .filter((t) => canSeeTask(t, viewer, tc.patientPractitioner))
+      .filter((t) =>
+        inView(t, view, viewer, data.assigneeId ?? null, tc.patientPractitioner, tc.now),
+      )
+      .filter((t) => !data.types?.length || data.types.includes(t.type))
+      .map((t) => shapeTask(t, viewer, tc.patientLite(t.patient_id), tc.nameOf, tc.now));
+    return { view, tasks: rows, groups: groupTasks(rows) };
+  });
+
+export const getTasksSummary = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "getTasksSummary");
+    const viewer = taskViewerOf(identity, ctx);
+    const tc = await loadTaskContext(ctx);
+    return summarise(
+      tc.rows,
+      viewer,
+      tc.team,
+      tc.patientPractitioner,
+      ROLE_VIEWS[taskRole(viewer)].map((v) => v.view),
+      tc.now,
+    );
+  });
+
+export const listPatientTasks = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.ListPatientTasks, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "listPatientTasks", { patientId: data.patient_id });
+    const viewer = taskViewerOf(identity, ctx);
+    const now = new Date();
+    await syncRuleTasks(ctx, now);
+    const [{ data: rows, error }, teamInfo, patientInfo] = await Promise.all([
+      ctx.supabase
+        .from("tasks")
+        .select("*")
+        .eq("patient_id", data.patient_id)
+        .neq("status", "cancelled")
+        .order("created_at", { ascending: false })
+        .limit(60),
+      loadTeam(ctx),
+      loadPatientContext(ctx, now, [data.patient_id]),
+    ]);
+    if (error) throw new Error(error.message);
+    return ((rows ?? []) as TaskRow[])
+      .filter(
+        (t) =>
+          viewer.isManager ||
+          canSeeTask(t, viewer, patientInfo.patientPractitioner) ||
+          patientInfo.patientPractitioner(t.patient_id) === viewer.userId,
+      )
+      .sort((a, b) =>
+        isOpen(a) === isOpen(b)
+          ? (a.due_at ?? "9").localeCompare(b.due_at ?? "9")
+          : isOpen(a)
+            ? -1
+            : 1,
+      )
+      .slice(0, 30)
+      .map((t) =>
+        shapeTask(t, viewer, patientInfo.patientLite(t.patient_id), teamInfo.nameOf, now),
+      );
+  });
+
+export const createTask = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      patient_id: string;
+      type: TaskType;
+      title?: string;
+      assigneeId?: string;
+      dueAt?: string;
+      note?: string;
+      autoClose?: boolean;
+      notify?: boolean;
+      saveAsRule?: boolean;
+    }) => parseInput(schemas.CreateTask, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "createTask", { patientId: data.patient_id });
+    const viewer = taskViewerOf(identity, ctx);
+    const now = new Date();
+    const nowISO = now.toISOString();
+    const [teamInfo, patientInfo] = await Promise.all([
+      loadTeam(ctx),
+      loadPatientContext(ctx, now, [data.patient_id]),
+    ]);
+    const patient = patientInfo.patientLite(data.patient_id);
+    if (!patient) throw new Error("Patient not found");
+    if (data.assigneeId && data.assigneeId !== ctx.userId && !can(identity, "tasks.assign_any")) {
+      throw new Error("You can add tasks to your own list; ask a manager to delegate to others");
+    }
+    const suggestion = suggestedAssignee({
+      type: data.type,
+      patientPractitionerId: patient.practitionerId,
+      ownerId: teamInfo.ownerId,
+    });
+    const actorName = identity.profile?.full_name ?? "A team member";
+    const row = await insertTask(ctx, {
+      clinic_id: clinicIdOf(ctx),
+      patient_id: data.patient_id,
+      type: data.type,
+      title: data.title?.trim() || `${TASK_TYPE_META[data.type].label}: ${patient.first_name}`,
+      context: null,
+      source: "manual",
+      source_label: `Assigned by ${actorName}`,
+      rule_id: null,
+      dedupe_key: null,
+      assignee_id: data.assigneeId ?? suggestion.assigneeId,
+      assignee_role: data.assigneeId ? null : suggestion.assigneeRole,
+      created_by: ctx.userId,
+      note: data.note?.trim() || null,
+      priority: data.type === "question" ? 1 : 2,
+      due_at: data.dueAt ?? dueAtForPreset("tomorrow", now),
+      escalate_at: null,
+      escalated_at: null,
+      escalated_to: null,
+      attempts: 0,
+      next_retry_at: null,
+      snoozed_until: null,
+      status: "open",
+      resolution: null,
+      resolved_by: null,
+      resolved_at: null,
+      auto_close: data.autoClose ?? true,
+      links: {},
+      created_at: nowISO,
+      updated_at: nowISO,
+    });
+    const eventId = await recordTaskEvent(
+      ctx,
+      row.id,
+      {
+        kind: "created",
+        data: {
+          assignee_id: row.assignee_id,
+          assignee_role: row.assignee_role,
+          note: row.note,
+          save_as_rule: !!data.saveAsRule,
+        },
+      },
+      ctx.userId,
+    );
+    if (data.notify !== false)
+      await notifyTaskAssignee(ctx, actorName, row, "task_assigned", row.note);
+    return { ok: true, eventId, task: shapeTask(row, viewer, patient, teamInfo.nameOf, now) };
+  });
+
+export const assignTasks = createServerFn({ method: "POST" })
+  .validator((data: { taskIds: string[]; assigneeId: string; dueAt?: string; note?: string }) =>
+    parseInput(schemas.AssignTasks, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "assignTasks");
+    const nowISO = new Date().toISOString();
+    const actorName = identity.profile?.full_name ?? "A manager";
+    const teamInfo = await loadTeam(ctx);
+    if (!teamInfo.team.some((m) => m.id === data.assigneeId))
+      throw new Error("Pick a current team member");
+    const eventIds: number[] = [];
+    for (const taskId of data.taskIds) {
+      const row = await fetchTask(ctx, taskId);
+      if (!isOpen(row)) continue;
+      eventIds.push(
+        await applyTransition(
+          ctx,
+          row,
+          planAssign(
+            row,
+            { assigneeId: data.assigneeId, dueAt: data.dueAt ?? null, note: data.note ?? null },
+            ctx.userId,
+            actorName,
+            nowISO,
+          ),
+          ctx.userId,
+        ),
+      );
+      await notifyTaskAssignee(ctx, actorName, row, "task_assigned", data.note ?? null);
+    }
+    return { ok: true, eventIds, assigneeName: teamInfo.nameOf(data.assigneeId) };
+  });
+
+export const handOffToPool = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string; role?: "front_desk" | "practitioner" | "manager" }) =>
+    parseInput(schemas.HandOffToPool, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "handOffToPool");
+    const row = await fetchTask(ctx, data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== ctx.userId && !identity.isManager)
+      throw new Error("You can only hand off your own tasks");
+    if (row.type === "question") throw new Error("Clinical questions stay with a clinician");
+    const eventId = await applyTransition(
+      ctx,
+      row,
+      planHandOff(row, data.role ?? "front_desk", ctx.userId, new Date().toISOString()),
+      ctx.userId,
+    );
+    return { ok: true, eventId };
+  });
+
+export const claimTask = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string }) => parseInput(schemas.ClaimTask, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "claimTask");
+    const row = await fetchTask(ctx, data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id && row.assignee_id !== ctx.userId && !identity.isManager)
+      throw new Error("Someone already has this task");
+    if (
+      row.type === "question" &&
+      !identity.roles.includes("practitioner") &&
+      !identity.isManager
+    ) {
+      throw new Error("Clinical questions go to a clinician");
+    }
+    const eventId = await applyTransition(
+      ctx,
+      row,
+      planClaim(row, ctx.userId, new Date().toISOString()),
+      ctx.userId,
+    );
+    return { ok: true, eventId };
+  });
+
+export const logTaskAttempt = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string; outcome: "no_answer" | "voicemail" | "link_sent" }) =>
+    parseInput(schemas.LogTaskAttempt, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "logTaskAttempt");
+    const row = await fetchTask(ctx, data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== ctx.userId && !identity.isManager)
+      throw new Error("Only the person holding the task can log an attempt");
+    const now = new Date();
+    const teamInfo = await loadTeam(ctx);
+    const plan = planAttempt(row, data.outcome, ctx.userId, teamInfo.ownerId, now);
+    const eventId = await applyTransition(ctx, row, plan, ctx.userId);
+    if (plan.escalated) {
+      await notifyTaskAssignee(
+        ctx,
+        identity.profile?.full_name ?? "Front desk",
+        row,
+        "task_escalated",
+        `Third missed attempt (${data.outcome.replace("_", " ")}).`,
+      );
+    }
+    return {
+      ok: true,
+      eventId,
+      escalated: plan.escalated,
+      attempts: row.attempts,
+      nextRetryAt: row.next_retry_at,
+    };
+  });
+
+export const completeTask = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string; resolution: string }) =>
+    parseInput(schemas.CompleteTask, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "completeTask");
+    const row = await fetchTask(ctx, data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== ctx.userId && !identity.isManager)
+      throw new Error("Only the person holding the task can close it");
+    const eventId = await applyTransition(
+      ctx,
+      row,
+      planComplete(row, data.resolution, ctx.userId, new Date().toISOString()),
+      ctx.userId,
+    );
+    return { ok: true, eventId };
+  });
+
+export const completeTasks = createServerFn({ method: "POST" })
+  .validator((data: { taskIds: string[]; resolution?: string }) =>
+    parseInput(schemas.CompleteTasks, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "completeTasks");
+    const nowISO = new Date().toISOString();
+    const eventIds: number[] = [];
+    for (const taskId of data.taskIds) {
+      const row = await fetchTask(ctx, taskId);
+      if (!isOpen(row)) continue;
+      eventIds.push(
+        await applyTransition(
+          ctx,
+          row,
+          planComplete(row, data.resolution ?? "handled", ctx.userId, nowISO),
+          ctx.userId,
+        ),
+      );
+    }
+    return { ok: true, eventIds };
+  });
+
+export const escalateToClinician = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string }) => parseInput(schemas.EscalateToClinician, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "escalateToClinician");
+    const row = await fetchTask(ctx, data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== ctx.userId && !identity.isManager)
+      throw new Error("Only the person holding the task can escalate it");
+    const now = new Date();
+    const [teamInfo, patientInfo] = await Promise.all([
+      loadTeam(ctx),
+      loadPatientContext(ctx, now, [row.patient_id]),
+    ]);
+    const toId = patientInfo.patientPractitioner(row.patient_id) ?? teamInfo.ownerId;
+    if (!toId) throw new Error("This patient has no practitioner to escalate to");
+    const eventId = await applyTransition(
+      ctx,
+      row,
+      planEscalate(row, toId, "practitioner", now.toISOString(), ctx.userId),
+      ctx.userId,
+    );
+    await notifyTaskAssignee(
+      ctx,
+      identity.profile?.full_name ?? "Front desk",
+      row,
+      "task_escalated",
+      "Needs a clinician.",
+    );
+    return { ok: true, eventId, toName: teamInfo.nameOf(toId) };
+  });
+
+export const snoozeTask = createServerFn({ method: "POST" })
+  .validator((data: { taskId: string; hours?: number }) => parseInput(schemas.SnoozeTask, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "snoozeTask");
+    const row = await fetchTask(ctx, data.taskId);
+    if (!isOpen(row)) throw new Error("This task is already closed");
+    if (row.assignee_id !== ctx.userId && !identity.isManager)
+      throw new Error("Only the person holding the task can snooze it");
+    const eventId = await applyTransition(
+      ctx,
+      row,
+      planSnooze(row, data.hours ?? 2, ctx.userId, new Date()),
+      ctx.userId,
+    );
+    return { ok: true, eventId, until: row.snoozed_until };
+  });
+
+export const undoTaskEvent = createServerFn({ method: "POST" })
+  .validator((data: { eventId: number | string }) => parseInput(schemas.UndoTaskEvent, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    const identity = await authorize(ctx, "undoTaskEvent");
+    const { data: event, error } = await ctx.supabase
+      .from("task_events")
+      .select("id, task_id, actor_id, kind, data")
+      .eq("id", Number(data.eventId))
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!event) throw new Error("Nothing to undo");
+    const previous = (event.data as { previous?: TaskSnapshot } | null)?.previous;
+    if (!previous) throw new Error("This change cannot be undone");
+    if (event.actor_id !== ctx.userId && !identity.isManager)
+      throw new Error("Only the person who made the change can undo it");
+    const { data: latest } = await ctx.supabase
+      .from("task_events")
+      .select("id")
+      .eq("task_id", event.task_id)
+      .neq("kind", "undone")
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latest && Number(latest.id) !== Number(event.id))
+      throw new Error("The task has changed since; refresh and try again");
+    const row = await fetchTask(ctx, event.task_id);
+    const eventId = await applyTransition(
+      ctx,
+      row,
+      planUndo(row, previous, ctx.userId, new Date().toISOString()),
+      ctx.userId,
+    );
+    return { ok: true, eventId };
+  });
+
+/* ---------------------------------------------------------------- */
+/* recall tasks: thin adapters over tasks until the surfaces move     */
+/* ---------------------------------------------------------------- */
+
+/** The old recall_tasks row shape, read from a task, so the dashboard card and record panel keep working. */
+function legacyRecallRow(t: TaskRow, nameOf: (id: string | null) => string | null) {
+  const status =
+    t.status === "done" || t.status === "auto_closed" || t.status === "cancelled"
+      ? "completed"
+      : t.attempts > 0
+        ? "contacted"
+        : "open";
+  return {
+    id: t.id,
+    clinic_id: t.clinic_id,
+    patient_id: t.patient_id,
+    group_id: t.id,
+    assigned_to: t.assignee_id,
+    assigned_label: t.assignee_id
+      ? nameOf(t.assignee_id)
+      : t.assignee_role === "front_desk"
+        ? "Front desk pool"
+        : null,
+    created_by: t.created_by,
+    note: t.note ?? t.title,
+    status,
+    contacted_at: status === "contacted" ? t.updated_at : null,
+    contacted_by: status === "contacted" ? t.assignee_id : null,
+    completed_at: status === "completed" ? t.resolved_at : null,
+    completed_by: status === "completed" ? t.resolved_by : null,
+    status_by_label:
+      status === "completed"
+        ? t.resolved_by
+          ? nameOf(t.resolved_by)
+          : "Closed automatically"
+        : status === "contacted"
+          ? nameOf(t.assignee_id)
+          : null,
+    reassigned_at: null,
+    due_at: t.due_at,
+    created_at: t.created_at,
+    updated_at: t.updated_at,
+  };
+}
+
 /** Create a recall task for a practitioner or receptionist to chase a patient. */
 export const createRecallTask = createServerFn({ method: "POST" })
   .validator(
@@ -7821,67 +8372,70 @@ export const createRecallTask = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "createRecallTask");
-    const dueAt = data.due_at ?? new Date(Date.now() + 7 * 86400000).toISOString();
+    const now = new Date();
+    const nowISO = now.toISOString();
     const requested = data.recipients.length
       ? data.recipients
       : [{ id: ctx.userId, label: identity.profile?.full_name ?? "The team" }];
-
-    // Skip anyone who already has an open (not completed) recall for this patient,
-    // so the same follow-up never lands twice in "My tasks".
-    const { data: openTasks } = await ctx.supabase
-      .from("recall_tasks")
-      .select("id, assigned_to, group_id, note")
-      .eq("patient_id", data.patient_id)
-      .neq("status", "completed");
     const note = (data.note ?? "").trim();
-    // Same note already open → reuse that group (don't spawn a second chase card).
-    const sameNote = (openTasks ?? []).filter(
-      (t: { note?: string | null }) => (t.note ?? "").trim() === note,
-    );
-    const pool = sameNote.length ? sameNote : [];
-    const alreadyAssigned = new Set(
-      (sameNote.length ? sameNote : (openTasks ?? [])).map(
-        (t: { assigned_to: string }) => t.assigned_to,
-      ),
-    );
+    const { data: openRows } = await ctx.supabase
+      .from("tasks")
+      .select("*")
+      .eq("patient_id", data.patient_id)
+      .eq("type", "recall")
+      .in("status", ["open", "snoozed"]);
+    const open = (openRows ?? []) as TaskRow[];
+    const sameNote = open.filter((t) => (t.note ?? t.title).trim() === note);
+    const alreadyAssigned = new Set((sameNote.length ? sameNote : open).map((t) => t.assignee_id));
     const recipients = requested.filter((r) => !alreadyAssigned.has(r.id));
-    if (!recipients.length) {
-      return {
-        ok: true,
-        duplicate: true,
-        group_id: (sameNote[0] ?? openTasks?.[0])?.group_id ?? null,
-      };
-    }
-    // Join an existing same-note group when present; otherwise start a new shared group.
-    const groupId =
-      (pool[0]?.group_id as string | undefined) ||
-      (pool[0]?.id as string | undefined) ||
-      crypto.randomUUID();
-    const { error } = await ctx.supabase.from("recall_tasks").insert(
-      recipients.map((r) => ({
-        clinic_id: clinicIdOf(context),
+    if (!recipients.length)
+      return { ok: true, duplicate: true, group_id: (sameNote[0] ?? open[0])?.id ?? null };
+    const actorName = identity.profile?.full_name ?? "A team member";
+    let groupId: string | null = null;
+    for (const r of recipients) {
+      const row = await insertTask(ctx, {
+        clinic_id: clinicIdOf(ctx),
         patient_id: data.patient_id,
-        group_id: groupId,
-        assigned_to: r.id,
-        assigned_label: r.label,
+        type: "recall",
+        title: note ? note.slice(0, 80) : "Follow up and rebook",
+        context: null,
+        source: "manual",
+        source_label: `Assigned by ${actorName}`,
+        rule_id: null,
+        dedupe_key: null,
+        assignee_id: r.id,
+        assignee_role: null,
         created_by: ctx.userId,
-        note: data.note ?? null,
-        status: "open" as const,
-        due_at: dueAt,
-      })),
-    );
-    if (error) throw new Error(error.message);
-    await audit(ctx, "recall_task.created", "patients", data.patient_id, data.patient_id, {
-      assigned_to: recipients.map((r) => r.label).join(", "),
-    });
+        note: note || null,
+        priority: 2,
+        due_at: data.due_at ?? new Date(now.getTime() + 7 * 86400000).toISOString(),
+        escalate_at: null,
+        escalated_at: null,
+        escalated_to: null,
+        attempts: 0,
+        next_retry_at: null,
+        snoozed_until: null,
+        status: "open",
+        resolution: null,
+        resolved_by: null,
+        resolved_at: null,
+        auto_close: true,
+        links: {},
+        created_at: nowISO,
+        updated_at: nowISO,
+      });
+      await recordTaskEvent(
+        ctx,
+        row.id,
+        { kind: "created", data: { assignee_id: r.id, note: row.note } },
+        ctx.userId,
+      );
+      await notifyTaskAssignee(ctx, actorName, row, "task_assigned", row.note);
+      groupId = groupId ?? row.id;
+    }
     return { ok: true, group_id: groupId };
   });
 
-/**
- * Manager edit: change who the chase-up is assigned to and/or the note.
- * Keeps shared status across the group and stamps reassigned_at when the
- * assignee set changes so the patient timeline shows the new hand-off time.
- */
 export const updateRecallTask = createServerFn({ method: "POST" })
   .validator(
     (data: { task_id: string; recipients: { id: string; label: string }[]; note?: string }) =>
@@ -7890,118 +8444,26 @@ export const updateRecallTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "updateRecallTask");
+    const identity = await authorize(ctx, "updateRecallTask");
     if (!data.recipients.length) throw new Error("Pick at least one team member");
-
-    const { data: target, error: targetErr } = await ctx.supabase
-      .from("recall_tasks")
-      .select("*")
-      .eq("id", data.task_id)
-      .maybeSingle();
-    if (targetErr) throw new Error(targetErr.message);
-    if (!target) throw new Error("Recall task not found");
-
-    const groupId = (target.group_id as string) || (target.id as string);
-    const { data: peers, error: peersErr } = await ctx.supabase
-      .from("recall_tasks")
-      .select("*")
-      .eq("group_id", groupId);
-    // Older rows may lack group_id; fall back to the single task.
-    const group = peersErr || !peers?.length ? [target] : peers;
-
-    // Ensure every row shares a group id so status stays linked.
-    if (!target.group_id) {
-      await ctx.supabase.from("recall_tasks").update({ group_id: groupId }).eq("id", target.id);
-    }
-
-    const now = new Date().toISOString();
-    const note = data.note !== undefined ? data.note : ((target.note as string | null) ?? null);
-    const template = group[0] as any;
-    const prevIds = new Set(group.map((g: any) => g.assigned_to as string));
-    const nextIds = new Set(data.recipients.map((r) => r.id));
-    const assigneesChanged =
-      prevIds.size !== nextIds.size || [...prevIds].some((id) => !nextIds.has(id));
-    const assigneesAdded = data.recipients.some((r) => !prevIds.has(r.id));
-    const assigneesRemoved = group.some((g: any) => !nextIds.has(g.assigned_to as string));
-    const reassignedAt = assigneesAdded
-      ? now
-      : assigneesRemoved
-        ? null
-        : ((template.reassigned_at as string | null) ?? null);
-
-    const shared = {
-      clinic_id: template.clinic_id ?? clinicIdOf(context),
-      patient_id: template.patient_id,
-      group_id: groupId,
-      created_by: template.created_by ?? ctx.userId,
-      note,
-      status: template.status,
-      contacted_at: template.contacted_at,
-      contacted_by: template.contacted_by,
-      completed_at: template.completed_at,
-      completed_by: template.completed_by,
-      status_by_label: template.status_by_label,
-      reassigned_at: reassignedAt,
-      updated_at: now,
-    };
-
-    const toRemove = group.filter((g: any) => !nextIds.has(g.assigned_to));
-    if (toRemove.length) {
-      const supabaseAdmin = await adminClient(context);
-      const { error } = await supabaseAdmin
-        .from("recall_tasks")
-        .delete()
-        .in(
-          "id",
-          toRemove.map((g: any) => g.id),
-        );
-      if (error) throw new Error(error.message);
-    }
-
-    const existingByAssignee = new Map(
-      group
-        .filter((g: any) => nextIds.has(g.assigned_to))
-        .map((g: any) => [g.assigned_to as string, g]),
+    const row = await fetchTask(ctx, data.task_id);
+    const target = data.recipients[0]!;
+    const reassigned = row.assignee_id !== target.id;
+    await applyTransition(
+      ctx,
+      row,
+      planAssign(
+        row,
+        { assigneeId: target.id, note: data.note !== undefined ? data.note : null },
+        ctx.userId,
+        identity.profile?.full_name ?? "A manager",
+        new Date().toISOString(),
+      ),
+      ctx.userId,
     );
-
-    for (const r of data.recipients) {
-      const existing = existingByAssignee.get(r.id);
-      if (existing) {
-        const { error } = await ctx.supabase
-          .from("recall_tasks")
-          .update({
-            assigned_label: r.label,
-            note,
-            reassigned_at: shared.reassigned_at,
-            updated_at: now,
-            group_id: groupId,
-          })
-          .eq("id", existing.id);
-        if (error) throw new Error(error.message);
-      } else {
-        const { error } = await ctx.supabase.from("recall_tasks").insert({
-          ...shared,
-          assigned_to: r.id,
-          assigned_label: r.label,
-          created_at: template.created_at ?? now,
-        });
-        if (error) throw new Error(error.message);
-      }
-    }
-
-    await audit(ctx, "recall_task.updated", "patients", template.patient_id, template.patient_id, {
-      assigned_to: data.recipients.map((r) => r.label).join(", "),
-      reassigned: assigneesChanged,
-    });
-    return { ok: true, group_id: groupId, reassigned: assigneesChanged };
+    return { ok: true, group_id: row.id, reassigned };
   });
 
-/**
- * Move a recall along its lifecycle: open -> contacted -> completed.
- * The whole assignment group moves together, so a practitioner marking it
- * off is instantly visible to the front desk (and the other way round) and
- * the patient never gets chased twice.
- */
 export const setRecallTaskStatus = createServerFn({ method: "POST" })
   .validator((data: { task_id: string; status: "open" | "contacted" | "completed" }) =>
     parseInput(schemas.SetRecallTaskStatus, data),
@@ -8010,59 +8472,57 @@ export const setRecallTaskStatus = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "setRecallTaskStatus");
-    const now = new Date().toISOString();
-    const actor = identity.profile?.full_name || identity.email || "A team member";
-    const { data: target } = await ctx.supabase
-      .from("recall_tasks")
-      .select("id, group_id, patient_id, assigned_to")
-      .eq("id", data.task_id)
-      .maybeSingle();
-    if (!target) throw new Error("Recall task not found");
-
-    // Assignees in the group can progress it; managers/front desk can too so
-    // chase-ups stay visible and actionable from either side of the clinic.
-    if (!identity.isManager) {
-      const isFrontDesk = identity.roles.includes("front_desk");
-      let assigneeIds = [target.assigned_to as string | null];
-      if (target.group_id) {
-        const { data: peers } = await ctx.supabase
-          .from("recall_tasks")
-          .select("assigned_to")
-          .eq("group_id", target.group_id);
-        assigneeIds = (peers ?? []).map((p: { assigned_to: string | null }) => p.assigned_to);
-      }
-      const isAssignee = assigneeIds.includes(ctx.userId);
-      if (!isAssignee && !isFrontDesk) {
-        throw new Error("Only the assigned team member can update this recall task");
-      }
+    const row = await fetchTask(ctx, data.task_id);
+    if (
+      !identity.isManager &&
+      row.assignee_id !== ctx.userId &&
+      !identity.roles.includes("front_desk")
+    ) {
+      throw new Error("Only the assigned team member can update this recall task");
     }
-
-    const patch: Record<string, unknown> = {
-      status: data.status,
-      contacted_at: data.status === "open" ? null : now,
-      completed_at: data.status === "completed" ? now : null,
-      contacted_by: data.status === "open" ? null : ctx.userId,
-      completed_by: data.status === "completed" ? ctx.userId : null,
-      status_by_label: data.status === "open" ? null : actor,
-    };
-    const query = ctx.supabase.from("recall_tasks").update(patch);
-    const { error } = target.group_id
-      ? await query.eq("group_id", target.group_id)
-      : await query.eq("id", data.task_id);
-    if (error) throw new Error(error.message);
-    if (target.patient_id) {
-      await audit(ctx, "recall_task.status", "patients", target.patient_id, target.patient_id, {
-        status: data.status,
-        by: actor,
-      });
+    const nowISO = new Date().toISOString();
+    if (data.status === "completed") {
+      if (isOpen(row))
+        await applyTransition(
+          ctx,
+          row,
+          planComplete(row, "handled", ctx.userId, nowISO),
+          ctx.userId,
+        );
+    } else if (data.status === "contacted") {
+      await applyTransition(
+        ctx,
+        row,
+        {
+          patch: { attempts: row.attempts + 1, updated_at: nowISO },
+          event: {
+            kind: "attempt",
+            data: { previous: snapshotOf(row), outcome: "contacted", actor_id: ctx.userId },
+          },
+        },
+        ctx.userId,
+      );
+    } else {
+      await applyTransition(
+        ctx,
+        row,
+        {
+          patch: {
+            status: "open",
+            resolution: null,
+            resolved_by: null,
+            resolved_at: null,
+            attempts: 0,
+            updated_at: nowISO,
+          },
+          event: { kind: "reopened", data: { previous: snapshotOf(row), actor_id: ctx.userId } },
+        },
+        ctx.userId,
+      );
     }
     return { ok: true };
   });
 
-/**
- * Retract a recall chase-up. Pass assignee_ids to remove only those people from
- * the group; omit it (or pass every assignee) to retract the whole assignment.
- */
 export const deleteRecallTask = createServerFn({ method: "POST" })
   .validator((data: { task_id: string; assignee_ids?: string[] }) =>
     parseInput(schemas.DeleteRecallTask, data),
@@ -8071,57 +8531,31 @@ export const deleteRecallTask = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "deleteRecallTask");
-    const { data: target } = await ctx.supabase
-      .from("recall_tasks")
-      .select("id, group_id, patient_id, assigned_to, assigned_label")
+    const { data: found } = await ctx.supabase
+      .from("tasks")
+      .select("*")
       .eq("id", data.task_id)
       .maybeSingle();
-    if (!target) return { ok: true, removed: [] as string[] };
-
-    const groupId = (target.group_id as string | null) ?? null;
-    const { data: peers } = groupId
-      ? await ctx.supabase
-          .from("recall_tasks")
-          .select("id, assigned_to, assigned_label")
-          .eq("group_id", groupId)
-      : { data: [target] };
-    const group = peers?.length ? peers : [target];
-
-    const pick = data.assignee_ids?.length
-      ? new Set(data.assignee_ids)
-      : new Set(group.map((g: any) => g.assigned_to as string));
-    const toRemove = group.filter((g: any) => pick.has(g.assigned_to));
-    if (!toRemove.length) return { ok: true, removed: [] as string[] };
-
-    const ids = toRemove.map((g: any) => g.id as string);
-    const supabaseAdmin = await adminClient(context);
-    const { data: deleted, error } = await supabaseAdmin
-      .from("recall_tasks")
-      .delete()
-      .in("id", ids)
-      .select("id");
-    if (error) throw new Error(error.message);
-    if (!deleted?.length) throw new Error("Could not retract assignment");
-
-    const remaining = group.filter((g: any) => !pick.has(g.assigned_to));
-    if (remaining.length > 0) {
-      const remainingIds = remaining.map((g: any) => g.id as string);
-      const { error: clearErr } = await supabaseAdmin
-        .from("recall_tasks")
-        .update({ reassigned_at: null, updated_at: new Date().toISOString() })
-        .in("id", remainingIds);
-      if (clearErr) throw new Error(clearErr.message);
-    }
-
-    const removed = toRemove
-      .map((g: any) => (g.assigned_label as string) || "Assignee")
-      .filter(Boolean);
-    if (target.patient_id) {
-      await audit(ctx, "recall_task.delete", "patients", target.patient_id, target.patient_id, {
-        assignees: removed,
-      });
-    }
-    return { ok: true, removed };
+    if (!found) return { ok: true, removed: [] as string[] };
+    const row = found as TaskRow;
+    const teamInfo = await loadTeam(ctx);
+    const label = row.assignee_id ? (teamInfo.nameOf(row.assignee_id) ?? "Assignee") : "Assignee";
+    const nowISO = new Date().toISOString();
+    await applyTransition(
+      ctx,
+      row,
+      {
+        patch: {
+          status: "cancelled",
+          resolved_by: ctx.userId,
+          resolved_at: nowISO,
+          updated_at: nowISO,
+        },
+        event: { kind: "cancelled", data: { previous: snapshotOf(row), actor_id: ctx.userId } },
+      },
+      ctx.userId,
+    );
+    return { ok: true, removed: [label] };
   });
 
 export const listRecallTasks = createServerFn({ method: "GET" })
@@ -8129,72 +8563,49 @@ export const listRecallTasks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
-    await authorize(ctx, "listRecallTasks");
-    const { data: rows, error } = await ctx.supabase
-      .from("recall_tasks")
-      .select("*")
-      .eq("patient_id", data.patient_id)
-      .order("created_at", { ascending: false });
+    await authorize(ctx, "listRecallTasks", { patientId: data.patient_id });
+    await syncRuleTasks(ctx);
+    const [{ data: rows, error }, teamInfo] = await Promise.all([
+      ctx.supabase
+        .from("tasks")
+        .select("*")
+        .eq("patient_id", data.patient_id)
+        .neq("status", "cancelled")
+        .order("created_at", { ascending: false }),
+      loadTeam(ctx),
+    ]);
     if (error) throw new Error(error.message);
-    return rows ?? [];
+    return ((rows ?? []) as TaskRow[]).map((t) => legacyRecallRow(t, teamInfo.nameOf));
   });
 
-/**
- * One dashboard card per chase-up. A recall can have several assignee rows that
- * share a group_id; managers used to see every copy. Prefer the signed-in
- * user's row when present.
- */
-function collapseOpenRecallRows<
-  T extends {
-    id: string;
-    group_id?: string | null;
-    assigned_to?: string | null;
-    patient_id?: string;
-    note?: string | null;
-    created_at?: string;
-  },
->(rows: T[], userId: string): T[] {
-  const byGroup = new Map<string, T>();
-  for (const row of rows) {
-    const key = row.group_id || row.id;
-    const prev = byGroup.get(key);
-    if (!prev || (row.assigned_to === userId && prev.assigned_to !== userId)) {
-      byGroup.set(key, row);
-    }
-  }
-  // True duplicates (same patient + note, different groups) also collapse.
-  const byChase = new Map<string, T>();
-  for (const row of byGroup.values()) {
-    const key = `${row.patient_id}::${(row.note ?? "").trim()}`;
-    const prev = byChase.get(key);
-    if (!prev || (row.assigned_to === userId && prev.assigned_to !== userId)) {
-      byChase.set(key, row);
-    }
-  }
-  return [...byChase.values()].sort((a, b) =>
-    String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
-  );
-}
-
-/** Open recall/follow-up tasks for the dashboard: mine, or all for managers. */
 export const listOpenRecallTasks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as Ctx;
     const identity = await authorize(ctx, "listOpenRecallTasks");
+    await syncRuleTasks(ctx);
     let query = ctx.supabase
-      .from("recall_tasks")
+      .from("tasks")
       .select("*, patients(id, first_name, last_name, phone, email)")
-      .neq("status", "completed")
+      .in("status", ["open", "snoozed"])
+      .not("assignee_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(50);
     const scoped = scopeFor(identity, "listOpenRecallTasks");
-    if (scoped) query = query.eq("assigned_to", scoped);
-    const { data: rows, error } = await query;
+    if (scoped) query = query.eq("assignee_id", scoped);
+    const [{ data: rows, error }, teamInfo] = await Promise.all([query, loadTeam(ctx)]);
     if (error) throw new Error(error.message);
-    return collapseOpenRecallRows(rows ?? [], ctx.userId).slice(0, 25);
+    type PatientJoin = {
+      id: string;
+      first_name: string;
+      last_name: string;
+      phone: string | null;
+      email: string | null;
+    } | null;
+    return ((rows ?? []) as Array<TaskRow & { patients: PatientJoin }>)
+      .slice(0, 25)
+      .map((t) => ({ ...legacyRecallRow(t, teamInfo.nameOf), patients: t.patients }));
   });
-
 /** Move an appointment to a new start time (keeps or updates its duration). */
 export const rescheduleAppointment = createServerFn({ method: "POST" })
   .validator(
@@ -9523,6 +9934,12 @@ export const listTreatmentPlans = createServerFn({ method: "GET" })
         stepBookedAt: step.stepBookedAt,
         otherBookingTreatment: step.otherBookingTreatment,
         noShowAt: step.noShowAt,
+        // The Journey board's triage vocabulary, derived from the same facts.
+        risk: boardRisk({ nextMilestone: next ? { dueDate: next.due_date } : null, ...step }),
+        dueBucket: dueBucketKey(
+          { nextMilestone: next ? { dueDate: next.due_date } : null, ...step },
+          todayISO,
+        ),
       };
     });
 
@@ -10519,11 +10936,18 @@ async function offerStoreFor(ctx: Ctx, origin: string | null | undefined) {
     },
     // A sent offer is the chase: the patient's open recall tasks close with it.
     async closeRecallTasks(patientId) {
+      const nowISO = new Date().toISOString();
       await ctx.supabase
-        .from("recall_tasks")
-        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .from("tasks")
+        .update({
+          status: "auto_closed",
+          resolution: "auto_resolved",
+          resolved_at: nowISO,
+          updated_at: nowISO,
+        })
         .eq("patient_id", patientId)
-        .in("status", ["open", "contacted"]);
+        .in("type", ["recall", "send_offer"])
+        .in("status", ["open", "snoozed"]);
     },
   };
   return store;
