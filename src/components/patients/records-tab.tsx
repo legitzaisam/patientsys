@@ -152,7 +152,12 @@ export function RecordsTab({
 
   // ---------------------------------------------------------------- paging + selection
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const page = Math.min(Math.max(1, search.page ?? 1), pageCount);
+  // A deep link to a patient (the board's pills, the dashboard) lands on their page.
+  const selIndex = search.sel && !search.page ? filtered.findIndex((p) => p.id === search.sel) : -1;
+  const page = Math.min(
+    Math.max(1, search.page ?? (selIndex >= 0 ? Math.floor(selIndex / PAGE_SIZE) + 1 : 1)),
+    pageCount,
+  );
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // The drawer follows the URL's `sel`; when the filter hides it, the first visible row stands in.
@@ -379,7 +384,7 @@ export function RecordsTab({
       <Sheet open={narrow === true && sheetOpen && !!selected} onOpenChange={setSheetOpen}>
         <SheetContent
           side="right"
-          className="w-[min(100vw,420px)] overflow-y-auto border-l-0 bg-transparent p-3 shadow-none sm:max-w-none"
+          className="w-[min(100vw-12px,420px)] overflow-y-auto border-l-0 bg-transparent p-3 shadow-none sm:max-w-none"
           data-qc="records-drawer-sheet"
         >
           <SheetTitle className="sr-only">Patient details</SheetTitle>

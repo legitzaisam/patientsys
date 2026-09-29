@@ -112,7 +112,7 @@ export function RecordsFilterBar({
           type="button"
           onClick={onClear}
           data-qc="records-show-everyone"
-          className="cursor-pointer text-[13px] font-semibold text-accent-ink underline underline-offset-[3px] hover:text-foreground"
+          className="-my-1 inline-flex min-h-7 cursor-pointer items-center py-1 text-[13px] font-semibold text-accent-ink underline underline-offset-[3px] hover:text-foreground"
         >
           Show everyone
         </button>

@@ -149,53 +149,77 @@ test.describe("list: pages, filters and columns", () => {
 });
 
 test.describe("journey board", () => {
-  test("at-risk cards first, dated Due or Booked, and Book opens Quick book pre-filled", async ({
+  test("tiles count and highlight, faces scope the map, a pill opens the drawer", async ({
     page,
   }) => {
     await page.goto("/patients?tab=board");
-    const cards = page.locator('[data-qc="board-card"]');
-    await expect(cards.first()).toBeVisible();
-    // Within a column, no on-track card sits above an at-risk one.
-    for (const column of await page.locator("ul").filter({ has: cards }).all()) {
-      const risks = await column
-        .locator('[data-qc="board-card"]')
-        .evaluateAll((els) => els.map((e) => e.getAttribute("data-risk")));
-      const firstOnTrack = risks.indexOf("on-track");
-      const lastAtRisk = risks.lastIndexOf("at-risk");
-      if (firstOnTrack !== -1 && lastAtRisk !== -1) expect(lastAtRisk).toBeLessThan(firstOnTrack);
+    const pills = page.locator('[data-qc="board-pill"]');
+    await expect(pills.first()).toBeVisible();
+    // Six tiles; their counts add up over the risk states (Due this week overlaps No booking).
+    for (const tile of ["overdue", "noshow", "mismatch", "nobook", "due_this_week", "ontrack"]) {
+      await expect(page.locator(`[data-qc="board-tile-${tile}"]`)).toBeVisible();
     }
-    const dates = await page.locator('[data-qc="board-date"]').allInnerTexts();
-    expect(dates.every((d) => /^(Booked|Due) /.test(d.trim()))).toBe(true);
-
-    // An overdue card names the step that slipped and how late it is, once.
-    await expect(cards.filter({ hasText: "Next step overdue" })).toHaveCount(0);
-    const overdue = cards.filter({ has: page.locator('[data-qc="board-late"]') }).first();
-    if ((await overdue.count()) > 0) {
-      await expect(overdue.locator('[data-qc="board-step"]')).toHaveText(
-        /^\S.+, \d+ days? overdue$/,
+    const risks = await pills.evaluateAll((els) => els.map((e) => e.getAttribute("data-risk")));
+    for (const tile of ["overdue", "noshow", "mismatch", "nobook", "ontrack"]) {
+      const count = Number(
+        await page.locator(`[data-qc="board-tile-${tile}"]`).getAttribute("data-count"),
       );
-      // Once on the chip, once on the step line.
-      expect((await overdue.innerText()).match(/overdue/gi)).toHaveLength(2);
-      // Late means unbooked, so it carries no date and still asks to be booked.
-      await expect(overdue.locator('[data-qc="board-date"]')).toHaveCount(0);
-      await expect(overdue.locator('[data-qc="board-book"]')).toHaveCount(1);
+      expect(count).toBe(risks.filter((r) => r === tile).length);
     }
 
-    // A step with its own booking is settled: a date, no chase, nothing late.
-    const booked = cards
-      .filter({ has: page.locator('[data-qc="board-date"]').filter({ hasText: /^Booked/ }) })
-      .first();
-    await expect(booked.locator('[data-qc="board-book"]')).toHaveCount(0);
-    await expect(booked).not.toContainText("overdue");
+    // Picking tiles lights the matching pills and fades the rest; the URL keeps the choice.
+    await page.locator('[data-qc="board-tile-overdue"]').click();
+    await page.locator('[data-qc="board-tile-noshow"]').click();
+    await expect(page).toHaveURL(/tiles=overdue(%2C|,)noshow/);
+    const overdue = Number(
+      await page.locator('[data-qc="board-tile-overdue"]').getAttribute("data-count"),
+    );
+    const noshow = Number(
+      await page.locator('[data-qc="board-tile-noshow"]').getAttribute("data-count"),
+    );
+    await expect(page.locator('[data-qc="board-pill"][data-hit]')).toHaveCount(overdue + noshow);
+    await expect(page.locator('[data-qc="board-legend"]')).toContainText(
+      `${overdue + noshow} of ${risks.length} plans highlighted`,
+    );
 
-    const book = page.locator('[data-qc="board-book"]').first();
-    const card = page.locator('[data-qc="board-card"]').filter({ has: book }).first();
-    const name = (await card.locator("p.font-semibold").first().innerText()).trim();
-    await book.click();
-    await expect(page.getByText(`Book ${name}`).first()).toBeVisible();
-    // The patient picker is pre-filled with the card's patient.
-    await expect(page.getByPlaceholder("Search patient…")).toHaveValue(name);
-    await page.keyboard.press("Escape");
+    // A practitioner face fades the other rows and scopes the tile counts.
+    const face = page.locator('[data-qc^="board-prac-"]').first();
+    const faceId = (await face.getAttribute("data-qc"))!.replace("board-prac-", "");
+    await face.click();
+    await expect(page).toHaveURL(new RegExp(`prac=${faceId}`));
+    const others = page.locator(
+      `[data-qc="board-row"]:not([data-practitioner="${faceId}"]) [role="rowheader"]`,
+    );
+    if ((await others.count()) > 0) {
+      await expect(others.first()).toHaveCSS("opacity", "0.3");
+    }
+    await page.locator('[data-qc="board-clear"]').click();
+    await expect(page).not.toHaveURL(/tiles=/);
+
+    // No action buttons on the board; a pill opens that patient in the Records drawer.
+    await expect(page.locator('[data-qc="board-book"]')).toHaveCount(0);
+    const pill = pills.first();
+    const name = (await pill.getAttribute("data-name"))!;
+    await pill.click();
+    await expect(page).toHaveURL(/\/patients\?.*sel=/);
+    await expect(page.locator('[data-qc="drawer-name"]')).toHaveText(name);
+  });
+
+  test("the dashboard's overdue-steps link opens the three needs-a-human tiles", async ({
+    page,
+  }) => {
+    await page.goto("/patients?tab=board&risk=1");
+    await expect(page.locator('[data-qc="board-pill"]').first()).toBeVisible();
+    for (const tile of ["overdue", "noshow", "nobook"]) {
+      await expect(page.locator(`[data-qc="board-tile-${tile}"]`)).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    }
+    await expect(page.locator('[data-qc="board-tile-ontrack"]')).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 });
 
@@ -268,13 +292,12 @@ test.describe("record: what the list promises, the record shows", () => {
     await expect(progress).toBeVisible();
     const [done, total] = (await progress.innerText()).match(/\d+/g)!.map(Number);
 
-    // Same figures on the journey board card for Olivia.
+    // Same figures in Olivia's pill tooltip on the journey board.
     await page.goto("/patients?tab=board");
-    const card = page
-      .locator('[data-qc="board-card"]')
-      .filter({ hasText: "Olivia Bennett" })
-      .first();
-    await expect(card).toContainText(`${done}/${total}`);
+    const pill = page.locator('[data-qc="board-pill"][data-name="Olivia Bennett"]').first();
+    await expect(pill).toBeVisible();
+    await pill.hover();
+    await expect(page.getByRole("tooltip")).toContainText(`${done}/${total}`);
 
     // And in the patient's own portal.
     await context.addCookies([
@@ -338,15 +361,13 @@ test.describe("attention treatment due", () => {
     const names = await treatmentDueNames(page);
     expect(names.length).toBeGreaterThan(0);
 
+    // Every one of them is an unbooked pill on the journey board.
     await page.goto("/patients?tab=board");
-    await expect(page.locator('[data-qc="board-card"]').first()).toBeVisible();
-    const bookNames = await page.locator('[data-qc="board-card"]').evaluateAll((els) =>
-      els
-        .filter((e) => e.querySelector('[data-qc="board-book"]'))
-        .map((e) => e.querySelector("p.font-semibold")?.textContent?.trim() ?? "")
-        .filter(Boolean),
-    );
-    for (const name of names) expect(bookNames).toContain(name);
+    await expect(page.locator('[data-qc="board-pill"]').first()).toBeVisible();
+    const unbooked = await page
+      .locator('[data-qc="board-pill"]:not([data-risk="ontrack"])')
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-name")));
+    for (const name of names) expect(unbooked).toContain(name);
 
     await page.goto("/dashboard");
     await page.locator('[data-qc="attention-kind-treatment_due"]').click();
@@ -390,12 +411,12 @@ test.describe("a booking only counts when it is for the step", () => {
     page,
   }) => {
     await page.goto("/patients?tab=board");
-    const card = page.locator('[data-qc="board-card"]').filter({ hasText: "No show" }).first();
-    await expect(card).toBeVisible();
-    const name = (await card.locator("p.font-semibold").first().innerText()).trim();
-    const href = (await card.locator("a").first().getAttribute("href"))!.split("?")[0];
+    const pill = page.locator('[data-qc="board-pill"][data-risk="noshow"]').first();
+    await expect(pill).toBeVisible();
+    const name = (await pill.getAttribute("data-name"))!;
+    const patientId = (await pill.getAttribute("data-patient"))!;
 
-    await page.goto(`${href}?tab=treatments`);
+    await page.goto(`/patients/${patientId}?tab=treatments`);
     const plan = page.locator('[data-qc="treatment-plan-card"]');
     await expect(plan).toContainText("No show");
     await expect(plan.locator('[data-qc="plan-booking-note"]').first()).toHaveText(
@@ -442,15 +463,13 @@ test.describe("attention treatment due as practitioner", () => {
     expect(names.length).toBeGreaterThan(0);
     expect(names).not.toContain("Marcus Delaney");
 
+    // Her board opens on her own book; each name is one of her unbooked pills.
     await page.goto("/patients?tab=board");
-    await expect(page.locator('[data-qc="board-card"]').first()).toBeVisible();
-    const bookNames = await page.locator('[data-qc="board-card"]').evaluateAll((els) =>
-      els
-        .filter((e) => e.querySelector('[data-qc="board-book"]'))
-        .map((e) => e.querySelector("p.font-semibold")?.textContent?.trim() ?? "")
-        .filter(Boolean),
-    );
-    for (const name of names) expect(bookNames).toContain(name);
+    await expect(page.locator('[data-qc="board-pill"]').first()).toBeVisible();
+    const unbooked = await page
+      .locator('[data-qc="board-pill"]:not([data-risk="ontrack"])')
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-name")));
+    for (const name of names) expect(unbooked).toContain(name);
   });
 });
 

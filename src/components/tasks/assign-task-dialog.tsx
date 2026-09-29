@@ -10,7 +10,6 @@ import {
   DialogFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { createTask, getTasksSummary } from "@/lib/clinic.functions";
@@ -161,10 +160,11 @@ export function AssignTaskDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] max-w-[540px] gap-0 overflow-y-auto rounded-[22px] p-0"
+        className="max-h-[calc(100dvh-2rem)] max-w-[540px] grid-rows-[minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[22px] p-0"
         data-qc="assign-task-dialog"
       >
-        <div className="flex flex-col gap-4 p-5">
+        {/* The body scrolls on its own so the close button and the footer stay put. */}
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-5">
           <header className="flex items-center gap-3 pr-8">
             <PatientAvatar
               patientId={patient.id}
@@ -226,28 +226,35 @@ export function AssignTaskDialog({
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
               Who
             </p>
-            <RadioGroup
-              value={chosen ?? ""}
-              onValueChange={(v) => setWho(v)}
-              className="gap-1.5"
-              aria-label="Assign to"
-            >
+            <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Assign to">
               {people.map((m) => {
                 const lane = staffLane(m.id, m.name);
                 const on = m.id === chosen;
                 const isSuggested = m.id === suggestedId && canAssignOthers;
                 return (
-                  <label
+                  <button
                     key={m.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setWho(m.id)}
                     className={cn(
-                      "flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition-colors",
+                      "flex w-full cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
                       on
                         ? "border-transparent bg-accent-wash shadow-[inset_0_0_0_1.5px_var(--accent-line)]"
                         : "border-edge-2 hover:bg-[rgba(47,63,102,0.04)]",
                     )}
                     data-qc={`assign-who-${m.id}`}
                   >
-                    <RadioGroupItem value={m.id} aria-label={m.name} />
+                    <span
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                        on ? "border-foreground" : "border-ink-3/60",
+                      )}
+                      aria-hidden
+                    >
+                      {on ? <span className="h-2 w-2 rounded-full bg-foreground" /> : null}
+                    </span>
                     <span
                       className={cn(
                         "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-accent-foreground",
@@ -267,17 +274,17 @@ export function AssignTaskDialog({
                       </span>
                     </span>
                     {isSuggested ? (
-                      <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-accent-ink">
+                      <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-accent-ink">
                         Suggested
                       </span>
                     ) : null}
-                  </label>
+                  </button>
                 );
               })}
               {people.length === 0 ? (
                 <p className="text-[12.5px] text-ink-3">Loading the team…</p>
               ) : null}
-            </RadioGroup>
+            </div>
           </section>
 
           <section>
@@ -315,8 +322,8 @@ export function AssignTaskDialog({
               <Switch
                 checked={autoClose}
                 onCheckedChange={setAutoClose}
-                aria-label="Close automatically"
-                data-qc="assign-auto-close"
+                aria-label="Finish automatically when the patient books or replies"
+                data-qc="assign-auto-resolve"
               />
               Close automatically when {patient.firstName} books or replies
             </label>

@@ -224,7 +224,7 @@ export function PatientDrawer({
             type="button"
             onClick={() => onAssignTask(patient)}
             data-qc="drawer-assign-task"
-            className="inline-flex cursor-pointer items-center gap-1 text-[12px] font-semibold text-accent-ink hover:text-foreground"
+            className="-my-1 inline-flex min-h-7 cursor-pointer items-center gap-1 py-1 text-[12px] font-semibold text-accent-ink hover:text-foreground"
           >
             <Plus className="h-3 w-3" aria-hidden />
             Assign task

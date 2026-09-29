@@ -1,24 +1,32 @@
-import { useMemo, useState } from "react";
-import { JOURNEY_PHASES } from "@/lib/journey-phases";
-import { Link } from "@tanstack/react-router";
+import { useMemo } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, CalendarClock, CalendarPlus, ClipboardList, Search } from "lucide-react";
-import {
-  getCatalogue,
-  listPatients,
-  listPractitioners,
-  listTreatmentPlans,
-} from "@/lib/clinic.functions";
+import { JOURNEY_PHASES } from "@/lib/journey-phases";
+import { listTreatmentPlans } from "@/lib/clinic.functions";
 import { PatientAvatar } from "@/components/patient-avatar";
-import { QuickAddAppointment } from "@/components/quick-add-appointment";
+import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  nextStepLine,
   overdueLabel,
   planDateLabel,
-  riskChipLabel,
+  bookingMismatchLine,
+  noShowLine,
 } from "@/components/patients/plan-step-copy";
-import { Card } from "@/components/ui/card";
+import {
+  hitTile,
+  isTileKey,
+  RISK_DEEP_LINK_TILES,
+  RISK_META,
+  RISK_ORDER,
+  riskUrgency,
+  TILE_ORDER,
+  tileMatches,
+  type DueBucketKey,
+  type RiskKey,
+  type TileKey,
+} from "@/lib/patients/board-risk";
+import { staffLane } from "@/lib/staff-lane";
 import { cn } from "@/lib/utils";
 
 type Identity = {
@@ -43,299 +51,384 @@ type BoardPlan = {
   overdue: boolean;
   atRisk: boolean;
   riskReason: string | null;
-  /** Earliest live booking, when the patient has one in the diary. */
   nextBookingAt?: string | null;
-  /** That booking when it is for this step; null when it is for something else. */
   stepBookedAt?: string | null;
   otherBookingTreatment?: string | null;
-  /** A booking for this step the patient did not turn up to. */
   noShowAt?: string | null;
+  risk: RiskKey;
+  dueBucket: DueBucketKey;
 };
 
-const COLUMNS: Array<{ phase: BoardPlan["phase"]; label: string; sub: string }> = JOURNEY_PHASES.map(
-  ({ phase, label, sub }) => ({ phase, label, sub }),
-);
-
-/** At-risk cards first (overdue before no-booking), then by patient name. */
-function byRiskThenName(a: BoardPlan, b: BoardPlan) {
-  const rank = (p: BoardPlan) => (p.overdue ? 0 : p.atRisk ? 1 : 2);
-  return rank(a) - rank(b) || a.patientName.localeCompare(b.patientName);
-}
+const PHASES = JOURNEY_PHASES.map(({ phase, label }) => ({ phase, label }));
 
 /**
- * Patients → Journey board: every active treatment plan by phase, from the
- * Advanced mockup. Owners, managers and front desk open on the whole clinic; a
- * practitioner opens on "My patients" and can toggle to everyone.
+ * Patients → Journey board. Information only: triage tiles highlight patients
+ * on a practitioner × phase map, and a pill opens that patient in the Records
+ * drawer. There are no action buttons here; follow-ups live on the Tasks page.
+ * Tiles and the practitioner filter live in the URL (`tiles`, `prac`).
  */
 export function JourneyBoard({
   identity,
   initialAtRiskOnly = false,
+  tiles: tilesParam,
+  prac: pracParam,
 }: {
   identity: Identity;
-  /** Open on the at-risk cards (the dashboard's "overdue steps" chip links here). */
+  /** The dashboard's "overdue steps" chip: open on the three "needs a human" tiles. */
   initialAtRiskOnly?: boolean;
-  /** URL state (wired in the board redesign): highlighted tiles and practitioner filter. */
   tiles?: string | undefined;
   prac?: string | undefined;
 }) {
-  const isPractitionerOnly = !identity.isManager && identity.roles.includes("practitioner");
-  // Role default: practitioners start on their own book.
-  const [scope, setScope] = useState<"mine" | "all">(isPractitionerOnly ? "mine" : "all");
-  const [practitionerId, setPractitionerId] = useState<string>("all");
-  const [atRiskOnly, setAtRiskOnly] = useState(initialAtRiskOnly);
-  const [query, setQuery] = useState("");
+  const navigate = useNavigate();
+  const ownBook = !identity.isManager && identity.roles.includes("practitioner");
 
-  const effectivePractitioner = isPractitionerOnly
-    ? scope === "mine"
-      ? identity.userId
-      : undefined
-    : practitionerId !== "all"
-      ? practitionerId
-      : undefined;
+  const tiles = useMemo<TileKey[]>(() => {
+    if (tilesParam !== undefined) return tilesParam.split(",").filter(isTileKey);
+    return initialAtRiskOnly ? [...RISK_DEEP_LINK_TILES] : [];
+  }, [tilesParam, initialAtRiskOnly]);
+  const prac = useMemo<string[]>(() => {
+    if (pracParam === undefined) return ownBook ? [identity.userId] : [];
+    if (pracParam === "me") return [identity.userId];
+    if (pracParam === "all") return [];
+    return pracParam.split(",").filter(Boolean);
+  }, [pracParam, ownBook, identity.userId]);
+
+  const go = (patch: { tiles?: TileKey[]; prac?: string[] | "all" }) => {
+    const nextTiles = patch.tiles ?? tiles;
+    const nextPrac = patch.prac ?? prac;
+    const search: Record<string, string> = { tab: "board" };
+    if (nextTiles.length) search["tiles"] = nextTiles.join(",");
+    else if (tilesParam !== undefined || initialAtRiskOnly) search["tiles"] = "";
+    if (nextPrac === "all" || nextPrac.length === 0) {
+      if (ownBook) search["prac"] = "all";
+    } else search["prac"] = nextPrac.join(",");
+    for (const k of Object.keys(search)) if (search[k] === "") delete search[k];
+    void navigate({ to: "/patients", search: search as never, replace: true });
+  };
 
   const fetchPlans = useServerFn(listTreatmentPlans);
-  const { data: plans } = useQuery({
-    queryKey: ["treatment-plans", effectivePractitioner ?? "all", atRiskOnly, query],
-    queryFn: () =>
-      fetchPlans({
-        data: {
-          ...(effectivePractitioner ? { practitioner_id: effectivePractitioner } : {}),
-          ...(atRiskOnly ? { at_risk_only: true } : {}),
-          ...(query.trim() ? { query: query.trim() } : {}),
-        },
-      }),
+  const { data } = useQuery({
+    queryKey: ["treatment-plans", "board"],
+    queryFn: () => fetchPlans({ data: {} }),
   });
-  const fetchPractitioners = useServerFn(listPractitioners);
-  const { data: practitioners } = useQuery({
-    queryKey: ["practitioners"],
-    queryFn: () => fetchPractitioners(),
-  });
-  // Quick book from a card needs the patient list and the catalogue; both are
-  // cached under the same keys the Records tab and the diary use.
-  const fetchPatients = useServerFn(listPatients);
-  const { data: patients } = useQuery({ queryKey: ["patients"], queryFn: () => fetchPatients() });
-  const fetchCatalogue = useServerFn(getCatalogue);
-  const { data: catalogue } = useQuery({
-    queryKey: ["catalogue"],
-    queryFn: () => fetchCatalogue(),
-  });
-  const [booking, setBooking] = useState<BoardPlan | null>(null);
+  const plans = useMemo(() => (data ?? []) as BoardPlan[], [data]);
 
-  const byPhase = useMemo(() => {
-    const rows = (plans ?? []) as BoardPlan[];
-    return COLUMNS.map((col) => ({
-      ...col,
-      plans: rows.filter((p) => p.phase === col.phase).sort(byRiskThenName),
-    }));
+  // Rows: every practitioner who holds a plan, busiest first.
+  const practitioners = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; plans: BoardPlan[] }>();
+    for (const p of plans) {
+      const id = p.practitionerId ?? "unassigned";
+      const row = map.get(id) ?? { id, name: p.practitionerName ?? "Unassigned", plans: [] };
+      row.plans.push(p);
+      map.set(id, row);
+    }
+    return [...map.values()].sort(
+      (a, b) => b.plans.length - a.plans.length || a.name.localeCompare(b.name),
+    );
   }, [plans]);
-  const atRiskCount = ((plans ?? []) as BoardPlan[]).filter((p) => p.atRisk).length;
+
+  const pracOn = (id: string) => prac.length === 0 || prac.includes(id);
+  const scoped = plans.filter((p) => pracOn(p.practitionerId ?? "unassigned"));
+  const anyTile = tiles.length > 0;
+  const highlighted = anyTile ? scoped.filter((p) => hitTile(tiles, p)).length : 0;
+
+  const tileCounts = TILE_ORDER.map((tile) => {
+    const matching = scoped
+      .filter((p) => tileMatches(tile, p))
+      .sort((a, b) => riskUrgency(a) - riskUrgency(b));
+    return { tile, count: matching.length, faces: matching.slice(0, 5) };
+  });
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {isPractitionerOnly ? (
-          <div className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi">
-            {(
-              [
-                ["mine", "My patients"],
-                ["all", "All patients"],
-              ] as const
-            ).map(([key, label]) => (
+    <div data-qc="journey-board">
+      {/* Filter row: practitioner faces + the selection summary, Clear on the right. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2" data-qc="board-filter-row">
+        <span className="text-[12.5px] text-ink-3">Practitioner</span>
+        <div className="flex items-center gap-1.5" role="group" aria-label="Filter by practitioner">
+          {practitioners.map((row) => {
+            const lane = staffLane(row.id, row.name);
+            const on = prac.includes(row.id);
+            return (
               <button
-                key={key}
+                key={row.id}
                 type="button"
-                onClick={() => setScope(key)}
-                className={`h-7 cursor-pointer rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors ${
-                  scope === key
-                    ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
-                    : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]"
-                }`}
+                aria-pressed={on}
+                title={row.name}
+                data-qc={`board-prac-${row.id}`}
+                onClick={() =>
+                  go({ prac: on ? prac.filter((x) => x !== row.id) : [...prac, row.id] })
+                }
+                className={cn(
+                  "flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full text-[11px] font-semibold text-accent-foreground transition-[opacity,box-shadow] duration-200",
+                  lane.tone.edge,
+                  on
+                    ? "shadow-[0_0_0_2px_var(--card),0_0_0_4px_var(--foreground)]"
+                    : "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.8)]",
+                  prac.length > 0 && !on && "opacity-45",
+                )}
               >
-                {label}
+                {lane.initials}
               </button>
-            ))}
-          </div>
-        ) : (
-          <select
-            value={practitionerId}
-            onChange={(e) => setPractitionerId(e.target.value)}
-            aria-label="Filter by practitioner"
-            className="h-[34px] rounded-xl border border-edge-2 bg-glass-2 px-3 text-xs shadow-inset-hi"
-          >
-            <option value="all">All practitioners</option>
-            {(practitioners ?? []).map((p: any) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name}
-              </option>
-            ))}
-          </select>
-        )}
-        <button
-          type="button"
-          onClick={() => setAtRiskOnly(!atRiskOnly)}
-          aria-pressed={atRiskOnly}
-          className={`inline-flex h-[34px] items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium shadow-inset-hi transition-colors ${
-            atRiskOnly
-              ? "border-transparent bg-destructive-bg text-destructive-ink"
-              : "border-edge bg-glass-2 text-ink-2 hover:border-accent-line hover:bg-accent-wash hover:text-foreground"
-          }`}
-        >
-          <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-          At risk only{atRiskCount ? ` (${atRiskCount})` : ""}
-        </button>
-        <div className="relative ml-auto">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Patient or plan…"
-            aria-label="Search plans"
-            className="h-[34px] w-52 rounded-xl border border-edge-2 bg-glass-2 pl-8 pr-3 text-xs shadow-inset-hi placeholder:text-muted-foreground"
-          />
+            );
+          })}
         </div>
+        <span className="text-[13px] font-semibold text-foreground" data-qc="board-prac-label">
+          {prac.length
+            ? practitioners
+                .filter((r) => prac.includes(r.id))
+                .map((r) => staffLane(r.id, r.name).short)
+                .join(", ")
+            : "All practitioners"}
+        </span>
+        <span className="text-[12.5px] text-ink-3">· tap tiles to highlight</span>
+        {anyTile || prac.length ? (
+          <button
+            type="button"
+            onClick={() => go({ tiles: [], prac: "all" })}
+            data-qc="board-clear"
+            className="-my-1 ml-auto inline-flex min-h-7 cursor-pointer items-center py-1 text-[13px] font-semibold text-accent-ink underline underline-offset-[3px] hover:text-foreground"
+          >
+            {anyTile ? "Clear highlight" : "Clear"}
+          </button>
+        ) : null}
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {byPhase.map((col) => (
-          <Card key={col.phase} className="p-3">
-            <div className="px-1.5 pb-2 pt-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-sm font-semibold text-foreground">{col.label}</p>
-                <p className="shrink-0 text-2xs tabular-nums text-muted-foreground">{col.plans.length}</p>
-              </div>
-              <p className="mt-0.5 text-2xs text-muted-foreground">{col.sub}</p>
-            </div>
-            <ul className="space-y-2">
-              {col.plans.map((plan) => {
-                const pct = plan.total ? Math.round((plan.done / plan.total) * 100) : 0;
-                const dateLabel = planDateLabel(plan);
-                const lateLabel = overdueLabel(plan);
-                return (
-                  <li
-                    key={plan.id}
-                    className="glass-item p-3"
-                    data-qc="board-card"
-                    data-risk={plan.atRisk ? "at-risk" : "on-track"}
-                  >
-                    <Link
-                      to="/patients/$id"
-                      params={{ id: plan.patientId }}
-                      className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      {/* Triage tiles: toggle, multi-select, OR. */}
+      <div
+        className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6"
+        data-qc="board-tiles"
+      >
+        {tileCounts.map(({ tile, count, faces }) => {
+          const meta = RISK_META[tile];
+          const on = tiles.includes(tile);
+          return (
+            <button
+              key={tile}
+              type="button"
+              aria-pressed={on}
+              data-qc={`board-tile-${tile}`}
+              data-count={count}
+              onClick={() => go({ tiles: on ? tiles.filter((t) => t !== tile) : [...tiles, tile] })}
+              className={cn(
+                "flex min-h-[112px] cursor-pointer flex-col items-start rounded-2xl p-3.5 text-left transition-[background-color,box-shadow,transform] duration-200",
+                on
+                  ? cn(
+                      meta.fill,
+                      "shadow-[0_0_0_2px_var(--tile-ring),0_10px_24px_-12px_var(--tile-ring)]",
+                    )
+                  : "bg-glass shadow-glass hover:bg-card",
+              )}
+              style={{ ["--tile-ring" as string]: `var(${meta.ringVar})` }}
+            >
+              <span
+                className={cn("flex items-center gap-1.5 text-[12.5px] font-semibold", meta.ink)}
+              >
+                <span className={cn("h-2 w-2 rounded-full", meta.dot)} aria-hidden />
+                {meta.label}
+              </span>
+              <span className="mt-1 text-[30px] font-semibold leading-none tracking-[-0.01em] text-foreground">
+                {count}
+              </span>
+              <span className="mt-1.5 text-[11.5px] leading-snug text-ink-2">
+                {meta.description}
+              </span>
+              {faces.length ? (
+                <span className="mt-auto flex pt-2.5" aria-hidden>
+                  {faces.map((p, i) => (
+                    <span
+                      key={p.id}
+                      className={cn("rounded-full ring-2 ring-card", i > 0 && "-ml-1.5")}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <PatientAvatar patientId={plan.patientId} name={plan.patientName} photoUrl={plan.avatarUrl} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-semibold text-foreground">{plan.patientName}</p>
-                          <p className="truncate text-2xs text-muted-foreground">{plan.name}</p>
-                        </div>
-                        <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                          {plan.done}/{plan.total}
-                        </span>
-                      </div>
-                      {plan.nextMilestone || dateLabel ? (
-                        <div
-                          className={cn(
-                            "mt-2 space-y-0.5 text-2xs",
-                            plan.overdue ? "text-destructive-ink" : "text-ink-2",
-                          )}
-                        >
-                          <p className="flex items-start gap-1.5" data-qc="board-step">
-                            <ClipboardList
-                              className={cn(
-                                "mt-px h-3 w-3 shrink-0",
-                                plan.overdue ? "text-destructive-ink" : "text-muted-foreground",
-                              )}
-                              aria-hidden
-                            />
-                            {lateLabel ? (
-                              <span className="line-clamp-2 min-w-0">
-                                <span className="font-semibold">{nextStepLine(plan)}</span>,{" "}
-                                <span className="whitespace-nowrap tabular-nums" data-qc="board-late">
-                                  {lateLabel}
-                                </span>
-                              </span>
-                            ) : (
-                              <span className="truncate">{nextStepLine(plan)}</span>
-                            )}
-                          </p>
-                          {dateLabel ? (
-                            <p
-                              data-qc="board-date"
-                              className="flex items-center gap-1 pl-[1.125rem] tabular-nums text-muted-foreground"
-                            >
-                              <CalendarClock className="h-3 w-3 shrink-0" aria-hidden />
-                              <span className="truncate">{dateLabel}</span>
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      {/* Same bar rule as the dashboard: pink once the next step is late. */}
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-glass-2 shadow-inset-hi">
-                        <div
-                          className={cn(
-                            "h-full rounded-full",
-                            plan.overdue ? "bg-destructive-ink/60" : "bg-accent-line",
-                          )}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </Link>
-                    <div className="mt-2 flex items-center gap-2">
+                      <PatientAvatar
+                        patientId={p.patientId}
+                        name={p.patientName}
+                        photoUrl={p.avatarUrl}
+                        size={22}
+                      />
+                    </span>
+                  ))}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Practitioner × phase map. */}
+      <Card className="overflow-hidden rounded-[18px] p-0" data-qc="board-map">
+        <div className="scroll-x-shadows">
+          <TooltipProvider delayDuration={150}>
+            <div
+              className="grid min-w-[880px] grid-cols-[140px_repeat(4,minmax(0,1fr))]"
+              role="table"
+              aria-label="Plans by practitioner and phase"
+            >
+              <div role="row" className="contents">
+                <div role="columnheader" className="sticky left-0 z-[1] bg-card px-4 py-3" />
+                {PHASES.map((ph, i) => (
+                  <div
+                    key={ph.phase}
+                    role="columnheader"
+                    className="flex items-baseline gap-2 border-l border-dashed border-edge-2 px-3 py-3"
+                  >
+                    <span className="font-mono text-[10px] font-medium text-ink-3">0{i + 1}</span>
+                    <span className="text-[12.5px] font-semibold text-foreground">{ph.label}</span>
+                  </div>
+                ))}
+              </div>
+              {practitioners.map((row) => {
+                const lane = staffLane(row.id, row.name);
+                const rowFaded = prac.length > 0 && !prac.includes(row.id);
+                return (
+                  <div
+                    key={row.id}
+                    role="row"
+                    className={cn(
+                      "contents transition-opacity duration-200",
+                      rowFaded && "[&>*]:opacity-30",
+                    )}
+                    data-qc="board-row"
+                    data-practitioner={row.id}
+                  >
+                    <div
+                      role="rowheader"
+                      className="sticky left-0 z-[1] flex min-h-[132px] items-start gap-2.5 border-t border-edge-2 bg-card px-4 py-4"
+                    >
                       <span
-                        className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-semibold shadow-inset-hi ${
-                          plan.atRisk ? "bg-destructive-bg text-destructive-ink" : "bg-success-bg text-success-ink"
-                        }`}
+                        className={cn(
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-accent-foreground",
+                          lane.tone.edge,
+                        )}
+                        aria-hidden
                       >
-                        {riskChipLabel(plan)}
+                        {lane.initials}
                       </span>
-                      {plan.practitionerName ? (
-                        <span className="min-w-0 truncate text-2xs text-muted-foreground">
-                          ⚕ {plan.practitionerName}
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-semibold text-foreground">
+                          {lane.short || row.name}
                         </span>
-                      ) : null}
-                      {!plan.stepBookedAt ? (
-                        <button
-                          type="button"
-                          data-qc="board-book"
-                          onClick={() => setBooking(plan)}
-                          className="ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-accent px-2.5 text-2xs font-semibold text-accent-foreground shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
-                        >
-                          <CalendarPlus className="h-3 w-3" aria-hidden />
-                          Book
-                        </button>
-                      ) : null}
+                        <span className="block text-[11.5px] text-ink-3">
+                          {row.plans.length} plan{row.plans.length === 1 ? "" : "s"}
+                        </span>
+                      </span>
                     </div>
-                  </li>
+                    {PHASES.map((ph) => {
+                      const cell = row.plans
+                        .filter((p) => p.phase === ph.phase)
+                        .sort((a, b) => riskUrgency(a) - riskUrgency(b));
+                      return (
+                        <div
+                          key={ph.phase}
+                          role="cell"
+                          className="flex flex-wrap content-start gap-1.5 border-l border-t border-dashed border-edge-2 px-3 py-4"
+                        >
+                          {cell.map((p) => {
+                            const hit = anyTile ? hitTile(tiles, p) : null;
+                            const faded = anyTile && !hit;
+                            const meta = RISK_META[p.risk];
+                            const hitMeta = hit ? RISK_META[hit] : null;
+                            return (
+                              <Tooltip key={p.id}>
+                                <TooltipTrigger asChild>
+                                  <Link
+                                    to="/patients"
+                                    search={{ sel: p.patientId, q: undefined } as never}
+                                    data-qc="board-pill"
+                                    data-name={p.patientName}
+                                    data-patient={p.patientId}
+                                    data-risk={p.risk}
+                                    data-hit={hit ?? undefined}
+                                    className={cn(
+                                      "flex h-[26px] items-center gap-1.5 rounded-full pl-[3px] pr-2.5 text-[12px] font-medium text-foreground transition-[opacity,background-color,box-shadow] duration-200",
+                                      hitMeta
+                                        ? cn(
+                                            hitMeta.fill,
+                                            "shadow-[0_0_0_1.5px_var(--pill-ring),0_6px_14px_-6px_var(--pill-ring)]",
+                                          )
+                                        : "bg-[rgba(47,63,102,0.05)] hover:bg-[rgba(47,63,102,0.1)]",
+                                      faded && "opacity-30",
+                                    )}
+                                    style={
+                                      hitMeta
+                                        ? { ["--pill-ring" as string]: `var(${hitMeta.ringVar})` }
+                                        : undefined
+                                    }
+                                  >
+                                    <PatientAvatar
+                                      patientId={p.patientId}
+                                      name={p.patientName}
+                                      photoUrl={p.avatarUrl}
+                                      size={20}
+                                    />
+                                    <span className="max-w-[9rem] truncate">
+                                      {p.patientName.split(" ")[0]}
+                                    </span>
+                                    <span
+                                      className={cn("h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)}
+                                      aria-hidden
+                                    />
+                                  </Link>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs">
+                                  <p className="text-[12.5px] font-semibold">{p.patientName}</p>
+                                  <p className="text-[12px] text-ink-2">
+                                    {p.name} · {p.done}/{p.total}
+                                  </p>
+                                  <p className="text-[12px] text-ink-2">
+                                    {p.nextMilestone
+                                      ? `Next: ${p.nextMilestone.title}`
+                                      : "No next step"}
+                                    {(() => {
+                                      const late = overdueLabel(p);
+                                      const when =
+                                        noShowLine(p) ??
+                                        bookingMismatchLine(p) ??
+                                        late ??
+                                        planDateLabel(p);
+                                      return when ? ` · ${when}` : "";
+                                    })()}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
                 );
               })}
-              {col.plans.length === 0 && (
-                <li className="rounded-2xl bg-glass-2 px-3 py-5 text-center text-2xs text-muted-foreground shadow-inset-hi">
-                  No plans in this phase.
-                </li>
-              )}
-            </ul>
-          </Card>
-        ))}
+              {practitioners.length === 0 ? (
+                <div
+                  role="row"
+                  className="col-span-5 px-4 py-10 text-center text-sm text-muted-foreground"
+                >
+                  No active treatment plans yet.
+                </div>
+              ) : null}
+            </div>
+          </TooltipProvider>
+        </div>
+      </Card>
+
+      {/* Legend and the one note. */}
+      <div
+        className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-[12px] text-ink-2"
+        data-qc="board-legend"
+      >
+        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
+          {RISK_ORDER.map((k) => (
+            <span key={k} className="flex items-center gap-1.5">
+              <span className={cn("h-2 w-2 rounded-full", RISK_META[k].dot)} aria-hidden />
+              {RISK_META[k].label}
+            </span>
+          ))}
+        </div>
+        <p className="text-ink-3">
+          {anyTile ? `${highlighted} of ${scoped.length} plans highlighted · ` : ""}Hover a patient
+          for their plan and next step. Follow-ups live on the Tasks page.
+        </p>
       </div>
-      {booking ? (
-        <QuickAddAppointment
-          patients={(patients ?? []) as any[]}
-          practitioners={(practitioners ?? []) as any[]}
-          catalogue={(catalogue ?? []) as any[]}
-          date={new Date()}
-          defaultPatientId={booking.patientId}
-          defaultPractitionerId={booking.practitionerId ?? undefined}
-          milestoneId={booking.nextMilestone?.id}
-          open
-          onOpenChange={(v) => {
-            if (!v) setBooking(null);
-          }}
-          title={`Book ${booking.patientName}`}
-          centered
-        >
-          <span className="sr-only">Quick book</span>
-        </QuickAddAppointment>
-      ) : null}
     </div>
   );
 }

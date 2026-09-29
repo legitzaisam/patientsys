@@ -29,7 +29,16 @@ export const TILE_ORDER: readonly TileKey[] = [
 
 export const RISK_META: Record<
   TileKey,
-  { label: string; description: string; fill: string; ink: string; dot: string; ring: string }
+  {
+    label: string;
+    description: string;
+    fill: string;
+    ink: string;
+    dot: string;
+    ring: string;
+    /** The colour token behind the selected ring, for inline `box-shadow`s. */
+    ringVar: string;
+  }
 > = {
   overdue: {
     label: "Overdue",
@@ -38,6 +47,7 @@ export const RISK_META: Record<
     ink: "text-destructive-ink",
     dot: "bg-destructive",
     ring: "ring-destructive",
+    ringVar: "--destructive",
   },
   noshow: {
     label: "No-show",
@@ -46,6 +56,7 @@ export const RISK_META: Record<
     ink: "text-noshow-ink",
     dot: "bg-noshow",
     ring: "ring-noshow",
+    ringVar: "--noshow",
   },
   mismatch: {
     label: "Wrong booking",
@@ -54,6 +65,7 @@ export const RISK_META: Record<
     ink: "text-sky-ink",
     dot: "bg-sky",
     ring: "ring-sky",
+    ringVar: "--sky",
   },
   nobook: {
     label: "No booking",
@@ -62,6 +74,7 @@ export const RISK_META: Record<
     ink: "text-warning-ink",
     dot: "bg-warning",
     ring: "ring-warning",
+    ringVar: "--warning",
   },
   due_this_week: {
     label: "Due this week",
@@ -70,6 +83,7 @@ export const RISK_META: Record<
     ink: "text-accent-ink",
     dot: "bg-accent-deep",
     ring: "ring-accent-deep",
+    ringVar: "--accent-deep",
   },
   ontrack: {
     label: "On track",
@@ -78,6 +92,7 @@ export const RISK_META: Record<
     ink: "text-success-ink",
     dot: "bg-success",
     ring: "ring-success",
+    ringVar: "--success",
   },
 };
 

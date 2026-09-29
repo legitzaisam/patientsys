@@ -14,7 +14,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | P1 | [`worklog/01-foundations.md`](worklog/01-foundations.md) | Pure helpers: task types, records summary, board risk, staff lanes, urgent triage, `--noshow` tokens | `9fb4213` |
 | P2 | [`worklog/02-schema.md`](worklog/02-schema.md) | `tasks`, `task_events`, `automation_rules` schema, types, tenancy, demo fixtures | `e0987c5` |
 | P3 | [`worklog/03-server.md`](worklog/03-server.md) | Rule evaluator, sync, task handlers, patient summaries, RBAC, notifications, realtime | `eb79eba` |
-| P4 | [`worklog/04-records.md`](worklog/04-records.md) | Patients → Records (A) and the Assign dialog (D) | |
+| P4 | [`worklog/04-records.md`](worklog/04-records.md) | Patients → Records (A) and the Assign dialog (D) | `5c366d2` |
 | P5 | [`worklog/05-journey-board.md`](worklog/05-journey-board.md) | Patients → Journey board (B) | |
 | P6 | [`worklog/06-tasks-page.md`](worklog/06-tasks-page.md) | Tasks page (C) and the sidebar item | |
 | P7 | [`worklog/07-dashboard-rewire.md`](worklog/07-dashboard-rewire.md) | Dashboard aggregation; rewiring the old recall surfaces | |
@@ -55,10 +55,10 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | `pt-p4-05-assign-dialog` | P4 | `tasks/assign-task-dialog.tsx` | done | [`04-records.md#pt-p4-05-assign-dialog`](worklog/04-records.md#pt-p4-05-assign-dialog) |
 | `pt-p4-06-drawer-actions` | P4 | drawer actions wired | done | [`04-records.md#pt-p4-06-drawer-actions`](worklog/04-records.md#pt-p4-06-drawer-actions) |
 | `pt-p4-07-verify-commit` | P4 | specs, responsive gate, captures; commit | done | [`04-records.md#pt-p4-07-verify-commit`](worklog/04-records.md#pt-p4-07-verify-commit) |
-| `pt-p5-01-board-filters-tiles` | P5 | faces + six triage tiles, URL state | pending | |
-| `pt-p5-02-board-map` | P5 | practitioner × phase map | pending | |
-| `pt-p5-03-board-responsive` | P5 | narrow layouts | pending | |
-| `pt-p5-04-verify-commit` | P5 | specs, responsive gate, captures; commit | pending | |
+| `pt-p5-01-board-filters-tiles` | P5 | faces + six triage tiles, URL state | done | [`05-journey-board.md#pt-p5-01-board-filters-tiles`](worklog/05-journey-board.md#pt-p5-01-board-filters-tiles) |
+| `pt-p5-02-board-map` | P5 | practitioner × phase map | done | [`05-journey-board.md#pt-p5-02-board-map`](worklog/05-journey-board.md#pt-p5-02-board-map) |
+| `pt-p5-03-board-responsive` | P5 | narrow layouts | done | [`05-journey-board.md#pt-p5-03-board-responsive`](worklog/05-journey-board.md#pt-p5-03-board-responsive) |
+| `pt-p5-04-verify-commit` | P5 | specs, responsive gate, captures; commit | done | [`05-journey-board.md#pt-p5-04-verify-commit`](worklog/05-journey-board.md#pt-p5-04-verify-commit) |
 | `pt-p6-01-route-nav` | P6 | `/tasks` route + `tasks-nav` | pending | |
 | `pt-p6-02-task-list-row` | P6 | `task-list`, `task-row` | pending | |
 | `pt-p6-03-delegate-outcome-panels` | P6 | `delegate-panel`, `outcome-panel` | pending | |

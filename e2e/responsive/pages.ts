@@ -508,19 +508,64 @@ const teamFormer: PageState = {
 };
 
 /** Quick book opened from a journey-board card's Book button. */
-const boardBook: PageState = {
-  id: "board-book",
+/** Journey board: two triage tiles lit, so highlighted and faded pills are both on screen. */
+const boardTiles: PageState = {
+  id: "board-tiles",
   open: async (page) => {
-    if (!(await clickIfVisible(page, '[data-qc="board-book"]', 3_000))) return false;
-    await page.getByPlaceholder("Search patient…").waitFor({ state: "visible", timeout: 3_000 });
-    await wait(page, 300);
+    if (!(await clickIfVisible(page, '[data-qc="board-tile-overdue"]', 3_000))) return false;
+    await clickIfVisible(page, '[data-qc="board-tile-nobook"]', 2_000);
+    await wait(page, 400);
     return true;
+  },
+};
+
+/** Records: a row selected with the drawer open (a side column when wide, a sheet when narrow). */
+const recordsDrawer: PageState = {
+  id: "records-drawer",
+  open: async (page) => {
+    const rows = page.locator('[data-qc="records-row"]');
+    if ((await rows.count()) < 2) return false;
+    await rows.nth(1).click();
+    await page
+      .locator('[data-qc="patient-drawer"]')
+      .first()
+      .waitFor({ state: "visible", timeout: 3_000 });
+    // The sheet slides in over 500 ms; measure it at rest.
+    await wait(page, 900);
+    return true;
+  },
+  close: async (page) => {
+    await page.keyboard.press("Escape");
+    await wait(page, 300);
+  },
+};
+
+/** Records: the Assign task dialog from the drawer. */
+const assignDialog: PageState = {
+  id: "assign-dialog",
+  open: async (page) => {
+    const rows = page.locator('[data-qc="records-row"]');
+    if ((await rows.count()) < 1) return false;
+    await rows.nth(0).click();
+    if (!(await clickIfVisible(page, '[data-qc="drawer-assign-task"]', 3_000))) return false;
+    await page
+      .locator('[data-qc="assign-task-dialog"]')
+      .waitFor({ state: "visible", timeout: 3_000 });
+    await wait(page, 500);
+    return true;
+  },
+  close: async (page) => {
+    await page.keyboard.press("Escape");
+    await wait(page, 300);
+    await page.keyboard.press("Escape");
+    await wait(page, 200);
   },
 };
 
 const bulkSelect: PageState = {
   id: "bulk-select",
   open: async (page) => {
+    if (!(await clickIfVisible(page, '[data-qc="records-select-toggle"]', 3_000))) return false;
     const boxes = page.locator('[data-qc="select-patient"]');
     if ((await boxes.count()) < 2) return false;
     await boxes.nth(0).click();
@@ -609,15 +654,16 @@ export const PAGES: PageEntry[] = [
     path: "/patients",
     roles: STAFF,
     settle: "table, .page-title",
-    states: [sidebarClosed, bulkSelect],
-    coreStates: ["sidebar-closed"],
+    states: [sidebarClosed, recordsDrawer, assignDialog, bulkSelect],
+    coreStates: ["sidebar-closed", "records-drawer"],
   },
   {
     id: "patients-board",
     path: "/patients?tab=board",
-    roles: ["owner"],
-    settle: ".page-title",
-    states: [sidebarClosed, boardBook],
+    roles: ["owner", "practitioner"],
+    settle: '[data-qc="board-tiles"]',
+    states: [sidebarClosed, boardTiles],
+    coreStates: ["board-tiles"],
   },
   {
     id: "patient-record",
