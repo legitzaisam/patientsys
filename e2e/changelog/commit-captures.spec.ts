@@ -216,6 +216,22 @@ export const SCENES: Scene[] = [
     },
   },
   {
+    id: "profile-pattern-request",
+    persona: "practitioner",
+    path: "/profile?tab=schedule",
+    settle: '[data-qc="working-pattern"], h1',
+    what: "My profile, proposing new hours (round 2)",
+    open: async (c) => {
+      if (
+        await c.click(
+          c.page.locator('[data-qc="pattern-request-change"]'),
+          "Request a change on the Working pattern card",
+        )
+      )
+        await c.wait(600);
+    },
+  },
+  {
     id: "profile-security",
     persona: "practitioner",
     path: "/profile",

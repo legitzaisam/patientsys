@@ -117,7 +117,7 @@ export function DateField({
         align="start"
         sideOffset={6}
         onOpenAutoFocus={(e) => e.preventDefault()}
-        className="w-auto rounded-[20px] bg-glass-2 p-2 shadow-inset-hi"
+        className="w-[calc(100vw-2rem)] rounded-[20px] bg-glass-2 p-2 shadow-inset-hi sm:w-auto"
         data-qc="date-picker"
       >
         <Calendar
@@ -136,7 +136,7 @@ export function DateField({
             onChange(key);
             setOpen(false);
           }}
-          className="bg-transparent p-1 [--cell-size:2.25rem]"
+          className="mx-auto w-fit bg-transparent p-1 [--cell-size:2.25rem]"
           classNames={{
             month_caption: "flex h-9 w-full items-center justify-center px-9",
             caption_label: "select-none text-sm font-semibold text-foreground",

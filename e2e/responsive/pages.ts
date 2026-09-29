@@ -328,6 +328,49 @@ const timeOffSheet: PageState = {
   },
 };
 
+const EMPTY_CTX: PageCtx = { oliviaId: null, teamMemberId: null, treatPath: null };
+
+/** The working-pattern editor on the Schedule tab (Edit hours, or Request a change). */
+const patternEditor: PageState = {
+  id: "pattern-editor",
+  open: async (page) => {
+    if (!(await clickIfVisible(page, '[data-qc="profile-tab-schedule"]', 3_000))) return false;
+    if (
+      !(await clickIfVisible(
+        page,
+        '[data-qc="pattern-edit"], [data-qc="pattern-request-change"]',
+        3_000,
+      ))
+    )
+      return false;
+    await page.locator('[data-qc="pattern-editor"]').waitFor({ state: "visible", timeout: 5_000 });
+    await wait(page, 400);
+    return true;
+  },
+  close: async (page) => {
+    await clickIfVisible(page, '[data-qc="pattern-editor"] button:has-text("Cancel")', 2_000);
+    await clickIfVisible(page, '[data-qc="profile-tab-overview"]', 2_000);
+    await wait(page, 300);
+  },
+};
+
+/** The editor with the time picker popover open on Monday's start. */
+const timeFieldOpen: PageState = {
+  id: "time-field-open",
+  open: async (page) => {
+    if (!(await patternEditor.open(page, EMPTY_CTX))) return false;
+    if (!(await clickIfVisible(page, '[data-qc="pattern-start-0-open"]', 3_000))) return false;
+    await page.locator('[data-qc="time-picker"]').waitFor({ state: "visible", timeout: 5_000 });
+    await wait(page, 300);
+    return true;
+  },
+  close: async (page) => {
+    await page.keyboard.press("Escape");
+    await wait(page, 200);
+    await patternEditor.close?.(page);
+  },
+};
+
 /** The invoice dialog from the profile hero (people who treat). */
 const invoiceDialog: PageState = {
   id: "invoice-dialog",
@@ -656,6 +699,8 @@ export const PAGES: PageEntry[] = [
       sidebarClosed,
       profileTab("earnings"),
       profileTab("schedule"),
+      patternEditor,
+      timeFieldOpen,
       profileTab("documents"),
       profileTab("access"),
     ],
@@ -677,6 +722,7 @@ export const PAGES: PageEntry[] = [
       sidebarClosed,
       profileTab("earnings"),
       profileTab("schedule"),
+      patternEditor,
       profileTab("documents"),
       profileTab("security"),
       timeOffSheet,

@@ -88,6 +88,10 @@ test.describe("profile changes on Attention needed", () => {
     await page.goto("/dashboard");
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
     const week = page.locator("#attention .glass-card").filter({ hasText: "This week" });
+    // Round 2: staff requests (working pattern, time off) sit beside the profile changes.
+    await expect(week.locator('[data-qc="attention-kind-staff_request"]')).toHaveText(
+      "Requests to approve",
+    );
     const kind = week.locator('[data-qc="attention-kind-profile_change"]');
     await expect(kind).toHaveText("Profile change request");
     await kind.click();

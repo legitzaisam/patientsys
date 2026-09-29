@@ -142,13 +142,13 @@ export function TimeField({
         align="start"
         sideOffset={6}
         onOpenAutoFocus={(e) => e.preventDefault()}
-        className="w-auto rounded-[20px] bg-glass-2 p-2 shadow-inset-hi"
+        className="w-[calc(100vw-2rem)] rounded-[20px] bg-glass-2 p-2 shadow-inset-hi sm:w-auto"
         data-qc="time-picker"
       >
         <div className="flex gap-1.5">
           <div
             ref={hoursRef}
-            className="scroll-y-plain flex max-h-[232px] w-[68px] flex-col gap-0.5 overflow-y-auto pr-0.5"
+            className="scroll-y-plain flex max-h-[232px] flex-1 flex-col gap-0.5 overflow-y-auto pr-0.5 sm:w-[68px] sm:flex-none"
             role="listbox"
             aria-label="Hour"
           >
@@ -172,7 +172,11 @@ export function TimeField({
               </button>
             ))}
           </div>
-          <div className="flex w-[68px] flex-col gap-0.5" role="listbox" aria-label="Minutes">
+          <div
+            className="flex flex-1 flex-col gap-0.5 sm:w-[68px] sm:flex-none"
+            role="listbox"
+            aria-label="Minutes"
+          >
             {MINUTES.map((m) => (
               <button
                 key={m}

@@ -127,9 +127,14 @@ test.describe("practitioner on their own profile", () => {
     // Last month was already invoiced: download only.
     await expect(dialog.locator('[data-qc="invoice-note-sent"]')).toBeVisible();
     await expect(dialog.locator('[data-qc="invoice-schedule"]')).toHaveCount(0);
-    // This month can be scheduled for the 1st.
+    // This month can be scheduled for the 1st (or is already scheduled, when an
+    // earlier spec raised it: sending or re-scheduling replaces that).
     await dialog.locator('[data-qc^="invoice-period-"]').first().click();
-    await expect(dialog.locator('[data-qc="invoice-note-progress"]')).toBeVisible();
+    await expect(
+      dialog
+        .locator('[data-qc="invoice-note-progress"], [data-qc="invoice-note-scheduled"]')
+        .first(),
+    ).toBeVisible();
     await expect(dialog.locator('[data-qc="invoice-number"]')).toHaveText(/^INV-NR-\d{4}-\d{2}$/);
     await dialog.locator('[data-qc="invoice-recipient-owner"]').click();
     await dialog.locator('[data-qc="invoice-schedule"]').click();
@@ -228,10 +233,10 @@ test.describe("owner on Nadia", () => {
       page.locator('[data-qc="timeoff-row"][data-status="approved"]').first(),
     ).toBeVisible();
 
-    // The earnings tab opens for the owner, without the invoice button.
+    // The earnings tab opens for the owner; since round 2 the owner can raise the invoice too.
     await openTab(page, "earnings");
     await expect(page.locator('[data-qc="metric:earnings.share"]')).toContainText("£");
-    await expect(page.locator('[data-qc="earnings-invoice"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="earnings-invoice"]')).toHaveCount(1);
   });
 });
 
