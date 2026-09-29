@@ -37,7 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RecallTasksPanel, type RecallExtraItem } from "@/components/retention/recall-tasks-panel";
+import { PatientTasksPanel } from "@/components/retention/patient-tasks-panel";
 import { TreatmentPlanCard } from "@/components/patients/treatment-plan-card";
 import { CommsPreferencesCard } from "@/components/comms/comms-preferences";
 import { CommsLogCard } from "@/components/comms/comms-log";
@@ -386,47 +386,6 @@ function PatientRecord() {
     (sum, t) => sum + Number(t.price ?? 0),
     0,
   );
-  // The list's open-items pill counts recall tasks plus these derived items;
-  // the Recall tasks card lists the same so the two never disagree.
-  const awaitingSignature = ((data.documents ?? []) as { status?: string }[]).filter(
-    (d) => d.status === "sent" || d.status === "viewed",
-  ).length;
-  const overdueTreatment =
-    data.retention?.risk === "overdue"
-      ? (
-          (data.treatments ?? []) as {
-            name?: string;
-            next_due_at?: string | null;
-            performed_at: string;
-          }[]
-        )
-          .filter((t) => t.next_due_at)
-          .sort(
-            (a, b) => new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime(),
-          )[0]
-      : null;
-  const recallExtras: RecallExtraItem[] = [
-    ...(awaitingSignature > 0
-      ? [
-          {
-            id: `docs-${id}`,
-            label: `${awaitingSignature} form${awaitingSignature === 1 ? "" : "s"} awaiting signature`,
-            kind: "Paperwork",
-            onOpen: () => setActiveTab("documents"),
-          },
-        ]
-      : []),
-    ...(overdueTreatment
-      ? [
-          {
-            id: `due-${id}`,
-            label: `${overdueTreatment.name ?? "Treatment"} overdue`,
-            kind: "Treatment due",
-          },
-        ]
-      : []),
-  ];
-
   return (
     <AppShell identity={identity}>
       {stepUp.dialog}
@@ -912,11 +871,13 @@ function PatientRecord() {
                   </Link>
                 </div>
               </Card>
-              <RecallTasksPanel
+              <PatientTasksPanel
                 patientId={id}
                 patientName={patientName || "this patient"}
+                patientFirstName={p?.first_name ?? "the patient"}
+                avatarUrl={p?.avatar_url ?? null}
                 practitionerId={(history[0] as any)?.practitioner_id ?? null}
-                extraItems={recallExtras}
+                context={history[0]?.name ? `Last treatment ${history[0].name}` : null}
               />
             </TabsContent>
 

@@ -22,13 +22,6 @@ describe("resolveScope", () => {
     expect(resolveScope(owner, "getRetention")).toBeNull();
   });
 
-  it("narrows everyone below manager on nonManagerOwnAssignments handlers", () => {
-    expect(resolveScope(practitioner, "listOpenRecallTasks")).toBe("u-prac");
-    expect(resolveScope(frontDesk, "listOpenRecallTasks")).toBe("u-desk");
-    expect(resolveScope(owner, "listOpenRecallTasks")).toBeNull();
-    expect(resolveScope(managerPractitioner, "listOpenRecallTasks")).toBeNull();
-  });
-
   it("leaves handlers without a scope rule clinic-wide for every role", () => {
     for (const identity of [practitioner, managerPractitioner, frontDesk, owner]) {
       expect(resolveScope(identity, "listPatients")).toBeNull();

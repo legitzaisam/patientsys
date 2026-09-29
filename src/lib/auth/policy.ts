@@ -245,14 +245,6 @@ export const POLICY = {
   markOfferViewed: { kind: "patientSelf" },
   claimOffer: { kind: "patientSelf" },
 
-  /* Recall tasks */
-  createRecallTask: { kind: "staff" },
-  updateRecallTask: { kind: "manager" },
-  setRecallTaskStatus: { kind: "staff" },
-  deleteRecallTask: { kind: "capability", key: "tasks.delete" },
-  listRecallTasks: { kind: "staff" },
-  listOpenRecallTasks: { kind: "staff" },
-
   /* Tasks (who sees which rows and who may do what is decided in the handlers) */
   listTasks: { kind: "staff" },
   getTasksSummary: { kind: "staff" },
@@ -305,14 +297,11 @@ type ScopeRule =
   /** Everything in the clinic. */
   | "clinic"
   /** A practitioner sees their own book; managers and non-practitioners see the clinic. */
-  | "practitionerOwnBook"
-  /** Anyone below manager sees only rows assigned to them. */
-  | "nonManagerOwnAssignments";
+  | "practitionerOwnBook";
 
 const SCOPE: Partial<Record<HandlerName, ScopeRule>> = {
   getDashboard: "practitionerOwnBook",
   getRetention: "practitionerOwnBook",
-  listOpenRecallTasks: "nonManagerOwnAssignments",
 };
 
 type ScopedIdentity = { userId: string; isManager: boolean; roles: string[] };
@@ -325,8 +314,6 @@ export function resolveScope(identity: ScopedIdentity, name: HandlerName): strin
   switch (SCOPE[name]) {
     case "practitionerOwnBook":
       return identity.isManager || !identity.roles.includes("practitioner") ? null : identity.userId;
-    case "nonManagerOwnAssignments":
-      return identity.isManager ? null : identity.userId;
     default:
       return null;
   }

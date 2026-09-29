@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { CalendarClock, Clock, PhoneCall } from "lucide-react";
-import { createRecallTask, rescheduleAppointment } from "@/lib/clinic.functions";
+import { createTask, rescheduleAppointment } from "@/lib/clinic.functions";
 import { DrilldownDatePicker } from "@/components/drilldown-date-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,14 +73,11 @@ export function NoShowFollowUpDialog({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // A missed booking becomes a "Rebook no-show" task: the front desk pool by
+  // default, or the practitioner who held the booking when there is one.
   const task = useMutation({
-    mutationFn: useServerFn(createRecallTask),
-    onSuccess: (res: any) =>
-      done(
-        res?.duplicate
-          ? "Follow-up task already on the dashboard"
-          : "Follow-up task added to the dashboard",
-      ),
+    mutationFn: useServerFn(createTask),
+    onSuccess: () => done("Rebook task added to the Tasks page"),
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -205,11 +202,10 @@ export function NoShowFollowUpDialog({
                   task.mutate({
                     data: {
                       patient_id: a.patient_id,
+                      type: "rebook_no_show",
+                      title: `Rebook missed ${String(a.treatment_name ?? "appointment").toLowerCase()}`,
                       note,
-                      recipients: a.practitioner_id
-                        ? [{ id: a.practitioner_id, label: a.profiles?.full_name ?? "Practitioner" }]
-                        : [],
-                      due_at: new Date(`${taskDue}T12:00:00`).toISOString(),
+                      dueAt: new Date(`${taskDue}T12:00:00`).toISOString(),
                     },
                   })
                 }

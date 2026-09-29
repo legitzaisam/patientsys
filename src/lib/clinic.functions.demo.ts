@@ -99,6 +99,7 @@ import {
   shapeTask,
   snapshotOf,
   summarise,
+  taskAttentionItems,
   taskRole,
   type PatientLite,
   type TaskEventInput,
@@ -128,7 +129,6 @@ import { buildRecordsSummaries } from "@/lib/patients/records-rows";
 import { boardRisk, dueBucketKey } from "@/lib/patients/board-risk";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
-import { attentionDueSubtitle, skinPlanDueForAttention } from "@/components/patients/plan-step-copy";
 import {
   CONSENT_BODY_DEFAULT,
   PRE_TREATMENT_CHECKS,
@@ -769,80 +769,27 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     activePlans = activePlans.filter((p) => !p.practitioner_id || p.practitioner_id === me.userId);
   }
   const todayKeyForPlans = clinicDayKey(today);
-  // Attention “Skin-plan treatment due”: no booking for the next step, and
-  // that step overdue or due within 14 days. A step the patient did not turn
-  // up to is a no show instead, so nobody is chased twice.
-  const nowISO = today.toISOString();
-  const stepLookbackISO = noShowLookbackISO(today);
-  const stepApptsByPatient = new Map<string, PlanStepAppointment[]>();
-  for (const a of appointments) {
-    if (a.status !== "booked" && a.status !== "no_show") continue;
-    if (a.starts_at < stepLookbackISO) continue;
-    const list = stepApptsByPatient.get(a.patient_id) ?? [];
-    list.push(a as PlanStepAppointment);
-    stepApptsByPatient.set(a.patient_id, list);
-  }
-  const planStepNoShows: { patientId: string; who: string; at: string }[] = [];
-  for (const p of activePlans) {
-    const mine = planMilestones.filter((m) => m.plan_id === p.id).sort((a, b) => a.idx - b.idx);
-    const next =
-      mine.find((m) => m.status === "current") ?? mine.find((m) => m.status === "upcoming") ?? null;
-    const patient = patientById(p.patient_id);
-    const who = `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Patient";
-    const title = (next?.title as string | undefined) || "Next step";
-    const dueDate = (next?.due_date as string | null | undefined) ?? null;
-    const step = planStepState({
-      nextMilestone: next
-        ? { id: next.id, kind: next.kind, dueDate, appointmentId: next.appointment_id }
-        : null,
-      planCatalogueId: p.catalogue_id,
-      appointments: stepApptsByPatient.get(p.patient_id) ?? [],
-      todayKey: todayKeyForPlans,
-      nowISO,
-    });
-    if (step.noShowAt) {
-      planStepNoShows.push({ patientId: p.patient_id, who, at: step.noShowAt });
-      continue;
-    }
-    if (step.stepBookedAt) continue;
-    if (!skinPlanDueForAttention(dueDate, todayKeyForPlans)) continue;
-    attentionItems.push({
-      id: `due-${p.id}`,
-      kind: "treatment_due",
-      urgency: "this_week",
-      title: `${who} — ${title}`,
-      subtitle: attentionDueSubtitle({
-        nextMilestone: { title, dueDate },
-        overdue: step.overdue,
-        atRisk: true,
-        riskReason: "No upcoming booking",
-        otherBookingTreatment: step.otherBookingTreatment,
-      }),
-      patientId: p.patient_id,
-      href: `/patients/${p.patient_id}?tab=treatments#plan`,
-    });
-  }
-  // A missed step stays on the list past today, until it is rebooked or the
-  // booking is cancelled. Today's diary already pushed a row for some of
-  // these, so the appointment id keeps them from doubling up.
-  const listedNoShows = new Set(
-    attentionItems.filter((i) => i.kind === "no_show").map((i) => i.id as string),
-  );
-  for (const miss of planStepNoShows) {
-    const appt = (stepApptsByPatient.get(miss.patientId) ?? []).find(
-      (a) => a.starts_at === miss.at && a.status === "no_show",
+  // Tasks: the page owns the detail; Attention needed carries the two aggregates
+  // (overdue, due today) for what this person can see. Plan-step dues and
+  // misses are tasks now, so they no longer appear here one by one.
+  demoSyncRuleTasks();
+  {
+    const practitioners = demoPatientPractitioners(today);
+    attentionItems.push(
+      ...taskAttentionItems(
+        demoTaskRows(),
+        {
+          userId: me.userId,
+          roles: me.roles,
+          isManager: me.isManager,
+          isOwner: me.isOwner,
+          isAdmin: me.isAdmin,
+          permissions: me.permissions,
+        },
+        (id) => practitioners.get(id) ?? null,
+        today,
+      ),
     );
-    if (!appt || listedNoShows.has(`no-show-${appt.id}`)) continue;
-    attentionItems.push({
-      id: `no-show-${appt.id}`,
-      kind: "no_show",
-      urgency: "urgent",
-      title: `${miss.who} — no show`,
-      subtitle: `${appt.treatment_name ?? "Treatment"} · ${new Date(appt.starts_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
-      patientId: miss.patientId,
-      appointmentId: appt.id,
-      href: `/patients/${miss.patientId}?tab=treatments#plan`,
-    });
   }
   const journeyPhases = (["consult", "foundation", "build", "results"] as const).map((phase) => {
     const inPhase = activePlans.filter((p) => p.phase === phase);
@@ -6395,265 +6342,6 @@ export const undoTaskEvent = createServerFn({ method: "POST" })
     return { ok: true, eventId };
   });
 
-/* ---------------------------------------------------------------- */
-/* recall tasks: thin adapters over tasks until the surfaces move     */
-/* ---------------------------------------------------------------- */
-
-/** The old recall_tasks row shape, read from a task, so the dashboard card and record panel keep working. */
-function legacyRecallRow(t: TaskRow) {
-  const status =
-    t.status === "done" || t.status === "auto_closed" || t.status === "cancelled"
-      ? "completed"
-      : t.attempts > 0
-        ? "contacted"
-        : "open";
-  const lastAttempt = [...taskEvents]
-    .reverse()
-    .find((e) => e.task_id === t.id && e.kind === "attempt");
-  return {
-    id: t.id,
-    clinic_id: t.clinic_id,
-    patient_id: t.patient_id,
-    group_id: t.id,
-    assigned_to: t.assignee_id,
-    assigned_label: t.assignee_id
-      ? profileName(t.assignee_id)
-      : t.assignee_role === "front_desk"
-        ? "Front desk pool"
-        : null,
-    created_by: t.created_by,
-    note: t.note ?? t.title,
-    status,
-    contacted_at: status === "contacted" ? (lastAttempt?.created_at ?? t.updated_at) : null,
-    contacted_by: status === "contacted" ? (lastAttempt?.actor_id ?? null) : null,
-    completed_at: status === "completed" ? t.resolved_at : null,
-    completed_by: status === "completed" ? t.resolved_by : null,
-    status_by_label:
-      status === "completed"
-        ? t.resolved_by
-          ? profileName(t.resolved_by)
-          : "Closed automatically"
-        : status === "contacted"
-          ? profileName(lastAttempt?.actor_id ?? t.assignee_id ?? "") || null
-          : null,
-    reassigned_at: null,
-    due_at: t.due_at,
-    created_at: t.created_at,
-    updated_at: t.updated_at,
-  };
-}
-
-export const createRecallTask = createServerFn({ method: "POST" })
-  .validator(
-    (data: {
-      patient_id: string;
-      note?: string;
-      recipients: { id: string; label: string }[];
-      due_at?: string;
-    }) => parseInput(schemas.CreateRecallTask, data),
-  )
-  .handler(async ({ data }) => {
-    const me = requireStaff();
-    const now = new Date();
-    const nowISO = now.toISOString();
-    const requested = data.recipients.length
-      ? data.recipients
-      : [{ id: me.userId, label: me.profile?.full_name ?? "The team" }];
-    const note = (data.note ?? "").trim();
-    const open = demoTaskRows().filter(
-      (t) => t.patient_id === data.patient_id && isOpen(t) && t.type === "recall",
-    );
-    const sameNote = open.filter((t) => (t.note ?? t.title).trim() === note);
-    const alreadyAssigned = new Set((sameNote.length ? sameNote : open).map((t) => t.assignee_id));
-    const recipients = requested.filter((r) => !alreadyAssigned.has(r.id));
-    if (!recipients.length)
-      return { ok: true, duplicate: true, group_id: (sameNote[0] ?? open[0])?.id ?? null };
-    const actorName = me.profile?.full_name ?? "A team member";
-    let groupId: string | null = null;
-    for (const r of recipients) {
-      const row: TaskRow = {
-        id: newId("t4"),
-        clinic_id: CLINIC_ID,
-        patient_id: data.patient_id,
-        type: "recall",
-        title: note ? note.slice(0, 80) : "Follow up and rebook",
-        context: null,
-        source: "manual",
-        source_label: `Assigned by ${actorName}`,
-        rule_id: null,
-        dedupe_key: null,
-        assignee_id: r.id,
-        assignee_role: null,
-        created_by: me.userId,
-        note: note || null,
-        priority: 2,
-        due_at: data.due_at ?? new Date(now.getTime() + 7 * 86400000).toISOString(),
-        escalate_at: null,
-        escalated_at: null,
-        escalated_to: null,
-        attempts: 0,
-        next_retry_at: null,
-        snoozed_until: null,
-        status: "open",
-        resolution: null,
-        resolved_by: null,
-        resolved_at: null,
-        auto_close: true,
-        links: {},
-        created_at: nowISO,
-        updated_at: nowISO,
-      };
-      tasks.unshift(row);
-      demoRecordTaskEvent(
-        row.id,
-        { kind: "created", data: { assignee_id: r.id, note: row.note } },
-        me.userId,
-      );
-      demoNotifyAssignee(me.userId, actorName, row, "task_assigned", row.note);
-      groupId = groupId ?? row.id;
-    }
-    return { ok: true, group_id: groupId };
-  });
-
-export const updateRecallTask = createServerFn({ method: "POST" })
-  .validator(
-    (data: { task_id: string; recipients: { id: string; label: string }[]; note?: string }) =>
-      parseInput(schemas.UpdateRecallTask, data),
-  )
-  .handler(async ({ data }) => {
-    const me = requireStaff();
-    if (!me.isManager) throw new Error("Manager access only");
-    if (!data.recipients.length) throw new Error("Pick at least one team member");
-    const row = demoFindTask(data.task_id);
-    const nowISO = new Date().toISOString();
-    const target = data.recipients[0]!;
-    const reassigned = row.assignee_id !== target.id;
-    demoApplyTransition(
-      row,
-      planAssign(
-        row,
-        { assigneeId: target.id, note: data.note !== undefined ? data.note : null },
-        me.userId,
-        me.profile?.full_name ?? "A manager",
-        nowISO,
-      ),
-      me.userId,
-    );
-    return { ok: true, group_id: row.id, reassigned };
-  });
-
-export const setRecallTaskStatus = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; status: "open" | "contacted" | "completed" }) =>
-    parseInput(schemas.SetRecallTaskStatus, data),
-  )
-  .handler(async ({ data }) => {
-    const me = requireStaff();
-    const row = demoFindTask(data.task_id);
-    if (!me.isManager && row.assignee_id !== me.userId && !me.roles.includes("front_desk")) {
-      throw new Error("Only the assigned team member can update this recall task");
-    }
-    const nowISO = new Date().toISOString();
-    if (data.status === "completed") {
-      if (isOpen(row))
-        demoApplyTransition(row, planComplete(row, "handled", me.userId, nowISO), me.userId);
-    } else if (data.status === "contacted") {
-      demoApplyTransition(
-        row,
-        {
-          patch: { attempts: row.attempts + 1, updated_at: nowISO },
-          event: {
-            kind: "attempt",
-            data: { previous: snapshotOf(row), outcome: "contacted", actor_id: me.userId },
-          },
-        },
-        me.userId,
-      );
-    } else {
-      demoApplyTransition(
-        row,
-        {
-          patch: {
-            status: "open",
-            resolution: null,
-            resolved_by: null,
-            resolved_at: null,
-            attempts: 0,
-            updated_at: nowISO,
-          },
-          event: { kind: "reopened", data: { previous: snapshotOf(row), actor_id: me.userId } },
-        },
-        me.userId,
-      );
-    }
-    return { ok: true };
-  });
-
-export const deleteRecallTask = createServerFn({ method: "POST" })
-  .validator((data: { task_id: string; assignee_ids?: string[] }) =>
-    parseInput(schemas.DeleteRecallTask, data),
-  )
-  .handler(async ({ data }) => {
-    const me = identity();
-    if (!me.isOwner && !me.permissions.includes("tasks.delete")) {
-      throw new Error("You do not have access to delete tasks");
-    }
-    const row = tasks.find((t) => t.id === data.task_id) as TaskRow | undefined;
-    if (!row) return { ok: true, removed: [] as string[] };
-    const label = row.assignee_id ? profileName(row.assignee_id) : "Assignee";
-    demoApplyTransition(
-      row,
-      {
-        patch: {
-          status: "cancelled",
-          resolved_by: me.userId,
-          resolved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        event: { kind: "cancelled", data: { previous: snapshotOf(row), actor_id: me.userId } },
-      },
-      me.userId,
-    );
-    return { ok: true, removed: [label] };
-  });
-
-export const listRecallTasks = createServerFn({ method: "GET" })
-  .validator((data: { patient_id: string }) => parseInput(schemas.ListRecallTasks, data))
-  .handler(async ({ data }) => {
-    requireStaff();
-    demoSyncRuleTasks();
-    return sortDesc(
-      demoTaskRows()
-        .filter((t) => t.patient_id === data.patient_id && t.status !== "cancelled")
-        .map(legacyRecallRow),
-      "created_at",
-    );
-  });
-
-export const listOpenRecallTasks = createServerFn({ method: "GET" }).handler(async () => {
-  const me = requireStaff();
-  demoSyncRuleTasks();
-  const rows = sortDesc(
-    demoTaskRows().filter(
-      (t) => isOpen(t) && (me.isManager ? !!t.assignee_id : t.assignee_id === me.userId),
-    ),
-    "created_at",
-  ).map((t: TaskRow) => {
-    const p = patientById(t.patient_id);
-    return {
-      ...legacyRecallRow(t),
-      patients: p
-        ? {
-            id: p.id,
-            first_name: p.first_name,
-            last_name: p.last_name,
-            phone: p.phone,
-            email: p.email,
-          }
-        : null,
-    };
-  });
-  return rows.slice(0, 25);
-});
 /* ---------------------------------------------------------------- */
 /* settings: colours, catalogue, clinic, permissions, notes           */
 /* ---------------------------------------------------------------- */

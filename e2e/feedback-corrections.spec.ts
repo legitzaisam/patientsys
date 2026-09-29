@@ -174,18 +174,14 @@ test.describe("as the owner", () => {
       "href",
       /\/patients\/[^?]+\?tab=treatments#plan/,
     );
-    // Tasks carry a due date and an assignee, and page ten at a time.
-    await expect(page.locator('[data-qc="task-meta"]').first()).toBeVisible();
-    const taskRows = page.locator('[data-qc="my-tasks"] > div');
-    expect(await taskRows.count()).toBeLessThanOrEqual(10);
-    const pagination = page.locator('[data-qc="my-tasks-pagination"]');
-    if (await pagination.isVisible()) {
-      await expect(pagination).toContainText(/Showing 1–10 of \d+ tasks/);
-      await pagination.getByRole("button", { name: "Next page" }).click();
-      await expect(pagination.locator('[data-qc="my-tasks-pagination-page"]')).toContainText(
-        "Page 2 of",
-      );
-    }
+    // The tasks card is an aggregate: open and overdue counts, type chips, the team's load,
+    // and one way in. Nothing is actioned here.
+    const card = page.locator('[data-qc="my-tasks"]');
+    expect(Number(await card.getAttribute("data-open"))).toBeGreaterThan(0);
+    await expect(page.locator('[data-qc="tasks-summary-types"] a').first()).toBeVisible();
+    await expect(page.locator('[data-qc="tasks-summary-team"]')).toBeVisible();
+    await expect(card.locator("button")).toHaveCount(0);
+    await expect(page.locator('[data-qc="tasks-summary-open"]')).toHaveAttribute("href", "/tasks");
   });
 
   test("toolbar icons: no butter ring at the top of the page, a ring once scrolled", async ({

@@ -182,7 +182,10 @@ export const PERMISSION_META: Record<
   "view.dashboard": { label: "Dashboard", description: "Open the clinic dashboard." },
   "view.dashboard.diary": { label: "Dashboard diary", description: "See today's diary on the dashboard." },
   "view.dashboard.attention": { label: "Attention needed", description: "See the attention list on the dashboard." },
-  "view.dashboard.followups": { label: "Follow-up tasks", description: "See follow-up tasks on the dashboard." },
+  "view.dashboard.followups": {
+    label: "Tasks summary",
+    description: "See the tasks summary card on the dashboard.",
+  },
   "view.dashboard.pauses": { label: "Pause requests", description: "See plan pause requests on the dashboard." },
   "view.dashboard.journeys": { label: "Treatment journeys", description: "See treatment journeys on the dashboard." },
   "view.schedule": { label: "Diary", description: "Open the clinic diary." },

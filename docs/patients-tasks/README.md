@@ -16,7 +16,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | P3 | [`worklog/03-server.md`](worklog/03-server.md) | Rule evaluator, sync, task handlers, patient summaries, RBAC, notifications, realtime | `eb79eba` |
 | P4 | [`worklog/04-records.md`](worklog/04-records.md) | Patients → Records (A) and the Assign dialog (D) | `5c366d2` |
 | P5 | [`worklog/05-journey-board.md`](worklog/05-journey-board.md) | Patients → Journey board (B) | `7f760b7` |
-| P6 | [`worklog/06-tasks-page.md`](worklog/06-tasks-page.md) | Tasks page (C) and the sidebar item | |
+| P6 | [`worklog/06-tasks-page.md`](worklog/06-tasks-page.md) | Tasks page (C) and the sidebar item | `192844e` |
 | P7 | [`worklog/07-dashboard-rewire.md`](worklog/07-dashboard-rewire.md) | Dashboard aggregation; rewiring the old recall surfaces | |
 | P8 | [`worklog/08-tests-and-verify.md`](worklog/08-tests-and-verify.md) | e2e, device matrix, full verification, after-captures, docs | |
 
@@ -68,11 +68,11 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | `pt-p6-07-sidebar-badge` | P6 | Tasks nav item with open-count badge | done | [`06-tasks-page.md#pt-p6-07-sidebar-badge`](worklog/06-tasks-page.md#pt-p6-07-sidebar-badge) |
 | `pt-p6-08-tasks-responsive` | P6 | narrow layouts | done | [`06-tasks-page.md#pt-p6-08-tasks-responsive`](worklog/06-tasks-page.md#pt-p6-08-tasks-responsive) |
 | `pt-p6-09-verify-commit` | P6 | role probes, responsive gate, captures; commit | done | [`06-tasks-page.md#pt-p6-09-verify-commit`](worklog/06-tasks-page.md#pt-p6-09-verify-commit) |
-| `pt-p7-01-dashboard-summary-card` | P7 | `tasks-summary-card.tsx` replaces Follow-up tasks | pending | |
-| `pt-p7-02-attention-aggregate` | P7 | aggregated `tasks` attention items | pending | |
-| `pt-p7-03-record-panel` | P7 | `patient-tasks-panel.tsx` on the record | pending | |
-| `pt-p7-04-noshow-retention-rewire` | P7 | no-show dialog, retention send, hovercard on tasks; adapters removed | pending | |
-| `pt-p7-05-verify-commit` | P7 | specs, responsive gate, captures; commit | pending | |
+| `pt-p7-01-dashboard-summary-card` | P7 | `tasks-summary-card.tsx` replaces Follow-up tasks | done | [`07-dashboard-rewire.md#pt-p7-01-dashboard-summary-card`](worklog/07-dashboard-rewire.md#pt-p7-01-dashboard-summary-card) |
+| `pt-p7-02-attention-aggregate` | P7 | aggregated `tasks` attention items | done | [`07-dashboard-rewire.md#pt-p7-02-attention-aggregate`](worklog/07-dashboard-rewire.md#pt-p7-02-attention-aggregate) |
+| `pt-p7-03-record-panel` | P7 | `patient-tasks-panel.tsx` on the record | done | [`07-dashboard-rewire.md#pt-p7-03-record-panel`](worklog/07-dashboard-rewire.md#pt-p7-03-record-panel) |
+| `pt-p7-04-noshow-retention-rewire` | P7 | no-show dialog, retention send, hovercard on tasks; adapters removed | done | [`07-dashboard-rewire.md#pt-p7-04-noshow-retention-rewire`](worklog/07-dashboard-rewire.md#pt-p7-04-noshow-retention-rewire) |
+| `pt-p7-05-verify-commit` | P7 | specs, responsive gate, captures; commit | done | [`07-dashboard-rewire.md#pt-p7-05-verify-commit`](worklog/07-dashboard-rewire.md#pt-p7-05-verify-commit) |
 | `pt-p8-01-e2e-tasks` | P8 | `e2e/tasks.spec.ts` | pending | |
 | `pt-p8-02-e2e-patients` | P8 | `e2e/patients-records.spec.ts`, `e2e/journey-board.spec.ts` | pending | |
 | `pt-p8-03-e2e-updates` | P8 | touched specs, responsive pages | pending | |

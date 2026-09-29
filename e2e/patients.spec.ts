@@ -240,12 +240,12 @@ test.describe("record: what the list promises, the record shows", () => {
     await page.locator('[data-qc="drawer-name"]').click();
     await expect(page).toHaveURL(/\/patients\/[^/?]+/);
     await page.getByRole("tab", { name: "Treatments" }).click();
-    const recall = page.locator('[data-qc="recall-tasks"]');
-    await expect(recall).toBeVisible();
-    await expect
-      .poll(async () => Number(await recall.getAttribute("data-open")))
-      .toBeGreaterThanOrEqual(pillCount);
-    await expect(recall).not.toContainText("Retention page");
+    const panel = page.locator('[data-qc="patient-tasks"]');
+    await expect(panel).toBeVisible();
+    await expect.poll(async () => Number(await panel.getAttribute("data-open"))).toBe(pillCount);
+    await expect(panel.locator('[data-qc="patient-task"][data-status="open"]')).toHaveCount(
+      pillCount,
+    );
 
     // Record treatment and Open chat sit on the header; the rest live in ⋯.
     await expect(page.getByRole("button", { name: "Record treatment" })).toBeVisible();
@@ -334,46 +334,38 @@ test.describe("insights", () => {
   });
 });
 
-test.describe("attention treatment due", () => {
-  async function treatmentDueNames(page: import("@playwright/test").Page) {
+test.describe("attention needed aggregates tasks", () => {
+  async function tasksAggregate(page: import("@playwright/test").Page) {
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
     await expect(page.locator('[data-qc="attention-kind-message"]')).toHaveCount(0);
-    const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
+    // Plan steps no longer appear one by one; tasks do, as two aggregate rows at most.
+    await expect(page.locator('[data-qc="attention-kind-treatment_due"]')).toHaveCount(0);
+    const kind = page.locator('[data-qc="attention-kind-tasks"]').first();
     await expect(kind).toBeVisible({ timeout: 15_000 });
-    await expect(kind).toHaveText("Skin-plan treatment due");
+    await expect(kind).toHaveText("Tasks");
     await kind.click();
-    const more = page.getByRole("button", { name: /Show \d+ more/ });
-    if ((await more.count()) > 0) await more.click();
-    return page
-      .locator('[data-qc="attention-treatment-due"]')
-      .evaluateAll((els) =>
-        els
-          .map((e) => e.querySelector(".font-semibold")?.textContent?.trim() ?? "")
-          .filter(Boolean),
-      );
+    const rows = page.locator('[data-qc="attention-tasks"]');
+    await expect(rows.first()).toBeVisible();
+    return rows.allInnerTexts();
   }
 
-  test("owner: every Skin-plan treatment due name has a Book button on the journey board", async ({
-    page,
-  }) => {
+  test("owner: the overdue aggregate matches the Tasks page and links to it", async ({ page }) => {
     await page.goto("/dashboard");
-    const names = await treatmentDueNames(page);
-    expect(names.length).toBeGreaterThan(0);
-
-    // Every one of them is an unbooked pill on the journey board.
-    await page.goto("/patients?tab=board");
-    await expect(page.locator('[data-qc="board-pill"]').first()).toBeVisible();
-    const unbooked = await page
-      .locator('[data-qc="board-pill"]:not([data-risk="ontrack"])')
-      .evaluateAll((els) => els.map((e) => e.getAttribute("data-name")));
-    for (const name of names) expect(unbooked).toContain(name);
-
-    await page.goto("/dashboard");
-    await page.locator('[data-qc="attention-kind-treatment_due"]').click();
-    await page.locator('[data-qc="attention-treatment-due"] a').first().click();
-    await expect(page).toHaveURL(/\/patients\/.+[?&]tab=treatments/);
-    await expect(page.locator('[data-qc="treatment-plan-card"]')).toBeVisible();
+    const rows = await tasksAggregate(page);
+    expect(
+      rows.some((r) => /\d+ (chases|rebooks|questions|recalls|offers|check-ins)/.test(r)),
+    ).toBe(true);
+    const urgent = page.locator('[data-qc="attention-urgent"] [data-qc="attention-tasks"]').first();
+    const n = Number(((await urgent.innerText()).match(/(\d+) overdue/) ?? [])[1] ?? 0);
+    await urgent.locator("a").first().click();
+    await expect(page).toHaveURL(/\/tasks/);
+    await expect(page.locator('[data-qc="tasks-main"]')).toHaveAttribute("data-view", "team");
+    if (n > 0) {
+      await expect(page.locator('[data-qc="tasks-group-overdue"] h3')).toContainText(
+        `Overdue · ${n}`,
+      );
+    }
   });
 });
 
@@ -381,23 +373,12 @@ test.describe("a booking only counts when it is for the step", () => {
   test("a booking for another treatment is named on the plan card and the chase stays", async ({
     page,
   }) => {
-    await page.goto("/dashboard");
-    await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
-    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
-    const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
-    await expect(kind).toBeVisible({ timeout: 15_000 });
-    await kind.click();
-    const more = page.getByRole("button", { name: /Show \d+ more/ });
-    if ((await more.count()) > 0) await more.click();
+    await page.goto("/patients?tab=board");
+    const pill = page.locator('[data-qc="board-pill"][data-risk="mismatch"]').first();
+    await expect(pill).toBeVisible();
+    const patientId = (await pill.getAttribute("data-patient"))!;
 
-    const row = page
-      .locator('[data-qc="attention-treatment-due"]')
-      .filter({ hasText: "not this step" })
-      .first();
-    await expect(row).toBeVisible();
-    await row.locator("a").first().click();
-    await expect(page).toHaveURL(/\/patients\/.+[?&]tab=treatments/);
-
+    await page.goto(`/patients/${patientId}?tab=treatments`);
     await expect(page.locator('[data-qc="treatment-plan-card"]')).toBeVisible();
     await expect(page.locator('[data-qc="plan-booking-note"]').first()).toHaveText(
       /^\d{1,2} \w+ booking is for .+, not this step$/,
@@ -407,9 +388,7 @@ test.describe("a booking only counts when it is for the step", () => {
     await expect(page.locator('[data-qc="plan-step"]').first()).not.toContainText("Booked");
   });
 
-  test("a missed step is tagged No show and keeps its place on Attention needed", async ({
-    page,
-  }) => {
+  test("a missed step is tagged No show and becomes a rebook task", async ({ page }) => {
     await page.goto("/patients?tab=board");
     const pill = page.locator('[data-qc="board-pill"][data-risk="noshow"]').first();
     await expect(pill).toBeVisible();
@@ -423,80 +402,69 @@ test.describe("a booking only counts when it is for the step", () => {
       /^Did not attend \d{1,2} \w+$/,
     );
     await expect(page.locator('[data-qc="plan-book"]').first()).toBeVisible();
+    // The record's tasks card carries the rebook task the rule created.
+    const rebook = page.locator('[data-qc="patient-task"][data-status="open"]', {
+      hasText: "Rebook missed",
+    });
+    await expect(rebook.first()).toBeVisible();
 
-    // It outlives today's diary, and is chased as a no show rather than twice.
-    await page.goto("/dashboard");
-    await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
-    const noShow = page.locator('[data-qc="attention-kind-no_show"]');
-    await expect(noShow).toBeVisible({ timeout: 15_000 });
-    await noShow.click();
+    // And it is one rebook task on the Tasks page, not a chase as well.
+    await page.goto("/tasks?view=team&types=rebook_no_show");
+    const row = page.locator('[data-qc="task-row"][data-type="rebook_no_show"]', { hasText: name });
+    await expect(row.first()).toBeVisible();
+    await page.goto("/tasks?view=team&types=chase_booking");
+    await expect(page.locator('[data-qc="tasks-main"]')).toBeVisible();
     await expect(
-      page.locator('[data-qc="attention-no-show"]').filter({ hasText: name }),
-    ).toHaveCount(1);
-    await expect(
-      page.locator('[data-qc="attention-treatment-due"]').filter({ hasText: name }),
+      page.locator('[data-qc="task-row"][data-type="chase_booking"]', { hasText: name }),
     ).toHaveCount(0);
   });
 });
 
-test.describe("attention treatment due as practitioner", () => {
+test.describe("tasks aggregate as practitioner", () => {
   test.use({ role: "practitioner" });
 
-  test("Nadia only sees her unbooked plan patients", async ({ page }) => {
+  test("Nadia sees the Tasks aggregate and her own Tasks page", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
     await expect(page.locator('[data-qc="attention-kind-message"]')).toHaveCount(0);
-    const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
-    await expect(kind).toBeVisible({ timeout: 15_000 });
-    await expect(kind).toHaveText("Skin-plan treatment due");
-    await kind.click();
-    const more = page.getByRole("button", { name: /Show \d+ more/ });
-    if ((await more.count()) > 0) await more.click();
-    const names = await page
-      .locator('[data-qc="attention-treatment-due"]')
-      .evaluateAll((els) =>
-        els
-          .map((e) => e.querySelector(".font-semibold")?.textContent?.trim() ?? "")
-          .filter(Boolean),
-      );
-    expect(names.length).toBeGreaterThan(0);
-    expect(names).not.toContain("Marcus Delaney");
+    await expect(page.locator('[data-qc="attention-kind-treatment_due"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="attention-kind-tasks"]').first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator('[data-qc="tasks-summary-stats"]')).toBeVisible();
 
-    // Her board opens on her own book; each name is one of her unbooked pills.
-    await page.goto("/patients?tab=board");
-    await expect(page.locator('[data-qc="board-pill"]').first()).toBeVisible();
-    const unbooked = await page
-      .locator('[data-qc="board-pill"]:not([data-risk="ontrack"])')
-      .evaluateAll((els) => els.map((e) => e.getAttribute("data-name")));
-    for (const name of names) expect(unbooked).toContain(name);
+    await page.goto("/tasks");
+    await expect(page.locator('[data-qc="tasks-main"]')).toHaveAttribute("data-view", "assigned");
+    await expect(page.locator('[data-qc="your-day-panel"]')).toBeVisible();
+    await expect(page.locator('[data-qc="team-panel"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="task-select"]')).toHaveCount(0);
+    // Everything on her list is hers.
+    const assignees = await page
+      .locator('[data-qc="task-assignee"]')
+      .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute("data-assignee")))]);
+    expect(assignees.length).toBeLessThanOrEqual(1);
   });
 });
 
-test.describe("attention treatment due as front desk", () => {
+test.describe("tasks aggregate as front desk", () => {
   test.use({ role: "front_desk" });
 
-  test("Sofia sees the clinic-wide skin-plan dues in the window", async ({ page }) => {
+  test("Sofia sees the Tasks aggregate; clinical questions never reach her", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
     await expect(page.locator('[data-qc="attention-kind-message"]')).toHaveCount(0);
-    const kind = page.locator('[data-qc="attention-kind-treatment_due"]');
-    await expect(kind).toBeVisible({ timeout: 15_000 });
-    await expect(kind).toHaveText("Skin-plan treatment due");
-    await kind.click();
-    const more = page.getByRole("button", { name: /Show \d+ more/ });
-    if ((await more.count()) > 0) await more.click();
-    const names = await page
-      .locator('[data-qc="attention-treatment-due"]')
-      .evaluateAll((els) =>
-        els
-          .map((e) => e.querySelector(".font-semibold")?.textContent?.trim() ?? "")
-          .filter(Boolean),
-      );
-    // Clinic-wide: Nadia's patient and another practitioner's patient.
-    expect(names).toContain("Harriet Blackwood");
-    expect(names).toContain("Marcus Delaney");
+    await expect(page.locator('[data-qc="attention-kind-tasks"]').first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator('[data-qc="tasks-summary-stats"]')).toBeVisible();
+
+    await page.goto("/tasks?view=pool");
+    await expect(page.locator('[data-qc="todays-calls-panel"]')).toBeVisible();
+    await expect(page.locator('[data-qc="tasks-type-question"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="task-row"]').first()).toBeVisible();
+    await expect(page.locator('[data-qc="task-row"][data-type="question"]')).toHaveCount(0);
   });
 });
 

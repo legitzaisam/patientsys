@@ -536,25 +536,6 @@ export const SendRecall = z.object({
   body: requiredText(10_000),
 });
 
-export const CreateRecallTask = z.object({
-  patient_id: id,
-  note: optionalText(4_000),
-  recipients,
-  /** When the chase should be done by (defaults to a week from now). */
-  due_at: dateString.optional(),
-});
-
-export const UpdateRecallTask = z.object({
-  task_id: id,
-  recipients,
-  note: optionalText(4_000),
-});
-
-export const SetRecallTaskStatus = z.object({
-  task_id: id,
-  status: z.enum(["open", "contacted", "completed"]),
-});
-
 export const EnqueueCommunication = z.object({
   patient_id: id,
   channel: z.enum(["email", "sms"]),
@@ -577,13 +558,6 @@ export const SaveCommsPreferences = z.object({
   reminders_opt_in: z.boolean(),
   marketing_opt_in: z.boolean(),
 });
-
-export const DeleteRecallTask = z.object({
-  task_id: id,
-  assignee_ids: z.array(id).max(200).optional(),
-});
-
-export const ListRecallTasks = z.object({ patient_id: id });
 
 /* Tasks */
 

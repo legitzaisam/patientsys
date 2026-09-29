@@ -651,3 +651,71 @@ export function summarise(
     retriesScheduled: mine.filter((t) => !!t.next_retry_at).length,
   };
 }
+
+// ---------------------------------------------------------------- dashboard aggregate
+
+export type TaskAttentionItem = {
+  id: string;
+  kind: "tasks";
+  urgency: "urgent" | "this_week";
+  title: string;
+  subtitle: string;
+  href: string;
+};
+
+/** "3 chases, 2 questions" in type order, for the Attention needed subtitle. */
+function typeBreakdown(list: TaskRow[]): string {
+  const counts = new Map<TaskType, number>();
+  for (const t of list) counts.set(t.type, (counts.get(t.type) ?? 0) + 1);
+  const PLURAL: Record<TaskType, [string, string]> = {
+    chase_booking: ["chase", "chases"],
+    recall: ["recall", "recalls"],
+    question: ["question", "questions"],
+    send_offer: ["offer", "offers"],
+    plan_support: ["check-in", "check-ins"],
+    rebook_no_show: ["rebook", "rebooks"],
+    custom: ["task", "tasks"],
+  };
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, n]) => `${n} ${PLURAL[type][n === 1 ? 0 : 1]}`)
+    .join(", ");
+}
+
+/**
+ * The dashboard's Attention needed carries at most two rows about tasks: how
+ * many the viewer can see are overdue (urgent) and how many are due today
+ * (this week). Everything else about tasks lives on the Tasks page.
+ */
+export function taskAttentionItems(
+  rows: TaskRow[],
+  viewer: TaskViewer,
+  patientPractitioner: (patientId: string) => string | null,
+  now: Date,
+): TaskAttentionItem[] {
+  const open = rows.filter((t) => isOpen(t) && canSeeTask(t, viewer, patientPractitioner));
+  const overdue = open.filter((t) => dueBucket(t.due_at, now) === "overdue");
+  const today = open.filter((t) => dueBucket(t.due_at, now) === "today");
+  const out: TaskAttentionItem[] = [];
+  if (overdue.length) {
+    out.push({
+      id: "tasks-overdue",
+      kind: "tasks",
+      urgency: "urgent",
+      title: `Tasks — ${overdue.length} overdue`,
+      subtitle: `${typeBreakdown(overdue)} · past their due time`,
+      href: "/tasks",
+    });
+  }
+  if (today.length) {
+    out.push({
+      id: "tasks-today",
+      kind: "tasks",
+      urgency: "this_week",
+      title: `Tasks — ${today.length} due today`,
+      subtitle: `${typeBreakdown(today)} · due by end of day`,
+      href: "/tasks",
+    });
+  }
+  return out;
+}

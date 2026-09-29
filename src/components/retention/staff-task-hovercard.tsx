@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Textarea } from "@/components/ui/textarea";
-import { createRecallTask, listTeam, logRetentionOutreach } from "@/lib/clinic.functions";
-import { invalidateRecallTasks } from "@/lib/use-recall-tasks-sync";
+import { createTask as createTaskFn, listTeam, logRetentionOutreach } from "@/lib/clinic.functions";
+import { invalidateTaskQueries } from "@/lib/use-tasks-sync";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Manager",
@@ -46,7 +46,7 @@ export function StaffTaskHoverCard({
   const queryClient = useQueryClient();
 
   const fetchTeam = useServerFn(listTeam);
-  const createTask = useServerFn(createRecallTask);
+  const createTask = useServerFn(createTaskFn);
   const logOutreach = useServerFn(logRetentionOutreach);
   const { data: team } = useQuery({
     queryKey: ["team", "recall-task"],
@@ -85,14 +85,19 @@ export function StaffTaskHoverCard({
 
   const send = useMutation({
     mutationFn: async (vars: { recipients: { id: string; label: string }[]; note: string }) => {
-      await createTask({
-        data: {
-          patient_id: patientId,
-          recipients: vars.recipients,
-          note: vars.note,
-          due_at: new Date(`${dueDate}T12:00:00`).toISOString(),
-        },
-      });
+      // One recall task per teammate picked, so each sees it on their own list.
+      for (const r of vars.recipients) {
+        await createTask({
+          data: {
+            patient_id: patientId,
+            type: "recall",
+            title: vars.note.trim().slice(0, 80) || "Follow up and rebook",
+            assigneeId: r.id,
+            note: vars.note,
+            dueAt: new Date(`${dueDate}T12:00:00`).toISOString(),
+          },
+        });
+      }
       await logOutreach({
         data: {
           patient_id: patientId,
@@ -103,7 +108,7 @@ export function StaffTaskHoverCard({
     },
     onSuccess: () => {
       toast.success("Recall task assigned to the team");
-      void invalidateRecallTasks(queryClient);
+      void invalidateTaskQueries(queryClient);
       setOpen(false);
       setNote("");
       setTouched(false);

@@ -60,7 +60,14 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
   node({ id: "dashboard", parentId: null, kind: "page", label: "Dashboard", route: "/dashboard", permission: "view.dashboard" }),
   node({ id: "dashboard-diary", parentId: "dashboard", kind: "component", label: "Today's diary", route: "/dashboard", permission: "view.dashboard.diary" }),
   node({ id: "dashboard-attention", parentId: "dashboard", kind: "component", label: "Attention needed", route: "/dashboard", permission: "view.dashboard.attention" }),
-  node({ id: "dashboard-followups", parentId: "dashboard", kind: "component", label: "Follow-up tasks", route: "/dashboard", permission: "view.dashboard.followups" }),
+  node({
+    id: "dashboard-followups",
+    parentId: "dashboard",
+    kind: "component",
+    label: "Tasks summary",
+    route: "/dashboard",
+    permission: "view.dashboard.followups",
+  }),
   node({
     id: "dashboard-delete-tasks",
     parentId: "dashboard-followups",

@@ -47,6 +47,7 @@ const KIND_ORDER = [
   "consent_due",
   "payment_due",
   "balance_due",
+  "tasks",
   "treatment_due",
   "incomplete_profile",
   "profile_change",
@@ -62,6 +63,7 @@ const CHIP_META: Record<string, { label: string; className: string }> = {
   consent_due: { label: "Consent due", className: "bg-warning-bg text-consent-ink" },
   payment_due: { label: "Unpaid", className: "bg-destructive-bg text-destructive-ink" },
   balance_due: { label: "Balance due", className: "bg-warning-bg text-warning-ink" },
+  tasks: { label: "Tasks", className: "bg-accent-soft text-accent-ink" },
   treatment_due: { label: "Skin-plan treatment due", className: "bg-accent-soft text-accent-ink" },
   incomplete_profile: { label: "Incomplete profile", className: "bg-warning-bg text-warning-ink" },
   profile_change: { label: "Profile change request", className: "bg-warning-bg text-warning-ink" },
@@ -496,6 +498,7 @@ function railFor(kind: string) {
       return "bg-destructive";
     case "consent_due":
       return "bg-consent";
+    case "tasks":
     case "treatment_due":
       return "bg-accent";
     case "incomplete_profile":

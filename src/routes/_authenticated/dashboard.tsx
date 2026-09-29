@@ -13,7 +13,7 @@ import { QuickAddAppointment } from "@/components/quick-add-appointment";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TodaySnapshot } from "@/components/dashboard/today-snapshot";
 import { AttentionList } from "@/components/dashboard/attention-list";
-import { FollowUpTasks } from "@/components/dashboard/follow-up-tasks";
+import { TasksSummaryCard } from "@/components/dashboard/tasks-summary-card";
 import { PauseRequests } from "@/components/dashboard/pause-requests";
 import { TreatmentJourneys } from "@/components/dashboard/treatment-journeys";
 
@@ -257,7 +257,7 @@ function DashboardPage() {
         )}
         <div className="space-y-4">
           {canSee(identity, "dashboard-pauses") && <PauseRequests />}
-          {canSee(identity, "dashboard-followups") && <FollowUpTasks />}
+          {canSee(identity, "dashboard-followups") && <TasksSummaryCard />}
         </div>
       </section>
 
