@@ -41,3 +41,13 @@ Captures: [`captures/p1-pickers/`](../captures/p1-pickers/) — `p1-time-picker-
 Files: `src/lib/field-parse.ts`, `src/components/ui/time-field.tsx`, `src/components/ui/date-field.tsx`, `tests/unit/field-parse.test.ts` (new); `src/components/profile/working-pattern-card.tsx`, `src/components/profile/registration-insurance-card.tsx`, `src/styles.css` (`.scroll-y-plain`), `e2e/profile-redesign.spec.ts`; captures under `captures/p1-pickers/`.
 
 Left as they were, per the plan's non-goals: the native time / date inputs in quick add, the diary, the patient record and the period picker.
+
+## Revised (after manual review)
+
+**Reported:** the popovers "didn't seem to be working" when tried by hand.
+
+**Found:** they opened and picked correctly (Playwright, Chromium + WebKit, through the live 8099 gateway), but the panel was invisible. The `PopoverContent` `className` replaced the default `bg-popover` surface with translucent `bg-glass-2`, so the hour/minute digits and the calendar floated straight over the table rows underneath.
+
+**Fix:** keep the solid popover surface on the content (`border-edge-2 bg-card`) and put the glass on an inner well (`rounded-2xl bg-glass-2 p-1 shadow-inset-hi`) around the columns / the calendar.
+
+**Proof:** `07-time-popover-revised.png`, `08-date-popover-revised.png` (Chromium via gateway); `profile-r2.spec.ts` pickers 2/2; responsive gate iPhone SE / iPhone 15 / laptop 6/6; tsc 109 (0 new); lint delta 0.

@@ -117,59 +117,61 @@ export function DateField({
         align="start"
         sideOffset={6}
         onOpenAutoFocus={(e) => e.preventDefault()}
-        className="w-[calc(100vw-2rem)] rounded-[20px] bg-glass-2 p-2 shadow-inset-hi sm:w-auto"
+        className="w-[calc(100vw-2rem)] rounded-[20px] border-edge-2 bg-card p-2 sm:w-auto"
         data-qc="date-picker"
       >
-        <Calendar
-          mode="single"
-          locale={enGB}
-          weekStartsOn={1}
-          showOutsideDays
-          selected={selected}
-          defaultMonth={selected ?? minDate ?? new Date()}
-          disabled={disabledDays}
-          onSelect={(day) => {
-            if (!day) return;
-            const key = dateToDayKey(day);
-            setText(formatDayInput(key));
-            setInvalid(false);
-            onChange(key);
-            setOpen(false);
-          }}
-          className="mx-auto w-fit bg-transparent p-1 [--cell-size:2.25rem]"
-          classNames={{
-            month_caption: "flex h-9 w-full items-center justify-center px-9",
-            caption_label: "select-none text-sm font-semibold text-foreground",
-            button_previous:
-              "absolute left-1 top-1 grid h-8 w-8 cursor-pointer place-items-center rounded-full text-ink-2 transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground aria-disabled:opacity-40",
-            button_next:
-              "absolute right-1 top-1 grid h-8 w-8 cursor-pointer place-items-center rounded-full text-ink-2 transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground aria-disabled:opacity-40",
-            weekday:
-              "flex-1 select-none pb-1 text-center text-2xs font-semibold text-muted-foreground",
-            day: "group/day relative h-9 w-9 p-0 text-center",
-            today: "rounded-xl ring-1 ring-foreground/40",
-            outside: "text-ink-3 aria-selected:text-ink-3",
-            disabled: "text-ink-3 opacity-40",
-          }}
-          components={{
-            DayButton: ({ className, day, modifiers, ...props }) => (
-              <button
-                type="button"
-                data-day={dateToDayKey(day.date)}
-                className={cn(
-                  "h-9 w-9 cursor-pointer rounded-xl text-sm tabular-nums transition-colors",
-                  modifiers["selected"]
-                    ? "bg-foreground font-bold text-background"
-                    : "text-foreground hover:bg-[rgba(47,63,102,0.08)]",
-                  modifiers["outside"] && !modifiers["selected"] && "text-ink-3",
-                  modifiers["disabled"] && "cursor-not-allowed",
-                  className,
-                )}
-                {...props}
-              />
-            ),
-          }}
-        />
+        <div className="rounded-2xl bg-glass-2 p-1 shadow-inset-hi">
+          <Calendar
+            mode="single"
+            locale={enGB}
+            weekStartsOn={1}
+            showOutsideDays
+            selected={selected}
+            defaultMonth={selected ?? minDate ?? new Date()}
+            disabled={disabledDays}
+            onSelect={(day) => {
+              if (!day) return;
+              const key = dateToDayKey(day);
+              setText(formatDayInput(key));
+              setInvalid(false);
+              onChange(key);
+              setOpen(false);
+            }}
+            className="mx-auto w-fit bg-transparent p-1 [--cell-size:2.25rem]"
+            classNames={{
+              month_caption: "flex h-9 w-full items-center justify-center px-9",
+              caption_label: "select-none text-sm font-semibold text-foreground",
+              button_previous:
+                "absolute left-1 top-1 grid h-8 w-8 cursor-pointer place-items-center rounded-full text-ink-2 transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground aria-disabled:opacity-40",
+              button_next:
+                "absolute right-1 top-1 grid h-8 w-8 cursor-pointer place-items-center rounded-full text-ink-2 transition-colors hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground aria-disabled:opacity-40",
+              weekday:
+                "flex-1 select-none pb-1 text-center text-2xs font-semibold text-muted-foreground",
+              day: "group/day relative h-9 w-9 p-0 text-center",
+              today: "rounded-xl ring-1 ring-foreground/40",
+              outside: "text-ink-3 aria-selected:text-ink-3",
+              disabled: "text-ink-3 opacity-40",
+            }}
+            components={{
+              DayButton: ({ className, day, modifiers, ...props }) => (
+                <button
+                  type="button"
+                  data-day={dateToDayKey(day.date)}
+                  className={cn(
+                    "h-9 w-9 cursor-pointer rounded-xl text-sm tabular-nums transition-colors",
+                    modifiers["selected"]
+                      ? "bg-foreground font-bold text-background"
+                      : "text-foreground hover:bg-[rgba(47,63,102,0.08)]",
+                    modifiers["outside"] && !modifiers["selected"] && "text-ink-3",
+                    modifiers["disabled"] && "cursor-not-allowed",
+                    className,
+                  )}
+                  {...props}
+                />
+              ),
+            }}
+          />
+        </div>
       </PopoverContent>
     </Popover>
   );
