@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -69,6 +69,9 @@ export function SendRecallDialog({
   practitionerId = null,
   practitionerName = null,
   canAssign = false,
+  trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
 }: {
   patientId: string;
   patientName: string;
@@ -82,9 +85,19 @@ export function SendRecallDialog({
   practitionerName?: string | null;
   /** Owners and managers can hand the recall to the team as a task instead. */
   canAssign?: boolean;
+  /** Replace the default "Send recall" button; `null` renders no trigger (control it with `open`). */
+  trigger?: ReactNode | null;
+  /** Controlled open state, for callers that open the dialog from their own UI. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (v: boolean) => {
+    onOpenChangeProp?.(v);
+    if (openProp === undefined) setOpenState(v);
+  };
   const [channel, setChannel] = useState<Channel>("message");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -214,21 +227,31 @@ export function SendRecallDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          size="sm"
-         
-          onClick={(e) => {
-            e.preventDefault();
-            openDialog();
-          }}
-        >
-          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-          Send recall
-        </Button>
-      </DialogTrigger>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        // A custom trigger opens through here, so seed the channel the same way.
+        if (v && !open) applyChannel("message");
+        setOpen(v);
+      }}
+    >
+      {trigger === null ? null : (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={(e) => {
+                e.preventDefault();
+                openDialog();
+              }}
+            >
+              <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+              Send recall
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Send recall to {patientName}</DialogTitle>

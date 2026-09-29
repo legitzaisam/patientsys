@@ -13,7 +13,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | P0 | [`worklog/00-baseline.md`](worklog/00-baseline.md) | Branch, docs scaffold, baselines, before-captures | `0bd63f3` |
 | P1 | [`worklog/01-foundations.md`](worklog/01-foundations.md) | Pure helpers: task types, records summary, board risk, staff lanes, urgent triage, `--noshow` tokens | `9fb4213` |
 | P2 | [`worklog/02-schema.md`](worklog/02-schema.md) | `tasks`, `task_events`, `automation_rules` schema, types, tenancy, demo fixtures | `e0987c5` |
-| P3 | [`worklog/03-server.md`](worklog/03-server.md) | Rule evaluator, sync, task handlers, patient summaries, RBAC, notifications, realtime | |
+| P3 | [`worklog/03-server.md`](worklog/03-server.md) | Rule evaluator, sync, task handlers, patient summaries, RBAC, notifications, realtime | `eb79eba` |
 | P4 | [`worklog/04-records.md`](worklog/04-records.md) | Patients → Records (A) and the Assign dialog (D) | |
 | P5 | [`worklog/05-journey-board.md`](worklog/05-journey-board.md) | Patients → Journey board (B) | |
 | P6 | [`worklog/06-tasks-page.md`](worklog/06-tasks-page.md) | Tasks page (C) and the sidebar item | |
@@ -48,13 +48,13 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | `pt-p3-07-rbac-policy-schemas` | P3 | permission keys, policy rows, schemas, catalogue node | done | [`03-server.md#pt-p3-07-rbac-policy-schemas`](worklog/03-server.md#pt-p3-07-rbac-policy-schemas) |
 | `pt-p3-08-notify-realtime` | P3 | notifications, `use-tasks-sync` | done | [`03-server.md#pt-p3-08-notify-realtime`](worklog/03-server.md#pt-p3-08-notify-realtime) |
 | `pt-p3-09-verify-commit` | P3 | persona probes, unit, guards; commit | done | [`03-server.md#pt-p3-09-verify-commit`](worklog/03-server.md#pt-p3-09-verify-commit) |
-| `pt-p4-01-extract-records-tab` | P4 | `records-tab.tsx` extracted from the route | pending | |
-| `pt-p4-02-filter-bar` | P4 | `records-filter-bar.tsx` | pending | |
-| `pt-p4-03-records-table` | P4 | `records-table.tsx` | pending | |
-| `pt-p4-04-patient-drawer` | P4 | `patient-drawer.tsx` | pending | |
-| `pt-p4-05-assign-dialog` | P4 | `tasks/assign-task-dialog.tsx` | pending | |
-| `pt-p4-06-drawer-actions` | P4 | drawer actions wired | pending | |
-| `pt-p4-07-verify-commit` | P4 | specs, responsive gate, captures; commit | pending | |
+| `pt-p4-01-extract-records-tab` | P4 | `records-tab.tsx` extracted from the route | done | [`04-records.md#pt-p4-01-extract-records-tab`](worklog/04-records.md#pt-p4-01-extract-records-tab) |
+| `pt-p4-02-filter-bar` | P4 | `records-filter-bar.tsx` | done | [`04-records.md#pt-p4-02-filter-bar`](worklog/04-records.md#pt-p4-02-filter-bar) |
+| `pt-p4-03-records-table` | P4 | `records-table.tsx` | done | [`04-records.md#pt-p4-03-records-table`](worklog/04-records.md#pt-p4-03-records-table) |
+| `pt-p4-04-patient-drawer` | P4 | `patient-drawer.tsx` | done | [`04-records.md#pt-p4-04-patient-drawer`](worklog/04-records.md#pt-p4-04-patient-drawer) |
+| `pt-p4-05-assign-dialog` | P4 | `tasks/assign-task-dialog.tsx` | done | [`04-records.md#pt-p4-05-assign-dialog`](worklog/04-records.md#pt-p4-05-assign-dialog) |
+| `pt-p4-06-drawer-actions` | P4 | drawer actions wired | done | [`04-records.md#pt-p4-06-drawer-actions`](worklog/04-records.md#pt-p4-06-drawer-actions) |
+| `pt-p4-07-verify-commit` | P4 | specs, responsive gate, captures; commit | done | [`04-records.md#pt-p4-07-verify-commit`](worklog/04-records.md#pt-p4-07-verify-commit) |
 | `pt-p5-01-board-filters-tiles` | P5 | faces + six triage tiles, URL state | pending | |
 | `pt-p5-02-board-map` | P5 | practitioner × phase map | pending | |
 | `pt-p5-03-board-responsive` | P5 | narrow layouts | pending | |

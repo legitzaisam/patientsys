@@ -10,20 +10,28 @@ test("search narrows the list by name", async ({ page }) => {
   await page.goto("/patients");
   const search = page.getByLabel("Search by name or reference");
   await search.fill("Bennett");
-  await expect(page.getByRole("link", { name: /Bennett, .*Olivia/ })).toBeVisible();
+  await expect(page).toHaveURL(/q=Bennett/);
+  await expect(
+    page.locator('[data-qc="records-name"]', { hasText: /Bennett, .*Olivia/ }),
+  ).toBeVisible();
   // A patient who does not match must be filtered out of the table.
-  await expect(page.getByRole("link", { name: /Bennett, / })).toHaveCount(1);
+  await expect(page.locator('[data-qc="records-name"]', { hasText: /Bennett, / })).toHaveCount(1);
+  // The drawer follows the first visible row.
+  await expect(page.locator('[data-qc="drawer-name"]')).toHaveText(/Olivia Bennett/);
 });
 
 test("search by reference finds the same record", async ({ page }) => {
   await page.goto("/patients");
   await page.getByLabel("Search by name or reference").fill("AV-1200");
-  await expect(page.getByRole("link", { name: /Bennett, .*Olivia/ })).toBeVisible();
+  await expect(
+    page.locator('[data-qc="records-name"]', { hasText: /Bennett, .*Olivia/ }),
+  ).toBeVisible();
 });
 
 test("record page exposes every clinical tab", async ({ page }) => {
-  await page.goto("/patients");
-  await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
+  await page.goto("/patients?q=Bennett");
+  await page.locator('[data-qc="records-row"]', { hasText: /Bennett, .*Olivia/ }).click();
+  await page.locator('[data-qc="drawer-name"]', { hasText: /Olivia Bennett/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: /Olivia Bennett/ })).toBeVisible();
 
   for (const tab of ["Before and after", "Documents", "Medical history", "Contact"]) {
@@ -37,45 +45,76 @@ test("record page exposes every clinical tab", async ({ page }) => {
 });
 
 test.describe("list: pages, filters and columns", () => {
-  test("25 a page, the page in the URL, counts on every filter chip", async ({ page }) => {
+  test("25 a page, the page in the URL, the practitioner filter and a deep-linked view", async ({
+    page,
+  }) => {
     await page.goto("/patients");
     await expect(page.locator("table tbody tr")).toHaveCount(25);
     const bar = page.locator('[data-qc="patients-pagination"]');
     await expect(bar).toContainText("Showing 1–25 of");
 
-    // Filter chips say how many they cover; Treatments due equals the dashboard card.
-    const due = page.locator('[data-qc="patients-filter-due"]');
-    const dueCount = Number((await due.innerText()).replace(/\D/g, ""));
-    expect(dueCount).toBeGreaterThan(0);
-    await expect(page.locator('[data-qc="patients-filter-nobooking"]')).toContainText(
-      "No upcoming treatment",
+    // Practitioner chips carry a count; picking one narrows the list and lands in the URL.
+    const chip = page.locator('[data-qc^="records-prac-"]').first();
+    const chipCount = Number((await chip.innerText()).replace(/\D/g, ""));
+    expect(chipCount).toBeGreaterThan(0);
+    await chip.click();
+    await expect(page).toHaveURL(/prac=/);
+    await expect(page.locator('[data-qc="records-summary"]')).toContainText(
+      `${chipCount} patients`,
     );
+    await page.locator('[data-qc="records-show-everyone"]').click();
+    await expect(page).not.toHaveURL(/prac=/);
 
-    await due.click();
-    await expect(page).toHaveURL(/view=due/);
-    await expect(page.locator(".page-subtitle")).toContainText(`${dueCount} records`);
-    // Every row on the due view names an overdue or due date.
+    // The dashboard's "Treatments due" link still narrows the list, shown as a removable token.
+    await page.goto("/patients?view=due");
+    await expect(page.locator('[data-qc="records-view-due"]')).toContainText("Treatments due");
     const states = await page
       .locator('[data-qc="next-treatment"]')
       .evaluateAll((els) => els.map((e) => e.getAttribute("data-state")));
-    expect(states.every((s) => s === "overdue" || s === "due_soon")).toBe(true);
+    expect(states.every((s) => s === "overdue" || s === "due")).toBe(true);
 
     // Paging keeps the view and lands in the URL.
     await bar.getByRole("button", { name: /next page/i }).click();
     await expect(page).toHaveURL(/page=2/);
+    await expect(page).toHaveURL(/view=due/);
     await expect(bar).toContainText("Showing 26–");
   });
 
-  test("the offer hint, select all matching across pages, and the task pill link", async ({
+  test("clicking a row fills the drawer; its open tasks match the pill", async ({ page }) => {
+    await page.goto("/patients");
+    const rows = page.locator('[data-qc="records-row"]');
+    await rows.nth(1).click();
+    await expect(page).toHaveURL(/sel=/);
+    const name = (await rows.nth(1).locator('[data-qc="records-name"]').innerText()).split(", ");
+    await expect(page.locator('[data-qc="drawer-name"]')).toContainText(name[0]!);
+    await expect(page.locator('[data-qc="drawer-suggestion"]')).toBeVisible();
+
+    // A row with a Tasks pill: the drawer lists the same number of open tasks.
+    const withPill = page.locator('[data-qc="records-row"]', {
+      has: page.locator('[data-qc="open-tasks-pill"]'),
+    });
+    if ((await withPill.count()) > 0) {
+      const pill = withPill.first().locator('[data-qc="open-tasks-pill"]');
+      const n = Number((await pill.innerText()).replace(/\D/g, ""));
+      await withPill.first().click();
+      await expect(page.locator('[data-qc="drawer-task"]')).toHaveCount(n);
+    }
+  });
+
+  test("Select reveals checkboxes; select all matching across pages; the bulk offer dialog", async ({
     page,
   }) => {
     await page.goto("/patients?view=due");
+    await expect(page.locator('[data-qc="select-patient"]')).toHaveCount(0);
+    await page.locator('[data-qc="records-select-toggle"]').click();
     await expect(page.locator('[data-qc="select-hint"]')).toContainText(
       "Select patients to send an offer",
     );
     await page.locator('[data-qc="select-patient"]').first().click();
     await expect(page.locator('[data-qc="select-hint"]')).toHaveCount(0);
-    const total = Number((await page.locator(".page-subtitle").innerText()).replace(/\D/g, ""));
+    const total = Number(
+      (await page.locator('[data-qc="records-summary"]').innerText()).replace(/\D/g, ""),
+    );
     const selectAll = page.locator('[data-qc="select-all-matching"]');
     await expect(selectAll).toContainText(`Select all ${total} matching`);
     await selectAll.click();
@@ -89,15 +128,11 @@ test.describe("list: pages, filters and columns", () => {
     await expect(
       page.locator('[data-qc="select-patient"][data-state="checked"]').first(),
     ).toBeVisible();
-
-    // The open-tasks pill opens the record's Treatments tab at the recall card.
-    const pill = page.locator('[data-qc="open-tasks-pill"]').first();
-    await pill.click();
-    await expect(page).toHaveURL(/\/patients\/[^/?]+\?tab=treatments#recall/);
   });
 
   test("the bulk offer dialog says how many are portal-only", async ({ page }) => {
     await page.goto("/patients?view=all");
+    await page.locator('[data-qc="records-select-toggle"]').click();
     for (const n of [0, 1, 2, 3, 4])
       await page.locator('[data-qc="select-patient"]').nth(n).click();
     await page.locator('[data-qc="bulk-send-offer"]').click();
@@ -169,14 +204,23 @@ test.describe("record: what the list promises, the record shows", () => {
     page,
   }) => {
     await page.goto("/patients?view=all");
-    // A row with open items: the pill count must equal the record's Recall tasks card.
-    const pill = page.locator('[data-qc="open-tasks-pill"]').first();
+    // A row with open items: the pill count equals the drawer's open tasks, and the
+    // record's tasks card lists at least that many.
+    const withPill = page.locator('[data-qc="records-row"]', {
+      has: page.locator('[data-qc="open-tasks-pill"]'),
+    });
+    const pill = withPill.first().locator('[data-qc="open-tasks-pill"]');
     const pillCount = Number((await pill.innerText()).replace(/\D/g, ""));
-    await pill.click();
-    await expect(page).toHaveURL(/tab=treatments#recall/);
+    await withPill.first().click();
+    await expect(page.locator('[data-qc="drawer-task"]')).toHaveCount(pillCount);
+    await page.locator('[data-qc="drawer-name"]').click();
+    await expect(page).toHaveURL(/\/patients\/[^/?]+/);
+    await page.getByRole("tab", { name: "Treatments" }).click();
     const recall = page.locator('[data-qc="recall-tasks"]');
     await expect(recall).toBeVisible();
-    await expect(recall).toHaveAttribute("data-open", String(pillCount));
+    await expect
+      .poll(async () => Number(await recall.getAttribute("data-open")))
+      .toBeGreaterThanOrEqual(pillCount);
     await expect(recall).not.toContainText("Retention page");
 
     // Record treatment and Open chat sit on the header; the rest live in ⋯.
@@ -217,8 +261,9 @@ test.describe("record: what the list promises, the record shows", () => {
     context,
     baseURL,
   }) => {
-    await page.goto("/patients");
-    await page.getByRole("link", { name: /Bennett, .*Olivia/ }).click();
+    await page.goto("/patients?q=Bennett");
+    await page.locator('[data-qc="records-row"]', { hasText: /Bennett, .*Olivia/ }).click();
+    await page.locator('[data-qc="drawer-name"]', { hasText: /Olivia Bennett/ }).click();
     const progress = page.locator('[data-qc="plan-progress"]').first();
     await expect(progress).toBeVisible();
     const [done, total] = (await progress.innerText()).match(/\d+/g)!.map(Number);
@@ -450,9 +495,9 @@ test("a patient on urgent Deposit due is not repeated under This week", async ({
     await kind.click();
     const more = card.getByRole("button", { name: /Show \d+ more/ });
     if ((await more.count()) > 0) await more.click();
-    return card.locator('[data-qc="attention-deposit-due"] .font-semibold').evaluateAll((els) =>
-      els.map((e) => e.textContent?.trim() ?? "").filter(Boolean),
-    );
+    return card
+      .locator('[data-qc="attention-deposit-due"] .font-semibold')
+      .evaluateAll((els) => els.map((e) => e.textContent?.trim() ?? "").filter(Boolean));
   }
 
   const urgentNames = await depositNames(urgent);

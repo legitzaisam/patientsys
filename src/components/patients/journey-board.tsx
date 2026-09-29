@@ -74,6 +74,9 @@ export function JourneyBoard({
   identity: Identity;
   /** Open on the at-risk cards (the dashboard's "overdue steps" chip links here). */
   initialAtRiskOnly?: boolean;
+  /** URL state (wired in the board redesign): highlighted tiles and practitioner filter. */
+  tiles?: string | undefined;
+  prac?: string | undefined;
 }) {
   const isPractitionerOnly = !identity.isManager && identity.roles.includes("practitioner");
   // Role default: practitioners start on their own book.

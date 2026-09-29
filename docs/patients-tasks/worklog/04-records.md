@@ -1,0 +1,43 @@
+# Phase 4: Patients → Records (A) and the Assign dialog (D)
+
+Branch `e2e_exp`, on top of `eb79eba`. 29 Sep 2026. The Records table becomes the mockup's calm four-column table with a drawer that says what to do next, and the Assign dialog is the one place a manual task is created. Captures: [`captures/p4-records/`](../captures/p4-records/) — `records-{owner,practitioner}--{laptop-1440,ipad-landscape,ipad-portrait}.jpg`, `records-owner-drawer--laptop-1440.jpg`, `assign-dialog--laptop-1440.jpg`, `records-practitioner-sheet--ipad-portrait.jpg`.
+
+### pt-p4-01-extract-records-tab
+
+- `src/routes/_authenticated/patients.index.tsx`: 809 → 394 lines. Keeps the route (`validateSearch` now also parses `prac`, `sel` and `tiles`; `view`, `q`, `page`, `tab`, `risk` unchanged; `tab=metrics` still redirects), the page header with the Records | Journey board pill (data-qc `patients-tab-*`), the New patient dialog (now a header button beside the pill, on the Records tab only), and renders `<RecordsTab>` / `<JourneyBoard>`. The inline table, the status sort, the DOB search, the hover-card task pill and the six local helper components are gone. The board subtitle now counts active skin plans.
+- `src/components/patients/records-types.ts` (new): `PatientRow` (the `listPatients` row with `summary`), `PatientView`, `VIEW_LABEL`, `isInactive`.
+- `src/components/patients/records-tab.tsx` (new): URL state (`prac` = comma-separated ids, `me`, or `all` for a practitioner who wants everyone; `sel`; `q` debounced 250 ms; `page`; a deep-linked `view` still narrows the list), filtering (search → view → practitioner), chips with counts from the primary practitioner, 25 a page, Select mode for the bulk offer, the drawer as a side column ≥ 1280 px (`useIsMobile(1280)`) or a right `Sheet` below it, and every drawer action wired (see 04-06). The route file was reformatted with Prettier as a whole since it was rewritten (lint 234 → 0).
+
+### pt-p4-02-filter-bar
+
+- `src/components/patients/records-filter-bar.tsx` (new): "Practitioner" label; a `bg-glass-2` pill track with one chip per practitioner who is somebody's primary (22 px lane-coloured initials from `staffLane`, short name, count; selected = white with the soft shadow and semibold; unselected fade to 45 % while any is selected; multi-select); `My patients` (navy `bg-foreground` when active; offered to anyone who treats patients, default on for practitioners); `Show everyone` (accent-ink underline) when a filter is on; a removable token for a deep-linked view ("Treatments due ×"); on the right the `Select` toggle (only for `comms.send` holders), the name / reference search and the summary ("Nadia R. · 265 patients"). The DOB search and the status column are dropped as decided.
+
+### pt-p4-03-records-table
+
+- `src/components/patients/records-table.tsx` (new): a `glass-table` with the four mockup columns. Patient: 34 px `PatientAvatar` with a 16 px practitioner-initials badge (lane colour, `ring-2 ring-card`), surname-first name, the type line (dot + "Skin plan · 5/8" / "Regular" / "New patient", " · Inactive" appended; inactive rows grey the name and desaturate the photo). Last treatment: name + `relativeAgo`. Next treatment: `nextTreatmentState` main + sub, tone classes calm / loud (accent-ink 600) / overdue (destructive-ink 600) / muted; `data-qc="next-treatment"` keeps `data-state` (`booked | due | overdue | later | none`) and adds `data-tone`. Tasks: one pill in the top task's type colour with an 18 px assignee avatar (or "FD" for the pool) and the count, `data-qc="open-tasks-pill"`, `data-late`. Rows are selectable (`data-selected`, `aria-selected`, accent wash + inset accent-line ring). Checkbox column only in Select mode. Empty state text comes from the tab ("No patients for this practitioner yet." when a practitioner filter is on).
+
+### pt-p4-04-patient-drawer
+
+- `src/components/patients/patient-drawer.tsx` (new): solid `bg-card` card, `rounded-[20px] p-5 shadow-popover`. Header (52 px photo, name as a link to the record, "AV-1263 · with Dr Nadia Rahman"), type pill, the **Suggested next step** well (`bg-accent-wash` with an inset accent-line ring, mono eyebrow, sentence from `suggestedNextStep`, up to two pills: primary `bg-accent`, secondary navy wash), LAST / NEXT tiles, the plan block with the segmented bar (`planSegments`: done accent-deep, current accent, current-overdue destructive, future navy 10 %) and "Next: …", **Open tasks** (type pill, assignee avatar + name, due in destructive ink when late; each row opens the task; `+ Assign task`; empty copy "Nothing open. Automations are watching this patient."), **Recent activity** (sky dot, text, relative time). Follows `sel`; when the filter hides that patient the first visible row stands in. Rendered once: as the column when wide, inside the sheet when narrow (a first cut rendered both, which the probe caught as two `patient-drawer`s).
+
+### pt-p4-05-assign-dialog
+
+- `src/components/tasks/assign-task-dialog.tsx` (new): `AssignTaskDialog({ open, onOpenChange, patient, defaultType, viewerId, canAssignOthers, onCreated })`. Header with photo, "Assign a task: {name}" and context. **What needs doing**: six type chips (selected takes the type's chip colour) and a message template that changes with the type. **Who**: `RadioGroup` over `getTasksSummary().team` sorted with the suggested teammate first (`suggestedAssignee` by type: questions and plan support → the patient's practitioner, offers → owner, chasing → front desk), each row "Role · N open", the suggested one with a mono SUGGESTED badge and the reason ("Handles booking chases"); without `tasks.assign_any` only the viewer is offered. **Due**: the app's pill segmented control over `DUE_PRESETS` (Within 4 hours · Today · Tomorrow · In 3 days; questions default to 4 hours). Three `Switch`es (close automatically, notify, make it a rule → green "New rule preview" sentence). Footer Cancel / `Assign to Sofia M.` → `createTask` → toast "Grace assigned to Sofia M. Added to their Tasks and dashboard." and every task query invalidated. Spacing tightened once so the footer fits a 900 px viewport.
+
+### pt-p4-06-drawer-actions
+
+- Wired in `records-tab.tsx`: `book` → `QuickAddAppointment` (patient and primary practitioner pre-filled); `send_booking_link` / `send_form_reminder` / `message` → `SendRecallDialog` opened in controlled mode (treatment and due date from the plan step or the due treatment); `call` → `tel:` when there is a phone, else the recall dialog; `approve_offer` → `SendOfferDialog` for that patient (`source: "one_off"`); `open_task` → `/tasks?task=<id>` (the page arrives in P6); `review_photos` → the record's photos tab; `reactivate` → the record; `assign` and `+ Assign task` → the Assign dialog; a task row → `/tasks?task=<id>`.
+- `src/components/retention/send-recall-dialog.tsx`: optional `trigger` (`null` hides the default button) and controlled `open` / `onOpenChange`; opening through either path seeds the channel the way the old button did. Only those hunks changed (a stray whole-file Prettier pass was reverted).
+
+### pt-p4-07-verify-commit
+
+- `e2e/patients.spec.ts`: the search tests read `records-name` and the drawer; the list describe is rewritten for the new bar (practitioner chip → `prac=` + summary, Show everyone, `view=due` token with `data-state` overdue / due, paging keeps the view; row click → `sel=` + drawer with the pill count; Select toggle → checkboxes, select all matching across pages, bulk offer dialog); the record-agreement test reaches the record through the drawer name and polls the tasks card count.
+
+| Check | Result |
+| ----- | ------ |
+| Probe (`/tmp/pt-probe-records.mjs`, Chromium 1440 + WebKit iPad Mini) | 25 rows; row click → drawer + `sel`; chip → `prac=` + "Nadia R. · 265 patients" + Show everyone; `view=due` token, states overdue / due; Select → hint → checkboxes → "Send offer · 2"; Assign dialog: 5 teammates, 1 Suggested, template changes with type, rule preview, "Assign to Nadia R." → closed, drawer tasks +1; iPad: sheet opens on tap, no horizontal overflow |
+| `e2e/patients.spec.ts` (Chromium) | 16 / 17; the one failure is the pre-existing `patients:291` insights test |
+| Responsive gate `patients`, 7 devices | 28 / 28 after one fix: the drawer column was `sticky`, so on laptop-1366 its bottom row sat under the floating dock (`overlay.covers-action`); it now scrolls with the page |
+| tsc | 107 (baseline 109; 0 new) |
+| Lint | new files 0; `patients.index.tsx` 234 → 0; `journey-board.tsx` 11 → 11; `send-recall-dialog.tsx` 12 → 11; `patients.spec.ts` 1 → 0 |
+| Commit | see the index |
