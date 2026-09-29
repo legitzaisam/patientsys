@@ -386,9 +386,10 @@ function TasksPage() {
           data-qc="tasks-main"
           data-view={view}
         >
+          {/* The title never shrinks; on a narrow card the type chips wrap under it as a row. */}
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h2 className="flex items-baseline gap-2 text-[17px] font-semibold text-foreground">
+            <div className="shrink-0">
+              <h2 className="flex items-baseline gap-2 whitespace-nowrap text-[17px] font-semibold text-foreground">
                 {title}
                 <span className="text-[13px] font-normal text-ink-3" data-qc="tasks-open-count">
                   {isLoading ? "…" : `${openCount} ${view === "done" ? "done" : "open"}`}

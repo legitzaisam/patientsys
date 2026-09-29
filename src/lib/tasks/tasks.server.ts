@@ -385,6 +385,9 @@ export async function syncRuleTasks(
         rule: proposal.ruleKey,
         assignee_id: row.assignee_id,
         assignee_role: row.assignee_role,
+        ...(proposal.escalatedNow
+          ? { escalated_to: row.escalated_to, to_role: proposal.escalatedNow.toRole }
+          : {}),
       },
     });
   }

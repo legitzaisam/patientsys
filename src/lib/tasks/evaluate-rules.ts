@@ -127,6 +127,13 @@ export type NewRuleTask = {
   escalateAt: string | null;
   priority: 1 | 2 | 3;
   links: Record<string, unknown>;
+  /**
+   * Set when the escalation window had already passed by the time the reason
+   * was noticed (a backfill, or a rule evaluated late): the task starts with
+   * its escalation target so the list reads the same on the first load as on
+   * the next.
+   */
+  escalatedNow?: { toId: string | null; toRole: string | null };
 };
 
 export type CloseTask = {
@@ -183,8 +190,11 @@ function shortDate(iso: string) {
 
 /** "Microneedling session 2" → "microneedling session 2"; acronyms ("PRP Hair") keep their case. */
 function lower(s: string) {
-  const first = s.split(" ")[0] ?? "";
+  const words = s.split(" ");
+  const first = words[0] ?? "";
   if (/^[A-Z]{2,}$/.test(first)) return s;
+  // A Title Case treatment name ("Chemical Peel") reads as a name; leave it.
+  if (words.slice(1).some((w) => /^[A-Z]/.test(w))) return s;
   return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
@@ -598,20 +608,27 @@ export function evaluateRules(snap: RuleSnapshot): RuleEvaluation {
   }
 
   // ---------------------------------------------------------------- escalations
-  const escalate: EscalateTask[] = [];
-  const closing = new Set(close.map((c) => c.taskId));
-  for (const t of snap.openTasks) {
-    if (closing.has(t.id) || t.escalatedAt || !t.escalateAt || t.escalateAt > nowISO) continue;
-    const rule = t.ruleId ? snap.rules.find((r) => r.id === t.ruleId) : null;
+  const escalationTarget = (ruleId: string | null, patientId: string) => {
+    const rule = ruleId ? snap.rules.find((r) => r.id === ruleId) : null;
     const toRole = rule?.escalate_to_role ?? "owner";
-    const plan = snap.plans.find((p) => p.patientId === t.patientId) ?? null;
+    const plan = snap.plans.find((p) => p.patientId === patientId) ?? null;
     const toId =
       toRole === "owner"
         ? snap.ownerId
         : toRole === "practitioner"
-          ? (practitionerFor(t.patientId, plan) ?? snap.ownerId)
+          ? (practitionerFor(patientId, plan) ?? snap.ownerId)
           : snap.ownerId;
-    escalate.push({ taskId: t.id, toId, toRole });
+    return { toId, toRole };
+  };
+  const escalate: EscalateTask[] = [];
+  const closing = new Set(close.map((c) => c.taskId));
+  for (const t of snap.openTasks) {
+    if (closing.has(t.id) || t.escalatedAt || !t.escalateAt || t.escalateAt > nowISO) continue;
+    escalate.push({ taskId: t.id, ...escalationTarget(t.ruleId, t.patientId) });
+  }
+  for (const c of candidates) {
+    if (c.escalateAt && c.escalateAt <= nowISO)
+      c.escalatedNow = escalationTarget(c.ruleId, c.patientId);
   }
 
   return { create: candidates, close, escalate, valid };

@@ -17,8 +17,8 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | P4 | [`worklog/04-records.md`](worklog/04-records.md) | Patients → Records (A) and the Assign dialog (D) | `5c366d2` |
 | P5 | [`worklog/05-journey-board.md`](worklog/05-journey-board.md) | Patients → Journey board (B) | `7f760b7` |
 | P6 | [`worklog/06-tasks-page.md`](worklog/06-tasks-page.md) | Tasks page (C) and the sidebar item | `192844e` |
-| P7 | [`worklog/07-dashboard-rewire.md`](worklog/07-dashboard-rewire.md) | Dashboard aggregation; rewiring the old recall surfaces | |
-| P8 | [`worklog/08-tests-and-verify.md`](worklog/08-tests-and-verify.md) | e2e, device matrix, full verification, after-captures, docs | |
+| P7 | [`worklog/07-dashboard-rewire.md`](worklog/07-dashboard-rewire.md) | Dashboard aggregation; rewiring the old recall surfaces | `8949cf7` |
+| P8 | [`worklog/08-tests-and-verify.md`](worklog/08-tests-and-verify.md) | e2e, device matrix, full verification, after-captures, docs | head of `e2e_exp` |
 
 ## To-dos
 
@@ -73,19 +73,45 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | `pt-p7-03-record-panel` | P7 | `patient-tasks-panel.tsx` on the record | done | [`07-dashboard-rewire.md#pt-p7-03-record-panel`](worklog/07-dashboard-rewire.md#pt-p7-03-record-panel) |
 | `pt-p7-04-noshow-retention-rewire` | P7 | no-show dialog, retention send, hovercard on tasks; adapters removed | done | [`07-dashboard-rewire.md#pt-p7-04-noshow-retention-rewire`](worklog/07-dashboard-rewire.md#pt-p7-04-noshow-retention-rewire) |
 | `pt-p7-05-verify-commit` | P7 | specs, responsive gate, captures; commit | done | [`07-dashboard-rewire.md#pt-p7-05-verify-commit`](worklog/07-dashboard-rewire.md#pt-p7-05-verify-commit) |
-| `pt-p8-01-e2e-tasks` | P8 | `e2e/tasks.spec.ts` | pending | |
-| `pt-p8-02-e2e-patients` | P8 | `e2e/patients-records.spec.ts`, `e2e/journey-board.spec.ts` | pending | |
-| `pt-p8-03-e2e-updates` | P8 | touched specs, responsive pages | pending | |
-| `pt-p8-04-unit-guards` | P8 | unit suites, guards | pending | |
-| `pt-p8-05-device-matrix` | P8 | responsive gate on 7 projects | pending | |
-| `pt-p8-06-full-verify` | P8 | full Chromium e2e, unit, tsc, lint, gateway smoke | pending | |
-| `pt-p8-07-after-captures` | P8 | after-captures + side-by-side table | pending | |
-| `pt-p8-08-docs-commit` | P8 | finish this index; commit | pending | |
+| `pt-p8-01-e2e-tasks` | P8 | `e2e/tasks.spec.ts` (7 tests, three roles); same-pass escalation | done | [`08-tests-and-verify.md#pt-p8-01-e2e-tasks`](worklog/08-tests-and-verify.md#pt-p8-01-e2e-tasks) |
+| `pt-p8-02-e2e-patients` | P8 | `e2e/patients-records.spec.ts` (9), `e2e/journey-board.spec.ts` (4); `prac=all` fix | done | [`08-tests-and-verify.md#pt-p8-02-e2e-patients`](worklog/08-tests-and-verify.md#pt-p8-02-e2e-patients) |
+| `pt-p8-03-e2e-updates` | P8 | retention, offers, capture selectors, responsive pages | done | [`08-tests-and-verify.md#pt-p8-03-e2e-updates`](worklog/08-tests-and-verify.md#pt-p8-03-e2e-updates) |
+| `pt-p8-04-unit-guards` | P8 | unit 243 (+11 pre-existing), guards, metrics | done | [`08-tests-and-verify.md#pt-p8-04-unit-guards`](worklog/08-tests-and-verify.md#pt-p8-04-unit-guards) |
+| `pt-p8-05-device-matrix` | P8 | responsive gate 126 / 126 on 7 projects | done | [`08-tests-and-verify.md#pt-p8-05-device-matrix`](worklog/08-tests-and-verify.md#pt-p8-05-device-matrix) |
+| `pt-p8-06-full-verify` | P8 | full Chromium e2e, tsc, lint, gateway smoke | done | [`08-tests-and-verify.md#pt-p8-06-full-verify`](worklog/08-tests-and-verify.md#pt-p8-06-full-verify) |
+| `pt-p8-07-after-captures` | P8 | 33 after-captures + side-by-side table | done | [`08-tests-and-verify.md#pt-p8-07-after-captures`](worklog/08-tests-and-verify.md#pt-p8-07-after-captures) |
+| `pt-p8-08-docs-commit` | P8 | this index, worklog/08; commit | done | [`08-tests-and-verify.md#pt-p8-08-docs-commit`](worklog/08-tests-and-verify.md#pt-p8-08-docs-commit) |
 
 ## Device matrix
 
 Playwright projects from `playwright.responsive.config.ts`. Focus devices for captures: `laptop-1440` (Chromium, 1440×900), `ipad-pro-landscape` (WebKit, iPad Pro 11 landscape) and `ipad-mini-portrait` (WebKit, iPad Mini portrait). The gate runs on all seven (`iphone-se`, `iphone-15`, `ipad-mini-portrait`, `ipad-pro-landscape`, `laptop-1366`, `laptop-1440`, `desktop-1920`).
 
+Final run (P8, `RESPONSIVE_GATE=major`, every state of every entry): **126 / 126**. Cells are passes / role runs.
+
+| Entry | Roles | iphone-se | iphone-15 | ipad-mini-portrait | ipad-pro-landscape | laptop-1366 | laptop-1440 | desktop-1920 |
+| ----- | ----- | --------- | --------- | ------------------ | ------------------ | ----------- | ----------- | ------------ |
+| `patients` (Records: drawer, Select, Assign dialog) | owner, practitioner, front desk, admin | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 |
+| `patients-board` (tiles lit) | owner, practitioner | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 |
+| `tasks` (delegate panel, bulk select) | owner, manager | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 |
+| `tasks-practitioner` (outcome panel) | practitioner | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 |
+| `tasks-front-desk` (outcome panel) | front desk | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 |
+| `dashboard` (Tasks summary card, Attention) | owner, practitioner, front desk, admin | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 |
+| `patient-record` (Tasks panel) | owner, practitioner, front desk, admin | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 |
+
 ## Regression proof
 
-Filled in at P8: `captures/before/` (P0) beside `captures/after/` (P8), same file names.
+`captures/before/` (P0, `0bd63f3`) beside `captures/after/` (P8), same file names, same devices, same personas, fresh demo server each time. The three `tasks-*` scenes have no "before": the page is new.
+
+| Scene | Persona | Before → after | laptop-1440 | ipad-landscape | ipad-portrait |
+| ----- | ------- | -------------- | ----------- | -------------- | ------------- |
+| Records | owner | filter chips + status column → practitioner chips, Select, drawer with suggestion, plan bar, open tasks | [before](captures/before/records-owner--laptop-1440.jpg) · [after](captures/after/records-owner--laptop-1440.jpg) | [before](captures/before/records-owner--ipad-landscape.jpg) · [after](captures/after/records-owner--ipad-landscape.jpg) | [before](captures/before/records-owner--ipad-portrait.jpg) · [after](captures/after/records-owner--ipad-portrait.jpg) |
+| Records | practitioner | whole list → own book by default, "Show everyone" | [before](captures/before/records-practitioner--laptop-1440.jpg) · [after](captures/after/records-practitioner--laptop-1440.jpg) | [before](captures/before/records-practitioner--ipad-landscape.jpg) · [after](captures/after/records-practitioner--ipad-landscape.jpg) | [before](captures/before/records-practitioner--ipad-portrait.jpg) · [after](captures/after/records-practitioner--ipad-portrait.jpg) |
+| Journey board | owner | cards with Book buttons → six triage tiles over the practitioner × phase map, pills open the drawer | [before](captures/before/board-owner--laptop-1440.jpg) · [after](captures/after/board-owner--laptop-1440.jpg) | [before](captures/before/board-owner--ipad-landscape.jpg) · [after](captures/after/board-owner--ipad-landscape.jpg) | [before](captures/before/board-owner--ipad-portrait.jpg) · [after](captures/after/board-owner--ipad-portrait.jpg) |
+| Dashboard | owner | Follow-up tasks list → Tasks summary card; Attention "Tasks" aggregates | [before](captures/before/dashboard-owner--laptop-1440.jpg) · [after](captures/after/dashboard-owner--laptop-1440.jpg) | [before](captures/before/dashboard-owner--ipad-landscape.jpg) · [after](captures/after/dashboard-owner--ipad-landscape.jpg) | [before](captures/before/dashboard-owner--ipad-portrait.jpg) · [after](captures/after/dashboard-owner--ipad-portrait.jpg) |
+| Dashboard | practitioner | as above, own tasks only | [before](captures/before/dashboard-practitioner--laptop-1440.jpg) · [after](captures/after/dashboard-practitioner--laptop-1440.jpg) | [before](captures/before/dashboard-practitioner--ipad-landscape.jpg) · [after](captures/after/dashboard-practitioner--ipad-landscape.jpg) | [before](captures/before/dashboard-practitioner--ipad-portrait.jpg) · [after](captures/after/dashboard-practitioner--ipad-portrait.jpg) |
+| Dashboard | front desk | as above, queue + pool, no clinical questions | [before](captures/before/dashboard-front-desk--laptop-1440.jpg) · [after](captures/after/dashboard-front-desk--laptop-1440.jpg) | [before](captures/before/dashboard-front-desk--ipad-landscape.jpg) · [after](captures/after/dashboard-front-desk--ipad-landscape.jpg) | [before](captures/before/dashboard-front-desk--ipad-portrait.jpg) · [after](captures/after/dashboard-front-desk--ipad-portrait.jpg) |
+| Record · Treatments | owner | Recall tasks panel → read-only Tasks panel with Assign task and a link to Tasks | [before](captures/before/record-treatments-owner--laptop-1440.jpg) · [after](captures/after/record-treatments-owner--laptop-1440.jpg) | [before](captures/before/record-treatments-owner--ipad-landscape.jpg) · [after](captures/after/record-treatments-owner--ipad-landscape.jpg) | [before](captures/before/record-treatments-owner--ipad-portrait.jpg) · [after](captures/after/record-treatments-owner--ipad-portrait.jpg) |
+| Retention | owner | unchanged page; "Send recall task" now creates tasks | [before](captures/before/retention-owner--laptop-1440.jpg) · [after](captures/after/retention-owner--laptop-1440.jpg) | [before](captures/before/retention-owner--ipad-landscape.jpg) · [after](captures/after/retention-owner--ipad-landscape.jpg) | [before](captures/before/retention-owner--ipad-portrait.jpg) · [after](captures/after/retention-owner--ipad-portrait.jpg) |
+| Tasks | owner | new: Whole team, type chips, Team rail | [after](captures/after/tasks-owner--laptop-1440.jpg) | [after](captures/after/tasks-owner--ipad-landscape.jpg) | [after](captures/after/tasks-owner--ipad-portrait.jpg) |
+| Tasks | practitioner | new: Assigned to me, Your day rail | [after](captures/after/tasks-practitioner--laptop-1440.jpg) | [after](captures/after/tasks-practitioner--ipad-landscape.jpg) | [after](captures/after/tasks-practitioner--ipad-portrait.jpg) |
+| Tasks | front desk | new: My queue, Today's calls rail | [after](captures/after/tasks-front-desk--laptop-1440.jpg) | [after](captures/after/tasks-front-desk--ipad-landscape.jpg) | [after](captures/after/tasks-front-desk--ipad-portrait.jpg) |

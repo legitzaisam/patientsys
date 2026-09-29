@@ -96,8 +96,20 @@ export const SCENES: Scene[] = [
   },
 
   // Patients
-  { id: "patients-list", persona: "owner", path: "/patients", settle: '[data-qc="patients-filter-all"], h1', what: "Patients list" },
-  { id: "journey-board", persona: "owner", path: "/patients?tab=board", settle: '[data-qc="board-book"], .page-title, h1', what: "Journey board" },
+  {
+    id: "patients-list",
+    persona: "owner",
+    path: "/patients",
+    settle: '[data-qc="records-filter-bar"], h1',
+    what: "Patients list",
+  },
+  {
+    id: "journey-board",
+    persona: "owner",
+    path: "/patients?tab=board",
+    settle: '[data-qc="board-tiles"], .page-title, h1',
+    what: "Journey board",
+  },
   { id: "patient-record", persona: "owner", path: "/patients", settle: "h1", open: openOlivia, what: "Patient record (Olivia Bennett), overview" },
   {
     id: "patient-record-treatments",

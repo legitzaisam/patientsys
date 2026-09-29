@@ -104,14 +104,14 @@ const SCENES: Scene[] = [
     id: "patients-list",
     persona: "owner",
     path: "/patients",
-    settle: '[data-qc="patients-filter-all"]',
+    settle: '[data-qc="records-filter-bar"]',
     sections: ["Before 2 October", "Across the whole portal", "Patients list and journey board"],
   },
   {
     id: "patients-board",
     persona: "owner",
     path: "/patients?tab=board",
-    settle: '[data-qc="board-book"], .page-title',
+    settle: '[data-qc="board-tiles"], .page-title',
     sections: ["Patients list and journey board"],
   },
   {

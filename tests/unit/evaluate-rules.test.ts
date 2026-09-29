@@ -325,8 +325,29 @@ describe("regulars", () => {
     expect(r.create[0]).toMatchObject({
       dedupeKey: "no_show_appt:ap-9",
       type: "rebook_no_show",
-      title: "Rebook missed laser Hair Removal",
+      title: "Rebook missed Laser Hair Removal",
     });
+    // 24h past due already: the rule's escalation lands on the same pass.
+    expect(r.create[0]?.escalatedNow).toEqual({ toId: OWNER, toRole: "owner" });
+  });
+
+  it("a fresh no-show starts in the pool without an escalation", () => {
+    const r = evaluateRules(
+      snap({
+        patients: [
+          patient("mia", {
+            missed: [
+              {
+                appointmentId: "ap-10",
+                startsAt: "2026-09-29T09:00:00+01:00",
+                treatmentName: "Laser Hair Removal",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(r.create[0]?.escalatedNow).toBeUndefined();
   });
 });
 

@@ -74,8 +74,14 @@ export function RecordsTab({
     search.prac ??
     (search.view === "mine" || (!search.view && !search.prac && ownBook) ? "me" : "");
   const mineActive = pracParam === "me";
+  // `all` is how a practitioner's own book opts out of its default scope.
   const selectedPracs = useMemo(
-    () => (mineActive ? [identity.userId] : pracParam.split(",").filter(Boolean)),
+    () =>
+      mineActive
+        ? [identity.userId]
+        : pracParam === "all"
+          ? []
+          : pracParam.split(",").filter(Boolean),
     [mineActive, pracParam, identity.userId],
   );
   const q = search.q ?? "";

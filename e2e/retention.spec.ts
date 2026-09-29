@@ -1,16 +1,20 @@
 import { expect, test } from "./fixtures";
 
 /**
- * Retention: the at-risk table, the recall dialog (whose email/sms channels
- * Phase 9c moves onto the outbox) and the recall tasks panel.
+ * Retention: the at-risk table and the recall dialog (whose email/sms
+ * channels Phase 9c moves onto the outbox). Handing a recall to the team
+ * creates tasks; those live on the Tasks page, not here.
  */
 
 test.use({ role: "owner" });
 
-test("retention page renders the at-risk table and tasks panel", async ({ page }) => {
+test("retention page renders the at-risk table; task lists live on the Tasks page", async ({
+  page,
+}) => {
   await page.goto("/retention");
   await expect(page.getByRole("heading", { level: 1, name: "Retention" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send recall" }).first()).toBeVisible();
+  await expect(page.locator('[data-qc="task-row"], [data-qc="recall-tasks"]')).toHaveCount(0);
 });
 
 test("sends a portal recall message from the dialog", async ({ page }) => {
@@ -53,10 +57,23 @@ test("the at-risk table pins the patient column, drops practitioner, and the dia
   await expect(dialog.locator('[data-qc="recall-assign-section"]')).toContainText(
     "hand it to the team",
   );
+  const patientName = (await dialog.getByRole("heading").first().innerText())
+    .replace(/^Send recall to /, "")
+    .trim();
   await dialog.locator('[data-qc="recall-assign-to"]').click();
   await expect(page.getByText("Ask the team to recall")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send recall task" })).toBeVisible();
-  await page.keyboard.press("Escape");
+  const card = page.getByText("Ask the team to recall").locator("..").locator("..");
+  await card.getByRole("checkbox").first().click();
+  await card.getByRole("button", { name: "Send recall task" }).click();
+  await expect(page.getByText("Recall task assigned to the team")).toBeVisible();
+
+  // The hand-off is a recall task on the Tasks page, marked as assigned by the sender.
+  await page.goto("/tasks?view=team&types=recall");
+  const row = page.locator('[data-qc="task-row"][data-type="recall"]', {
+    hasText: patientName.split(" ")[0]!,
+  });
+  await expect(row.first()).toBeVisible();
+  await expect(row.first().locator('[data-qc="task-source"]')).toContainText(/Assigned by/);
 });
 
 test("cohorts read Too early for this month and 'so far' while young; the trend axis is in %", async ({

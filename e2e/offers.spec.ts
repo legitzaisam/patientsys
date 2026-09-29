@@ -265,6 +265,8 @@ test.describe("send surfaces", () => {
   test("the patient table sends to a selection and reports who was skipped", async ({ page }) => {
     await page.goto("/patients");
     await expect(page.locator('[data-qc="bulk-send-offer"]')).toHaveCount(0);
+    // Checkboxes live behind Select so the table reads clean day to day.
+    await page.locator('[data-qc="records-select-toggle"]').click();
     await page.locator('[data-qc="select-patient"]').nth(1).click();
     await page.locator('[data-qc="select-patient"]').nth(2).click();
     await page.locator('[data-qc="select-patient"]').nth(3).click();

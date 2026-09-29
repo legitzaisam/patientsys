@@ -507,7 +507,6 @@ const teamFormer: PageState = {
   close: async () => {},
 };
 
-/** Quick book opened from a journey-board card's Book button. */
 /** Journey board: two triage tiles lit, so highlighted and faded pills are both on screen. */
 const boardTiles: PageState = {
   id: "board-tiles",

@@ -358,6 +358,7 @@ export function newTaskRow(
   id: string,
   nowISO: string,
 ): TaskRow {
+  const esc = proposal.escalatedNow;
   return {
     id,
     clinic_id: clinicId,
@@ -369,15 +370,15 @@ export function newTaskRow(
     source_label: proposal.ruleName,
     rule_id: proposal.ruleId,
     dedupe_key: proposal.dedupeKey,
-    assignee_id: proposal.assigneeId,
-    assignee_role: proposal.assigneeRole,
+    assignee_id: esc?.toId ?? proposal.assigneeId,
+    assignee_role: esc?.toId ? null : proposal.assigneeRole,
     created_by: null,
     note: null,
     priority: proposal.priority,
     due_at: proposal.dueAt,
     escalate_at: proposal.escalateAt,
-    escalated_at: null,
-    escalated_to: null,
+    escalated_at: esc ? nowISO : null,
+    escalated_to: esc?.toId ?? null,
     attempts: 0,
     next_retry_at: null,
     snoozed_until: null,
