@@ -11,7 +11,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | Phase | Worklog | Scope | Commit |
 | ----- | ------- | ----- | ------ |
 | P0 | [`worklog/00-baseline.md`](worklog/00-baseline.md) | Branch, docs scaffold, baselines, before-captures | `0bd63f3` |
-| P1 | [`worklog/01-foundations.md`](worklog/01-foundations.md) | Pure helpers: task types, records summary, board risk, staff lanes, urgent triage, `--noshow` tokens | |
+| P1 | [`worklog/01-foundations.md`](worklog/01-foundations.md) | Pure helpers: task types, records summary, board risk, staff lanes, urgent triage, `--noshow` tokens | `9fb4213` |
 | P2 | [`worklog/02-schema.md`](worklog/02-schema.md) | `tasks`, `task_events`, `automation_rules` schema, types, tenancy, demo fixtures | |
 | P3 | [`worklog/03-server.md`](worklog/03-server.md) | Rule evaluator, sync, task handlers, patient summaries, RBAC, notifications, realtime | |
 | P4 | [`worklog/04-records.md`](worklog/04-records.md) | Patients → Records (A) and the Assign dialog (D) | |
@@ -35,10 +35,10 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | `pt-p1-04-staff-lane-triage` | P1 | `src/lib/staff-lane.ts`, `src/lib/tasks/urgent-triage.ts` + unit tests | done | [`01-foundations.md#pt-p1-04-staff-lane-triage`](worklog/01-foundations.md#pt-p1-04-staff-lane-triage) |
 | `pt-p1-05-noshow-tokens` | P1 | `--noshow` token family in `styles.css` | done | [`01-foundations.md#pt-p1-05-noshow-tokens`](worklog/01-foundations.md#pt-p1-05-noshow-tokens) |
 | `pt-p1-06-verify-commit` | P1 | unit, tsc/lint; commit | done | [`01-foundations.md#pt-p1-06-verify-commit`](worklog/01-foundations.md#pt-p1-06-verify-commit) |
-| `pt-p2-01-migration` | P2 | `20261003000100_tasks.sql` | pending | |
-| `pt-p2-02-types-scope` | P2 | `types.ts` rows, `CLINIC_SCOPED_TABLES` | pending | |
-| `pt-p2-03-demo-fixtures` | P2 | demo `automationRules`, `tasks`, `taskEvents`; recall rows converted | pending | |
-| `pt-p2-04-verify-commit` | P2 | guards, unit, tsc/lint; commit | pending | |
+| `pt-p2-01-migration` | P2 | `20261003000100_tasks.sql` | done | [`02-schema.md#pt-p2-01-migration`](worklog/02-schema.md#pt-p2-01-migration) |
+| `pt-p2-02-types-scope` | P2 | `types.ts` rows, `CLINIC_SCOPED_TABLES` | done | [`02-schema.md#pt-p2-02-types-scope`](worklog/02-schema.md#pt-p2-02-types-scope) |
+| `pt-p2-03-demo-fixtures` | P2 | demo `automationRules`, `tasks`, `taskEvents`; recall rows converted | done | [`02-schema.md#pt-p2-03-demo-fixtures`](worklog/02-schema.md#pt-p2-03-demo-fixtures) |
+| `pt-p2-04-verify-commit` | P2 | guards, unit, tsc/lint; commit | done | [`02-schema.md#pt-p2-04-verify-commit`](worklog/02-schema.md#pt-p2-04-verify-commit) |
 | `pt-p3-01-evaluator` | P3 | `src/lib/tasks/evaluate-rules.ts` + unit tests | pending | |
 | `pt-p3-02-sync-rule-tasks` | P3 | `syncRuleTasks` prod + demo | pending | |
 | `pt-p3-03-list-and-summary` | P3 | `listTasks`, `getTasksSummary` | pending | |

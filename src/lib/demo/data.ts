@@ -2930,6 +2930,336 @@ addRecall(20, USERS.owner, "Dr Amara Osei", "Overdue peel — personal note from
 addRecall(22, USERS.practitioner, "Dr Nadia Rahman", "Anti-wrinkle lapsed at five months.", 5);
 addRecall(24, USERS.frontDesk, "Sofia Marchetti", "Laser course paused. See if they want to restart.", 9);
 
+/* ---------------------------------------------------------------- */
+/* tasks: rules, the recall tasks carried across, manual tasks       */
+/* ---------------------------------------------------------------- */
+
+/** The six hand-off rules (plus the photos rule), keyed the way the evaluator switches. */
+export const automationRules: Row[] = (
+  [
+    [
+      "plan_step_overdue",
+      "Skin plan step overdue",
+      "plan.step_overdue",
+      { grace_days: 2 },
+      "chase_booking",
+      "front_desk_pool",
+      24,
+      48,
+      "practitioner",
+      ["appointment.booked", "plan.step_done"],
+    ],
+    [
+      "plan_step_due_unbooked",
+      "Skin plan step due, not booked",
+      "plan.step_due",
+      { within_days: 7 },
+      "chase_booking",
+      "front_desk_pool",
+      24,
+      null,
+      null,
+      ["appointment.booked", "plan.step_done"],
+    ],
+    [
+      "urgent_portal_question",
+      "Urgent portal question",
+      "portal.message",
+      { triage: "urgent" },
+      "question",
+      "patient_practitioner",
+      4,
+      4,
+      "owner",
+      ["portal.replied"],
+    ],
+    [
+      "rebook_window",
+      "Rebook window opens",
+      "patient.rebook_window",
+      { nudge_days: 7 },
+      "recall",
+      "front_desk_pool",
+      48,
+      null,
+      null,
+      ["appointment.booked"],
+    ],
+    [
+      "no_show",
+      "No-show",
+      "appointment.no_show",
+      {},
+      "rebook_no_show",
+      "front_desk_pool",
+      8,
+      24,
+      "owner",
+      ["appointment.booked"],
+    ],
+    [
+      "lapsing_regular",
+      "Lapsing regular",
+      "schedule.nightly",
+      { lapse_days: 120 },
+      "send_offer",
+      "owner",
+      72,
+      null,
+      null,
+      ["appointment.booked", "offer.sent"],
+    ],
+    [
+      "progress_photos",
+      "Progress photos uploaded",
+      "portal.photos_uploaded",
+      { on_active_plan: true },
+      "plan_support",
+      "patient_practitioner",
+      72,
+      null,
+      null,
+      ["plan.step_done"],
+    ],
+  ] as const
+).map(
+  ([
+    key,
+    name,
+    trigger,
+    conditions,
+    task_type,
+    assign_strategy,
+    due_offset_hours,
+    escalate_after_hours,
+    escalate_to_role,
+    resolve_on,
+  ]) => ({
+    id: id("r5"),
+    clinic_id: CLINIC_ID,
+    key,
+    name,
+    enabled: true,
+    trigger,
+    conditions,
+    action: "create_task",
+    task_type,
+    assign_strategy,
+    assign_person: null,
+    due_offset_hours,
+    escalate_after_hours,
+    escalate_to_role,
+    resolve_on: [...resolve_on],
+    created_at: iso(-120, 9, 0),
+    updated_at: iso(-120, 9, 0),
+  }),
+);
+
+export const tasks: Row[] = [];
+export const taskEvents: Row[] = [];
+let taskEventSeq = 0;
+
+export function addTaskEvent(
+  taskId: string,
+  kind: string,
+  actorId: string | null,
+  data: Row = {},
+  at: string = NOW.toISOString(),
+) {
+  taskEventSeq += 1;
+  taskEvents.push({
+    id: taskEventSeq,
+    clinic_id: CLINIC_ID,
+    task_id: taskId,
+    actor_id: actorId,
+    kind,
+    data,
+    created_at: at,
+  });
+}
+
+// Every recall chase becomes a 'recall' task; a group shared by two people
+// becomes one task for the first of them, the way the dashboard collapsed it.
+{
+  const seenGroups = new Set<string>();
+  for (const r of recallTasks) {
+    const group = r["group_id"] as string;
+    if (seenGroups.has(group)) continue;
+    seenGroups.add(group);
+    const completed = r["status"] === "completed";
+    const taskId = id("t1");
+    tasks.push({
+      id: taskId,
+      clinic_id: CLINIC_ID,
+      patient_id: r["patient_id"],
+      type: "recall",
+      title:
+        String(r["note"] ?? "")
+          .trim()
+          .slice(0, 80) || "Follow up and rebook",
+      context: null,
+      source: "manual",
+      source_label: `Assigned by ${profiles.find((p) => p["id"] === r["created_by"])?.["full_name"] ?? "the clinic"}`,
+      rule_id: null,
+      dedupe_key: null,
+      assignee_id: r["assigned_to"],
+      assignee_role: r["assigned_to"] ? null : "front_desk",
+      created_by: r["created_by"],
+      note: null,
+      priority: 2,
+      due_at: r["due_at"] ?? iso(7, 9, 0),
+      escalate_at: null,
+      escalated_at: null,
+      escalated_to: null,
+      attempts: r["status"] === "contacted" ? 1 : 0,
+      next_retry_at: r["status"] === "contacted" ? iso(2, 10, 0) : null,
+      snoozed_until: null,
+      status: completed ? "done" : "open",
+      resolution: completed ? "handled" : null,
+      resolved_by: completed ? r["completed_by"] : null,
+      resolved_at: completed ? r["completed_at"] : null,
+      auto_close: true,
+      links: { recall_task_id: r["id"], group_id: group },
+      created_at: r["created_at"],
+      updated_at: r["updated_at"],
+    });
+    addTaskEvent(
+      taskId,
+      "created",
+      r["created_by"],
+      { assignee_id: r["assigned_to"] },
+      r["created_at"] as string,
+    );
+  }
+}
+
+/** Manual tasks the owner delegated by hand, with the notes the mockup shows. */
+function addManualTask(input: {
+  patientIndex: number;
+  type: string;
+  title: string;
+  context: string;
+  assignee: string | null;
+  assigneeRole?: string | null;
+  note?: string;
+  dueInDays: number;
+  createdDaysAgo: number;
+  escalated?: boolean;
+}) {
+  const taskId = id("t1");
+  const created = iso(-input.createdDaysAgo, 9, 30);
+  tasks.push({
+    id: taskId,
+    clinic_id: CLINIC_ID,
+    patient_id: patients[input.patientIndex]!["id"],
+    type: input.type,
+    title: input.title,
+    context: input.context,
+    source: "manual",
+    source_label: "Assigned by Dr Amara Osei",
+    rule_id: null,
+    dedupe_key: null,
+    assignee_id: input.assignee,
+    assignee_role: input.assignee
+      ? null
+      : input.assigneeRole === undefined
+        ? "front_desk"
+        : input.assigneeRole,
+    created_by: USERS.owner,
+    note: input.note ?? null,
+    priority: 2,
+    due_at: iso(input.dueInDays, 18, 0),
+    escalate_at: null,
+    escalated_at: input.escalated ? iso(-1, 9, 0) : null,
+    escalated_to: input.escalated ? USERS.owner : null,
+    attempts: 0,
+    next_retry_at: null,
+    snoozed_until: null,
+    status: "open",
+    resolution: null,
+    resolved_by: null,
+    resolved_at: null,
+    auto_close: true,
+    links: {},
+    created_at: created,
+    updated_at: created,
+  });
+  addTaskEvent(
+    taskId,
+    "created",
+    USERS.owner,
+    { assignee_id: input.assignee, note: input.note ?? null },
+    created,
+  );
+  return taskId;
+}
+
+// Harriet Blackwood (12, lapsed): a personal re-engagement call, overdue and escalated.
+addManualTask({
+  patientIndex: 12,
+  type: "chase_booking",
+  title: "Re-engagement call",
+  context: "Win-back plan step 7 days overdue · portal quiet 34 days",
+  assignee: USERS.practitioner,
+  note: "A personal call from you works best. She mentioned you by name at her last visit.",
+  dueInDays: -2,
+  createdDaysAgo: 5,
+  escalated: true,
+});
+// Beatrice Ashcombe (25): swelling mentioned at checkout, Nadia to call on Thursday.
+addManualTask({
+  patientIndex: 25,
+  type: "plan_support",
+  title: "Call about filler swelling",
+  context: "Mentioned swelling at checkout",
+  assignee: USERS.practitioner,
+  dueInDays: 2,
+  createdDaysAgo: 2,
+});
+// Aisha Bello (17): referred two friends this month.
+addManualTask({
+  patientIndex: 17,
+  type: "send_offer",
+  title: "Send referral thank-you voucher",
+  context: "Referred 2 friends this month",
+  assignee: USERS.owner,
+  dueInDays: 3,
+  createdDaysAgo: 1,
+});
+// Sienna Clarke (14): a chase nobody has picked up yet (the Unassigned view).
+addManualTask({
+  patientIndex: 14,
+  type: "chase_booking",
+  title: "Chase to book skin consultation",
+  context: "Enquired twice in the portal · nothing booked",
+  assignee: null,
+  assigneeRole: null,
+  dueInDays: 0,
+  createdDaysAgo: 3,
+});
+
+// Two urgent portal questions, sent within the hour, still unread. The
+// urgent-question rule turns each into a task for the patient's practitioner.
+for (const q of [
+  { patientIndex: 22, body: "OK to go to the gym the day after session 2?", minutesAgo: 40 },
+  {
+    patientIndex: 10,
+    body: "Is redness on day 3 normal? It started yesterday evening.",
+    minutesAgo: 38,
+  },
+]) {
+  messages.push({
+    id: id("h1"),
+    clinic_id: CLINIC_ID,
+    patient_id: patients[q.patientIndex]!["id"],
+    author: "patient",
+    author_id: null,
+    body: q.body,
+    attachments: [],
+    read_at: null,
+    created_at: new Date(NOW.getTime() - q.minutesAgo * 60_000).toISOString(),
+  });
+}
 export const communications: Row[] = [
   {
     id: id("m1"),
@@ -5494,6 +5824,9 @@ export const db = {
   medicalHistory,
   photos,
   recallTasks,
+  automationRules,
+  tasks,
+  taskEvents,
   treatmentPlans,
   planMilestoneChecklist,
   planPauseRequests,

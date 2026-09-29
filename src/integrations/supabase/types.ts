@@ -191,6 +191,81 @@ export type Database = {
           },
         ];
       };
+      automation_rules: {
+        Row: {
+          action: string;
+          assign_person: string | null;
+          assign_strategy: string;
+          clinic_id: string;
+          conditions: Json;
+          created_at: string;
+          due_offset_hours: number;
+          enabled: boolean;
+          escalate_after_hours: number | null;
+          escalate_to_role: string | null;
+          id: string;
+          key: string;
+          name: string;
+          resolve_on: string[];
+          task_type: Database["public"]["Enums"]["task_type"] | null;
+          trigger: string;
+          updated_at: string;
+        };
+        Insert: {
+          action?: string;
+          assign_person?: string | null;
+          assign_strategy: string;
+          clinic_id: string;
+          conditions?: Json;
+          created_at?: string;
+          due_offset_hours?: number;
+          enabled?: boolean;
+          escalate_after_hours?: number | null;
+          escalate_to_role?: string | null;
+          id?: string;
+          key: string;
+          name: string;
+          resolve_on?: string[];
+          task_type?: Database["public"]["Enums"]["task_type"] | null;
+          trigger: string;
+          updated_at?: string;
+        };
+        Update: {
+          action?: string;
+          assign_person?: string | null;
+          assign_strategy?: string;
+          clinic_id?: string;
+          conditions?: Json;
+          created_at?: string;
+          due_offset_hours?: number;
+          enabled?: boolean;
+          escalate_after_hours?: number | null;
+          escalate_to_role?: string | null;
+          id?: string;
+          key?: string;
+          name?: string;
+          resolve_on?: string[];
+          task_type?: Database["public"]["Enums"]["task_type"] | null;
+          trigger?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "automation_rules_assign_person_fkey";
+            columns: ["assign_person"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "automation_rules_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       audit_log: {
         Row: {
           action: string;
@@ -2754,6 +2829,207 @@ export type Database = {
           },
         ];
       };
+      task_events: {
+        Row: {
+          actor_id: string | null;
+          clinic_id: string;
+          created_at: string;
+          data: Json;
+          id: number;
+          kind: string;
+          task_id: string;
+        };
+        Insert: {
+          actor_id?: string | null;
+          clinic_id: string;
+          created_at?: string;
+          data?: Json;
+          id?: number;
+          kind: string;
+          task_id: string;
+        };
+        Update: {
+          actor_id?: string | null;
+          clinic_id?: string;
+          created_at?: string;
+          data?: Json;
+          id?: number;
+          kind?: string;
+          task_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "task_events_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "task_events_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "task_events_task_id_fkey";
+            columns: ["task_id"];
+            isOneToOne: false;
+            referencedRelation: "tasks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      tasks: {
+        Row: {
+          assignee_id: string | null;
+          assignee_role: string | null;
+          attempts: number;
+          auto_close: boolean;
+          clinic_id: string;
+          context: string | null;
+          created_at: string;
+          created_by: string | null;
+          dedupe_key: string | null;
+          due_at: string | null;
+          escalate_at: string | null;
+          escalated_at: string | null;
+          escalated_to: string | null;
+          id: string;
+          links: Json;
+          next_retry_at: string | null;
+          note: string | null;
+          patient_id: string;
+          priority: number;
+          resolution: string | null;
+          resolved_at: string | null;
+          resolved_by: string | null;
+          rule_id: string | null;
+          snoozed_until: string | null;
+          source: Database["public"]["Enums"]["task_source"];
+          source_label: string | null;
+          status: Database["public"]["Enums"]["task_status"];
+          title: string;
+          type: Database["public"]["Enums"]["task_type"];
+          updated_at: string;
+        };
+        Insert: {
+          assignee_id?: string | null;
+          assignee_role?: string | null;
+          attempts?: number;
+          auto_close?: boolean;
+          clinic_id: string;
+          context?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          dedupe_key?: string | null;
+          due_at?: string | null;
+          escalate_at?: string | null;
+          escalated_at?: string | null;
+          escalated_to?: string | null;
+          id?: string;
+          links?: Json;
+          next_retry_at?: string | null;
+          note?: string | null;
+          patient_id: string;
+          priority?: number;
+          resolution?: string | null;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          rule_id?: string | null;
+          snoozed_until?: string | null;
+          source?: Database["public"]["Enums"]["task_source"];
+          source_label?: string | null;
+          status?: Database["public"]["Enums"]["task_status"];
+          title: string;
+          type: Database["public"]["Enums"]["task_type"];
+          updated_at?: string;
+        };
+        Update: {
+          assignee_id?: string | null;
+          assignee_role?: string | null;
+          attempts?: number;
+          auto_close?: boolean;
+          clinic_id?: string;
+          context?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          dedupe_key?: string | null;
+          due_at?: string | null;
+          escalate_at?: string | null;
+          escalated_at?: string | null;
+          escalated_to?: string | null;
+          id?: string;
+          links?: Json;
+          next_retry_at?: string | null;
+          note?: string | null;
+          patient_id?: string;
+          priority?: number;
+          resolution?: string | null;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          rule_id?: string | null;
+          snoozed_until?: string | null;
+          source?: Database["public"]["Enums"]["task_source"];
+          source_label?: string | null;
+          status?: Database["public"]["Enums"]["task_status"];
+          title?: string;
+          type?: Database["public"]["Enums"]["task_type"];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tasks_assignee_id_fkey";
+            columns: ["assignee_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_escalated_to_fkey";
+            columns: ["escalated_to"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_resolved_by_fkey";
+            columns: ["resolved_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_rule_id_fkey";
+            columns: ["rule_id"];
+            isOneToOne: false;
+            referencedRelation: "automation_rules";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       treatment_catalogue: {
         Row: {
           active: boolean;
@@ -3508,6 +3784,16 @@ export type Database = {
       plan_milestone_status: "upcoming" | "current" | "done" | "skipped";
       plan_pause_status: "pending" | "approved" | "declined";
       recall_task_status: "open" | "contacted" | "completed";
+      task_source: "rule" | "portal" | "manual";
+      task_status: "open" | "snoozed" | "done" | "auto_closed" | "cancelled";
+      task_type:
+        | "chase_booking"
+        | "recall"
+        | "question"
+        | "send_offer"
+        | "plan_support"
+        | "rebook_no_show"
+        | "custom";
       routine_period: "morning" | "evening";
       treatment_plan_phase: "consult" | "foundation" | "build" | "results";
       treatment_plan_status: "active" | "completed" | "cancelled" | "paused";
@@ -3650,6 +3936,17 @@ export const Constants = {
       payment_status: ["unpaid", "deposit_paid", "paid", "refunded"],
       photo_kind: ["before", "after"],
       recall_task_status: ["open", "contacted", "completed"],
+      task_source: ["rule", "portal", "manual"],
+      task_status: ["open", "snoozed", "done", "auto_closed", "cancelled"],
+      task_type: [
+        "chase_booking",
+        "recall",
+        "question",
+        "send_offer",
+        "plan_support",
+        "rebook_no_show",
+        "custom",
+      ],
       visit_stage: [
         "booked",
         "arrived",
