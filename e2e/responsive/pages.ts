@@ -562,6 +562,49 @@ const assignDialog: PageState = {
   },
 };
 
+/** Tasks: the owner's inline delegate panel on the first row. */
+const delegateOpen: PageState = {
+  id: "delegate-open",
+  open: async (page) => {
+    const btn = page
+      .locator('[data-qc="task-action-delegate"], [data-qc="task-action-reassign"]')
+      .first();
+    if ((await btn.count()) === 0) return false;
+    await btn.click();
+    await page.locator('[data-qc="delegate-panel"]').waitFor({ state: "visible", timeout: 3_000 });
+    await wait(page, 300);
+    return true;
+  },
+};
+
+/** Tasks: the practitioner's / front desk's outcome panel on the first row that has one. */
+const outcomeOpen: PageState = {
+  id: "outcome-open",
+  open: async (page) => {
+    const btn = page
+      .locator('[data-qc="task-action-done"], [data-qc="task-action-log-outcome"]')
+      .first();
+    if ((await btn.count()) === 0) return false;
+    await btn.click();
+    await page.locator('[data-qc="outcome-panel"]').waitFor({ state: "visible", timeout: 3_000 });
+    await wait(page, 300);
+    return true;
+  },
+};
+
+/** Tasks: two rows selected, so the bulk bar and the Team hint are on screen. */
+const tasksSelect: PageState = {
+  id: "tasks-select",
+  open: async (page) => {
+    const boxes = page.locator('[data-qc="task-select"]');
+    if ((await boxes.count()) < 2) return false;
+    await boxes.nth(0).click();
+    await boxes.nth(1).click();
+    await wait(page, 300);
+    return true;
+  },
+};
+
 const bulkSelect: PageState = {
   id: "bulk-select",
   open: async (page) => {
@@ -698,6 +741,30 @@ export const PAGES: PageEntry[] = [
     roles: ["owner"],
     settle: ".page-title",
     states: [sidebarClosed],
+  },
+  {
+    id: "tasks",
+    path: "/tasks",
+    roles: ["owner", "manager"],
+    settle: '[data-qc="tasks-main"]',
+    states: [sidebarClosed, delegateOpen, tasksSelect],
+    coreStates: ["delegate-open"],
+  },
+  {
+    id: "tasks-practitioner",
+    path: "/tasks",
+    roles: ["practitioner"],
+    settle: '[data-qc="tasks-main"]',
+    states: [sidebarClosed, outcomeOpen],
+    coreStates: ["outcome-open"],
+  },
+  {
+    id: "tasks-front-desk",
+    path: "/tasks",
+    roles: ["front_desk"],
+    settle: '[data-qc="tasks-main"]',
+    states: [sidebarClosed, outcomeOpen],
+    coreStates: ["outcome-open"],
   },
   {
     id: "retention",

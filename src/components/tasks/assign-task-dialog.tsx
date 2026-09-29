@@ -144,7 +144,9 @@ export function AssignTaskDialog({
     mutationFn: useServerFn(createTask),
     onSuccess: (res: { task: { id: string } }) => {
       toast.success(
-        `${patient?.firstName ?? "Task"} assigned to ${chosenMember ? staffLane(chosenMember.id, chosenMember.name).short : "the team"}. Added to their Tasks and dashboard.`,
+        `${patient?.firstName ?? "Task"} assigned to ${
+          chosenMember ? staffLane(chosenMember.id, chosenMember.name).short : "the team."
+        } Added to their Tasks and dashboard.`,
       );
       void invalidateTaskQueries(queryClient);
       onOpenChange(false);

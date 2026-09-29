@@ -120,6 +120,7 @@ import {
 } from "@/lib/tasks/tasks.server";
 import {
   dueAtForPreset,
+  DEFAULT_VIEW,
   ROLE_VIEWS,
   suggestedAssignee,
   TASK_TYPE_META,
@@ -7902,7 +7903,7 @@ export const listTasks = createServerFn({ method: "GET" })
       ? "person"
       : data.view && views.some((v) => v.view === data.view)
         ? data.view
-        : views[0]!.view;
+        : DEFAULT_VIEW[role];
     if (view === "person" && !viewer.isManager)
       throw new Error("Only managers can see a colleague's list");
     const rows = tc.rows

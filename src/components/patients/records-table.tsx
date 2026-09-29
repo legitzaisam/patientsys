@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { displayName } from "@/lib/format";
@@ -130,15 +131,19 @@ export function RecordsTable({
                     ) : null}
                   </span>
                   <div className="min-w-0">
-                    <p
+                    {/* The name opens the record (the app's long-standing way in); the row itself selects. */}
+                    <Link
+                      to="/patients/$id"
+                      params={{ id: p.id }}
+                      onClick={(e) => e.stopPropagation()}
                       className={cn(
-                        "truncate text-[14px] font-medium",
+                        "block truncate text-[14px] font-medium hover:text-accent-ink",
                         inactive ? "text-ink-3" : "text-foreground",
                       )}
                       data-qc="records-name"
                     >
                       {displayName(p, { surnameFirst: true })}
-                    </p>
+                    </Link>
                     <p
                       className={cn("mt-0.5 flex items-center gap-1.5 text-[11.5px]", meta.ink)}
                       data-qc="records-type"

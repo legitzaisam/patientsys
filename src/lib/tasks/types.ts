@@ -154,6 +154,14 @@ export const ROLE_VIEWS: Record<TaskRole, readonly { view: TaskView; label: stri
   ],
 };
 
+/** Where each role lands: managers on the whole team, everyone else on their own list. */
+export const DEFAULT_VIEW: Record<TaskRole, TaskView> = {
+  owner: "team",
+  manager: "team",
+  practitioner: "assigned",
+  front_desk: "queue",
+};
+
 export function isTaskView(value: unknown): value is TaskView {
   return typeof value === "string" && (TASK_VIEWS as readonly string[]).includes(value);
 }

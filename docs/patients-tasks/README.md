@@ -15,7 +15,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | P2 | [`worklog/02-schema.md`](worklog/02-schema.md) | `tasks`, `task_events`, `automation_rules` schema, types, tenancy, demo fixtures | `e0987c5` |
 | P3 | [`worklog/03-server.md`](worklog/03-server.md) | Rule evaluator, sync, task handlers, patient summaries, RBAC, notifications, realtime | `eb79eba` |
 | P4 | [`worklog/04-records.md`](worklog/04-records.md) | Patients → Records (A) and the Assign dialog (D) | `5c366d2` |
-| P5 | [`worklog/05-journey-board.md`](worklog/05-journey-board.md) | Patients → Journey board (B) | |
+| P5 | [`worklog/05-journey-board.md`](worklog/05-journey-board.md) | Patients → Journey board (B) | `7f760b7` |
 | P6 | [`worklog/06-tasks-page.md`](worklog/06-tasks-page.md) | Tasks page (C) and the sidebar item | |
 | P7 | [`worklog/07-dashboard-rewire.md`](worklog/07-dashboard-rewire.md) | Dashboard aggregation; rewiring the old recall surfaces | |
 | P8 | [`worklog/08-tests-and-verify.md`](worklog/08-tests-and-verify.md) | e2e, device matrix, full verification, after-captures, docs | |
@@ -59,15 +59,15 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | `pt-p5-02-board-map` | P5 | practitioner × phase map | done | [`05-journey-board.md#pt-p5-02-board-map`](worklog/05-journey-board.md#pt-p5-02-board-map) |
 | `pt-p5-03-board-responsive` | P5 | narrow layouts | done | [`05-journey-board.md#pt-p5-03-board-responsive`](worklog/05-journey-board.md#pt-p5-03-board-responsive) |
 | `pt-p5-04-verify-commit` | P5 | specs, responsive gate, captures; commit | done | [`05-journey-board.md#pt-p5-04-verify-commit`](worklog/05-journey-board.md#pt-p5-04-verify-commit) |
-| `pt-p6-01-route-nav` | P6 | `/tasks` route + `tasks-nav` | pending | |
-| `pt-p6-02-task-list-row` | P6 | `task-list`, `task-row` | pending | |
-| `pt-p6-03-delegate-outcome-panels` | P6 | `delegate-panel`, `outcome-panel` | pending | |
-| `pt-p6-04-bulk-dnd` | P6 | `bulk-bar`, drag to assign | pending | |
-| `pt-p6-05-right-rails` | P6 | `team-panel`, `your-day-panel`, `todays-calls-panel` | pending | |
-| `pt-p6-06-optimistic-undo-toast` | P6 | optimistic mutations, Undo toast | pending | |
-| `pt-p6-07-sidebar-badge` | P6 | Tasks nav item with open-count badge | pending | |
-| `pt-p6-08-tasks-responsive` | P6 | narrow layouts | pending | |
-| `pt-p6-09-verify-commit` | P6 | role probes, responsive gate, captures; commit | pending | |
+| `pt-p6-01-route-nav` | P6 | `/tasks` route + `tasks-nav` | done | [`06-tasks-page.md#pt-p6-01-route-nav`](worklog/06-tasks-page.md#pt-p6-01-route-nav) |
+| `pt-p6-02-task-list-row` | P6 | `task-list`, `task-row` | done | [`06-tasks-page.md#pt-p6-02-task-list-row`](worklog/06-tasks-page.md#pt-p6-02-task-list-row) |
+| `pt-p6-03-delegate-outcome-panels` | P6 | `delegate-panel`, `outcome-panel` | done | [`06-tasks-page.md#pt-p6-03-delegate-outcome-panels`](worklog/06-tasks-page.md#pt-p6-03-delegate-outcome-panels) |
+| `pt-p6-04-bulk-dnd` | P6 | `bulk-bar`, drag to assign | done | [`06-tasks-page.md#pt-p6-04-bulk-dnd`](worklog/06-tasks-page.md#pt-p6-04-bulk-dnd) |
+| `pt-p6-05-right-rails` | P6 | `team-panel`, `your-day-panel`, `todays-calls-panel` | done | [`06-tasks-page.md#pt-p6-05-right-rails`](worklog/06-tasks-page.md#pt-p6-05-right-rails) |
+| `pt-p6-06-optimistic-undo-toast` | P6 | optimistic mutations, Undo toast | done | [`06-tasks-page.md#pt-p6-06-optimistic-undo-toast`](worklog/06-tasks-page.md#pt-p6-06-optimistic-undo-toast) |
+| `pt-p6-07-sidebar-badge` | P6 | Tasks nav item with open-count badge | done | [`06-tasks-page.md#pt-p6-07-sidebar-badge`](worklog/06-tasks-page.md#pt-p6-07-sidebar-badge) |
+| `pt-p6-08-tasks-responsive` | P6 | narrow layouts | done | [`06-tasks-page.md#pt-p6-08-tasks-responsive`](worklog/06-tasks-page.md#pt-p6-08-tasks-responsive) |
+| `pt-p6-09-verify-commit` | P6 | role probes, responsive gate, captures; commit | done | [`06-tasks-page.md#pt-p6-09-verify-commit`](worklog/06-tasks-page.md#pt-p6-09-verify-commit) |
 | `pt-p7-01-dashboard-summary-card` | P7 | `tasks-summary-card.tsx` replaces Follow-up tasks | pending | |
 | `pt-p7-02-attention-aggregate` | P7 | aggregated `tasks` attention items | pending | |
 | `pt-p7-03-record-panel` | P7 | `patient-tasks-panel.tsx` on the record | pending | |

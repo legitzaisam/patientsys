@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   Search,
   ShieldCheck,
+  ListChecks,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,7 +45,7 @@ import { FloatingNotes } from "@/components/dashboard/floating-notes";
 import { DemoRoleSwitcher } from "@/components/demo/role-switcher";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { clearDemoRole, demoHandoffUrl, handoffToWebsite } from "@/lib/demo/handoff";
-import { listTeam } from "@/lib/clinic.functions";
+import { getTasksSummary, listTeam } from "@/lib/clinic.functions";
 import { useAuthSessionReady } from "@/lib/use-auth-session-ready";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { canSee, isAccessAdmin } from "@/lib/access-catalogue";
@@ -67,7 +68,12 @@ type Identity = {
   patient: { first_name: string; last_name: string } | null;
 };
 
-type NavLink = { to: string; label: string; icon: typeof LayoutDashboard };
+type NavLink = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  badge?: number | undefined;
+};
 
 const TOOLBAR_SCROLL_BLEND_RANGE = 72;
 
@@ -153,6 +159,18 @@ function NavItem({
         <item.icon className="h-3 w-3" />
       </span>
       <span className="flex-1 truncate">{item.label}</span>
+      {item.badge ? (
+        <span
+          className={cn(
+            "ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums",
+            active ? "bg-foreground text-background" : "bg-accent-soft text-accent-ink",
+          )}
+          data-qc={`nav-badge-${item.label.toLowerCase()}`}
+          aria-label={`${item.badge} open`}
+        >
+          {item.badge > 99 ? "99+" : item.badge}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -523,6 +541,15 @@ export function AppShell({ identity, children }: { identity: Identity; children:
     enabled: identity.isStaff && sessionReady,
   });
 
+  // The Tasks item carries how many are open for this person.
+  const fetchTasksSummary = useServerFn(getTasksSummary);
+  const { data: tasksSummary } = useQuery({
+    queryKey: ["tasks-summary"],
+    queryFn: () => fetchTasksSummary(),
+    enabled: identity.isStaff && sessionReady && canSee(identity, "tasks"),
+    staleTime: 30_000,
+  });
+
   const teamMembers = useMemo(() => {
     const rows = team ?? [];
     const byId = new Map<string, { id: string; fullName: string }>();
@@ -559,6 +586,9 @@ export function AppShell({ identity, children }: { identity: Identity; children:
           ? [{ to: "/schedule", label: "Diary", icon: CalendarDays }]
           : []),
         ...(canSee(identity, "patients") ? [{ to: "/patients", label: "Patients", icon: Users }] : []),
+        ...(canSee(identity, "tasks")
+          ? [{ to: "/tasks", label: "Tasks", icon: ListChecks, badge: tasksSummary?.openForMe }]
+          : []),
         ...(isAccessAdmin(identity) ? [{ to: "/access", label: "Access", icon: ShieldCheck }] : []),
       ]
     : [
