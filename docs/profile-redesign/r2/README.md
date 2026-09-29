@@ -16,7 +16,7 @@ Every phase has a worklog with one `### <todo-id>` section per to-do (files chan
 | P4 | [`worklog/04-server.md`](worklog/04-server.md) | Pattern request / review / withdraw functions, dashboard staff requests, invoice on behalf | `332bbdc` |
 | P5 | [`worklog/05-pattern-approval-ui.md`](worklog/05-pattern-approval-ui.md) | Pattern approval UI and the Requests to approve chip | `9282728` |
 | P6 | [`worklog/06-invoice-on-behalf-ui.md`](worklog/06-invoice-on-behalf-ui.md) | Invoice on behalf UI | `9423a49` |
-| P7 | [`worklog/07-tests-and-verify.md`](worklog/07-tests-and-verify.md) | e2e, full verification, stitching re-run, after-captures, docs | `83c9669` (code) + the docs commit |
+| P7 | [`worklog/07-tests-and-verify.md`](worklog/07-tests-and-verify.md) | e2e, full verification, stitching re-run, after-captures, docs | `83c9669` (code), `9ea93fd` (docs) |
 
 ## To-dos
 
