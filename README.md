@@ -42,7 +42,7 @@ Open [http://localhost:8080](http://localhost:8080). Demo mode swaps `src/lib/cl
 The root `/` is the app's public landing page (Staff sign in, Patient portal) and looks the same in demo and live mode; the demo itself starts at [`/dashboard`](http://localhost:8080/dashboard) for staff and [`/my-record`](http://localhost:8080/my-record) for the patient. In demo mode the server trusts a `demo_role` cookie, so **no password is checked**. Pick a role in any of three ways:
 
 1. **The Demo pill** (bottom-left of every page) switches persona in place.
-2. **A URL**, when the app runs behind `launch-plan/gateway`: `/demo/enter?role=owner|practitioner|front_desk|patient` (the gateway does not route `manager` or `admin`; use the pill for those).
+2. **A URL**, when the app runs behind `launch-plan/gateway`: `/demo/enter?role=owner|manager|practitioner|front_desk|patient` (the gateway does not route `admin`; use the pill for that).
 3. **Signing in** at `/auth` (staff) or `/portal` (patients) with one of the emails below: the app maps the email onto the persona. This route needs a real Supabase project in `.env` where the account exists. The passwords listed are the ones `scripts/provision-staff.mjs` creates there; roles marked "pill only" have no account provisioned by the scripts.
 
 | Role (`demo_role`) | Persona you become | Sign-in email | Password | Lands on |
@@ -56,6 +56,140 @@ The root `/` is the app's public landing page (Staff sign in, Patient portal) an
 | `admin` (software admin) | Software developer | `developer@aetheria.clinic` | `Developer1!` | `/access` |
 
 The fixture clinic is Aetheria; all names, patients and numbers are demo data. Emails and texts stay in a sandbox.
+
+## Launching the Sqinos application (website + clinic portal + patient portal)
+
+`npm run dev:demo` above runs the portal on its own. The **whole** Sqinos experience is three pieces served from one address:
+
+```
+launch-plan/website/dist  (static Astro marketing site)  ┐
+                                                         ├─> gateway :8099  ──>  http://localhost:8099
+app in demo mode          (clinic portal + patient portal) ┘   (optionally ──> ngrok ──> public https URL)
+```
+
+The **gateway** (`launch-plan/gateway/server.mjs`, plain Node, no dependencies) answers the website's paths (`/`, `/login`, `/pricing`, `/contact`, `/demo`, `/for-clinics/…`, `/for-patients/…`, `/journal/…`, …; the full list is `launch-plan/gateway/routes.json`) from the static build and proxies everything else (`/dashboard`, `/patients`, `/tasks`, `/my-record`, `/api/…`, websockets) to the app. Behind the gateway the website's `/login` owns sign-in: the app's `/auth` and `/portal` redirect there, and `/demo/enter?role=…` drops you into a persona.
+
+Everything below is local only (nothing leaves your machine) and needs **three terminals**, or one terminal plus `--background`. Run every command from the repository root.
+
+### 1. Prerequisites (once)
+
+```sh
+node -v          # 22 or newer (both package.json files pin engines >= 22)
+npm i            # app dependencies, if you have not already
+cd launch-plan/website && npm i && cd ../..   # website dependencies (Astro)
+```
+
+`launch-plan/.env.local` is optional for a local launch. The scripts default to `APP_PORT=8090`, `GATEWAY_PORT=8099`, `DEMO_DEFAULT_ROLE=owner`; it only becomes necessary for ngrok (`NGROK_DOMAIN`, see step 8). Never commit it.
+
+### 2. Check the ports are free
+
+```sh
+lsof -nP -iTCP:8090 -sTCP:LISTEN   # app
+lsof -nP -iTCP:8099 -sTCP:LISTEN   # gateway
+```
+
+Both should print nothing. If something else already holds 8090 (any other project's dev server), **do not kill it**; pick another port for the app and use it in steps 4 and 5 (`APP_PORT=8092` is used as the example throughout). The gateway will happily proxy to whatever is on the port you give it, so a wrong or busy port shows you a different application, not an error.
+
+### 3. Build the website
+
+The gateway serves a static build, so the site has to be built once (and again after every edit under `launch-plan/website/src`):
+
+```sh
+cd launch-plan/website && npm run build && cd ../..
+ls launch-plan/website/dist/index.html          # must exist
+```
+
+Takes about a second; prints `[build] 6 page(s) built`.
+
+### 4. Start the app in demo mode — terminal 1
+
+```sh
+APP_MODE=dev ./launch-plan/ngrok/start-demo.sh
+# if 8090 is taken:
+APP_MODE=dev APP_PORT=8092 ./launch-plan/ngrok/start-demo.sh
+```
+
+The script refuses to start if the port is busy (`Port 8090 is busy…`). It sets `DEMO=1`, points the app's sign-in links at the website (`DEMO_SIGNIN_URL=/login`), tells the app its public origin (`APP_ORIGIN=http://localhost:8099`) and, when there is no `.env`, exports placeholder Supabase values so the browser client can load. It then runs `vite dev --port <APP_PORT> --strictPort --host 127.0.0.1` in the foreground. Wait for:
+
+```
+VITE v8.x  ready in …
+➜  Local:   http://127.0.0.1:8090/
+```
+
+Confirm it is **this** app before going on (the title must be Aetheria's):
+
+```sh
+curl -s http://127.0.0.1:8090/tasks | grep -o '<title>[^<]*'    # → <title>Tasks — Aetheria
+```
+
+`APP_MODE=preview` (the default when the variable is omitted) builds a production bundle first and serves that instead; it is what the public launch uses because it makes about an eighth of the requests per page. For local work `dev` is faster to start and hot-reloads.
+
+### 5. Start the gateway — terminal 2
+
+```sh
+GATEWAY_PORT=8099 APP_PORT=8090 \
+WEBSITE_DIST="$PWD/launch-plan/website/dist" \
+DEMO_DEFAULT_ROLE=owner GATEWAY_QUIET=1 \
+node launch-plan/gateway/server.mjs
+```
+
+Use the same `APP_PORT` as in step 4. It prints:
+
+```
+Aetheria gateway on http://localhost:8099
+  website: …/launch-plan/website/dist
+  app:     http://127.0.0.1:8090
+```
+
+`GATEWAY_QUIET=1` turns off the per-request log line; drop it to see every request. `DEMO_DEFAULT_ROLE` is the persona `/demo/enter` uses when the link carries no `?role=`. (An app URL opened with no persona cookie at all renders as the owner: that is the demo server's own default.)
+
+### 6. Verify — terminal 3
+
+```sh
+for p in / /login /demo /contact /dashboard /patients /tasks /my-record; do
+  printf '%-11s %s  ' "$p" "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8099$p)"
+  curl -s "http://localhost:8099$p" | grep -a -o '<title>[^<]*' | head -1
+done
+curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' http://localhost:8099/auth     # 302 -> …/login
+curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' http://localhost:8099/portal   # 302 -> …/login#patient
+node launch-plan/gateway/test.mjs                                                          # # pass 12 / # fail 0
+```
+
+Expected: every path `200`; website titles `SQINOS — …`, `Sign in · SQINOS`, `Demo · SQINOS`; app titles `… — Aetheria`. `test.mjs` is self-contained: it spins up a stub app and its own gateway on 18090/18099, checks the routing rules (website paths, proxying, sign-in redirects, `/demo/enter`, websockets) and exits, so it neither needs nor touches steps 4–5. The `curl` lines above are what prove the real stack.
+
+### 7. Use it
+
+| Open | What you get |
+| ---- | ------------ |
+| [http://localhost:8099/](http://localhost:8099/) | Marketing website (a short intro animation with the drop mark plays first) |
+| [http://localhost:8099/login](http://localhost:8099/login) | Sign in: pick a staff persona, or the patient under `#patient` |
+| [http://localhost:8099/demo](http://localhost:8099/demo) | Demo page; `/demo/enter?role=owner\|manager\|practitioner\|front_desk\|patient` jumps straight in |
+| [http://localhost:8099/dashboard](http://localhost:8099/dashboard) | **Clinic portal** (Dashboard, Diary, Patients, Tasks, Team, reports) as the current persona — owner by default |
+| [http://localhost:8099/my-record](http://localhost:8099/my-record) | **Patient portal** (Olivia Bennett's plan, timeline, messages) |
+| Demo pill, bottom-left of any app page | Switch persona in place (this is also where `manager` and `admin` live) |
+| Sign out (top-right menu) | Returns to the website's `/login` |
+
+Everything is fixture data: no Supabase, no real email or SMS. The app hot-reloads code changes; the website does not (rebuild, step 3, and reload).
+
+### 8. Public URL (optional, ngrok)
+
+To show it from outside your Mac, `launch-plan/ngrok/start-public.sh` does steps 3–5 in one go (`--rebuild` to rebuild the site first), then opens an ngrok tunnel to `https://$NGROK_DOMAIN`. It needs the one-time ngrok set-up (authtoken, free reserved domain) in `launch-plan/.env.local`; `./launch-plan/ngrok/doctor.sh` checks all of it. Full instructions: [`launch-plan/README.md`](launch-plan/README.md). It too defaults to `APP_PORT=8090`, so free that port or set `APP_PORT` first.
+
+### 9. Stop
+
+- Foreground (steps 4–5): `Ctrl-C` in each terminal.
+- Background: start the app with `./launch-plan/ngrok/start-demo.sh --background` (pid in `launch-plan/.run/app.pid`, log in `.run/logs/app.log`) and stop everything the scripts started with `./launch-plan/ngrok/stop.sh`. The gateway from step 5 has no pid file, so stop it with `kill $(lsof -nP -iTCP:8099 -sTCP:LISTEN -t)`.
+
+### If something is off
+
+| Symptom | Cause / fix |
+| ------- | ----------- |
+| `Port 8090 is busy. Stop whatever uses it or change APP_PORT.` | Another server has the port (`lsof -nP -iTCP:8090 -sTCP:LISTEN` names it). Use `APP_PORT=8092` in steps 4 and 5. |
+| App pages through the gateway show a **different product** | The gateway is proxying to whatever sits on `APP_PORT`. Check `curl -s http://127.0.0.1:<APP_PORT>/tasks \| grep -o '<title>[^<]*'` says Aetheria; restart the gateway with the right port. |
+| `The demo app is not reachable on port …` page from the gateway | Step 4 is not running, or on a different port than the gateway's `APP_PORT`. |
+| Website paths answer `503 The website is not built yet` | Step 3 was skipped, or `WEBSITE_DIST` points elsewhere: build the site and restart the gateway with the path from step 5. |
+| Website shows old content | The static build is stale; rebuild (step 3) and hard-reload. |
+| Only the app, no website, is wanted | `npm run dev:demo` on port 8080 (Quick start above). |
 
 ## Local development (live Supabase)
 
