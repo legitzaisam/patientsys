@@ -72,6 +72,16 @@ test("the at-risk table pins the patient column, drops practitioner, and the dia
   const row = page.locator('[data-qc="task-row"][data-type="recall"]', {
     hasText: patientName.split(" ")[0]!,
   });
+  // Ten a page: walk the pages until the row turns up.
+  await expect(page.locator('[data-qc="task-row"]').first()).toBeVisible();
+  for (let guard = 0; guard < 10 && (await row.count()) === 0; guard++) {
+    const next = page.locator('[data-qc="tasks-pagination"]').getByRole("button", {
+      name: /next page/i,
+    });
+    if ((await next.count()) === 0 || (await next.isDisabled())) break;
+    await next.click();
+    await expect(page.locator('[data-qc="task-row"]').first()).toBeVisible();
+  }
   await expect(row.first()).toBeVisible();
   await expect(row.first().locator('[data-qc="task-source"]')).toContainText(/Assigned by/);
 });

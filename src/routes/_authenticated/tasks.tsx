@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PaginationBar } from "@/components/pagination-bar";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
 import { AssignTaskDialog } from "@/components/tasks/assign-task-dialog";
 import { TaskRow, type RowAction } from "@/components/tasks/task-row";
@@ -20,6 +21,8 @@ import {
 import { useTaskActions } from "@/components/tasks/use-task-actions";
 import { getTasksSummary, listPatients, listTasks } from "@/lib/clinic.functions";
 import { canSee } from "@/lib/access-catalogue";
+import { DEMO_MODE } from "@/lib/demo/enabled";
+import { switchDemoRole } from "@/lib/demo/switch-role";
 import { can } from "@/lib/permissions";
 import { staffLane } from "@/lib/staff-lane";
 import { taskRole, type TaskView_ } from "@/lib/tasks/service";
@@ -37,15 +40,15 @@ import { useTasksLiveSync } from "@/lib/use-tasks-sync";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { view?: TaskView; types?: string; person?: string; task?: string } => {
-    const parsed: { view?: TaskView; types?: string; person?: string; task?: string } = {};
+  validateSearch: (search: Record<string, unknown>): TasksSearch => {
+    const parsed: TasksSearch = {};
     if (isTaskView(search?.["view"])) parsed.view = search["view"];
     if (typeof search?.["types"] === "string" && search["types"]) parsed.types = search["types"];
     if (typeof search?.["person"] === "string" && search["person"])
       parsed.person = search["person"];
     if (typeof search?.["task"] === "string" && search["task"]) parsed.task = search["task"];
+    const page = Number(search?.["page"]);
+    if (Number.isInteger(page) && page > 1) parsed.page = page;
     return parsed;
   },
   head: () => ({
@@ -67,6 +70,14 @@ export const Route = createFileRoute("/_authenticated/tasks")({
   ),
 });
 
+type TasksSearch = {
+  view?: TaskView;
+  types?: string;
+  person?: string;
+  task?: string;
+  page?: number;
+};
+
 const TYPE_CHIPS: TaskType[] = [
   "chase_booking",
   "rebook_no_show",
@@ -75,6 +86,16 @@ const TYPE_CHIPS: TaskType[] = [
   "send_offer",
   "plan_support",
 ];
+
+/** Rows a page: long enough to work through, short enough that the rail stays in view. */
+const PAGE_SIZE = 10;
+
+/** Demo only: the mock's "Viewing as" pill. In the app the role comes from who is signed in. */
+const DEMO_PERSONAS = [
+  { label: "Owner / manager", role: "owner", matches: ["owner", "manager"] },
+  { label: "Practitioner", role: "practitioner", matches: ["practitioner"] },
+  { label: "Front desk", role: "front_desk", matches: ["front_desk"] },
+] as const;
 
 function TasksPage() {
   const { data: identity } = useIdentity();
@@ -100,13 +121,17 @@ function TasksPage() {
       : DEFAULT_VIEW[role];
   const types = useMemo(() => (search.types ?? "").split(",").filter(isTaskType), [search.types]);
 
-  const go = (patch: {
-    view?: TaskView | undefined;
-    types?: TaskType[] | undefined;
-    person?: string | null | undefined;
-    task?: string | null | undefined;
-  }) => {
-    const next: Record<string, string> = {};
+  const go = (
+    patch: {
+      view?: TaskView | undefined;
+      types?: TaskType[] | undefined;
+      person?: string | null | undefined;
+      task?: string | null | undefined;
+      page?: number | undefined;
+    },
+    opts: { resetScroll?: boolean } = {},
+  ) => {
+    const next: Record<string, string | number> = {};
     const v = patch.view === undefined ? (personId ? undefined : search.view) : patch.view;
     if (v && v !== DEFAULT_VIEW[role]) next["view"] = v;
     const t = patch.types ?? types;
@@ -115,7 +140,17 @@ function TasksPage() {
     if (person) next["person"] = person;
     const task = patch.task === undefined ? search.task : patch.task;
     if (task) next["task"] = task;
-    void navigate({ to: "/tasks", search: next as never, replace: true });
+    // A different list starts on page 1; only an explicit page (or the same list) keeps one.
+    const listChanged =
+      patch.view !== undefined || patch.types !== undefined || patch.person !== undefined;
+    const page = patch.page ?? (listChanged ? 1 : search.page);
+    if (page && page > 1) next["page"] = page;
+    void navigate({
+      to: "/tasks",
+      search: next as never,
+      replace: true,
+      resetScroll: opts.resetScroll ?? true,
+    });
   };
 
   const fetchTasks = useServerFn(listTasks);
@@ -158,18 +193,63 @@ function TasksPage() {
     setOpenPanel(null);
   }, [view, personId]);
 
-  // A deep link to one task scrolls it into view and opens its panel once.
+  // ---------------------------------------------------------------- paging
+  // Rows keep the server's grouping and order but read each task from the
+  // (optimistically patched) flat list, so a handled row leaves at once.
+  const groups = list?.groups;
+  const rows = useMemo(() => {
+    const byId = new Map((list?.tasks ?? []).map((t) => [t.id, t]));
+    return (groups ?? []).flatMap((g) =>
+      g.tasks.flatMap((t) => {
+        const live = byId.get(t.id);
+        return live
+          ? [{ bucket: g.bucket, label: g.label, total: g.tasks.length, task: live }]
+          : [];
+      }),
+    );
+  }, [groups, list?.tasks]);
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, search.page ?? 1), pageCount);
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // The page's rows, regrouped; a group that started on an earlier page says so.
+  const pageGroups = pageRows.reduce<
+    Array<{ bucket: string; label: string; total: number; continued: boolean; tasks: TaskView_[] }>
+  >((acc, r) => {
+    const last = acc[acc.length - 1];
+    if (last && last.bucket === r.bucket) last.tasks.push(r.task);
+    else {
+      const first = rows.findIndex((x) => x.bucket === r.bucket);
+      acc.push({
+        bucket: r.bucket,
+        label: r.label,
+        total: r.total,
+        continued: rows[first]?.task.id !== r.task.id,
+        tasks: [r.task],
+      });
+    }
+    return acc;
+  }, []);
+
+  // A deep link to one task lands on its page, scrolls it into view and highlights it once.
   useEffect(() => {
     if (!search.task || !list?.tasks.length) return;
+    const idx = rows.findIndex((r) => r.task.id === search.task);
+    const target = idx >= 0 ? Math.floor(idx / PAGE_SIZE) + 1 : page;
+    if (target !== page) {
+      go({ page: target });
+      return;
+    }
     const el = document.querySelector(`[data-task-id="${search.task}"]`);
     if (el) {
-      el.scrollIntoView({ block: "center" });
+      // After the router's own scroll-to-top for the page change.
+      window.requestAnimationFrame(() => el.scrollIntoView({ block: "center" }));
       el.classList.add("ring-2", "ring-accent-deep");
       window.setTimeout(() => el.classList.remove("ring-2", "ring-accent-deep"), 1600);
     }
-    go({ task: null });
+    // Clearing `task` from the URL must not scroll the list back to the top.
+    go({ task: null }, { resetScroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search.task, list?.tasks.length]);
+  }, [search.task, list?.tasks.length, page]);
 
   if (!identity) return <div className="p-12 text-sm text-muted-foreground">Loading…</div>;
   if (!identity.isStaff || !canSee(identity, "tasks"))
@@ -182,7 +262,6 @@ function TasksPage() {
   const nameOf = (id: string | null) => team.find((m) => m.id === id)?.name ?? null;
   const counts = new Map<TaskView, number>((summary?.views ?? []).map((v) => [v.view, v.count]));
   const tasks = list?.tasks ?? [];
-  const groups = list?.groups ?? [];
   const title = personId
     ? (nameOf(personId) ?? "Team member")
     : (views.find((v) => v.view === view)?.label ?? "Tasks");
@@ -358,14 +437,49 @@ function TasksPage() {
             {viewerName} · {roleLabel}
           </p>
         </div>
-        <Button
-          type="button"
-          onClick={() => setNewTaskOpen(true)}
-          data-qc="tasks-new"
-          className="h-[34px]"
-        >
-          New task
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {DEMO_MODE ? (
+            <div className="flex items-center gap-2" data-qc="tasks-viewing-as">
+              <span className="text-[12.5px] text-ink-3 max-sm:hidden">Viewing as</span>
+              <div
+                className="flex h-[34px] items-center gap-0.5 rounded-full border border-edge bg-glass-2 p-0.5 shadow-inset-hi"
+                role="group"
+                aria-label="Viewing as"
+              >
+                {DEMO_PERSONAS.map((p) => {
+                  const on = (p.matches as readonly string[]).includes(role);
+                  return (
+                    <button
+                      key={p.role}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => {
+                        if (!on) switchDemoRole(p.role);
+                      }}
+                      data-qc={`tasks-viewing-as-${p.role}`}
+                      className={cn(
+                        "h-7 cursor-pointer whitespace-nowrap rounded-full px-3.5 text-xs tracking-[0.02em] transition-colors",
+                        on
+                          ? "bg-accent-soft font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--edge)]"
+                          : "text-ink-2 hover:bg-[rgba(47,63,102,0.08)] hover:text-foreground active:bg-[rgba(47,63,102,0.14)]",
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          <Button
+            type="button"
+            onClick={() => setNewTaskOpen(true)}
+            data-qc="tasks-new"
+            className="h-[34px]"
+          >
+            New task
+          </Button>
+        </div>
       </div>
 
       <div
@@ -437,13 +551,13 @@ function TasksPage() {
             />
           ) : null}
 
-          {groups.length === 0 && !isLoading ? (
+          {rows.length === 0 && !isLoading ? (
             <p className="py-16 text-center text-sm text-muted-foreground" data-qc="tasks-empty">
               All clear. Nothing waiting here.
             </p>
           ) : null}
 
-          {groups.map((g) => (
+          {pageGroups.map((g) => (
             <section key={g.bucket} className="mb-4" data-qc={`tasks-group-${g.bucket}`}>
               <h3
                 className={cn(
@@ -451,7 +565,8 @@ function TasksPage() {
                   g.bucket === "overdue" ? "text-destructive-ink" : "text-ink-3",
                 )}
               >
-                {g.label} · {g.tasks.length}
+                {g.label} · {g.total}
+                {g.continued ? <span className="font-normal text-ink-3"> · continued</span> : null}
               </h3>
               <ul className="flex flex-col divide-y divide-edge-2">
                 {g.tasks.map((t) => {
@@ -515,6 +630,21 @@ function TasksPage() {
               </ul>
             </section>
           ))}
+
+          <PaginationBar
+            page={page}
+            pageCount={pageCount}
+            total={rows.length}
+            from={rows.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
+            to={Math.min(rows.length, page * PAGE_SIZE)}
+            onPage={(next) => {
+              go({ page: next });
+              setOpenPanel(null);
+            }}
+            noun="tasks"
+            qc="tasks-pagination"
+            className="mt-1 border-t border-edge-2 px-2.5 pt-3"
+          />
         </Card>
 
         <div className="min-w-0 lg:col-span-2 xl:col-span-1 xl:sticky xl:top-4">

@@ -50,9 +50,9 @@ test.describe("owner", () => {
   }) => {
     await openTasks(page);
     await expect(page.locator('[data-qc="tasks-main"]')).toHaveAttribute("data-view", "team");
-    for (const g of ["overdue", "today", "week"]) {
-      await expect(page.locator(`[data-qc="tasks-group-${g}"]`)).toBeVisible();
-    }
+    // Page 1 opens on what is late; the other groups follow on later pages.
+    await expect(page.locator('[data-qc="tasks-group-overdue"]')).toBeVisible();
+    await expect(page.locator('[data-qc="tasks-pagination"]')).toBeVisible();
     await expect(page.locator('[data-qc="nav-badge-tasks"]')).toHaveText(/^\d+$/);
     await expect(page.locator('[data-qc="team-panel"]')).toBeVisible();
     await expect(page.locator('[data-qc="tasks-auto-closed"]')).toContainText(
@@ -78,6 +78,89 @@ test.describe("owner", () => {
       .locator('[data-qc="task-assignee"]')
       .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute("data-assignee")))]);
     expect(assignees.length).toBeLessThanOrEqual(1);
+  });
+
+  test("ten a page: the page in the URL, a group continues across pages, a new view starts on page 1, a deep link lands on its page", async ({
+    page,
+  }) => {
+    await openTasks(page);
+    const rows = page.locator('[data-qc="task-row"]');
+    await expect(rows).toHaveCount(10);
+    const total = Number(
+      (await page.locator('[data-qc="tasks-open-count"]').innerText()).replace(/\D/g, ""),
+    );
+    expect(total).toBeGreaterThan(10);
+    const bar = page.locator('[data-qc="tasks-pagination"]');
+    await expect(bar).toContainText(`Showing 1–10 of ${total} tasks`);
+    await expect(bar).toContainText(`Page 1 of ${Math.ceil(total / 10)}`);
+    // The Overdue header carries the group's total, not the page's slice.
+    const overdue = page.locator('[data-qc="tasks-group-overdue"] h3');
+    const overdueTotal = Number(((await overdue.innerText()).match(/· (\d+)/) ?? [])[1]);
+    expect(overdueTotal).toBeGreaterThan(10);
+    await expect(overdue).not.toContainText("continued");
+
+    await bar.getByRole("button", { name: /next page/i }).click();
+    await expect(page).toHaveURL(/page=2/);
+    await expect(bar).toContainText("Showing 11–20");
+    await expect(overdue).toContainText(`Overdue · ${overdueTotal} · continued`);
+    // Every row on page 2 is different from page 1's.
+    const firstId = (await rows.first().getAttribute("data-task-id"))!;
+    await bar.getByRole("button", { name: /previous page/i }).click();
+    await expect(page).not.toHaveURL(/page=/);
+    const ids = await rows.evaluateAll((els) => els.map((e) => e.getAttribute("data-task-id")));
+    expect(ids).not.toContain(firstId);
+
+    // A different view or a type chip starts on page 1 again.
+    await page.goto("/tasks?page=3");
+    await expect(bar).toContainText("Showing 21–30");
+    await page.locator('[data-qc="tasks-view-pool"]').click();
+    await expect(page).toHaveURL(/view=pool/);
+    await expect(page).not.toHaveURL(/page=/);
+    await page.goto("/tasks?page=3");
+    await page.locator('[data-qc="tasks-type-question"]').click();
+    await expect(page).toHaveURL(/types=question/);
+    await expect(page).not.toHaveURL(/page=/);
+    // A view with ten or fewer rows has no pager.
+    await page.goto("/tasks?view=unassigned");
+    await expect(rows.first()).toBeVisible();
+    await expect(bar).toHaveCount(0);
+
+    // A deep link to a task on page 3 lands on page 3 with the row on screen.
+    await page.goto("/tasks?page=3");
+    const target = (await rows.nth(4).getAttribute("data-task-id"))!;
+    await page.goto(`/tasks?task=${target}`);
+    await expect(page).toHaveURL(/page=3/);
+    await expect(page.locator(`[data-task-id="${target}"]`)).toBeInViewport();
+  });
+
+  test("demo only: the Viewing as pill switches persona and lands on that role's view", async ({
+    page,
+  }) => {
+    await openTasks(page);
+    const pill = page.locator('[data-qc="tasks-viewing-as"]');
+    await expect(pill.locator('[data-qc="tasks-viewing-as-owner"]')).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await pill.locator('[data-qc="tasks-viewing-as-practitioner"]').click();
+    await expect(page.locator('[data-qc="tasks-main"]')).toHaveAttribute("data-view", "assigned", {
+      timeout: 15_000,
+    });
+    await expect(page.locator('[data-qc="your-day-panel"]')).toBeVisible();
+    await expect(pill.locator('[data-qc="tasks-viewing-as-practitioner"]')).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await pill.locator('[data-qc="tasks-viewing-as-front_desk"]').click();
+    await expect(page.locator('[data-qc="tasks-main"]')).toHaveAttribute("data-view", "queue", {
+      timeout: 15_000,
+    });
+    await expect(page.locator('[data-qc="todays-calls-panel"]')).toBeVisible();
+    await pill.locator('[data-qc="tasks-viewing-as-owner"]').click();
+    await expect(page.locator('[data-qc="tasks-main"]')).toHaveAttribute("data-view", "team", {
+      timeout: 15_000,
+    });
+    await expect(page.locator('[data-qc="team-panel"]')).toBeVisible();
   });
 
   test("delegate panel: suggested teammate, due, note, assign, then undo", async ({ page }) => {

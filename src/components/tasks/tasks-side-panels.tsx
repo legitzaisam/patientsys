@@ -44,15 +44,20 @@ export function TasksNav({
               aria-current={on ? "page" : undefined}
               data-qc={`tasks-view-${v.view}`}
               className={cn(
-                "flex h-9 shrink-0 cursor-pointer items-center justify-between gap-3 whitespace-nowrap rounded-xl px-3 text-[13px] transition-colors lg:w-full",
+                // A pill in the phone scroller; a full-width row in the desktop column, where a
+                // long label ("My patients, with others") wraps and the count stays put.
+                "flex h-9 shrink-0 cursor-pointer items-center justify-between gap-3 whitespace-nowrap rounded-xl px-3 text-left text-[13px] transition-colors lg:h-auto lg:min-h-9 lg:w-full lg:whitespace-normal lg:py-1.5",
                 on
                   ? "bg-card font-semibold text-foreground shadow-[0_1px_2px_rgba(47,63,102,0.1)]"
                   : "text-ink-2 hover:bg-[rgba(47,63,102,0.06)] hover:text-foreground",
               )}
             >
-              {v.label}
+              <span className="min-w-0 leading-snug">{v.label}</span>
               <span
-                className={cn("text-[12px] tabular-nums", on ? "text-foreground" : "text-ink-3")}
+                className={cn(
+                  "shrink-0 text-[12px] tabular-nums",
+                  on ? "text-foreground" : "text-ink-3",
+                )}
               >
                 {counts.get(v.view) ?? 0}
               </span>
