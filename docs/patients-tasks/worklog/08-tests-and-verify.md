@@ -76,4 +76,4 @@ And two smaller ones: rule-task titles keep Title Case treatment names ("Rebook 
 | Guards | policy 191 ok · tenancy 62 ok · validators 2 pre-existing · metrics 16 / 17 pre-existing |
 | tsc / lint | 106 (0 new) / delta 0 |
 | Gateway smoke | 12 / 12 |
-| Commit | head of `e2e_exp` (see the index) |
+| Commit | `d9b66fc` |
