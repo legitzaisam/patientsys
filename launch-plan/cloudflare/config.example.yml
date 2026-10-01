@@ -1,0 +1,20 @@
+# Only for a LOCALLY-managed tunnel (cloudflared tunnel login / create).
+# With a remotely-managed tunnel (TUNNEL_TOKEN in launch-plan/.env.local)
+# this file is not needed: the hostnames live in the Cloudflare dashboard.
+#
+#   cloudflared tunnel login                 # opens the browser, pick sqinos.com
+#   cloudflared tunnel create sqinos         # prints the UUID, writes ~/.cloudflared/<UUID>.json
+#   cp launch-plan/cloudflare/config.example.yml ~/.cloudflared/sqinos.yml   # then fill in the UUID
+#   cloudflared tunnel --config ~/.cloudflared/sqinos.yml ingress validate
+#   cloudflared tunnel route dns sqinos www.sqinos.com
+#   cloudflared tunnel route dns sqinos sqinos.com
+#
+# Keep the real file outside the repository: it names your credentials file.
+tunnel: <TUNNEL-UUID>
+credentials-file: /Users/karndeb/.cloudflared/<TUNNEL-UUID>.json
+ingress:
+  - hostname: www.sqinos.com
+    service: http://localhost:8099   # the gateway (GATEWAY_PORT)
+  - hostname: sqinos.com
+    service: http://localhost:8099   # Cloudflare's redirect rule sends this to www before it gets here
+  - service: http_status:404

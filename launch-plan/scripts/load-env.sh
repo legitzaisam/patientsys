@@ -30,7 +30,20 @@ RUN_DIR="$LAUNCH_DIR/.run"
 export RUN_DIR
 mkdir -p "$RUN_DIR/logs"
 
-if [[ -n "$NGROK_DOMAIN" ]]; then
+# Own domain served through a Cloudflare Tunnel (launch-plan/cloudflare/).
+# When set it wins over NGROK_DOMAIN for PUBLIC_URL.
+export PUBLIC_DOMAIN="${PUBLIC_DOMAIN:-}"
+PUBLIC_DOMAIN="${PUBLIC_DOMAIN#https://}"
+PUBLIC_DOMAIN="${PUBLIC_DOMAIN#http://}"
+PUBLIC_DOMAIN="${PUBLIC_DOMAIN%/}"
+export PUBLIC_DOMAIN
+export TUNNEL_TOKEN="${TUNNEL_TOKEN:-}"
+export TUNNEL_NAME="${TUNNEL_NAME:-sqinos}"
+export CLOUDFLARED_CONFIG="${CLOUDFLARED_CONFIG:-$HOME/.cloudflared/sqinos.yml}"
+
+if [[ -n "$PUBLIC_DOMAIN" ]]; then
+  export PUBLIC_URL="https://$PUBLIC_DOMAIN"
+elif [[ -n "$NGROK_DOMAIN" ]]; then
   export PUBLIC_URL="https://$NGROK_DOMAIN"
 else
   export PUBLIC_URL="http://localhost:$GATEWAY_PORT"

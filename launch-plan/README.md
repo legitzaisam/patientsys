@@ -194,7 +194,15 @@ URL) live in `website/.env.local`; see [`website/README.md`](website/README.md).
 - Optional: set `NGROK_BASIC_AUTH_USER` / `_PASS` for a private preview, and
   `DEMO_NOW` so the diary looks the same in every rehearsal.
 
-### Your own domain later
+### Your own domain now: www.sqinos.com through Cloudflare Tunnel
+
+[`cloudflare/README.md`](cloudflare/README.md) is the path in use for the public
+launch: the same website + gateway + demo app, published on **https://www.sqinos.com**
+by a free Cloudflare Tunnel instead of ngrok (`cloudflare/start-public.sh`,
+`redeploy.sh website|app`, `status.sh`, `stop.sh`). `PUBLIC_DOMAIN` in `.env.local`
+sets `APP_ORIGIN`; the ngrok scripts keep working for rehearsals.
+
+### Your own domain later (ngrok)
 
 Buying a `.com` and splitting it into `www.` (website), `clinic.` (staff portal)
 and `my.` (patient portal) is covered in [`docs/launch-plan.md`](docs/launch-plan.md),

@@ -33,7 +33,7 @@ export DEMO_NOW="${DEMO_NOW:-}"
 # /portal, its landing and Sign out back there. Empty keeps the app's own pages.
 export DEMO_SIGNIN_URL="${DEMO_SIGNIN_URL-/login}"
 export APP_ORIGIN="$PUBLIC_URL"
-export __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=".ngrok-free.dev,.ngrok-free.app,.ngrok.app,.ngrok.dev${NGROK_DOMAIN:+,$NGROK_DOMAIN}"
+export __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=".ngrok-free.dev,.ngrok-free.app,.ngrok.app,.ngrok.dev${NGROK_DOMAIN:+,$NGROK_DOMAIN}${PUBLIC_DOMAIN:+,$PUBLIC_DOMAIN}"
 
 # Demo mode never talks to Supabase, but the browser client module still wants
 # a URL and key to exist. Placeholders keep secrets out of the worktree; a real
