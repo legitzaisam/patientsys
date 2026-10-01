@@ -3,7 +3,7 @@ import { expect, test, type Page } from "./fixtures";
 /**
  * The Tasks page: one list of what needs doing, by role. Owners delegate
  * (inline panel, bulk, drag), practitioners close with an outcome or hand off,
- * front desk claims from the pool and logs calls; three misses escalate.
+ * front desk claims from the pool and logs outcomes; three misses escalate.
  * Every write shows a toast with Undo. The demo server is shared and writes
  * persist for its lifetime, so each test undoes what it changes.
  */
@@ -323,6 +323,32 @@ test.describe("owner", () => {
     const done = await toast(page);
     expect(done.text).toMatch(/Olivia: handled/);
   });
+
+  test("Contact opens Call / Message / Email and does not mark the task handled", async ({
+    page,
+  }) => {
+    await openTasks(page);
+    const row = page
+      .locator('[data-qc="task-row"]', { has: page.locator('[data-qc="task-action-contact"]') })
+      .first();
+    await expect(row.locator('[data-qc="task-action-contact"]')).toBeVisible();
+    await expect(row.locator('[data-qc="task-action-call"]')).toHaveCount(0);
+    await expect(row.locator('[data-qc="task-action-handled"]')).toBeVisible();
+    const id = (await row.getAttribute("data-task-id"))!;
+
+    await row.locator('[data-qc="task-action-contact"]').click();
+    const menu = page.locator('[data-qc="contact-menu"]');
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('[data-qc="task-contact-call"]')).toBeVisible();
+    await expect(menu.locator('[data-qc="task-contact-message"]')).toBeVisible();
+    await expect(menu.locator('[data-qc="task-contact-email"]')).toBeVisible();
+
+    await page.addStyleTag({ content: '[data-qc="floating-dock"] { display: flex !important; }' });
+    await menu.locator('[data-qc="task-contact-message"]').click();
+    await expect(page.locator('[data-qc="chat-window"]')).toBeVisible();
+    await expect(page.locator(`[data-task-id="${id}"]`)).toHaveAttribute("data-status", "open");
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+  });
 });
 
 test.describe("practitioner", () => {
@@ -449,7 +475,7 @@ test.describe("front desk", () => {
     for (let i = 1; i <= 3; i++) {
       await mine.locator('[data-qc="task-action-log-outcome"]').click();
       const panel = page.locator('[data-qc="outcome-panel"]');
-      await expect(panel).toContainText("Log the call");
+      await expect(panel).toContainText("Log the outcome");
       await expect(panel.locator('[data-qc^="outcome-"]')).toHaveCount(5);
       await panel.locator('[data-qc="outcome-no-answer"]').click();
       const t = await toast(page);

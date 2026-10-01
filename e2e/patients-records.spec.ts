@@ -48,6 +48,22 @@ test.describe("owner", () => {
     await expect(bar).toContainText("Showing 26–");
   });
 
+  test("column headers sort Patient A–Z / Z–A and Tasks most first", async ({ page }) => {
+    await page.goto("/patients");
+    const names = page.locator('[data-qc="records-name"]');
+    const firstAsc = (await names.first().innerText()).trim();
+    await page.locator('[data-qc="records-sort-patient"]').click();
+    await expect(page).toHaveURL(/dir=desc/);
+    const firstDesc = (await names.first().innerText()).trim();
+    expect(firstDesc.localeCompare(firstAsc, "en-GB")).toBeGreaterThan(0);
+    await page.locator('[data-qc="records-sort-tasks"]').click();
+    await expect(page).toHaveURL(/sort=tasks/);
+    const firstTasks = page.locator('[data-qc="records-row"]').first().locator('[data-qc="open-tasks-pill"]');
+    await expect(firstTasks).toBeVisible();
+    const count = Number((await firstTasks.innerText()).replace(/\D/g, ""));
+    expect(count).toBeGreaterThan(0);
+  });
+
   test("every row shows a patient type and a next-treatment state; the name opens the record", async ({
     page,
   }) => {

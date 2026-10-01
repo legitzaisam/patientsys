@@ -30,6 +30,7 @@ import { staffLane } from "@/lib/staff-lane";
 import { taskRole, type TaskView_ } from "@/lib/tasks/service";
 import {
   DEFAULT_VIEW,
+  isContactTask,
   isTaskType,
   isTaskView,
   ROLE_VIEWS,
@@ -300,23 +301,30 @@ function TasksPage() {
     else if (o.kind === "escalate") void actions.escalate(task);
   };
 
+  const contactAction = (): RowAction => ({
+    label: "Contact",
+    kind: "primary",
+    contact: true,
+  });
+
   const rowActions = (t: TaskView_): RowAction[] => {
     const meta = TASK_TYPE_META[t.type];
     const primaryLabel = t.type === "question" ? "Reply" : meta.actionLabel;
+    const completePrimary = (): RowAction => ({
+      label: primaryLabel,
+      kind: "primary",
+      onClick: () =>
+        t.type === "question"
+          ? reply(t)
+          : void actions.complete(
+              t,
+              t.type === "send_offer" ? "approved" : "handled",
+              t.type === "send_offer" ? "Approved" : "Handled",
+            ),
+    });
     if (manager) {
       return [
-        {
-          label: primaryLabel,
-          kind: "primary",
-          onClick: () =>
-            t.type === "question"
-              ? reply(t)
-              : void actions.complete(
-                  t,
-                  t.type === "send_offer" ? "approved" : "handled",
-                  t.type === "send_offer" ? "Approved" : "Handled",
-                ),
-        },
+        isContactTask(t.type) ? contactAction() : completePrimary(),
         {
           label: t.assigneeId ? "Reassign" : "Delegate",
           onClick: () =>
@@ -340,11 +348,13 @@ function TasksPage() {
           ];
         }
         return [
-          {
-            label: primaryLabel,
-            kind: "primary",
-            onClick: () => void actions.complete(t, "handled", "Handled"),
-          },
+          isContactTask(t.type)
+            ? contactAction()
+            : {
+                label: primaryLabel,
+                kind: "primary",
+                onClick: () => void actions.complete(t, "handled", "Handled"),
+              },
           {
             label: "Done…",
             onClick: () =>
@@ -370,14 +380,7 @@ function TasksPage() {
     // Front desk
     if (t.assigneeId === identity.userId) {
       return [
-        {
-          label: "Call",
-          kind: "primary",
-          onClick: () =>
-            setOpenPanel((p) =>
-              p?.id === t.id && p.mode === "outcome" ? null : { id: t.id, mode: "outcome" },
-            ),
-        },
+        contactAction(),
         { label: "Send booking link", onClick: () => void actions.attempt(t, "link_sent") },
         {
           label: "Log outcome…",
@@ -604,7 +607,7 @@ function TasksPage() {
                       />
                     ) : open && openPanel?.mode === "outcome" ? (
                       <OutcomePanel
-                        title={role === "front_desk" ? "Log the call" : "How did it go?"}
+                        title={role === "front_desk" ? "Log the outcome" : "How did it go?"}
                         outcomes={
                           role === "front_desk" ? FRONT_DESK_OUTCOMES : PRACTITIONER_OUTCOMES
                         }

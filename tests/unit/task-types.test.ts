@@ -95,6 +95,9 @@ describe("vocabulary", () => {
     expect(resolutionLabel("no_answer")).toBe("No answer");
     expect(resolutionLabel("something_else")).toBe("something else");
     expect(TASK_TYPE_META.rebook_no_show.chip).toContain("noshow");
+    expect(TASK_TYPE_META.chase_booking.actionLabel).toBe("Contact");
+    expect(TASK_TYPE_META.recall.actionLabel).toBe("Contact");
+    expect(TASK_TYPE_META.rebook_no_show.actionLabel).toBe("Contact");
     expect(ROLE_VIEWS.front_desk.map((v) => v.view)).toEqual(["queue", "pool", "retries", "done"]);
     expect(ROLE_VIEWS.practitioner[0]?.view).toBe("assigned");
     expect(ROLE_VIEWS.owner[0]?.view).toBe("mine");

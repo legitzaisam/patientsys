@@ -708,7 +708,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     });
   }
 
-  // Owner reminder: registrations and insurance expiring within 60 days.
+  // Owner reminder: registrations and insurance expiring in under 30 days.
   if (isManager) {
     for (const item of complianceReminders(profiles, todayISO)) attentionItems.push(item);
   }
@@ -5847,6 +5847,7 @@ function demoPatientLite(now: Date): (id: string) => PatientLite | null {
       last_name: p.last_name,
       avatar_url: p.avatar_url ?? null,
       phone: p.phone ?? null,
+      email: p.email ?? null,
       practitionerId: practitioners.get(id) ?? null,
       patientType: patientTypeFrom(onPlan.has(id), visited.has(id) || !!p.last_visit_at),
     };

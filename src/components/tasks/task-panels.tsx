@@ -160,7 +160,7 @@ export function DelegatePanel({
   );
 }
 
-/** The outcome chips: "How did it go?" for practitioners, "Log the call" for front desk. */
+/** The outcome chips: "How did it go?" for practitioners, "Log the outcome" for front desk. */
 export function OutcomePanel({
   title,
   outcomes,

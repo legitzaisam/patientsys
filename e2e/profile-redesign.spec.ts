@@ -190,8 +190,22 @@ test.describe("practitioner on their own profile", () => {
     await expect(page.locator('[data-qc="profile-page-frontdesk"]')).toBeVisible();
     await expect(page.locator('[data-qc="profile-name"]')).toHaveText("Dr Tom Whitfield");
     await expect(page.locator('[data-qc="frontdesk-book"]')).toHaveText("Book with Tom");
+    await expect(page.locator('[data-qc="frontdesk-message"]')).toHaveText("Message");
+    await expect(page.locator('[data-qc="frontdesk-hero"] [data-qc="frontdesk-email"]')).toHaveText(
+      "tom.whitfield@sqinos.com",
+    );
+    await expect(page.locator('[data-qc="frontdesk-free-today"]')).toBeVisible();
+    await expect(page.locator('[data-qc="frontdesk-pattern"]')).toBeVisible();
     await expect(page.locator('[data-qc^="profile-tab-"]')).toHaveCount(0);
     await expect(page.getByText(/Commission/)).toHaveCount(0);
+
+    // The fixture hides the dock; this click needs it, same as team-chat-dock.
+    await page.addStyleTag({ content: '[data-qc="floating-dock"] { display: flex !important; }' });
+    await page.locator('[data-qc="frontdesk-message"]').click();
+    const chat = page.locator('[data-qc="chat-window"]');
+    await expect(chat).toBeVisible();
+    await expect(chat).toHaveAttribute("aria-label", "Chat with Dr Tom Whitfield");
+    await expect(chat.locator('[data-qc="staff-chat-embedded"]')).toBeVisible();
   });
 });
 
@@ -281,9 +295,8 @@ test.describe("front desk on Nadia", () => {
     await expect(page.locator('[data-qc="frontdesk-prescriber"]')).toBeVisible();
     await expect(page.locator('[data-qc="frontdesk-compliance"]')).toBeVisible();
     await expect(page.locator('[data-qc="frontdesk-pattern"]')).toContainText("Thu 12–8");
-    await expect(page.locator('[data-qc="frontdesk-unavailable"]').first()).toContainText(
-      "Unavailable",
-    );
+    await expect(page.locator('[data-qc="frontdesk-free-today"]')).toBeVisible();
+    await expect(page.locator('[data-qc="frontdesk-unavailable"]').first()).toBeVisible();
     await expect(page.locator('[data-qc="bookable-chip"]').first()).toBeVisible();
     await expect(page.getByText("NMC 18C4471E")).toHaveCount(0);
     await expect(page.getByText("Cosmetic Insure")).toHaveCount(0);

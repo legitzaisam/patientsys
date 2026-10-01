@@ -39,20 +39,20 @@ export const USERS = {
 export type DemoRole = "owner" | "manager" | "practitioner" | "front_desk" | "patient" | "admin";
 
 export const DEMO_ACCOUNTS: Record<DemoRole, { userId: string; email: string; label: string }> = {
-  owner: { userId: USERS.owner, email: "amara.osei@aetheria.clinic", label: "Clinic owner" },
-  manager: { userId: USERS.manager, email: "maya.chen@aetheria.clinic", label: "Manager" },
+  owner: { userId: USERS.owner, email: "amara.osei@sqinos.com", label: "Clinic owner" },
+  manager: { userId: USERS.manager, email: "maya.chen@sqinos.com", label: "Manager" },
   practitioner: {
     userId: USERS.practitioner,
-    email: "nadia.rahman@aetheria.clinic",
+    email: "nadia.rahman@sqinos.com",
     label: "Practitioner",
   },
   front_desk: {
     userId: USERS.frontDesk,
-    email: "sofia.marchetti@aetheria.clinic",
+    email: "sofia.marchetti@sqinos.com",
     label: "Receptionist",
   },
   patient: { userId: USERS.patient, email: "olivia.bennett@example.com", label: "Patient" },
-  admin: { userId: USERS.admin, email: "developer@aetheria.clinic", label: "Admin" },
+  admin: { userId: USERS.admin, email: "developer@sqinos.com", label: "Admin" },
 };
 
 /* ---------------------------------------------------------------- */
@@ -272,12 +272,12 @@ export const userRoles: Row[] = [
 ];
 
 export const staffEmails: Record<string, string> = {
-  [USERS.owner]: "amara.osei@aetheria.clinic",
-  [USERS.manager]: "maya.chen@aetheria.clinic",
-  [USERS.practitioner]: "nadia.rahman@aetheria.clinic",
-  [USERS.practitioner2]: "tom.whitfield@aetheria.clinic",
-  [USERS.frontDesk]: "sofia.marchetti@aetheria.clinic",
-  [USERS.admin]: "developer@aetheria.clinic",
+  [USERS.owner]: "amara.osei@sqinos.com",
+  [USERS.manager]: "maya.chen@sqinos.com",
+  [USERS.practitioner]: "nadia.rahman@sqinos.com",
+  [USERS.practitioner2]: "tom.whitfield@sqinos.com",
+  [USERS.frontDesk]: "sofia.marchetti@sqinos.com",
+  [USERS.admin]: "developer@sqinos.com",
 };
 
 /** Last sign-in per staff account, as Supabase Auth's last_sign_in_at. */
@@ -5083,7 +5083,7 @@ export const formerTeamSeed = [
   {
     id: id("ex"),
     userId: USERS.former,
-    email: "helen.cho@aetheria.clinic",
+    email: "helen.cho@sqinos.com",
     fullName: "Dr Helen Cho",
     jobTitle: "Aesthetic Practitioner",
     registrationBody: "GMC",

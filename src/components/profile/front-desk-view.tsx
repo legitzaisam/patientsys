@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getCatalogue, listPatients, listPractitioners } from "@/lib/clinic.functions";
+import { Mail, MessageSquare } from "lucide-react";
+import { useOpenTeamChat } from "@/components/floating-dock/dock-context";
+import {
+  getCatalogue,
+  getPractitionerDay,
+  listPatients,
+  listPractitioners,
+} from "@/lib/clinic.functions";
+import { clinicDayKey } from "@/lib/clinic-time";
 import { toneForTreatment } from "@/lib/practitioner-colours";
 import { timeOffLabel } from "@/lib/staff-schedule";
 import { useTreatmentColours } from "@/lib/use-treatment-colours";
@@ -17,6 +25,28 @@ function firstName(fullName: string) {
   return fullName.replace(/^(Dr|Mr|Mrs|Ms|Miss|Mx|Prof)\.?\s+/i, "").split(" ")[0] ?? fullName;
 }
 
+const hhmm = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+const GHOST_BTN =
+  "border border-edge bg-[rgba(47,63,102,0.08)] shadow-inset-hi hover:border-edge-2 hover:bg-[rgba(47,63,102,0.12)]";
+
+function WorkEmailChip({ email }: { email: string }) {
+  return (
+    <a
+      href={`mailto:${email}`}
+      className={cn(
+        "inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-foreground transition-colors",
+        GHOST_BTN,
+      )}
+      data-qc="frontdesk-email"
+    >
+      <Mail className="h-3.5 w-3.5 shrink-0 text-ink-3" aria-hidden />
+      <span className="truncate">{email}</span>
+    </a>
+  );
+}
+
 /**
  * What everyone outside the management tier sees of a colleague: who they
  * are, whether they can be booked, what for, and when. No registration
@@ -24,9 +54,12 @@ function firstName(fullName: string) {
  */
 export function FrontDeskView({ subject, treats }: { subject: ProfileSubject; treats: boolean }) {
   const [booking, setBooking] = useState(false);
+  const openTeamChat = useOpenTeamChat();
+  const todayKey = clinicDayKey();
   const fetchPatients = useServerFn(listPatients);
   const fetchPractitioners = useServerFn(listPractitioners);
   const fetchCatalogue = useServerFn(getCatalogue);
+  const fetchDay = useServerFn(getPractitionerDay);
   const { data: patients } = useQuery({
     queryKey: ["patients"],
     queryFn: () => fetchPatients(),
@@ -42,7 +75,13 @@ export function FrontDeskView({ subject, treats }: { subject: ProfileSubject; tr
     queryFn: () => fetchCatalogue(),
     enabled: treats,
   });
+  const { data: day, isFetching: dayLoading } = useQuery({
+    queryKey: ["practitioner-day", subject.userId, todayKey],
+    queryFn: () => fetchDay({ data: { practitionerId: subject.userId, date: todayKey } }),
+    staleTime: 60_000,
+  });
   const colours = useTreatmentColours();
+  const freeSlots = day?.free ?? [];
 
   // "Book with" offers only what the manager tagged under Can be booked for.
   // With nothing tagged yet the full list stays, so the front desk is not stuck.
@@ -102,24 +141,41 @@ export function FrontDeskView({ subject, treats }: { subject: ProfileSubject; tr
               </span>
             ) : null}
           </div>
+          {subject.email ? (
+            <div className="mt-2">
+              <WorkEmailChip email={subject.email} />
+            </div>
+          ) : null}
         </div>
-        {treats && !subject.revoked ? (
-          <QuickAddAppointment
-            patients={(patients ?? []) as never[]}
-            practitioners={(practitioners ?? []) as never[]}
-            catalogue={bookableCatalogue as never[]}
-            date={new Date()}
-            defaultPractitionerId={subject.userId}
-            open={booking}
-            onOpenChange={setBooking}
-            title={`Book with ${first}`}
-            align="end"
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {treats && !subject.revoked ? (
+            <QuickAddAppointment
+              patients={(patients ?? []) as never[]}
+              practitioners={(practitioners ?? []) as never[]}
+              catalogue={bookableCatalogue as never[]}
+              date={new Date()}
+              defaultPractitionerId={subject.userId}
+              open={booking}
+              onOpenChange={setBooking}
+              title={`Book with ${first}`}
+              align="end"
+            >
+              <Button type="button" className="h-11 px-5 font-semibold" data-qc="frontdesk-book">
+                Book with {first}
+              </Button>
+            </QuickAddAppointment>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            className={cn("h-11 px-5 font-semibold", GHOST_BTN)}
+            data-qc="frontdesk-message"
+            onClick={() => openTeamChat({ userId: subject.userId, name: subject.fullName })}
           >
-            <Button type="button" className="h-11 px-5 font-semibold" data-qc="frontdesk-book">
-              Book with {first}
-            </Button>
-          </QuickAddAppointment>
-        ) : null}
+            <MessageSquare className="h-3.5 w-3.5" />
+            Message
+          </Button>
+        </div>
       </Card>
 
       <div className="grid gap-5 md:grid-cols-2">
@@ -154,32 +210,59 @@ export function FrontDeskView({ subject, treats }: { subject: ProfileSubject; tr
                 : `${first} does not take patient bookings.`}
             </p>
           )}
-          {subject.email ? (
-            <p className="text-[13px] text-muted-foreground">Work email: {subject.email}</p>
-          ) : null}
         </Card>
 
-        <Card className="flex flex-col gap-2.5 p-6" data-qc="frontdesk-hours">
-          <h3 className="text-lg font-semibold text-foreground">Hours &amp; unavailable</h3>
-          <p className="text-sm leading-relaxed text-foreground" data-qc="frontdesk-pattern">
-            {subject.patternSummary}
-          </p>
-          {subject.upcomingUnavailable.length === 0 ? (
-            <p className="border-t border-edge-2 pt-2.5 text-sm text-muted-foreground">
-              Nothing booked off in the weeks ahead.
+        <Card className="flex flex-col gap-0 p-6" data-qc="frontdesk-hours">
+          <section>
+            <h3 className="text-sm font-semibold text-foreground">Free today</h3>
+            <div className="mt-2 flex flex-wrap gap-1.5" data-qc="frontdesk-free-today">
+              {freeSlots.length ? (
+                freeSlots.map((f) => (
+                  <span
+                    key={`${f.from}-${f.to}`}
+                    className="rounded-full border border-edge bg-glass-2 px-2.5 py-0.5 text-xs font-medium tabular-nums text-foreground shadow-inset-hi"
+                  >
+                    {hhmm(f.from)}–{hhmm(f.to)}
+                  </span>
+                ))
+              ) : (
+                <span className="text-sm text-muted-foreground">
+                  {dayLoading && !day ? "Loading today’s diary…" : "No free slots left today"}
+                </span>
+              )}
+            </div>
+          </section>
+
+          <section className="mt-3.5 border-t border-edge-2 pt-3.5">
+            <h3 className="text-sm font-semibold text-foreground">Hours</h3>
+            <p
+              className="mt-1.5 text-sm leading-relaxed text-foreground"
+              data-qc="frontdesk-pattern"
+            >
+              {subject.patternSummary}
             </p>
-          ) : (
-            subject.upcomingUnavailable.map((u) => (
-              <div
-                key={`${u.starts_on}-${u.ends_on}`}
-                className="flex justify-between gap-3 border-t border-edge-2 py-2.5 text-sm"
-                data-qc="frontdesk-unavailable"
-              >
-                <span className="font-semibold text-foreground">{timeOffLabel(u)}</span>
-                <span className="text-muted-foreground">Unavailable</span>
-              </div>
-            ))
-          )}
+          </section>
+
+          <section className="mt-3.5 border-t border-edge-2 pt-3.5">
+            <h3 className="text-sm font-semibold text-foreground">Time off</h3>
+            {subject.upcomingUnavailable.length === 0 ? (
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Nothing booked off in the weeks ahead.
+              </p>
+            ) : (
+              <ul className="mt-1.5 flex flex-col">
+                {subject.upcomingUnavailable.map((u) => (
+                  <li
+                    key={`${u.starts_on}-${u.ends_on}`}
+                    className="py-1 text-sm font-semibold text-foreground"
+                    data-qc="frontdesk-unavailable"
+                  >
+                    {timeOffLabel(u)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </Card>
       </div>
     </div>

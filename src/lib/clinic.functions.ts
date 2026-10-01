@@ -817,8 +817,8 @@ export const getDashboard = createServerFn({ method: "GET" })
       });
     }
 
-    // Owner reminder: a team member's registration or insurance runs out within
-    // 60 days (or has already). Managers see the row; it links to the profile.
+    // Owner reminder: a team member's registration or insurance runs out in
+    // under 30 days (or has already). Managers see the row; it links to the profile.
     if (isManager) {
       const { data: staffRows } = await supabase
         .from("profiles")

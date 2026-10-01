@@ -111,7 +111,7 @@ export async function loadTeam(ctx: Ctx): Promise<{
 export async function loadPatientContext(ctx: Ctx, now: Date, patientIds?: string[]) {
   let patientsQuery = ctx.supabase
     .from("patients")
-    .select("id, first_name, last_name, avatar_url, phone, status, user_id, last_visit_at");
+    .select("id, first_name, last_name, avatar_url, phone, email, status, user_id, last_visit_at");
   if (patientIds?.length) patientsQuery = patientsQuery.in("id", patientIds);
   const [{ data: patients }, { data: treatments }, { data: appointments }, { data: plans }] =
     await Promise.all([
@@ -134,6 +134,7 @@ export async function loadPatientContext(ctx: Ctx, now: Date, patientIds?: strin
     last_name?: string | null;
     avatar_url?: string | null;
     phone?: string | null;
+    email?: string | null;
     last_visit_at?: string | null;
   };
   const patientRows = (patients ?? []) as PatientRow[];
@@ -163,6 +164,7 @@ export async function loadPatientContext(ctx: Ctx, now: Date, patientIds?: strin
         last_name: p.last_name ?? "",
         avatar_url: p.avatar_url ?? null,
         phone: p.phone ?? null,
+        email: p.email ?? null,
         practitionerId: practitioners.get(id) ?? null,
         patientType: patientTypeFrom(onPlan.has(id), visited.has(id) || !!p.last_visit_at),
       };

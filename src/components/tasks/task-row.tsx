@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PatientAvatar } from "@/components/patient-avatar";
+import { ContactMenu } from "@/components/tasks/contact-menu";
 import { PATIENT_TYPE_META } from "@/lib/patients/records-summary";
 import type { TaskView_ } from "@/lib/tasks/service";
 import { staffLane } from "@/lib/staff-lane";
@@ -13,7 +14,13 @@ import {
 } from "@/lib/tasks/types";
 import { cn } from "@/lib/utils";
 
-export type RowAction = { label: string; onClick: () => void; kind?: "primary" | "ghost" | "done" };
+export type RowAction = {
+  label: string;
+  onClick?: () => void;
+  kind?: "primary" | "ghost" | "done";
+  /** Call / Message / Email — does not mark the task handled. */
+  contact?: boolean;
+};
 
 /**
  * One task: who it is for, what needs doing and why, who has it, when it is
@@ -200,28 +207,39 @@ export function TaskRow({
         ) : null}
         {!done && actions.length && !open ? (
           <div className="mt-2.5 flex flex-wrap gap-1.5" data-qc="task-actions">
-            {actions.map((a) => (
-              <button
-                key={a.label}
-                type="button"
-                onClick={a.onClick}
-                data-qc={`task-action-${a.label
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, "-")
-                  .replace(/-$/, "")}`}
-                className={cn(
-                  "inline-flex h-7 cursor-pointer items-center gap-1 rounded-full px-3 text-[12px] font-semibold shadow-inset-hi transition-[filter,background-color] hover:brightness-[0.97]",
-                  a.kind === "primary" && "bg-accent text-accent-foreground",
-                  a.kind === "done" &&
-                    "bg-transparent text-success-ink shadow-none hover:bg-success-bg",
-                  (!a.kind || a.kind === "ghost") &&
-                    "bg-[rgba(47,63,102,0.06)] text-foreground hover:bg-[rgba(47,63,102,0.1)]",
-                )}
-              >
-                {a.kind === "done" ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
-                {a.label}
-              </button>
-            ))}
+            {actions.map((a) =>
+              a.contact ? (
+                <ContactMenu
+                  key={a.label}
+                  patientId={task.patient.id}
+                  patientName={task.patient.name}
+                  phone={task.patient.phone}
+                  email={task.patient.email}
+                  kind={a.kind === "ghost" ? "ghost" : "primary"}
+                />
+              ) : (
+                <button
+                  key={a.label}
+                  type="button"
+                  onClick={a.onClick}
+                  data-qc={`task-action-${a.label
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, "-")
+                    .replace(/-$/, "")}`}
+                  className={cn(
+                    "inline-flex h-7 cursor-pointer items-center gap-1 rounded-full px-3 text-[12px] font-semibold shadow-inset-hi transition-[filter,background-color] hover:brightness-[0.97]",
+                    a.kind === "primary" && "bg-accent text-accent-foreground",
+                    a.kind === "done" &&
+                      "bg-transparent text-success-ink shadow-none hover:bg-success-bg",
+                    (!a.kind || a.kind === "ghost") &&
+                      "bg-[rgba(47,63,102,0.06)] text-foreground hover:bg-[rgba(47,63,102,0.1)]",
+                  )}
+                >
+                  {a.kind === "done" ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
+                  {a.label}
+                </button>
+              ),
+            )}
           </div>
         ) : null}
         {done && onUndo ? (

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { PatientAvatar } from "@/components/patient-avatar";
+import { ContactMenu } from "@/components/tasks/contact-menu";
 import { staffLane } from "@/lib/staff-lane";
 import { cn } from "@/lib/utils";
 import {
@@ -133,24 +134,38 @@ export function PatientDrawer({
         <p className="mt-1.5 text-[13.5px] leading-[1.5] text-foreground">{suggestion.text}</p>
         {suggestion.actions.length ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            {suggestion.actions.slice(0, 2).map((a, i) => (
-              <button
-                key={a.action}
-                type="button"
-                onClick={() =>
-                  a.action === "assign" ? onAssignTask(patient) : onAction(a.action, patient)
-                }
-                data-qc={`drawer-action-${a.action}`}
-                className={cn(
-                  "h-8 cursor-pointer rounded-full px-3.5 text-[12.5px] font-semibold shadow-inset-hi transition-[filter,background-color] hover:brightness-[0.97]",
-                  i === 0
-                    ? "bg-accent text-accent-foreground"
-                    : "bg-[rgba(47,63,102,0.06)] text-foreground hover:bg-[rgba(47,63,102,0.1)]",
-                )}
-              >
-                {a.label}
-              </button>
-            ))}
+            {suggestion.actions.slice(0, 2).map((a, i) =>
+              a.action === "call" ? (
+                <ContactMenu
+                  key={a.action}
+                  patientId={patient.id}
+                  patientName={fullName}
+                  phone={patient.phone ?? null}
+                  email={patient.email ?? null}
+                  kind={i === 0 ? "primary" : "ghost"}
+                  size="drawer"
+                  label={a.label}
+                  qc="drawer-action-contact"
+                />
+              ) : (
+                <button
+                  key={a.action}
+                  type="button"
+                  onClick={() =>
+                    a.action === "assign" ? onAssignTask(patient) : onAction(a.action, patient)
+                  }
+                  data-qc={`drawer-action-${a.action}`}
+                  className={cn(
+                    "h-8 cursor-pointer rounded-full px-3.5 text-[12.5px] font-semibold shadow-inset-hi transition-[filter,background-color] hover:brightness-[0.97]",
+                    i === 0
+                      ? "bg-accent text-accent-foreground"
+                      : "bg-[rgba(47,63,102,0.06)] text-foreground hover:bg-[rgba(47,63,102,0.1)]",
+                  )}
+                >
+                  {a.label}
+                </button>
+              ),
+            )}
           </div>
         ) : null}
       </section>

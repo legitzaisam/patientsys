@@ -17,6 +17,7 @@ import {
   type PatientRow,
   type PatientView,
 } from "@/components/patients/records-types";
+import { isRecordsSort, isRecordsSortDir } from "@/lib/patients/records-sort";
 import { SavePatient } from "@/lib/validation/schemas";
 import { useIdentity } from "@/lib/use-identity";
 import { AppShell } from "@/components/app-shell";
@@ -83,6 +84,10 @@ export const Route = createFileRoute("/_authenticated/patients/")({
     prac?: string;
     /** Records: the patient open in the drawer. */
     sel?: string;
+    /** Records: which column the table is sorted by. */
+    sort?: "patient" | "last" | "next" | "tasks";
+    /** Records: sort direction. */
+    dir?: "asc" | "desc";
     /** Journey board: highlighted triage tiles, comma-separated. */
     tiles?: string;
   } => {
@@ -96,6 +101,8 @@ export const Route = createFileRoute("/_authenticated/patients/")({
       risk?: boolean;
       prac?: string;
       sel?: string;
+      sort?: "patient" | "last" | "next" | "tasks";
+      dir?: "asc" | "desc";
       tiles?: string;
     } = {};
     // ?risk=1 opens the journey board on its at-risk tiles (the dashboard's "overdue steps" chip).
@@ -106,6 +113,8 @@ export const Route = createFileRoute("/_authenticated/patients/")({
     if (typeof search?.["q"] === "string" && search["q"]) parsed.q = search["q"];
     if (typeof search?.["prac"] === "string" && search["prac"]) parsed.prac = search["prac"];
     if (typeof search?.["sel"] === "string" && search["sel"]) parsed.sel = search["sel"];
+    if (isRecordsSort(search?.["sort"])) parsed.sort = search["sort"];
+    if (isRecordsSortDir(search?.["dir"])) parsed.dir = search["dir"];
     if (typeof search?.["tiles"] === "string" && search["tiles"]) parsed.tiles = search["tiles"];
     const page = Number(search?.["page"]);
     if (Number.isInteger(page) && page > 1) parsed.page = page;
@@ -208,6 +217,8 @@ function PatientsPage() {
                         ...(search.view ? { view: search.view } : {}),
                         ...(search.prac ? { prac: search.prac } : {}),
                         ...(q ? { q } : {}),
+                        ...(search.sort ? { sort: search.sort } : {}),
+                        ...(search.dir ? { dir: search.dir } : {}),
                       }
                     : {}),
                   ...(t.key !== "records"
@@ -251,6 +262,8 @@ function PatientsPage() {
             ...(search.page ? { page: search.page } : {}),
             ...(search.prac ? { prac: search.prac } : {}),
             ...(search.sel ? { sel: search.sel } : {}),
+            ...(search.sort ? { sort: search.sort } : {}),
+            ...(search.dir ? { dir: search.dir } : {}),
           }}
           canSendOffers={canSendOffers}
         />

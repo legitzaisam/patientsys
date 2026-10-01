@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { displayName } from "@/lib/format";
+import type { RecordsSort, RecordsSortDir } from "@/lib/patients/records-sort";
 import { staffLane } from "@/lib/staff-lane";
 import { cn } from "@/lib/utils";
 import {
@@ -19,6 +21,7 @@ import { isInactive, type PatientRow } from "@/components/patients/records-types
  * by default (a booked next step reads in normal ink), loud by exception
  * (due inside the rebook window, or overdue). Clicking a row selects it and
  * fills the drawer; the checkbox column only appears in Select mode.
+ * Column headers sort the full filtered list (not just this page).
  */
 export function RecordsTable({
   rows,
@@ -32,6 +35,9 @@ export function RecordsTable({
   totalMatching,
   emptyText,
   now,
+  sort,
+  dir,
+  onSort,
 }: {
   rows: PatientRow[];
   selectedId: string | null;
@@ -44,6 +50,9 @@ export function RecordsTable({
   totalMatching: number;
   emptyText: string;
   now: Date;
+  sort: RecordsSort;
+  dir: RecordsSortDir;
+  onSort: (column: RecordsSort) => void;
 }) {
   return (
     <table className="glass-table w-full min-w-[640px] text-sm" data-qc="records-table">
@@ -60,10 +69,47 @@ export function RecordsTable({
               />
             </th>
           ) : null}
-          <th className="w-[38%] uppercase tracking-[0.05em]">Patient</th>
-          <th className="w-[22%] uppercase tracking-[0.05em]">Last treatment</th>
-          <th className="uppercase tracking-[0.05em]">Next treatment</th>
-          <th className="w-[1%] whitespace-nowrap text-right uppercase tracking-[0.05em]">Tasks</th>
+          <th className="w-[38%]">
+            <SortHeader
+              label="Patient"
+              column="patient"
+              active={sort}
+              dir={dir}
+              onSort={onSort}
+              hint="A to Z, or Z to A"
+            />
+          </th>
+          <th className="w-[22%]">
+            <SortHeader
+              label="Last treatment"
+              column="last"
+              active={sort}
+              dir={dir}
+              onSort={onSort}
+              hint="Oldest first, or newest first"
+            />
+          </th>
+          <th>
+            <SortHeader
+              label="Next treatment"
+              column="next"
+              active={sort}
+              dir={dir}
+              onSort={onSort}
+              hint="Soonest or most overdue first, or furthest first"
+            />
+          </th>
+          <th className="w-[1%] whitespace-nowrap text-right">
+            <SortHeader
+              label="Tasks"
+              column="tasks"
+              active={sort}
+              dir={dir}
+              onSort={onSort}
+              hint="Most open tasks first, or fewest first"
+              align="right"
+            />
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -196,6 +242,49 @@ export function RecordsTable({
         ) : null}
       </tbody>
     </table>
+  );
+}
+
+function SortHeader({
+  label,
+  column,
+  active,
+  dir,
+  onSort,
+  hint,
+  align = "left",
+}: {
+  label: string;
+  column: RecordsSort;
+  active: RecordsSort;
+  dir: RecordsSortDir;
+  onSort: (column: RecordsSort) => void;
+  hint: string;
+  align?: "left" | "right";
+}) {
+  const on = active === column;
+  const Icon = on && dir === "asc" ? ChevronUp : ChevronDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(column)}
+      title={hint}
+      aria-label={`${label}. ${hint}`}
+      aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"}
+      data-qc={`records-sort-${column}`}
+      data-dir={on ? dir : undefined}
+      className={cn(
+        "inline-flex w-full items-center gap-1 uppercase tracking-[0.05em] transition-colors hover:text-foreground",
+        align === "right" && "justify-end",
+        on ? "text-foreground" : "text-ink-3",
+      )}
+    >
+      {label}
+      <Icon
+        className={cn("h-3 w-3 shrink-0", on ? "opacity-80" : "opacity-35")}
+        aria-hidden
+      />
+    </button>
   );
 }
 

@@ -21,7 +21,12 @@ export const PATIENT_TYPE_META: Record<
     ink: "text-accent-ink",
     pill: "bg-accent-soft text-accent-ink",
   },
-  regular: { label: "Regular", dot: "bg-ink-3", ink: "text-ink-2", pill: "bg-glass-2 text-ink-2" },
+  regular: {
+    label: "Regular",
+    dot: "bg-[#3d5684]",
+    ink: "text-[#3d5684]",
+    pill: "bg-[rgba(186,208,236,0.48)] text-[#3d5684]",
+  },
   new: { label: "New patient", dot: "bg-sky", ink: "text-sky-ink", pill: "bg-sky-bg text-sky-ink" },
 };
 
@@ -271,7 +276,7 @@ export function suggestedNextStep(input: {
     return {
       text: `Missed ${input.plan?.nextStep ? input.plan.nextStep.toLowerCase() : "the last booking"} on ${shortDate(input.noShowAt)}${input.portal?.kind === "quiet" ? " and hasn't replied since" : ""}. A call usually works better after a no-show.`,
       actions: [
-        { label: "Call now", action: "call" },
+        { label: "Contact", action: "call" },
         { label: "Rebook", action: "book" },
       ],
     };
@@ -306,7 +311,7 @@ export function suggestedNextStep(input: {
     return {
       text: `${input.next.name} is ${input.next.main.toLowerCase()} and nothing is booked.${link}${chased ? ` ${chased.assigneeName ?? "Front desk"} is chasing (${chased.dueLabel.toLowerCase()}).` : ""}`,
       actions: [
-        { label: "Call now", action: "call" },
+        { label: "Contact", action: "call" },
         {
           label: chased ? "Open task" : "Send booking link",
           action: chased ? "open_task" : "send_booking_link",
@@ -324,7 +329,7 @@ export function suggestedNextStep(input: {
       text: `${input.next.name} is ${input.next.main.toLowerCase()} and nothing is booked.${link}`,
       actions: [
         { label: "Send booking link", action: "send_booking_link" },
-        { label: "Call now", action: "call" },
+        { label: "Contact", action: "call" },
       ],
     };
   }

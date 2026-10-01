@@ -79,6 +79,7 @@ export type PatientLite = {
   last_name: string;
   avatar_url?: string | null;
   phone?: string | null;
+  email?: string | null;
   /** The practitioner who treats them (plan practitioner, else last/next booking). */
   practitionerId: string | null;
   /** Skin plan, regular or new — the same taxonomy as the Records table. */
@@ -199,6 +200,7 @@ export type TaskView_ = {
     firstName: string;
     avatarUrl: string | null;
     phone: string | null;
+    email: string | null;
     practitionerId: string | null;
     /** Null when the patient record could not be loaded. */
     patientType: PatientType | null;
@@ -276,6 +278,7 @@ export function shapeTask(
       firstName: patient?.first_name ?? "Patient",
       avatarUrl: patient?.avatar_url ?? null,
       phone: patient?.phone ?? null,
+      email: patient?.email ?? null,
       practitionerId: patient?.practitionerId ?? null,
       patientType: patient?.patientType ?? null,
     },

@@ -4,8 +4,11 @@
  */
 import { clinicDayDiff } from "@/lib/clinic-time";
 
+/** Attention needed only once a renewal is under 30 clinic days away. */
+const ATTENTION_WITHIN_DAYS = 30;
+
 /**
- * Attention rows for registrations and insurance expiring within 60 days
+ * Attention rows for registrations and insurance expiring in under 30 days
  * (urgent inside 14 days or once lapsed). Shared by production and demo.
  */
 export function complianceReminders(
@@ -43,7 +46,7 @@ export function complianceReminders(
     for (const [key, expiry, label] of checks) {
       if (!expiry) continue;
       const days = clinicDayDiff(todayKey, expiry.slice(0, 10));
-      if (days > 60) continue;
+      if (days >= ATTENTION_WITHIN_DAYS) continue;
       const when = new Date(`${expiry.slice(0, 10)}T12:00:00`).toLocaleDateString("en-GB", {
         day: "numeric",
         month: "short",

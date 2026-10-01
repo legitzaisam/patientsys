@@ -65,7 +65,7 @@ function template(type: TaskType, first: string, context: string | null | undefi
     case "send_offer":
       return `Send ${first} an offer for this month.`;
     case "rebook_no_show":
-      return `Call ${first} to rebook the missed appointment.`;
+      return `Contact ${first} to rebook the missed appointment.`;
     default:
       return `A task for ${first}.`;
   }

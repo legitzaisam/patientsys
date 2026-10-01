@@ -20,6 +20,14 @@ import { RecordsFilterBar, type PractitionerChip } from "@/components/patients/r
 import { RecordsTable } from "@/components/patients/records-table";
 import { PatientDrawer, type DrawerAction } from "@/components/patients/patient-drawer";
 import { type PatientRow, type PatientView } from "@/components/patients/records-types";
+import {
+  defaultDirFor,
+  isRecordsSort,
+  isRecordsSortDir,
+  sortRecords,
+  type RecordsSort,
+  type RecordsSortDir,
+} from "@/lib/patients/records-sort";
 
 const PAGE_SIZE = 25;
 
@@ -39,13 +47,15 @@ export type RecordsSearch = {
   page?: number;
   prac?: string;
   sel?: string;
+  sort?: RecordsSort;
+  dir?: RecordsSortDir;
 };
 
 /**
  * Patients → Records. The table is for seeing: who they are, what happened
  * last, what is next, and whether a task is open. The drawer says what to do
  * next and hands off to the flows that do it. Filters live in the URL
- * (`prac`, `sel`, `q`, `page`, and a deep-linked `view`).
+ * (`prac`, `sel`, `q`, `page`, `sort`, `dir`, and a deep-linked `view`).
  */
 export function RecordsTab({
   identity,
@@ -85,6 +95,8 @@ export function RecordsTab({
     [mineActive, pracParam, identity.userId],
   );
   const q = search.q ?? "";
+  const sortKey: RecordsSort = isRecordsSort(search.sort) ? search.sort : "patient";
+  const sortDir: RecordsSortDir = isRecordsSortDir(search.dir) ? search.dir : defaultDirFor(sortKey);
   const [searchText, setSearchText] = useState(q);
   useEffect(() => setSearchText(q), [q]);
 
@@ -95,9 +107,17 @@ export function RecordsTab({
       ...(search.q ? { q: search.q } : {}),
       ...(search.prac ? { prac: search.prac } : {}),
       ...(search.sel ? { sel: search.sel } : {}),
+      ...(search.sort ? { sort: search.sort } : {}),
+      ...(search.dir ? { dir: search.dir } : {}),
       ...(search.page && search.page > 1 ? { page: search.page } : {}),
       ...patch,
     };
+    const sort = isRecordsSort(next["sort"]) ? next["sort"] : "patient";
+    const dir = isRecordsSortDir(next["dir"]) ? next["dir"] : defaultDirFor(sort);
+    if (sort === "patient") delete next["sort"];
+    else next["sort"] = sort;
+    if (dir === defaultDirFor(sort)) delete next["dir"];
+    else next["dir"] = dir;
     for (const k of Object.keys(next))
       if (next[k] === undefined || next[k] === "" || next[k] === null) delete next[k];
     void navigate({ to: "/patients", search: next as never, replace: opts.replace ?? false });
@@ -135,12 +155,16 @@ export function RecordsTab({
   const viewed = useMemo(() => searched.filter((p) => inView(p, view)), [searched, view]);
   const practitionerOf = (p: PatientRow) =>
     p.summary?.primaryPractitionerId ?? p.practitionerIds[0] ?? null;
-  const filtered = useMemo(
+  const scoped = useMemo(
     () =>
       selectedPracs.length
         ? viewed.filter((p) => selectedPracs.includes(practitionerOf(p) ?? ""))
         : viewed,
     [viewed, selectedPracs],
+  );
+  const filtered = useMemo(
+    () => sortRecords(scoped, sortKey, sortDir, now),
+    [scoped, sortKey, sortDir, now],
   );
 
   const chips: PractitionerChip[] = useMemo(() => {
@@ -177,7 +201,7 @@ export function RecordsTab({
   const [checked, setChecked] = useState<Set<string>>(new Set());
   useEffect(() => {
     setChecked(new Set());
-  }, [view, q, pracParam]);
+  }, [view, q, pracParam, sortKey, sortDir]);
   const [offerOpen, setOfferOpen] = useState(false);
   const allChecked = filtered.length > 0 && filtered.every((p) => checked.has(p.id));
 
@@ -369,6 +393,15 @@ export function RecordsTab({
                     : "No patients yet — add your first record."
               }
               now={now}
+              sort={sortKey}
+              dir={sortDir}
+              onSort={(column) =>
+                go({
+                  sort: column,
+                  dir: column === sortKey ? (sortDir === "asc" ? "desc" : "asc") : defaultDirFor(column),
+                  page: undefined,
+                })
+              }
             />
           </div>
           <PaginationBar

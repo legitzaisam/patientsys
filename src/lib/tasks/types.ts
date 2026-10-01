@@ -25,7 +25,14 @@ export type PoolRole = "front_desk" | "practitioner" | "manager";
 export type TaskRole = "owner" | "manager" | "practitioner" | "front_desk";
 
 export type TaskPrimaryAction =
-  "call" | "reply" | "send_link" | "approve" | "review" | "message" | "send";
+  | "contact"
+  | "call"
+  | "reply"
+  | "send_link"
+  | "approve"
+  | "review"
+  | "message"
+  | "send";
 
 export const TASK_TYPES: readonly TaskType[] = [
   "chase_booking",
@@ -46,15 +53,15 @@ export const TASK_TYPE_META: Record<
     label: "Chase booking",
     chip: "bg-warning-bg text-warning-ink",
     dot: "bg-warning",
-    action: "call",
-    actionLabel: "Call",
+    action: "contact",
+    actionLabel: "Contact",
   },
   recall: {
     label: "Recall",
     chip: "bg-sky-bg text-sky-ink",
     dot: "bg-sky",
-    action: "call",
-    actionLabel: "Call",
+    action: "contact",
+    actionLabel: "Contact",
   },
   question: {
     label: "Urgent question",
@@ -81,8 +88,8 @@ export const TASK_TYPE_META: Record<
     label: "Rebook no-show",
     chip: "bg-noshow-bg text-noshow-ink",
     dot: "bg-noshow",
-    action: "call",
-    actionLabel: "Call",
+    action: "contact",
+    actionLabel: "Contact",
   },
   custom: {
     label: "Task",
