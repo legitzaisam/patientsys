@@ -69,7 +69,37 @@ app in demo mode          (clinic portal + patient portal) ┘   (optionally ─
 
 The **gateway** (`launch-plan/gateway/server.mjs`, plain Node, no dependencies) answers the website's paths (`/`, `/login`, `/pricing`, `/contact`, `/demo`, `/for-clinics/…`, `/for-patients/…`, `/journal/…`, …; the full list is `launch-plan/gateway/routes.json`) from the static build and proxies everything else (`/dashboard`, `/patients`, `/tasks`, `/my-record`, `/api/…`, websockets) to the app. Behind the gateway the website's `/login` owns sign-in: the app's `/auth` and `/portal` redirect there, and `/demo/enter?role=…` drops you into a persona.
 
-Everything below is local only (nothing leaves your machine) and needs **three terminals**, or one terminal plus `--background`. Run every command from the repository root.
+Everything here is local only: nothing leaves your machine. There are two ways to get it up, and both run from the repository root.
+
+### Everything at once (ports 8190 and 8199)
+
+One command builds the website, builds the app in demo mode and serves both behind a gateway on **8199**. It shares nothing with the public site, so it is also the right way to try a change while www.sqinos.com is running on this Mac.
+
+```sh
+cd ~/Downloads/"Lovable project"
+./launch-plan/cloudflare/start-local.sh     # prints the links when it is up: ~20 s warm, a couple of minutes the first time
+```
+
+| Open | What you get |
+| ---- | ------------ |
+| [http://localhost:8199/](http://localhost:8199/) | Marketing **website** |
+| [http://localhost:8199/login](http://localhost:8199/login) | Sign in: staff, and the patient under `#patient` |
+| [http://localhost:8199/demo/enter?role=owner](http://localhost:8199/demo/enter?role=owner) | **Clinic portal** as the owner (`manager`, `practitioner`, `front_desk` work the same way) |
+| [http://localhost:8199/demo/enter?role=patient](http://localhost:8199/demo/enter?role=patient) | **Patient portal** (Olivia Bennett) |
+
+The app sits on **8190** and the gateway on **8199**; builds, pid files and logs live under `launch-plan/.run/local/`. None of that is shared with the public stack on 8090/8099, so the two run side by side and `stop-local.sh` cannot take the public site down.
+
+```sh
+./launch-plan/cloudflare/start-local.sh     # again after an edit: rebuilds both, replaces what is running
+./launch-plan/cloudflare/stop-local.sh      # when you are done
+tail -f launch-plan/.run/local/logs/app.log # also app-build, gateway, website-build
+```
+
+Both pieces are built from the working tree, committed or not, and the app runs on fixture data (no Supabase, no real email or SMS). Because it is a production build there is no hot reload: re-run the script, or use the route below while you are writing code. Re-running also resets the demo data.
+
+### Step by step, with hot reload (ports 8090 and 8099)
+
+The rest of this section starts the same pieces by hand in **three terminals**, or one terminal plus `--background`, with the app in dev mode so it hot-reloads as you edit. It uses 8090 and 8099, which belong to the public site: if that is running on this Mac (`tmux attach -t sqinos`), use the one-command route above instead, or stop it first.
 
 ### 1. Prerequisites (once)
 

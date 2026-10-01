@@ -23,6 +23,8 @@ touches what visitors see; `redeploy.sh` swaps the snapshot when the build is do
 | `redeploy.sh website \| app \| all \| tunnel` | Push an edit to the running site (see below); `tunnel` restarts only cloudflared |
 | `status.sh` | Which processes run, and whether local and public health checks answer |
 | `stop.sh` | Stops tunnel, gateway and app by pid file |
+| `start-local.sh` | The same website and app on 8190/8199 for this Mac only, with their own snapshots and pid files: try a change while the public site keeps serving |
+| `stop-local.sh` | Stops that local stack. It cannot touch the public one |
 | `lib.sh` | Shared functions (sourced by the others) |
 | `config.example.yml` | Only for a locally-managed tunnel; not needed with a token |
 
@@ -62,6 +64,23 @@ Battery, on power adapter).
 Run them from the repo root in any terminal (not necessarily the tmux one).
 Cloudflare needs no cache purge: asset file names are content-hashed and HTML is
 not cached at the edge.
+
+## Trying a change before it goes public
+
+`start-local.sh` builds the website and the app from the working tree and serves
+them behind a second gateway, for your browser only:
+
+```sh
+./launch-plan/cloudflare/start-local.sh   # website http://localhost:8199/, clinic /demo/enter?role=owner, patient /demo/enter?role=patient
+./launch-plan/cloudflare/stop-local.sh
+```
+
+App on 8190, gateway on 8199, snapshots and pid files under
+`launch-plan/.run/local/`, logs in `launch-plan/.run/local/logs/`. Nothing there
+is shared with the public stack, so both run at once and neither script can stop
+the other's processes. Re-run `start-local.sh` after an edit: it rebuilds both
+and replaces what is running (the demo data starts fresh). When it looks right,
+`redeploy.sh` puts the same code on www.sqinos.com.
 
 ## Everyday
 
