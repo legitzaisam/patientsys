@@ -45,7 +45,7 @@ async function reloadTasks(page: Page) {
 }
 
 test.describe("owner", () => {
-  test("lands on Whole team with four groups, the sidebar badge, type chips and the deep link", async ({
+  test("lands on Whole team with four groups, no sidebar count, type chips and the deep link", async ({
     page,
   }) => {
     await openTasks(page);
@@ -53,7 +53,13 @@ test.describe("owner", () => {
     // Page 1 opens on what is late; the other groups follow on later pages.
     await expect(page.locator('[data-qc="tasks-group-overdue"]')).toBeVisible();
     await expect(page.locator('[data-qc="tasks-pagination"]')).toBeVisible();
-    await expect(page.locator('[data-qc="nav-badge-tasks"]')).toHaveText(/^\d+$/);
+    // The sidebar item carries no count; the page itself says how many are open.
+    await expect(page.locator('[data-qc="nav-badge-tasks"]')).toHaveCount(0);
+    // Every card names the patient type instead of the rule that raised it.
+    await expect(page.locator('[data-qc="task-source"]')).toHaveCount(0);
+    await expect(page.locator('[data-qc="task-patient-type"]').first()).toHaveText(
+      /^(Skin plan|Regular|New patient)$/,
+    );
     await expect(page.locator('[data-qc="team-panel"]')).toBeVisible();
     await expect(page.locator('[data-qc="tasks-auto-closed"]')).toContainText(
       "closed automatically",
@@ -380,6 +386,35 @@ test.describe("practitioner", () => {
     await page.locator('[data-qc="tasks-view-patients_with_others"]').click();
     await expect(page.locator('[data-qc="task-owner-line"]').first()).toBeVisible();
     await expect(page.locator('[data-qc="task-action-delegate"]')).toHaveCount(0);
+  });
+
+  test("Reply opens the patient's chat; sending the message closes the question as Replied", async ({
+    page,
+  }) => {
+    await openTasks(page, "?view=questions");
+    const q = page.locator('[data-qc="task-row"][data-type="question"]').first();
+    await expect(q).toBeVisible();
+    const id = (await q.getAttribute("data-task-id"))!;
+    const patientName = (await q.locator("p").nth(1).locator("a").innerText()).trim();
+
+    // The fixture hides the dock to keep page corners clear; show it for this check.
+    await page.addStyleTag({ content: '[data-qc="floating-dock"] { display: flex !important; }' });
+    await q.locator('[data-qc="task-action-reply"]').click();
+    const chat = page.locator('[data-qc="chat-window"]');
+    await expect(chat).toBeVisible();
+    await expect(chat.locator("header")).toContainText(patientName);
+    // Nothing closes until a message actually goes out.
+    await expect(page.locator(`[data-task-id="${id}"]`)).toHaveAttribute("data-status", "open");
+
+    await chat.locator("textarea").fill(`Thanks for asking — yes, that is normal. ${Date.now()}`);
+    await chat.locator('[aria-label="Send message"]').click();
+    const t = await toast(page);
+    expect(t.text).toMatch(/replied\. Removed from the dashboard/);
+    // Closed, so it leaves the Clinical questions list; Undo reopens it.
+    await expect(page.locator(`[data-task-id="${id}"][data-status="open"]`)).toHaveCount(0);
+    await undo(page, t);
+    await reloadTasks(page);
+    await expect(page.locator(`[data-task-id="${id}"]`)).toHaveAttribute("data-status", "open");
   });
 });
 

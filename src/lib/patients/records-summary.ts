@@ -42,9 +42,13 @@ export function patientType(input: {
   plan: PlanFacts | null | undefined;
   visitCount: number;
 }): PatientType {
-  if (input.plan) return "skin_plan";
-  if (input.visitCount === 0) return "new";
-  return "regular";
+  return patientTypeFrom(Boolean(input.plan), input.visitCount > 0);
+}
+
+/** The same taxonomy from bare facts, for places that only know "has a plan" and "has visited". */
+export function patientTypeFrom(hasPlan: boolean, hasVisited: boolean): PatientType {
+  if (hasPlan) return "skin_plan";
+  return hasVisited ? "regular" : "new";
 }
 
 /** "Skin plan · 5/8", "Regular", "New patient", with " · Inactive" appended. */

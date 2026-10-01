@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  canSeeProfileChangeAttention,
   profileChangeApproverIds,
   profileChangeAttentionItems,
   profileChangeShowsReviewer,
 } from "@/lib/profile-change-policy";
+import { canApproveStaffRequests } from "@/lib/staff-access";
 
 const owner = { user_id: "owner-1", role: "owner" };
 const manager = { user_id: "manager-1", role: "manager" };
@@ -98,8 +98,9 @@ describe("profileChangeAttentionItems", () => {
       { userId: "owner-1", isOwner: true },
     );
     expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe("staff_request");
     expect(items[0]?.title).toBe("Dr Nadia Rahman — profile change");
-    expect(items[0]?.subtitle).toBe("Promoted to senior in July.");
+    expect(items[0]?.subtitle).toBe("Promoted to senior in July. · Profile change");
     expect(items[0]?.href).toBe("/team#profile-change-requests");
   });
 
@@ -112,9 +113,15 @@ describe("profileChangeAttentionItems", () => {
     ).toEqual([]);
   });
 
-  it("is only for the owner, admin or manager role", () => {
-    expect(canSeeProfileChangeAttention({ isOwner: true, roles: ["owner"] })).toBe(true);
-    expect(canSeeProfileChangeAttention({ roles: ["manager"] })).toBe(true);
-    expect(canSeeProfileChangeAttention({ roles: ["practitioner"] })).toBe(false);
+  it("Requests to approve: owner always, manager only once granted Approve staff requests", () => {
+    expect(canApproveStaffRequests({ isOwner: true, roles: ["owner"] })).toBe(true);
+    expect(canApproveStaffRequests({ isAdmin: true, roles: [] })).toBe(true);
+    expect(canApproveStaffRequests({ roles: ["manager"], permissions: [] })).toBe(false);
+    expect(
+      canApproveStaffRequests({ roles: ["manager"], permissions: ["team.approve_changes"] }),
+    ).toBe(true);
+    expect(
+      canApproveStaffRequests({ roles: ["practitioner"], permissions: ["team.approve_changes"] }),
+    ).toBe(false);
   });
 });

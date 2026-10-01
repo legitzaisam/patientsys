@@ -1,4 +1,5 @@
-import { clinicDayKey } from "@/lib/clinic-time";
+import { clinicDayDiff, clinicDayKey } from "@/lib/clinic-time";
+import type { PatientType } from "@/lib/patients/records-summary";
 import {
   dueBucket,
   isContactTask,
@@ -80,6 +81,8 @@ export type PatientLite = {
   phone?: string | null;
   /** The practitioner who treats them (plan practitioner, else last/next booking). */
   practitionerId: string | null;
+  /** Skin plan, regular or new — the same taxonomy as the Records table. */
+  patientType: PatientType;
 };
 
 export type TaskEventInput = {
@@ -197,6 +200,8 @@ export type TaskView_ = {
     avatarUrl: string | null;
     phone: string | null;
     practitionerId: string | null;
+    /** Null when the patient record could not be loaded. */
+    patientType: PatientType | null;
   };
   type: TaskType;
   typeLabel: string;
@@ -272,6 +277,7 @@ export function shapeTask(
       avatarUrl: patient?.avatar_url ?? null,
       phone: patient?.phone ?? null,
       practitionerId: patient?.practitionerId ?? null,
+      patientType: patient?.patientType ?? null,
     },
     type: t.type,
     typeLabel: TASK_TYPE_META[t.type].label,
@@ -652,69 +658,105 @@ export function summarise(
   };
 }
 
-// ---------------------------------------------------------------- dashboard aggregate
+// ---------------------------------------------------------------- dashboard rows
+
+/** Due inside this many clinic days (or already late) reads as Urgent on the dashboard. */
+export const TASK_ATTENTION_URGENT_DAYS = 3;
+/** Due inside this many clinic days reads as This week; later than that stays on the Tasks page only. */
+export const TASK_ATTENTION_WEEK_DAYS = 10;
+
+/** Which Attention needed accordion a task type lands in. */
+export const TASK_ATTENTION_KIND: Record<TaskType, string> = {
+  rebook_no_show: "no_show",
+  recall: "recall",
+  question: "question",
+  chase_booking: "chase_booking",
+  send_offer: "send_offer",
+  plan_support: "plan_support",
+  custom: "tasks",
+};
 
 export type TaskAttentionItem = {
   id: string;
-  kind: "tasks";
+  kind: string;
   urgency: "urgent" | "this_week";
   title: string;
   subtitle: string;
+  patientId: string;
+  taskId: string;
+  /** Whether Done on the dashboard may close it: the holder, or a manager. Pool tasks must be claimed first. */
+  completable: boolean;
   href: string;
 };
 
-/** "3 chases, 2 questions" in type order, for the Attention needed subtitle. */
-function typeBreakdown(list: TaskRow[]): string {
-  const counts = new Map<TaskType, number>();
-  for (const t of list) counts.set(t.type, (counts.get(t.type) ?? 0) + 1);
-  const PLURAL: Record<TaskType, [string, string]> = {
-    chase_booking: ["chase", "chases"],
-    recall: ["recall", "recalls"],
-    question: ["question", "questions"],
-    send_offer: ["offer", "offers"],
-    plan_support: ["check-in", "check-ins"],
-    rebook_no_show: ["rebook", "rebooks"],
-    custom: ["task", "tasks"],
-  };
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([type, n]) => `${n} ${PLURAL[type][n === 1 ? 0 : 1]}`)
-    .join(", ");
+/** Urgent, This week, or null when the task is too far out for the dashboard. */
+export function taskAttentionUrgency(
+  dueAt: string | null,
+  now: Date,
+): TaskAttentionItem["urgency"] | null {
+  if (!dueAt) return "this_week";
+  if (dueBucket(dueAt, now) === "overdue") return "urgent";
+  const days = clinicDayDiff(clinicDayKey(now), clinicDayKey(new Date(dueAt)));
+  if (days <= TASK_ATTENTION_URGENT_DAYS) return "urgent";
+  if (days <= TASK_ATTENTION_WEEK_DAYS) return "this_week";
+  return null;
 }
 
 /**
- * The dashboard's Attention needed carries at most two rows about tasks: how
- * many the viewer can see are overdue (urgent) and how many are due today
- * (this week). Everything else about tasks lives on the Tasks page.
+ * The open tasks on this person's plate: assigned to them, plus the truly
+ * unassigned ones for the owner and managers (someone has to pick them up) and
+ * the unclaimed front-desk pool for the front desk.
+ */
+export function onMyPlate(t: TaskRow, viewer: TaskViewer): boolean {
+  if (t.assignee_id === viewer.userId) return true;
+  if (t.assignee_id) return false;
+  const role = taskRole(viewer);
+  if (role === "owner" || role === "manager") return !t.assignee_role;
+  if (role === "front_desk") return t.assignee_role === "front_desk";
+  return false;
+}
+
+/** The Tasks page view a dashboard row opens on, so the deep link lands on a list that holds the task. */
+function taskAttentionHref(t: TaskRow, viewer: TaskViewer): string {
+  const view =
+    t.assignee_id === viewer.userId
+      ? null
+      : t.assignee_role === "front_desk"
+        ? "pool"
+        : "unassigned";
+  return `/tasks?task=${t.id}${view ? `&view=${view}` : ""}`;
+}
+
+/**
+ * The dashboard's Attention needed lists each task on the viewer's plate under
+ * the accordion for its type: Urgent when late or due within three clinic
+ * days, This week when due within ten. Completing it anywhere clears it here.
  */
 export function taskAttentionItems(
   rows: TaskRow[],
   viewer: TaskViewer,
-  patientPractitioner: (patientId: string) => string | null,
+  patientLite: (patientId: string) => PatientLite | null,
   now: Date,
 ): TaskAttentionItem[] {
-  const open = rows.filter((t) => isOpen(t) && canSeeTask(t, viewer, patientPractitioner));
-  const overdue = open.filter((t) => dueBucket(t.due_at, now) === "overdue");
-  const today = open.filter((t) => dueBucket(t.due_at, now) === "today");
+  const patientPractitioner = (id: string) => patientLite(id)?.practitionerId ?? null;
   const out: TaskAttentionItem[] = [];
-  if (overdue.length) {
+  for (const t of rows) {
+    if (!isOpen(t) || !onMyPlate(t, viewer) || !canSeeTask(t, viewer, patientPractitioner))
+      continue;
+    const urgency = taskAttentionUrgency(t.due_at, now);
+    if (!urgency) continue;
+    const patient = patientLite(t.patient_id);
+    const name = patient ? `${patient.first_name} ${patient.last_name}`.trim() : "Patient";
     out.push({
-      id: "tasks-overdue",
-      kind: "tasks",
-      urgency: "urgent",
-      title: `Tasks — ${overdue.length} overdue`,
-      subtitle: `${typeBreakdown(overdue)} · past their due time`,
-      href: "/tasks",
-    });
-  }
-  if (today.length) {
-    out.push({
-      id: "tasks-today",
-      kind: "tasks",
-      urgency: "this_week",
-      title: `Tasks — ${today.length} due today`,
-      subtitle: `${typeBreakdown(today)} · due by end of day`,
-      href: "/tasks",
+      id: `task-${t.id}`,
+      kind: TASK_ATTENTION_KIND[t.type],
+      urgency,
+      title: `${name} — ${t.title}`,
+      subtitle: `${t.title} · ${taskDueLabel({ dueAt: t.due_at, type: t.type, escalated: !!t.escalated_at }, now)}`,
+      patientId: t.patient_id,
+      taskId: t.id,
+      completable: t.assignee_id === viewer.userId || viewer.isManager,
+      href: taskAttentionHref(t, viewer),
     });
   }
   return out;

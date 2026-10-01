@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { LoadError, LoadingCard, type LoadStatus } from "@/components/dashboard/load-state";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Bell, ChevronDown } from "lucide-react";
+import { AlertCircle, Bell, Check, ChevronDown } from "lucide-react";
+import { useTaskActions } from "@/components/tasks/use-task-actions";
 import { dropThisWeekDepositsIfUrgent } from "@/lib/metrics/appointment-flags";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,10 @@ type AttentionRaw = {
   patientId?: string;
   appointmentId?: string;
   href?: string;
+  /** Set on rows that mirror a task, so Done here completes it on the Tasks page too. */
+  taskId?: string;
+  /** False when the viewer must claim the task first (an unclaimed pool task); no Done button then. */
+  completable?: boolean;
 };
 
 type TaskPerson = {
@@ -22,7 +27,11 @@ type TaskPerson = {
   href: string;
   patientId?: string;
   subtitleParts: { treatment: string; suffix?: string }[];
+  taskIds: string[];
 };
+
+/** Mark this person's tasks under one accordion as handled. */
+type CompleteTasks = (ids: string[], who: string) => void;
 
 const APPOINTMENT_ATTENTION_KINDS = new Set([
   "deposit_due",
@@ -47,26 +56,35 @@ const KIND_ORDER = [
   "consent_due",
   "payment_due",
   "balance_due",
+  "question",
+  "chase_booking",
+  "recall",
+  "send_offer",
+  "plan_support",
   "tasks",
   "treatment_due",
   "incomplete_profile",
-  "profile_change",
   "staff_request",
   "compliance_due",
 ] as const;
 
 const PREVIEW_LIMIT = 4;
 
+/** Task kinds reuse the chip colours of their type on the Tasks page. */
 const CHIP_META: Record<string, { label: string; className: string }> = {
   no_show: { label: "No show", className: "bg-destructive-bg text-destructive-ink" },
   deposit_due: { label: "Deposit due", className: "bg-destructive-bg text-destructive-ink" },
   consent_due: { label: "Consent due", className: "bg-warning-bg text-consent-ink" },
   payment_due: { label: "Unpaid", className: "bg-destructive-bg text-destructive-ink" },
   balance_due: { label: "Balance due", className: "bg-warning-bg text-warning-ink" },
+  question: { label: "Patient questions", className: "bg-destructive-bg text-destructive-ink" },
+  chase_booking: { label: "Chase booking", className: "bg-warning-bg text-warning-ink" },
+  recall: { label: "Recall", className: "bg-sky-bg text-sky-ink" },
+  send_offer: { label: "Send offer", className: "bg-accent-soft text-accent-ink" },
+  plan_support: { label: "Plan support", className: "bg-success-bg text-success-ink" },
   tasks: { label: "Tasks", className: "bg-accent-soft text-accent-ink" },
   treatment_due: { label: "Skin-plan treatment due", className: "bg-accent-soft text-accent-ink" },
   incomplete_profile: { label: "Incomplete profile", className: "bg-warning-bg text-warning-ink" },
-  profile_change: { label: "Profile change request", className: "bg-warning-bg text-warning-ink" },
   staff_request: { label: "Requests to approve", className: "bg-accent-soft text-accent-ink" },
   compliance_due: {
     label: "Registration or insurance",
@@ -173,7 +191,7 @@ function displayHref(person: TaskPerson, kind: string) {
 
 function personKey(item: AttentionRaw) {
   if (item.patientId) return `patient:${item.patientId}`;
-  if (item.kind === "profile_change" || item.kind === "staff_request") return `id:${item.id}`;
+  if (item.kind === "staff_request") return `id:${item.id}`;
   if (item.href) return `href:${item.href}`;
   return `id:${item.id}`;
 }
@@ -197,14 +215,16 @@ function groupByTask(items: AttentionRaw[]): TaskGroup[] {
       ) {
         existing.subtitleParts.push(parsed);
       }
+      if (item.taskId && item.completable !== false) existing.taskIds.push(item.taskId);
       continue;
     }
     people.set(key, {
       key,
       name: nameFromTitle(item.title),
       href: hrefFor(item),
-      patientId: item.patientId,
+      ...(item.patientId ? { patientId: item.patientId } : {}),
       subtitleParts: parsed ? [parsed] : [],
+      taskIds: item.taskId && item.completable !== false ? [item.taskId] : [],
     });
   }
 
@@ -240,6 +260,10 @@ export function AttentionList({
   items = dropThisWeekDepositsIfUrgent(items.filter((i) => i.kind !== "message"));
   const urgent = items.filter((i) => i.urgency === "urgent");
   const thisWeek = items.filter((i) => i.urgency === "this_week");
+  // Done on a task row goes through the Tasks page's own action: optimistic,
+  // with Undo in the toast, and it refreshes this list and the Tasks page.
+  const actions = useTaskActions();
+  const completeTasks: CompleteTasks = (ids, who) => void actions.completeFromDashboard(ids, who);
 
   if (status === "error") return <LoadError what="the attention list" onRetry={onRetry} />;
   if (status === "loading") {
@@ -262,8 +286,13 @@ export function AttentionList({
 
   return (
     <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
-      <AttentionSection title="Urgent" items={urgent} tone="urgent" />
-      <AttentionSection title="This week" items={thisWeek} tone="muted" />
+      <AttentionSection title="Urgent" items={urgent} tone="urgent" completeTasks={completeTasks} />
+      <AttentionSection
+        title="This week"
+        items={thisWeek}
+        tone="muted"
+        completeTasks={completeTasks}
+      />
     </div>
   );
 }
@@ -272,10 +301,12 @@ function AttentionSection({
   title,
   items,
   tone,
+  completeTasks,
 }: {
   title: string;
   items: AttentionRaw[];
   tone: "urgent" | "muted";
+  completeTasks: CompleteTasks;
 }) {
   const tasks = useMemo(() => groupByTask(items), [items]);
   const taskCount = tasks.reduce((sum, t) => sum + t.people.length, 0);
@@ -322,6 +353,7 @@ function AttentionSection({
               task={task}
               open={openKinds.has(task.kind)}
               onToggle={() => toggleKind(task.kind)}
+              completeTasks={completeTasks}
             />
           ))
         )}
@@ -334,12 +366,14 @@ function TaskCategory({
   task,
   open,
   onToggle,
+  completeTasks,
 }: {
   task: TaskGroup;
   open: boolean;
   onToggle: () => void;
+  completeTasks: CompleteTasks;
 }) {
-  const rail = railFor(task.kind);
+  const dot = dotFor(task.kind);
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? task.people : task.people.slice(0, PREVIEW_LIMIT);
   const hiddenCount = task.people.length - PREVIEW_LIMIT;
@@ -377,7 +411,12 @@ function TaskCategory({
               kind={task.kind}
               subtitle={displaySubtitle(person, task.kind)}
               href={displayHref(person, task.kind)}
-              rail={rail}
+              dot={dot}
+              onDone={
+                person.taskIds.length
+                  ? () => completeTasks(person.taskIds, person.name.split(" ")[0] ?? person.name)
+                  : undefined
+              }
             />
           ))}
           {hiddenCount > 0 && (
@@ -397,18 +436,35 @@ function TaskCategory({
   );
 }
 
+function DoneButton({ onDone, who }: { onDone: () => void; who: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onDone}
+      title={`Mark ${who}'s task as handled`}
+      aria-label={`Mark ${who}'s task as handled`}
+      data-qc="attention-task-done"
+      className="grid h-6 w-6 shrink-0 cursor-pointer place-items-center rounded-full text-ink-3 transition-colors hover:bg-success-bg hover:text-success-ink active:bg-success-bg"
+    >
+      <Check className="h-3.5 w-3.5" aria-hidden />
+    </button>
+  );
+}
+
 function AttentionPersonRow({
   person,
   kind,
   subtitle,
   href,
-  rail,
+  dot,
+  onDone,
 }: {
   person: TaskPerson;
   kind: string;
   subtitle: string | null;
   href: string;
-  rail: string;
+  dot: string;
+  onDone?: (() => void) | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -436,31 +492,35 @@ function AttentionPersonRow({
   const expandable = Boolean(subtitle) && !summarized && (truncated || expanded);
 
   const rowQc = `attention-${kind.replace(/_/g, "-")}`;
+  const who = person.name.split(" ")[0] ?? person.name;
 
   if (!expandable) {
     return (
-      <li data-qc={rowQc}>
-        <Link
-          to={href as any}
-          className="flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.08)] active:bg-[rgba(47,63,102,0.14)]"
-        >
-          <i className={`h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
-          <p
-            ref={textRef}
-            className="min-w-0 flex-1 truncate text-[13px] leading-snug text-foreground"
+      <li data-qc={rowQc} data-task-ids={person.taskIds.join(" ") || undefined}>
+        <div className="flex items-center gap-1 rounded-md pr-1 transition-colors hover:bg-[rgba(47,63,102,0.08)]">
+          <Link
+            to={href as any}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 active:bg-[rgba(47,63,102,0.14)]"
           >
-            {line}
-          </p>
-        </Link>
+            <i className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} aria-hidden />
+            <p
+              ref={textRef}
+              className="min-w-0 flex-1 truncate text-[13px] leading-snug text-foreground"
+            >
+              {line}
+            </p>
+          </Link>
+          {onDone ? <DoneButton onDone={onDone} who={who} /> : null}
+        </div>
       </li>
     );
   }
 
   return (
-    <li data-qc={rowQc}>
-      <div className="flex items-start gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-[rgba(47,63,102,0.08)]">
-        <i className={`mt-1.5 h-3.5 w-[3px] shrink-0 rounded-full ${rail}`} aria-hidden />
-        <div className="min-w-0 flex-1">
+    <li data-qc={rowQc} data-task-ids={person.taskIds.join(" ") || undefined}>
+      <div className="flex items-start gap-1 rounded-md py-1.5 pl-1.5 pr-1 transition-colors hover:bg-[rgba(47,63,102,0.08)]">
+        <i className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} aria-hidden />
+        <div className="min-w-0 flex-1 pl-1">
           <button
             type="button"
             onClick={() => setExpanded((open) => !open)}
@@ -480,29 +540,38 @@ function AttentionPersonRow({
               to={href as any}
               className="mt-1 inline-flex text-2xs font-semibold text-accent-ink hover:underline"
             >
-              Open record
+              {onDone ? "Open task" : "Open record"}
             </Link>
           ) : null}
         </div>
+        {onDone ? <DoneButton onDone={onDone} who={who} /> : null}
       </div>
     </li>
   );
 }
 
-function railFor(kind: string) {
+function dotFor(kind: string) {
   switch (kind) {
     case "no_show":
     case "deposit_due":
     case "payment_due":
     case "balance_due":
+    case "question":
       return "bg-destructive";
     case "consent_due":
       return "bg-consent";
+    case "chase_booking":
+      return "bg-warning";
+    case "recall":
+      return "bg-sky";
+    case "plan_support":
+      return "bg-success";
+    case "send_offer":
+      return "bg-accent-deep";
     case "tasks":
     case "treatment_due":
       return "bg-accent";
     case "incomplete_profile":
-    case "profile_change":
     case "compliance_due":
       return "bg-warning";
     case "staff_request":

@@ -14,7 +14,7 @@ import {
 } from "@/lib/metrics/appointment-flags";
 import { complianceReminders } from "@/lib/metrics/compliance";
 import { ESSENTIAL_DOC_CATEGORIES, complianceStatus } from "@/lib/staff-doc-compliance";
-import { canManageProfiles, canSetCommission } from "@/lib/staff-access";
+import { canApproveStaffRequests, canManageProfiles, canSetCommission } from "@/lib/staff-access";
 import {
   fullPattern,
   initialsOf,
@@ -166,7 +166,6 @@ import { emailMfaDelivery } from "@/lib/auth/email-mfa.server";
 import { createHash, randomInt } from "node:crypto";
 import { generateInsightsIngestKey } from "@/lib/insights-ingest.server";
 import {
-  canSeeProfileChangeAttention,
   canSelfApplyIdentityChanges,
   clinicHasSeparateManager,
   profileChangeApproverIds,
@@ -831,7 +830,11 @@ export const getDashboard = createServerFn({ method: "GET" })
       }
     }
 
-    if (canManageProfiles(identity)) {
+    // Requests to approve: the owner always; a manager once granted Approve
+    // staff requests. Time off and working patterns are approved on the
+    // colleague's Schedule tab, so those rows also need Edit staff profiles.
+    const approver = canApproveStaffRequests(identity);
+    if (approver && canManageProfiles(identity)) {
       const supabaseAdmin = await adminClient(context);
       const [{ data: patternReqs }, { data: timeOffReqs }, { data: staffNames }] =
         await Promise.all([
@@ -892,7 +895,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       );
     }
 
-    if (canSeeProfileChangeAttention(identity)) {
+    if (approver) {
       const supabaseAdmin = await adminClient(context);
       const { data: changeReqs } = await supabaseAdmin
         .from("profile_change_requests")
@@ -922,9 +925,10 @@ export const getDashboard = createServerFn({ method: "GET" })
       list.push(m);
       milestonesByPlan.set(m.plan_id, list);
     }
-    // Tasks: the page owns the detail; Attention needed carries the two aggregates
-    // (overdue, due today) for what this person can see. Plan-step dues and
-    // misses are tasks now, so they no longer appear here one by one.
+    // Tasks: each one on this person's plate (assigned to them, or waiting for
+    // an owner) sits under the accordion for its type — urgent when late or due
+    // within three days, this week within ten. Plan-step dues and misses are
+    // tasks now, so they no longer appear here one by one.
     {
       const ctx = context as Ctx;
       await syncRuleTasks(ctx, today);
@@ -943,7 +947,7 @@ export const getDashboard = createServerFn({ method: "GET" })
             isAdmin: identity.isAdmin,
             permissions: identity.permissions,
           },
-          patientInfo.patientPractitioner,
+          patientInfo.patientLite,
           today,
         ),
       );
@@ -6334,7 +6338,7 @@ export const getMyProfile = createServerFn({ method: "GET" })
     };
   });
 
-/** Owner, or staff granted Approve profile change requests. */
+/** Owner, or staff granted Approve staff requests. */
 export const listProfileChangeRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -6409,7 +6413,7 @@ export const listProfileChangeRequests = createServerFn({ method: "GET" })
     });
   });
 
-/** Owner, or staff granted Approve profile change requests. */
+/** Owner, or staff granted Approve staff requests. */
 export const reviewProfileChange = createServerFn({ method: "POST" })
   .validator((data: { id: string; approve: boolean; reviewerNote?: string }) =>
     parseInput(schemas.ReviewProfileChange, data),
@@ -6478,7 +6482,7 @@ export const reviewProfileChange = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Owner, or staff granted Approve profile change requests, can clear a finished card. */
+/** Owner, or staff granted Approve staff requests, can clear a finished card. */
 export const dismissProfileChangeRequest = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => parseInput(schemas.DismissProfileChange, data))
   .middleware([requireSupabaseAuth])

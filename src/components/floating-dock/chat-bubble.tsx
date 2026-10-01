@@ -554,6 +554,7 @@ function InboxView({ onPick }: { onPick: (thread: ActiveThread) => void }) {
 
 function ThreadView({ thread }: { thread: PatientThread }) {
   const queryClient = useQueryClient();
+  const { notifyPatientMessageSent } = useFloatingDock();
   const fetchMessages = useServerFn(getPatientMessages);
   const markRead = useServerFn(markMessagesRead);
   // After sending, poll fast for a while: the demo AI patient replies within
@@ -588,6 +589,7 @@ function ThreadView({ thread }: { thread: PatientThread }) {
         queryClient.invalidateQueries({ queryKey: ["patient-messages", thread.patientId] });
         queryClient.invalidateQueries({ queryKey: ["patient-threads"] });
         queryClient.invalidateQueries({ queryKey: ["patient", thread.patientId] });
+        notifyPatientMessageSent(thread.patientId);
       }}
     />
   );

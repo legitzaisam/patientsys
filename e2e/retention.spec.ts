@@ -83,7 +83,8 @@ test("the at-risk table pins the patient column, drops practitioner, and the dia
     await expect(page.locator('[data-qc="task-row"]').first()).toBeVisible();
   }
   await expect(row.first()).toBeVisible();
-  await expect(row.first().locator('[data-qc="task-source"]')).toContainText(/Assigned by/);
+  await expect(row.first()).toHaveAttribute("data-source", "manual");
+  await expect(row.first().locator('[data-qc="task-patient-type"]')).toBeVisible();
 });
 
 test("cohorts read Too early for this month and 'so far' while young; the trend axis is in %", async ({

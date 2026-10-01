@@ -157,38 +157,88 @@ test.describe("insights", () => {
   });
 });
 
-test.describe("attention needed aggregates tasks", () => {
-  async function tasksAggregate(page: import("@playwright/test").Page) {
+test.describe("attention needed lists each task on my plate", () => {
+  /** Attention needed settled, with no aggregate "N overdue" line and no per-step plan rows. */
+  async function attentionReady(page: import("@playwright/test").Page) {
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
     await expect(page.locator('[data-qc="attention-kind-message"]')).toHaveCount(0);
-    // Plan steps no longer appear one by one; tasks do, as two aggregate rows at most.
     await expect(page.locator('[data-qc="attention-kind-treatment_due"]')).toHaveCount(0);
-    const kind = page.locator('[data-qc="attention-kind-tasks"]').first();
-    await expect(kind).toBeVisible({ timeout: 15_000 });
-    await expect(kind).toHaveText("Tasks");
-    await kind.click();
-    const rows = page.locator('[data-qc="attention-tasks"]');
-    await expect(rows.first()).toBeVisible();
-    return rows.allInnerTexts();
-  }
-
-  test("owner: the overdue aggregate matches the Tasks page and links to it", async ({ page }) => {
-    await page.goto("/dashboard");
-    const rows = await tasksAggregate(page);
-    expect(
-      rows.some((r) => /\d+ (chases|rebooks|questions|recalls|offers|check-ins)/.test(r)),
-    ).toBe(true);
-    const urgent = page.locator('[data-qc="attention-urgent"] [data-qc="attention-tasks"]').first();
-    const n = Number(((await urgent.innerText()).match(/(\d+) overdue/) ?? [])[1] ?? 0);
-    await urgent.locator("a").first().click();
-    await expect(page).toHaveURL(/\/tasks/);
-    await expect(page.locator('[data-qc="tasks-main"]')).toHaveAttribute("data-view", "team");
-    if (n > 0) {
-      await expect(page.locator('[data-qc="tasks-group-overdue"] h3')).toContainText(
-        `Overdue · ${n}`,
+    await expect(page.locator('[data-qc="attention-kind-tasks"]')).toHaveCount(0);
+    for (const card of ['[data-qc="attention-urgent"]', '[data-qc="attention-this-week"]']) {
+      await expect(page.locator(card)).not.toContainText(/\d+ overdue/);
+      await expect(page.locator(card)).not.toContainText(
+        /\d+ (chases|rebooks|questions|recalls|offers|check-ins)/,
       );
     }
+  }
+
+  test("owner: her own send-offer task sits under Send offer, deep-links to it, and Done clears it on both pages", async ({
+    page,
+    context,
+  }) => {
+    await page.goto("/dashboard");
+    await attentionReady(page);
+
+    // Aisha's referral voucher is assigned to the owner and due in three days: Urgent → Send offer.
+    const urgent = page.locator('[data-qc="attention-urgent"]');
+    const showAll = async () => {
+      const more = urgent.getByRole("button", { name: /^Show \d+ more$/ });
+      if ((await more.count()) > 0) await more.first().click();
+    };
+    const kind = urgent.locator('[data-qc="attention-kind-send_offer"]');
+    await expect(kind).toHaveText("Send offer");
+    await kind.click();
+    await showAll();
+    const row = urgent.locator('[data-qc="attention-send-offer"]', { hasText: "Aisha Bello" });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText("Send referral thank-you voucher");
+    const taskId = (await row.getAttribute("data-task-ids"))!;
+    expect(taskId).toMatch(/\S/);
+
+    // A chase nobody holds yet is on the owner's plate too, under Chase booking.
+    await urgent.locator('[data-qc="attention-kind-chase_booking"]').click();
+    await showAll();
+    await expect(
+      urgent.locator('[data-qc="attention-chase-booking"]', { hasText: "Tilly Rowntree" }),
+    ).toHaveCount(1);
+
+    // The row opens the Tasks page on that task.
+    await row.locator("a").first().click();
+    await expect(page).toHaveURL(/\/tasks/);
+    await expect(page.locator(`[data-task-id="${taskId}"]`)).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(`[data-task-id="${taskId}"]`)).toHaveAttribute("data-status", "open");
+
+    // Done on the dashboard closes it on the Tasks page; Undo brings it back on both.
+    await page.goto("/dashboard");
+    await attentionReady(page);
+    await urgent.locator('[data-qc="attention-kind-send_offer"]').click();
+    await showAll();
+    const again = urgent.locator('[data-qc="attention-send-offer"]', { hasText: "Aisha Bello" });
+    await again.locator('[data-qc="attention-task-done"]').click();
+    const t = page.locator("[data-sonner-toast]").last();
+    await expect(t).toContainText("Aisha: handled. Cleared here and on the Tasks page.");
+    await t.hover(); // pauses the toast so Undo stays available
+    await expect(
+      page.locator('[data-qc="attention-send-offer"]', { hasText: "Aisha Bello" }),
+    ).toHaveCount(0, { timeout: 15_000 });
+
+    // Seen from a second tab: closed on the Tasks page, listed under Done today.
+    const other = await context.newPage();
+    await other.goto(`/tasks?view=done`);
+    await expect(other.locator('[data-qc="tasks-main"]')).toBeVisible();
+    await expect(other.locator(`[data-task-id="${taskId}"]`)).toHaveAttribute(
+      "data-status",
+      "done",
+      { timeout: 15_000 },
+    );
+    await other.close();
+
+    await t.getByRole("button", { name: "Undo" }).click();
+    await expect(page.locator("[data-sonner-toast]").last()).toContainText("Undone.");
+    await expect(
+      urgent.locator('[data-qc="attention-send-offer"]', { hasText: "Aisha Bello" }),
+    ).toHaveCount(1, { timeout: 15_000 });
   });
 });
 
@@ -243,18 +293,42 @@ test.describe("a booking only counts when it is for the step", () => {
   });
 });
 
-test.describe("tasks aggregate as practitioner", () => {
+test.describe("tasks on the dashboard as practitioner", () => {
   test.use({ role: "practitioner" });
 
-  test("Nadia sees the Tasks aggregate and her own Tasks page", async ({ page }) => {
+  test("Nadia sees her own tasks under their accordions, and her own Tasks page", async ({
+    page,
+  }) => {
     await page.goto("/dashboard");
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
     await expect(page.locator('[data-qc="attention-kind-message"]')).toHaveCount(0);
     await expect(page.locator('[data-qc="attention-kind-treatment_due"]')).toHaveCount(0);
-    await expect(page.locator('[data-qc="attention-kind-tasks"]').first()).toBeVisible({
-      timeout: 15_000,
+    await expect(page.locator('[data-qc="attention-kind-tasks"]')).toHaveCount(0);
+    const urgent = page.locator('[data-qc="attention-urgent"]');
+    const week = page.locator('[data-qc="attention-this-week"]');
+    await expect(urgent).not.toContainText(/\d+ overdue/);
+    // Harriet's escalated re-engagement call (two days late) and Beatrice's
+    // swelling check-in (due in two days) are hers, so both read as Urgent.
+    await expect(urgent.locator('[data-qc="attention-kind-chase_booking"]')).toHaveText(
+      "Chase booking",
+    );
+    await urgent.locator('[data-qc="attention-kind-chase_booking"]').click();
+    const harriet = urgent.locator('[data-qc="attention-chase-booking"]', {
+      hasText: "Harriet Blackwood",
     });
+    await expect(harriet).toHaveCount(1);
+    await expect(harriet).toContainText("Escalated");
+    await expect(harriet.locator('[data-qc="attention-task-done"]')).toBeVisible();
+    await urgent.locator('[data-qc="attention-kind-plan_support"]').click();
+    await expect(
+      urgent.locator('[data-qc="attention-plan-support"]', { hasText: "Beatrice Ashcombe" }),
+    ).toHaveCount(1);
+    // The owner's voucher task and the unclaimed chase are not on her plate.
+    for (const card of [urgent, week]) {
+      await expect(card).not.toContainText("Aisha Bello");
+      await expect(card).not.toContainText("Tilly Rowntree");
+    }
     await expect(page.locator('[data-qc="tasks-summary-stats"]')).toBeVisible();
 
     await page.goto("/tasks");
@@ -270,17 +344,30 @@ test.describe("tasks aggregate as practitioner", () => {
   });
 });
 
-test.describe("tasks aggregate as front desk", () => {
+test.describe("tasks on the dashboard as front desk", () => {
   test.use({ role: "front_desk" });
 
-  test("Sofia sees the Tasks aggregate; clinical questions never reach her", async ({ page }) => {
+  test("Sofia sees her recall under Recall; clinical questions never reach her", async ({
+    page,
+  }) => {
     await page.goto("/dashboard");
     await expect(page.locator('[data-qc="attention-deposit-rule"]')).toBeVisible();
     await expect(page.locator('[data-qc="attention-loading"]')).toHaveCount(0);
     await expect(page.locator('[data-qc="attention-kind-message"]')).toHaveCount(0);
-    await expect(page.locator('[data-qc="attention-kind-tasks"]').first()).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(page.locator('[data-qc="attention-kind-tasks"]')).toHaveCount(0);
+    const urgent = page.locator('[data-qc="attention-urgent"]');
+    const week = page.locator('[data-qc="attention-this-week"]');
+    await expect(urgent).not.toContainText(/\d+ overdue/);
+    // Her lapsed-patient recall, contacted yesterday and now late, is Urgent → Recall.
+    await expect(urgent.locator('[data-qc="attention-kind-recall"]')).toHaveText("Recall");
+    await urgent.locator('[data-qc="attention-kind-recall"]').click();
+    const more = urgent.getByRole("button", { name: /^Show \d+ more$/ });
+    if ((await more.count()) > 0) await more.first().click();
+    const recall = urgent.locator('[data-qc="attention-recall"][data-task-ids]');
+    await expect(recall.first()).toBeVisible();
+    await expect(recall.first().locator('[data-qc="attention-task-done"]')).toBeVisible();
+    await expect(page.locator('[data-qc="attention-kind-question"]')).toHaveCount(0);
+    for (const card of [urgent, week]) await expect(card).not.toContainText("Aisha Bello");
     await expect(page.locator('[data-qc="tasks-summary-stats"]')).toBeVisible();
 
     await page.goto("/tasks?view=pool");

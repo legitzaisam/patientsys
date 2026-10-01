@@ -2,13 +2,13 @@ import { Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PatientAvatar } from "@/components/patient-avatar";
+import { PATIENT_TYPE_META } from "@/lib/patients/records-summary";
 import type { TaskView_ } from "@/lib/tasks/service";
 import { staffLane } from "@/lib/staff-lane";
 import {
   TASK_TYPE_META,
   isContactTask,
   MAX_CONTACT_ATTEMPTS,
-  taskSourceLine,
   type TaskRole,
 } from "@/lib/tasks/types";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,9 @@ export function TaskRow({
     !!task.assigneeId &&
     (role === "front_desk" || role === "owner" || role === "manager");
   const overdue = task.bucket === "overdue";
+  const patientMeta = task.patient.patientType
+    ? PATIENT_TYPE_META[task.patient.patientType]
+    : null;
 
   return (
     <li
@@ -70,6 +73,7 @@ export function TaskRow({
       data-type={task.type}
       data-bucket={task.bucket}
       data-status={task.status}
+      data-source={task.source}
       draggable={draggable}
       onDragStart={draggable ? onDragStart : undefined}
       onDragEnd={draggable ? onDragEnd : undefined}
@@ -137,9 +141,19 @@ export function TaskRow({
           >
             {meta.label}
           </span>
-          <span className="font-mono text-[10.5px] text-ink-3" data-qc="task-source">
-            {taskSourceLine(task.source, task.sourceLabel)}
-          </span>
+          {patientMeta ? (
+            <span
+              className={cn(
+                "inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold shadow-inset-hi",
+                patientMeta.pill,
+              )}
+              data-qc="task-patient-type"
+              data-patient-type={task.patient.patientType}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", patientMeta.dot)} aria-hidden />
+              {patientMeta.label}
+            </span>
+          ) : null}
         </div>
         {task.note ? (
           <p

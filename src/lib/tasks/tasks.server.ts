@@ -1,5 +1,6 @@
 import type { Ctx } from "@/lib/auth/guards.server";
 import { clinicScoped } from "@/lib/auth/clinic-scope.server";
+import { patientTypeFrom } from "@/lib/patients/records-summary";
 import { evaluateRules } from "@/lib/tasks/evaluate-rules";
 import {
   planAutoClose,
@@ -110,7 +111,7 @@ export async function loadTeam(ctx: Ctx): Promise<{
 export async function loadPatientContext(ctx: Ctx, now: Date, patientIds?: string[]) {
   let patientsQuery = ctx.supabase
     .from("patients")
-    .select("id, first_name, last_name, avatar_url, phone, status, user_id");
+    .select("id, first_name, last_name, avatar_url, phone, status, user_id, last_visit_at");
   if (patientIds?.length) patientsQuery = patientsQuery.in("id", patientIds);
   const [{ data: patients }, { data: treatments }, { data: appointments }, { data: plans }] =
     await Promise.all([
@@ -133,18 +134,23 @@ export async function loadPatientContext(ctx: Ctx, now: Date, patientIds?: strin
     last_name?: string | null;
     avatar_url?: string | null;
     phone?: string | null;
+    last_visit_at?: string | null;
   };
   const patientRows = (patients ?? []) as PatientRow[];
+  const treatmentRows = (treatments ?? []) as TreatmentRowLike[];
+  const planRows = (plans ?? []) as Pick<PlanRowLike, "patient_id" | "practitioner_id">[];
   const practitioners = primaryPractitioners({
     patients: patientRows,
-    treatments: (treatments ?? []) as TreatmentRowLike[],
+    treatments: treatmentRows,
     appointments: (appointments ?? []) as AppointmentRowLike[],
-    plans: ((plans ?? []) as Pick<PlanRowLike, "patient_id" | "practitioner_id">[]).map((p) => ({
+    plans: planRows.map((p) => ({
       patientId: p.patient_id,
       practitionerId: p.practitioner_id ?? null,
     })),
     now,
   });
+  const onPlan = new Set(planRows.map((p) => p.patient_id));
+  const visited = new Set(treatmentRows.map((t) => t.patient_id));
   const byId = new Map<string, PatientRow>(patientRows.map((p) => [p.id, p]));
   return {
     patientPractitioner: (id: string) => practitioners.get(id) ?? null,
@@ -158,6 +164,7 @@ export async function loadPatientContext(ctx: Ctx, now: Date, patientIds?: strin
         avatar_url: p.avatar_url ?? null,
         phone: p.phone ?? null,
         practitionerId: practitioners.get(id) ?? null,
+        patientType: patientTypeFrom(onPlan.has(id), visited.has(id) || !!p.last_visit_at),
       };
     },
   };

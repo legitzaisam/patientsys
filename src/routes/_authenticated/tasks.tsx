@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useFloatingDock } from "@/components/floating-dock/dock-context";
 import { PaginationBar } from "@/components/pagination-bar";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
 import { AssignTaskDialog } from "@/components/tasks/assign-task-dialog";
@@ -23,6 +24,7 @@ import { getTasksSummary, listPatients, listTasks } from "@/lib/clinic.functions
 import { canSee } from "@/lib/access-catalogue";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { switchDemoRole } from "@/lib/demo/switch-role";
+import type { PatientType } from "@/lib/patients/records-summary";
 import { can } from "@/lib/permissions";
 import { staffLane } from "@/lib/staff-lane";
 import { taskRole, type TaskView_ } from "@/lib/tasks/service";
@@ -181,6 +183,21 @@ function TasksPage() {
   });
 
   const actions = useTaskActions();
+  // Reply opens the patient's thread in the chat bubble; the question counts as
+  // answered once a message actually goes out to that patient.
+  const { requestChat, patientMessageSent } = useFloatingDock();
+  const replying = useRef<TaskView_ | null>(null);
+  const reply = (t: TaskView_) => {
+    replying.current = t;
+    requestChat({ patientId: t.patient.id, patientName: t.patient.name });
+  };
+  useEffect(() => {
+    const t = replying.current;
+    if (!t || !patientMessageSent || patientMessageSent.patientId !== t.patient.id) return;
+    replying.current = null;
+    void actions.complete(t, "replied", "Replied");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientMessageSent?.seq]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openPanel, setOpenPanel] = useState<{ id: string; mode: "delegate" | "outcome" } | null>(
     null,
@@ -292,11 +309,13 @@ function TasksPage() {
           label: primaryLabel,
           kind: "primary",
           onClick: () =>
-            void actions.complete(
-              t,
-              t.type === "send_offer" ? "approved" : t.type === "question" ? "replied" : "handled",
-              t.type === "send_offer" ? "Approved" : t.type === "question" ? "Replied" : "Handled",
-            ),
+            t.type === "question"
+              ? reply(t)
+              : void actions.complete(
+                  t,
+                  t.type === "send_offer" ? "approved" : "handled",
+                  t.type === "send_offer" ? "Approved" : "Handled",
+                ),
         },
         {
           label: t.assigneeId ? "Reassign" : "Delegate",
@@ -316,11 +335,7 @@ function TasksPage() {
       if (t.assigneeId === identity.userId) {
         if (t.type === "question") {
           return [
-            {
-              label: "Reply",
-              kind: "primary",
-              onClick: () => void actions.complete(t, "replied", "Replied"),
-            },
+            { label: "Reply", kind: "primary", onClick: () => reply(t) },
             { label: "Snooze 2h", onClick: () => void actions.snooze(t, 2) },
           ];
         }
@@ -705,7 +720,7 @@ function TasksPage() {
             first_name: string;
             last_name: string;
             avatar_url?: string | null;
-            summary?: { primaryPractitionerId: string | null } | null;
+            summary?: { primaryPractitionerId: string | null; type?: PatientType } | null;
           }>
         }
         onPick={(p) => {
@@ -719,6 +734,7 @@ function TasksPage() {
               avatarUrl: p.avatar_url ?? null,
               phone: null,
               practitionerId: p.summary?.primaryPractitionerId ?? null,
+              patientType: p.summary?.type ?? null,
             },
             type: "chase_booking",
             typeLabel: "",
@@ -775,14 +791,14 @@ function NewTaskPicker({
     first_name: string;
     last_name: string;
     avatar_url?: string | null;
-    summary?: { primaryPractitionerId: string | null } | null;
+    summary?: { primaryPractitionerId: string | null; type?: PatientType } | null;
   }>;
   onPick: (p: {
     id: string;
     first_name: string;
     last_name: string;
     avatar_url?: string | null;
-    summary?: { primaryPractitionerId: string | null } | null;
+    summary?: { primaryPractitionerId: string | null; type?: PatientType } | null;
   }) => void;
 }) {
   const [q, setQ] = useState("");

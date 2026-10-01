@@ -79,7 +79,7 @@ test.describe("owner can hand profile-change approval to a manager", () => {
     const base = baseURL ?? "http://localhost:8091";
     await page.goto("/team");
     await expect(page.locator("#profile-change-requests")).toBeVisible();
-    const grant = page.getByRole("switch", { name: "Approve profile change requests for Manager" });
+    const grant = page.getByRole("switch", { name: "Approve staff requests for Manager" });
     await grant.scrollIntoViewIfNeeded();
     await expect(grant).not.toBeChecked();
 
@@ -89,9 +89,9 @@ test.describe("owner can hand profile-change approval to a manager", () => {
 
     await context.addCookies([{ name: "demo_role", value: "owner", url: base }]);
     await page.goto("/team");
-    await page.getByRole("switch", { name: "Approve profile change requests for Manager" }).click();
+    await page.getByRole("switch", { name: "Approve staff requests for Manager" }).click();
     await expect(
-      page.getByRole("switch", { name: "Approve profile change requests for Manager" }),
+      page.getByRole("switch", { name: "Approve staff requests for Manager" }),
     ).toBeChecked();
 
     const inbox = page.locator("#profile-change-requests");

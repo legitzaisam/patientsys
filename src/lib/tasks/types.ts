@@ -345,9 +345,3 @@ export function dueAtForPreset(preset: DuePreset, now: Date = new Date()): strin
   const offsetHours = londonHour - 12;
   return new Date(Date.parse(`${key}T18:00:00Z`) - offsetHours * 3_600_000).toISOString();
 }
-
-/** "Rule · Skin plan step overdue", "Portal · Urgent portal question", "Manual · Assigned by Dr Amara Osei". */
-export function taskSourceLine(source: TaskSource, sourceLabel: string | null | undefined) {
-  const prefix = source === "rule" ? "Rule" : source === "portal" ? "Portal" : "Manual";
-  return sourceLabel ? `${prefix} · ${sourceLabel}` : prefix;
-}

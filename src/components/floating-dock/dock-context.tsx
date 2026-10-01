@@ -37,6 +37,9 @@ type DockApi = {
   requestTeamChat: (peer: TeamChatContext) => void;
   /** `seq` is bumped on every request so the same thread can be re-opened. */
   chatRequest: ChatRequest | null;
+  /** The last patient thread staff wrote to from the dock; `seq` bumps per message so pages can react (the Tasks page closes the Reply task). */
+  patientMessageSent: { patientId: string; seq: number } | null;
+  notifyPatientMessageSent: (patientId: string) => void;
 };
 
 const DockContext = createContext<DockApi | null>(null);
@@ -45,6 +48,10 @@ export function FloatingDockProvider({ children }: { children: React.ReactNode }
   const [chatPage, setChatPage] = useState<ChatPageContext | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
+  const [patientMessageSent, setPatientMessageSent] = useState<{
+    patientId: string;
+    seq: number;
+  } | null>(null);
   const requestChat = useCallback((thread: ChatPageContext) => {
     setChatRequest((prev) => ({ ...thread, kind: "patient", seq: (prev?.seq ?? 0) + 1 }));
     setChatOpen(true);
@@ -53,9 +60,30 @@ export function FloatingDockProvider({ children }: { children: React.ReactNode }
     setChatRequest((prev) => ({ ...peer, kind: "team", seq: (prev?.seq ?? 0) + 1 }));
     setChatOpen(true);
   }, []);
+  const notifyPatientMessageSent = useCallback((patientId: string) => {
+    setPatientMessageSent((prev) => ({ patientId, seq: (prev?.seq ?? 0) + 1 }));
+  }, []);
   const value = useMemo(
-    () => ({ chatPage, setChatPage, chatOpen, setChatOpen, requestChat, requestTeamChat, chatRequest }),
-    [chatPage, chatOpen, requestChat, requestTeamChat, chatRequest],
+    () => ({
+      chatPage,
+      setChatPage,
+      chatOpen,
+      setChatOpen,
+      requestChat,
+      requestTeamChat,
+      chatRequest,
+      patientMessageSent,
+      notifyPatientMessageSent,
+    }),
+    [
+      chatPage,
+      chatOpen,
+      requestChat,
+      requestTeamChat,
+      chatRequest,
+      patientMessageSent,
+      notifyPatientMessageSent,
+    ],
   );
   return <DockContext.Provider value={value}>{children}</DockContext.Provider>;
 }
@@ -73,6 +101,8 @@ export function useFloatingDock(): DockApi {
       requestChat: () => {},
       requestTeamChat: () => {},
       chatRequest: null,
+      patientMessageSent: null,
+      notifyPatientMessageSent: () => {},
     };
   }
   return ctx;

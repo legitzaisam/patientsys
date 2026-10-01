@@ -132,9 +132,9 @@ export const PERMISSION_META: Record<
       "Open the Team page and read colleagues' profiles and compliance status. Staff documents, profile edits and access changes stay with managers and the owner.",
   },
   "team.approve_changes": {
-    label: "Approve profile change requests",
+    label: "Approve staff requests",
     description:
-      "Review staff requests to change name, job title, registration, work email or working arrangement. Off for managers unless the clinic owner hands this over.",
+      "See the dashboard's Requests to approve and review staff requests: profile changes (name, job title, registration, work email, working arrangement) and, together with Edit staff profiles, time off and working-pattern changes. Off for managers unless the clinic owner hands this over.",
   },
   "team.manage_profiles": {
     label: "Edit staff profiles",

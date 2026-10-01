@@ -172,6 +172,24 @@ export function useTaskActions() {
         call: () => doCompleteMany({ data: { taskIds: ids, resolution: "handled" } }),
         message: () => `${ids.length} task${ids.length === 1 ? "" : "s"} marked as handled.`,
       }),
+    /**
+     * Done on a dashboard row: one call per task so the "holder closes it" rule
+     * applies to non-managers too; one toast, and Undo puts every one back.
+     */
+    completeFromDashboard: (ids: string[], who: string) =>
+      run({
+        ids,
+        patch: (x) => ({ ...x, status: "done", resolution: "handled", dueLabel: "Handled" }),
+        call: async () => {
+          const eventIds: number[] = [];
+          for (const taskId of ids) {
+            const r = await doComplete({ data: { taskId, resolution: "handled" } });
+            eventIds.push(r.eventId);
+          }
+          return { eventIds };
+        },
+        message: () => `${who}: handled. Cleared here and on the Tasks page.`,
+      }),
     escalate: (t: TaskView_) =>
       run({
         ids: [t.id],

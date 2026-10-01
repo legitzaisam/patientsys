@@ -44,7 +44,7 @@ const APPROVE_PROFILE_CHANGES = "team.approve_changes";
 /**
  * Who should be pinged about a profile change request.
  * Owners (and software admins) always receive it. Everyone else only does
- * when the owner has granted Approve profile change requests.
+ * when the owner has granted Approve staff requests.
  */
 export function profileChangeApproverIds(input: {
   requesterId: string;
@@ -85,15 +85,6 @@ export function profileChangeShowsReviewer(input: Parameters<typeof profileChang
   return profileChangeApproverIds(input).length > 1;
 }
 
-/** Owner, software admin, or the manager role — the people who review staff profile updates. */
-export function canSeeProfileChangeAttention(identity: {
-  isOwner?: boolean;
-  isAdmin?: boolean;
-  roles?: string[];
-}) {
-  return Boolean(identity.isOwner || identity.isAdmin || identity.roles?.includes("manager"));
-}
-
 type ProfileChangeRequestRow = {
   id: string;
   user_id: string;
@@ -124,7 +115,10 @@ export function profileChangeRequestSummary(row: ProfileChangeRequestRow) {
   return bits.join(", ") || "Profile update";
 }
 
-/** Pending requests the viewer can act on, for Attention needed → This week. */
+/**
+ * Pending profile changes the viewer can act on, for Attention needed → This
+ * week → Requests to approve, beside the time-off and working-pattern requests.
+ */
 export function profileChangeAttentionItems(
   requests: ProfileChangeRequestRow[],
   viewer: { userId: string; isOwner?: boolean; isAdmin?: boolean },
@@ -139,10 +133,11 @@ export function profileChangeAttentionItems(
     })
     .map((row) => ({
       id: `profile-change-${row.id}`,
-      kind: "profile_change",
+      kind: "staff_request",
       urgency: "this_week" as const,
       title: `${(row.full_name ?? "").trim() || "Team member"} — profile change`,
-      subtitle: profileChangeRequestSummary(row),
+      // The list shows the last segment first: "Profile change · job title, registration".
+      subtitle: `${profileChangeRequestSummary(row)} · Profile change`,
       href: "/team#profile-change-requests",
     }));
 }

@@ -45,7 +45,7 @@ import {
 } from "@/lib/metrics/appointment-flags";
 import { complianceReminders } from "@/lib/metrics/compliance";
 import { ESSENTIAL_DOC_CATEGORIES, complianceStatus } from "@/lib/staff-doc-compliance";
-import { canManageProfiles, canSetCommission } from "@/lib/staff-access";
+import { canApproveStaffRequests, canManageProfiles, canSetCommission } from "@/lib/staff-access";
 import {
   fullPattern,
   initialsOf,
@@ -126,6 +126,7 @@ import {
   type TaskView,
 } from "@/lib/tasks/types";
 import { buildRecordsSummaries } from "@/lib/patients/records-rows";
+import { patientTypeFrom } from "@/lib/patients/records-summary";
 import { boardRisk, dueBucketKey } from "@/lib/patients/board-risk";
 import * as schemas from "@/lib/validation/schemas";
 import * as portal from "@/lib/portal/shape";
@@ -153,7 +154,6 @@ import { assertPhone } from "@/lib/phone";
 import { practitionerDayAlerts, type PractitionerDayAlertRow } from "@/lib/practitioner-day-alerts";
 import { parseStaffAlertTitle, teamAlertPreview } from "@/lib/staff-alert-title";
 import {
-  canSeeProfileChangeAttention,
   canSelfApplyIdentityChanges,
   clinicHasSeparateManager,
   profileChangeApproverIds,
@@ -713,7 +713,11 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     for (const item of complianceReminders(profiles, todayISO)) attentionItems.push(item);
   }
 
-  if (canManageProfiles(me)) {
+  // Requests to approve: the owner always; a manager once granted Approve
+  // staff requests. Time off and working patterns are approved on the
+  // colleague's Schedule tab, so those rows also need Edit staff profiles.
+  const approver = canApproveStaffRequests(me);
+  if (approver && canManageProfiles(me)) {
     attentionItems.push(
       ...staffRequestAttentionItems(
         {
@@ -753,7 +757,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     );
   }
 
-  if (canSeeProfileChangeAttention(me)) {
+  if (approver) {
     attentionItems.push(
       ...profileChangeAttentionItems(profileChangeRequests, {
         userId: me.userId,
@@ -769,28 +773,26 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     activePlans = activePlans.filter((p) => !p.practitioner_id || p.practitioner_id === me.userId);
   }
   const todayKeyForPlans = clinicDayKey(today);
-  // Tasks: the page owns the detail; Attention needed carries the two aggregates
-  // (overdue, due today) for what this person can see. Plan-step dues and
-  // misses are tasks now, so they no longer appear here one by one.
+  // Tasks: each one on this person's plate (assigned to them, or waiting for
+  // an owner) sits under the accordion for its type — urgent when late or due
+  // within three days, this week within ten. Plan-step dues and misses are
+  // tasks now, so they no longer appear here one by one.
   demoSyncRuleTasks();
-  {
-    const practitioners = demoPatientPractitioners(today);
-    attentionItems.push(
-      ...taskAttentionItems(
-        demoTaskRows(),
-        {
-          userId: me.userId,
-          roles: me.roles,
-          isManager: me.isManager,
-          isOwner: me.isOwner,
-          isAdmin: me.isAdmin,
-          permissions: me.permissions,
-        },
-        (id) => practitioners.get(id) ?? null,
-        today,
-      ),
-    );
-  }
+  attentionItems.push(
+    ...taskAttentionItems(
+      demoTaskRows(),
+      {
+        userId: me.userId,
+        roles: me.roles,
+        isManager: me.isManager,
+        isOwner: me.isOwner,
+        isAdmin: me.isAdmin,
+        permissions: me.permissions,
+      },
+      demoPatientLite(today),
+      today,
+    ),
+  );
   const journeyPhases = (["consult", "foundation", "build", "results"] as const).map((phase) => {
     const inPhase = activePlans.filter((p) => p.phase === phase);
     return {
@@ -5832,6 +5834,10 @@ function demoPatientPractitioners(now: Date) {
 
 function demoPatientLite(now: Date): (id: string) => PatientLite | null {
   const practitioners = demoPatientPractitioners(now);
+  const onPlan = new Set(
+    treatmentPlans.filter((p) => p.status === "active").map((p) => p.patient_id as string),
+  );
+  const visited = new Set(treatments.map((t) => t.patient_id as string));
   return (id: string) => {
     const p = patientById(id);
     if (!p) return null;
@@ -5842,6 +5848,7 @@ function demoPatientLite(now: Date): (id: string) => PatientLite | null {
       avatar_url: p.avatar_url ?? null,
       phone: p.phone ?? null,
       practitionerId: practitioners.get(id) ?? null,
+      patientType: patientTypeFrom(onPlan.has(id), visited.has(id) || !!p.last_visit_at),
     };
   };
 }

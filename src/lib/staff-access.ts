@@ -26,6 +26,18 @@ export function canManageProfiles(identity: IdentityLike): boolean {
   return isManagerRole(identity) && can(identity, "team.manage_profiles");
 }
 
+/**
+ * Who gets the dashboard's "Requests to approve": the clinic owner and the
+ * software admin always; a manager once the owner grants `team.approve_changes`
+ * ("Approve staff requests") under Staff access. Time-off and working-pattern
+ * rows additionally need `canManageProfiles`, where Approve / Decline live.
+ */
+export function canApproveStaffRequests(identity: IdentityLike): boolean {
+  if (!identity) return false;
+  if (identity.isOwner || identity.isAdmin) return true;
+  return isManagerRole(identity) && can(identity, "team.approve_changes");
+}
+
 /** See and set a colleague's commission rate and open their Performance & earnings. */
 export function canSetCommission(identity: IdentityLike): boolean {
   if (!identity) return false;

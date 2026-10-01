@@ -213,7 +213,7 @@ export const ACCESS_CATALOGUE: CatalogueNode[] = [
     id: "team-approve",
     parentId: "team",
     kind: "component",
-    label: "Approve profile change requests",
+    label: "Approve staff requests",
     route: "/team",
     permission: "team.approve_changes",
     defaults: staff({ manager: false, practitioner: false, front_desk: false }),

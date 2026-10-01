@@ -7,7 +7,6 @@ import {
   resolutionLabel,
   suggestedAssignee,
   taskDueLabel,
-  taskSourceLine,
   TASK_TYPE_META,
   ROLE_VIEWS,
 } from "@/lib/tasks/types";
@@ -95,8 +94,6 @@ describe("vocabulary", () => {
     expect(isTaskType("chase")).toBe(false);
     expect(resolutionLabel("no_answer")).toBe("No answer");
     expect(resolutionLabel("something_else")).toBe("something else");
-    expect(taskSourceLine("rule", "Skin plan step overdue")).toBe("Rule · Skin plan step overdue");
-    expect(taskSourceLine("manual", null)).toBe("Manual");
     expect(TASK_TYPE_META.rebook_no_show.chip).toContain("noshow");
     expect(ROLE_VIEWS.front_desk.map((v) => v.view)).toEqual(["queue", "pool", "retries", "done"]);
     expect(ROLE_VIEWS.practitioner[0]?.view).toBe("assigned");
