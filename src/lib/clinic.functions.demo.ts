@@ -669,7 +669,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
     }
   }
 
-  // Settings → Payments and deposits.
+  // Settings → Rules → Deposits.
   const DEPOSIT_LEAD_DAYS = Number(db.clinic["deposit_lead_days"] ?? 3);
   const depositHorizonDays = attentionDepositHorizonDays(DEPOSIT_LEAD_DAYS) + 1;
   let unpaidDeposits = sortAsc(
@@ -6545,7 +6545,11 @@ export const updateDepositRules = createServerFn({ method: "POST" })
     requireSettings();
     db.clinic["deposit_lead_days"] = data.deposit_lead_days;
     db.clinic["deposit_percent"] = data.deposit_percent;
-    return { ok: true };
+    return {
+      ok: true as const,
+      deposit_lead_days: data.deposit_lead_days,
+      deposit_percent: data.deposit_percent,
+    };
   });
 
 export const updateClinicDetails = createServerFn({ method: "POST" })

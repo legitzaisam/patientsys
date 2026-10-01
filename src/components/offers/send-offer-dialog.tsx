@@ -143,7 +143,7 @@ export function SendOfferDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-3xl overflow-y-auto rounded-xl" data-qc="send-offer">
+      <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-3xl overflow-y-auto rounded-xl" data-qc="send-offer">
         <DialogHeader>
           <DialogTitle>
             {result

@@ -19,6 +19,8 @@ import { RichNotesEditor } from "@/components/notes/rich-notes-editor";
 import { Button } from "@/components/ui/button";
 import { useIdentity } from "@/lib/use-identity";
 import { cn } from "@/lib/utils";
+import { getAppZoom } from "@/lib/app-zoom";
+import { startPointerDrag } from "@/lib/pointer-drag";
 
 /**
  * "My notes" as a movable, resizable floating card.
@@ -51,26 +53,34 @@ type NotesFloatApi = {
 
 const NotesFloatContext = createContext<NotesFloatApi | null>(null);
 
+/** Viewport size in CSS pixels (the app may be zoomed — see src/lib/app-zoom.ts). */
+function viewportCss() {
+  const zoom = getAppZoom();
+  return { w: window.innerWidth / zoom, h: window.innerHeight / zoom };
+}
+
 function clampSize(size: Size): Size {
   if (typeof window === "undefined") return size;
+  const vp = viewportCss();
   return {
-    w: Math.min(Math.max(MIN_W, size.w), Math.max(MIN_W, window.innerWidth)),
-    h: Math.min(Math.max(MIN_H, size.h), Math.max(MIN_H, window.innerHeight - EDGE_Y * 2)),
+    w: Math.min(Math.max(MIN_W, size.w), Math.max(MIN_W, vp.w)),
+    h: Math.min(Math.max(MIN_H, size.h), Math.max(MIN_H, vp.h - EDGE_Y * 2)),
   };
 }
 
 function clampPos(pos: Pos, size: Size): Pos {
   if (typeof window === "undefined") return pos;
   const { w, h } = clampSize(size);
+  const vp = viewportCss();
   return {
-    x: Math.min(Math.max(0, pos.x), Math.max(0, window.innerWidth - w)),
-    y: Math.min(Math.max(EDGE_Y, pos.y), Math.max(EDGE_Y, window.innerHeight - h - EDGE_Y)),
+    x: Math.min(Math.max(0, pos.x), Math.max(0, vp.w - w)),
+    y: Math.min(Math.max(EDGE_Y, pos.y), Math.max(EDGE_Y, vp.h - h - EDGE_Y)),
   };
 }
 
 function defaultPos(size: Size): Pos {
   if (typeof window === "undefined") return { x: 600, y: 80 };
-  return clampPos({ x: window.innerWidth - size.w - 40, y: 64 }, size);
+  return clampPos({ x: viewportCss().w - size.w - 40, y: 64 }, size);
 }
 
 function loadSize(): Size {
@@ -121,16 +131,6 @@ export function FloatingNotesProvider({ children }: { children: ReactNode }) {
   const sizeRef = useRef(size);
   sizeRef.current = size;
 
-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
-  const resizeRef = useRef<{
-    edge: ResizeEdge;
-    startX: number;
-    startY: number;
-    origW: number;
-    origH: number;
-    origX: number;
-    origY: number;
-  } | null>(null);
 
   const toggle = useCallback(() => {
     setOpen((current) => {
@@ -165,87 +165,43 @@ export function FloatingNotesProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("resize", onWin);
   }, []);
 
+  const savePlacement = () => {
+    setSize((current) => {
+      persist(SIZE_KEY, current);
+      return current;
+    });
+    setPos((current) => {
+      if (current) persist(POS_KEY, current);
+      return current;
+    });
+  };
+
   function onDragHandleDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!pos || (event.target as HTMLElement).closest("button")) return;
-    event.preventDefault();
-    dragRef.current = { startX: event.clientX, startY: event.clientY, origX: pos.x, origY: pos.y };
-    document.body.classList.add("select-none");
-
-    function onMove(moveEvent: globalThis.PointerEvent) {
-      const drag = dragRef.current;
-      if (!drag) return;
-      setPos(
-        clampPos(
-          {
-            x: drag.origX + (moveEvent.clientX - drag.startX),
-            y: drag.origY + (moveEvent.clientY - drag.startY),
-          },
-          sizeRef.current,
-        ),
-      );
-    }
-
-    function onUp() {
-      dragRef.current = null;
-      document.body.classList.remove("select-none");
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      setPos((current) => {
-        if (current) persist(POS_KEY, current);
-        return current;
-      });
-    }
-
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    if (!pos || (event.target as HTMLElement).closest("button, a, input, textarea")) return;
+    const origin = pos;
+    startPointerDrag(event, {
+      onMove: (dx, dy) =>
+        setPos(clampPos({ x: origin.x + dx, y: origin.y + dy }, sizeRef.current)),
+      onEnd: savePlacement,
+    });
   }
 
   function onResizeDown(edge: ResizeEdge) {
     return (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!pos) return;
-      event.preventDefault();
       event.stopPropagation();
-      resizeRef.current = {
-        edge,
-        startX: event.clientX,
-        startY: event.clientY,
-        origW: size.w,
-        origH: size.h,
-        origX: pos.x,
-        origY: pos.y,
-      };
-      document.body.classList.add("select-none");
-
-      function onMove(moveEvent: globalThis.PointerEvent) {
-        const resize = resizeRef.current;
-        if (!resize) return;
-        const dx = moveEvent.clientX - resize.startX;
-        const dy = moveEvent.clientY - resize.startY;
-        const next = clampSize({
-          w: resize.edge === "s" ? resize.origW : resize.origW + dx,
-          h: resize.edge === "e" ? resize.origH : resize.origH + dy,
-        });
-        setSize(next);
-        setPos(clampPos({ x: resize.origX, y: resize.origY }, next));
-      }
-
-      function onUp() {
-        resizeRef.current = null;
-        document.body.classList.remove("select-none");
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        setSize((current) => {
-          persist(SIZE_KEY, current);
-          return current;
-        });
-        setPos((current) => {
-          if (current) persist(POS_KEY, current);
-          return current;
-        });
-      }
-
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
+      const origin = { w: size.w, h: size.h, x: pos.x, y: pos.y };
+      startPointerDrag(event, {
+        onMove: (dx, dy) => {
+          const next = clampSize({
+            w: edge === "s" ? origin.w : origin.w + dx,
+            h: edge === "e" ? origin.h : origin.h + dy,
+          });
+          setSize(next);
+          setPos(clampPos({ x: origin.x, y: origin.y }, next));
+        },
+        onEnd: savePlacement,
+      });
     };
   }
 
@@ -275,7 +231,7 @@ export function FloatingNotesProvider({ children }: { children: ReactNode }) {
               <div className="glass-card relative flex h-full flex-col p-0 !bg-[rgba(255,255,255,0.94)] shadow-[var(--shadow-popover)]">
                 <div
                   onPointerDown={onDragHandleDown}
-                  className="flex shrink-0 cursor-grab items-center gap-1.5 border-b border-edge-2 px-4 py-3 active:cursor-grabbing"
+                  className="drag-handle flex shrink-0 cursor-grab items-center gap-1.5 border-b border-edge-2 px-4 py-3 active:cursor-grabbing"
                 >
                   <GripVertical className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                   <p className="text-sm font-semibold text-foreground">My notes</p>
@@ -299,20 +255,20 @@ export function FloatingNotesProvider({ children }: { children: ReactNode }) {
                   aria-orientation="vertical"
                   aria-label="Resize notes width"
                   onPointerDown={onResizeDown("e")}
-                  className="absolute inset-y-3 right-0 z-10 w-2 cursor-ew-resize touch-none"
+                  className="drag-handle absolute inset-y-3 right-0 z-10 w-2 cursor-ew-resize touch-none pointer-coarse:w-4"
                 />
                 <div
                   role="separator"
                   aria-orientation="horizontal"
                   aria-label="Resize notes height"
                   onPointerDown={onResizeDown("s")}
-                  className="absolute inset-x-3 bottom-0 z-10 h-2 cursor-ns-resize touch-none"
+                  className="drag-handle absolute inset-x-3 bottom-0 z-10 h-2 cursor-ns-resize touch-none pointer-coarse:h-4"
                 />
                 <div
                   role="separator"
                   aria-label="Resize notes"
                   onPointerDown={onResizeDown("se")}
-                  className="absolute bottom-0 right-0 z-20 flex h-5 w-5 cursor-nwse-resize touch-none items-end justify-end p-1"
+                  className="drag-handle absolute bottom-0 right-0 z-20 flex h-5 w-5 cursor-nwse-resize touch-none pointer-coarse:h-8 pointer-coarse:w-8 items-end justify-end p-1"
                 >
                   <span
                     aria-hidden

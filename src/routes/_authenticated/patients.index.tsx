@@ -270,7 +270,7 @@ function PatientsPage() {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
+        <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
           <DialogHeader>
             <DialogTitle>New patient</DialogTitle>
           </DialogHeader>

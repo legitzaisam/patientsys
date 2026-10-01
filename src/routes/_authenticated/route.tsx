@@ -120,7 +120,7 @@ function AuthenticatedLayout() {
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-app-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
       </div>
     );
@@ -220,7 +220,7 @@ function IdentityGate() {
 
   if (signingOutRevoked) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-app-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
       </div>
     );
@@ -228,7 +228,7 @@ function IdentityGate() {
 
   if (isError) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="flex min-h-app-screen items-center justify-center px-4">
         <div className="glass-card max-w-md p-8 text-center">
           <h1 className="page-title">
             We could not load your account
@@ -256,7 +256,7 @@ function IdentityGate() {
 
   if (isLoading || !identity || signingOutRevoked) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-app-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
       </div>
     );
@@ -272,7 +272,7 @@ function IdentityGate() {
   }
   if (lostStaffAccess) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-app-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
       </div>
     );

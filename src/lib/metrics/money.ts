@@ -42,7 +42,7 @@ export type MoneyAppointment = {
 };
 
 export type MoneyOptions = {
-  /** Deposit share of the price, from Settings (Payments and deposits). */
+  /** Deposit share of the price, from Settings (Rules → Deposits). */
   depositPercent: number;
   /** A treatment with no booking has no payment record; walk-ins pay at the desk. */
   unlinkedCountsAs?: "paid" | "unpaid";

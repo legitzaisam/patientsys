@@ -23,6 +23,9 @@
     "test:metrics": "playwright test --config playwright.metrics.config.ts",
     "review:captures": "playwright test --config playwright.review.config.ts",
     "test:responsive": "playwright test --config playwright.responsive.config.ts",
+    "test:ipad": "playwright test --config playwright.responsive.config.ts --project=ipad-mini-portrait --project=ipad-pro-landscape",
+    "test:drag": "playwright test --config playwright.responsive.config.ts e2e/responsive/diary-drag.spec.ts e2e/responsive/panel-drag.spec.ts",
+    "test:journey-tap": "playwright test --config playwright.responsive.config.ts e2e/responsive/journey-pill-tap.spec.ts",
     "test:responsive:gate": "RESPONSIVE_GATE=major playwright test --config playwright.responsive.config.ts e2e/responsive/matrix.spec.ts",
     "qc:responsive": "npm run test:responsive; node scripts/responsive-report.mjs",
     "verify": "npm run check:policy && npm run check:validators && npm run check:tenancy && npm run check:metrics && npm run test:unit && npm run test:e2e"

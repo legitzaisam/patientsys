@@ -236,7 +236,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-[28rem] flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-6 shadow-popover sm:rounded-[22px]">
+        <DialogContent className="flex max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-[28rem] flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-6 shadow-popover sm:rounded-[22px]">
           <DialogHeader className="shrink-0 pr-8 text-left">
             <DialogTitle>
               {result

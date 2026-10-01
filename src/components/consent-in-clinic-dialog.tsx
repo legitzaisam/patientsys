@@ -83,7 +83,7 @@ export function ConsentInClinicDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto" data-qc="consent-in-clinic">
+      <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-lg overflow-y-auto" data-qc="consent-in-clinic">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-accent-ink" aria-hidden />
@@ -99,7 +99,7 @@ export function ConsentInClinicDialog({
         </DialogHeader>
 
         {data ? (
-          <div className="max-h-[min(62dvh,560px)] space-y-4 overflow-y-auto pr-1">
+          <div className="max-h-[min(calc(62*var(--app-dvh)),560px)] space-y-4 overflow-y-auto pr-1">
             <div className="rounded-2xl bg-glass-2 p-4 shadow-inset-hi">
               <p className="text-sm font-semibold text-foreground">{data.document.title}</p>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{data.document.body}</p>

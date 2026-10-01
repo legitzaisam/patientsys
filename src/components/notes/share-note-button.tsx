@@ -106,7 +106,7 @@ export function ShareNoteButton({
           <Send className="h-3.5 w-3.5" />
         </button>
       </DialogTrigger>
-      <DialogContent className="flex max-h-[min(90dvh,560px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge bg-card/95 p-5 shadow-popover backdrop-blur-glass backdrop-saturate-150 sm:rounded-[22px]">
+      <DialogContent className="flex max-h-[min(calc(90*var(--app-dvh)),560px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge bg-card/95 p-5 shadow-popover backdrop-blur-glass backdrop-saturate-150 sm:rounded-[22px]">
         <DialogHeader className="shrink-0 pr-8 text-left">
           <DialogTitle>Share note</DialogTitle>
           <DialogDescription>

@@ -235,7 +235,7 @@ function ChatWindow({
             : "Patient conversations"
       }
       data-qc="chat-window"
-      className="pointer-events-auto absolute bottom-[calc(100%+0.75rem)] right-0 flex h-[560px] max-h-[70vh] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-edge bg-popover shadow-[var(--shadow-popover)] backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:h-auto max-sm:max-h-[min(70dvh,32rem)] max-sm:w-auto max-sm:max-w-none"
+      className="pointer-events-auto absolute bottom-[calc(100%+0.75rem)] right-0 flex h-[560px] max-h-[calc(70*var(--app-vh))] w-[380px] max-w-[calc(calc(100*var(--app-vw))-2.5rem)] flex-col overflow-hidden rounded-2xl border border-edge bg-popover shadow-[var(--shadow-popover)] backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:h-auto max-sm:max-h-[min(calc(70*var(--app-dvh)),32rem)] max-sm:w-auto max-sm:max-w-none"
     >
       <header
         className={cn(

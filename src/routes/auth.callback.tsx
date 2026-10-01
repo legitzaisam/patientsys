@@ -52,7 +52,7 @@ function AuthCallback() {
   }, [fetchMe, navigate]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6">
+    <div className="flex min-h-app-screen flex-col items-center justify-center gap-4 px-6">
       <BrandLockup />
       {error ? (
         <div className="glass-card max-w-sm p-6 text-center">

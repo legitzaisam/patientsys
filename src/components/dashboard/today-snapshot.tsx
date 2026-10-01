@@ -48,6 +48,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { getAppZoom } from "@/lib/app-zoom";
 
 type Stage = "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
 
@@ -153,17 +154,20 @@ function AppointmentCarousel({
     startX: number;
     startY: number;
     startScroll: number;
+    zoom: number;
     moved: boolean;
   } | null>(null);
 
   const slides = () =>
     Array.from(scrollerRef.current?.querySelectorAll<HTMLElement>("[data-diary-slide]") ?? []);
 
+  /** Horizontal padding in screen pixels, to compare with getBoundingClientRect(). */
   const padX = (el: HTMLElement) => {
     const styles = getComputedStyle(el);
+    const zoom = getAppZoom();
     return {
-      left: Number.parseFloat(styles.paddingLeft) || 0,
-      right: Number.parseFloat(styles.paddingRight) || 0,
+      left: (Number.parseFloat(styles.paddingLeft) || 0) * zoom,
+      right: (Number.parseFloat(styles.paddingRight) || 0) * zoom,
     };
   };
 
@@ -218,7 +222,7 @@ function AppointmentCarousel({
     if (!slide) return;
     const delta =
       slide.getBoundingClientRect().left - (el.getBoundingClientRect().left + padX(el).left);
-    el.scrollBy({ left: delta, behavior });
+    el.scrollBy({ left: delta / getAppZoom(), behavior });
     requestAnimationFrame(syncEdges);
     if (behavior === "smooth") {
       const onEnd = () => {
@@ -316,6 +320,9 @@ function AppointmentCarousel({
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    // Fingers and pens scroll the strip natively; driving scrollLeft as well
+    // made it move twice as far and jump on iPad.
+    if (event.pointerType !== "mouse") return;
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest("a, button, input, textarea, select, label")) return;
@@ -326,6 +333,7 @@ function AppointmentCarousel({
       startX: event.clientX,
       startY: event.clientY,
       startScroll: el.scrollLeft,
+      zoom: getAppZoom(),
       moved: false,
     };
     // Capture is taken only once a drag is under way (see onPointerMove).
@@ -353,7 +361,7 @@ function AppointmentCarousel({
     }
     if (!drag.moved) return;
     event.preventDefault();
-    el.scrollLeft = drag.startScroll - dx;
+    el.scrollLeft = drag.startScroll - dx / drag.zoom;
     syncEdges();
   };
 
@@ -652,7 +660,7 @@ function TodayCard({
         }}
       >
         <DialogContent
-          className="max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md gap-0 overflow-y-auto overscroll-contain rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
+          className="max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md gap-0 overflow-y-auto overscroll-contain rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
         >
           <DialogHeader className="pr-8 text-left">
             <DialogTitle>

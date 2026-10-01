@@ -143,7 +143,7 @@ export function AlertBubble({ roles }: { roles: string[] }) {
         }}
         className={
           showPanel
-            ? "pointer-events-auto flex w-[min(18rem,calc(100vw-2.5rem))] flex-col items-end gap-3"
+            ? "pointer-events-auto flex w-[min(18rem,calc(calc(100*var(--app-vw))-2.5rem))] flex-col items-end gap-3"
             : "hidden"
         }
       >

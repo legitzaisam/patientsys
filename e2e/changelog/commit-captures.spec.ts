@@ -269,7 +269,7 @@ export const SCENES: Scene[] = [
   { id: "retention", persona: "owner", path: "/retention", settle: '[data-qc="metric:retention.oneVisitOnly"], h1', what: "Retention" },
   { id: "offers", persona: "owner", path: "/offers", settle: '[data-qc="offer-stage-count"], h1', what: "Offers" },
   { id: "settings", persona: "owner", path: "/settings", settle: '[data-qc="settings-tabs"], h1', what: "Settings, Clinic" },
-  { id: "settings-payments", persona: "owner", path: "/settings?tab=payments", settle: '[data-qc="settings-tabs"], h1', what: "Settings, Payments and deposits" },
+  { id: "settings-rules", persona: "owner", path: "/settings?tab=rules", settle: '[data-qc="settings-tabs"], h1', what: "Settings, Rules (deposits)" },
 
   // Floating dock, alerts, bell, sidebar
   { id: "dock-chat", persona: "owner", path: "/dashboard", settle: "h1", keepDock: true, viewport: true, what: "Floating dock, chat window", open: openChat },

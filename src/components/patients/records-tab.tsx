@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Send } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { getAppZoom } from "@/lib/app-zoom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { PaginationBar } from "@/components/pagination-bar";
 import { SendOfferDialog } from "@/components/offers/send-offer-dialog";
 import { SendRecallDialog } from "@/components/retention/send-recall-dialog";
@@ -70,7 +71,7 @@ export function RecordsTab({
 }) {
   const navigate = useNavigate();
   useTasksLiveSync();
-  // Below the xl breakpoint the drawer is a right-hand sheet instead of a side column.
+  // Below the xl breakpoint the drawer is a centred popup instead of a side column.
   const narrow = useIsMobile(1280);
   // One clock per render of the list, so every row and the drawer agree on "today".
   const now = useMemo(() => new Date(), []);
@@ -196,6 +197,59 @@ export function RecordsTab({
     : (pageRows[0]?.id ?? null);
   const selected = pageRows.find((p) => p.id === selectedId) ?? null;
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Arriving from a deep link (a Journey board pill, the dashboard): bring the
+  // patient's row into view so the highlighted row is the one asked for, not
+  // just somewhere further down the page.
+  const scrolledFor = useRef<string | null>(null);
+  useEffect(() => {
+    const sel = search.sel;
+    if (!sel || scrolledFor.current === sel || selectedId !== sel) return;
+    scrolledFor.current = sel;
+    // The row can render before the page settles, and the router restores
+    // the page's scroll position after navigating — on a slow phone that can
+    // land well after the first paint. So keep checking for a few seconds and
+    // bring the row back whenever it is off screen, stopping as soon as the
+    // user touches, scrolls or types (never fight the user).
+    const scroller = document.getElementById("app-main-scroll");
+    const bring = () => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-qc="records-row"][data-selected="true"]',
+      );
+      if (!row) return;
+      const vv = window.visualViewport;
+      const top = vv ? vv.offsetTop : 0;
+      const height = vv ? vv.height : window.innerHeight;
+      const r = row.getBoundingClientRect();
+      if (r.top >= top && r.bottom <= top + height - 80) return;
+      if (scroller && scroller.scrollHeight > scroller.clientHeight) {
+        // Scroll the page's own scroller directly: centring the row in it.
+        const box = scroller.getBoundingClientRect();
+        const zoom = getAppZoom();
+        const delta = (r.top + r.height / 2 - (box.top + box.height / 2)) / zoom;
+        scroller.scrollTop += delta;
+      } else {
+        row.scrollIntoView({ block: "center" });
+      }
+    };
+    let stopped = false;
+    const stop = () => {
+      stopped = true;
+    };
+    const userEvents = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+    userEvents.forEach((type) => window.addEventListener(type, stop, { passive: true, once: true }));
+    const started = Date.now();
+    const tick = window.setInterval(() => {
+      if (stopped || Date.now() - started > 3000) window.clearInterval(tick);
+      else bring();
+    }, 120);
+    const frame = requestAnimationFrame(bring);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearInterval(tick);
+      userEvents.forEach((type) => window.removeEventListener(type, stop));
+    };
+  }, [search.sel, selectedId]);
 
   const [selectMode, setSelectMode] = useState(false);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -420,16 +474,19 @@ export function RecordsTab({
         {narrow === false ? <div>{drawer}</div> : null}
       </div>
 
-      <Sheet open={narrow === true && sheetOpen && !!selected} onOpenChange={setSheetOpen}>
-        <SheetContent
-          side="right"
-          className="w-[min(100vw-12px,420px)] overflow-y-auto border-l-0 bg-transparent p-3 shadow-none sm:max-w-none"
+      {/* Below xl (iPad, small laptops, phones) the patient card opens as a centred popup. */}
+      <Dialog open={narrow === true && sheetOpen && !!selected} onOpenChange={setSheetOpen}>
+        <DialogContent
+          className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] w-[min(calc(calc(100*var(--app-vw))-2rem),440px)] max-w-none gap-0 overflow-y-auto overscroll-contain rounded-[20px] border-0 bg-transparent p-0 shadow-none backdrop-blur-none backdrop-saturate-100 sm:rounded-[20px] [&_header]:pr-8"
           data-qc="records-drawer-sheet"
         >
-          <SheetTitle className="sr-only">Patient details</SheetTitle>
+          <DialogTitle className="sr-only">Patient details</DialogTitle>
+          <DialogDescription className="sr-only">
+            Summary, next step, open tasks and recent activity for this patient.
+          </DialogDescription>
           {drawer}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       <AssignTaskDialog
         open={!!assignFor}

@@ -16,10 +16,11 @@ import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_MODE } from "@/lib/demo/enabled";
 import { onDocumentTabBetweenFields } from "@/lib/tab-fields";
+import { installKeyboardViewport } from "@/lib/keyboard-viewport";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-app-screen items-center justify-center px-4">
       <div className="glass-card max-w-md p-10 text-center">
         <h1 className="text-7xl font-semibold tracking-[-0.03em] text-accent-ink">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
@@ -47,7 +48,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-app-screen items-center justify-center px-4">
       <div className="glass-card max-w-md p-10 text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
           This page didn't load
@@ -151,6 +152,8 @@ function RootComponent() {
   }, [router, queryClient]);
 
   useEffect(() => installClientErrorReporting(), []);
+  // Keep dialogs above the iPad / iPhone keyboard (src/lib/keyboard-viewport.ts).
+  useEffect(() => installKeyboardViewport(), []);
 
   useEffect(() => {
     document.addEventListener("keydown", onDocumentTabBetweenFields);

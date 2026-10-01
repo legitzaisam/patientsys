@@ -31,7 +31,7 @@ export function RouteErrorBoundary({
   }, [error, area]);
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-4">
+    <div className="flex min-h-[calc(60*var(--app-vh))] items-center justify-center px-4">
       <Card className="max-w-md p-8 text-center">
         <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-glass-2">
           <AlertTriangle className="h-5 w-5 text-ink-3" aria-hidden />

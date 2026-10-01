@@ -52,6 +52,7 @@ import { canSee, isAccessAdmin } from "@/lib/access-catalogue";
 import { initialsOf, laneFor } from "@/lib/practitioner-colours";
 import { useStaffPresence } from "@/lib/use-staff-presence";
 import { cn } from "@/lib/utils";
+import { startPointerDrag } from "@/lib/pointer-drag";
 
 type Identity = {
   userId?: string;
@@ -511,7 +512,6 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const [scrollBlend, setScrollBlend] = useState(0);
-  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => {
     const main = mainScrollRef.current;
@@ -682,25 +682,10 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   }
 
   function onResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    dragRef.current = { startX: event.clientX, startWidth: sidebarWidth };
-    document.body.classList.add("select-none", "cursor-col-resize");
-
-    function onMove(moveEvent: globalThis.PointerEvent) {
-      const drag = dragRef.current;
-      if (!drag) return;
-      persistWidth(drag.startWidth + (moveEvent.clientX - drag.startX));
-    }
-
-    function onUp() {
-      dragRef.current = null;
-      document.body.classList.remove("select-none", "cursor-col-resize");
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    }
-
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    const startWidth = sidebarWidth;
+    startPointerDrag(event, {
+      onMove: (dx) => persistWidth(startWidth + dx),
+    });
   }
 
   useEffect(() => {
@@ -743,12 +728,12 @@ export function AppShell({ identity, children }: { identity: Identity; children:
   };
 
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-app-screen overflow-hidden">
       {narrow && (
         <Sheet open={sidebarOpen} onOpenChange={setOpen}>
           <SheetContent
             side="left"
-            className="w-[min(20rem,88vw)] gap-0 border-edge bg-sidebar p-0 shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass [&>button]:hidden"
+            className="w-[min(20rem,calc(88*var(--app-vw)))] gap-0 border-edge bg-sidebar p-0 shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass [&>button]:hidden"
             data-qc="sidebar-drawer"
           >
             <SheetTitle className="sr-only">Navigation</SheetTitle>
@@ -761,7 +746,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
       )}
       {!narrow && sidebarOpen && (
         <aside
-          className="relative flex h-dvh shrink-0 flex-col border-r border-edge bg-sidebar shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass"
+          className="relative flex h-app-screen shrink-0 flex-col border-r border-edge bg-sidebar shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass"
           style={{ width: sidebarWidth }}
         >
           <SidebarChrome {...chrome} searchRef={searchRef} />
@@ -785,7 +770,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
                 persistWidth(sidebarWidth + 16);
               }
             }}
-            className="absolute inset-y-0 right-0 z-10 w-1 cursor-col-resize touch-none hover:bg-accent-soft"
+            className="drag-handle absolute inset-y-0 right-0 z-10 w-1 cursor-col-resize touch-none hover:bg-accent-soft"
           />
         </aside>
       )}

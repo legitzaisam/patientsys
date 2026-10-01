@@ -681,7 +681,7 @@ export const UpdateClinicDetails = z.object({
   reminder_offsets: z.array(z.number().int().min(1).max(2160)).max(6).optional(),
 });
 
-/** Payments and deposits settings: lead days before the visit, deposit share of the price. */
+/** Settings → Rules → Deposits: lead days before the visit, deposit share of the price. */
 export const UpdateDepositRules = z.object({
   deposit_lead_days: z.number().int().min(0).max(30),
   deposit_percent: z.number().int().min(0).max(100),

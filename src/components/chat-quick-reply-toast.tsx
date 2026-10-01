@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { formatTeamAlertToast, isStaffAlertReply } from "@/lib/staff-alert-title";
 import { pinAetheriaToast, unpinAetheriaToast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
+import { getAppZoom } from "@/lib/app-zoom";
 
 type ChatQuickReplyToastProps = {
   toastId: string | number;
@@ -92,7 +93,7 @@ function useQuickReplyToastDock(contentRef: React.RefObject<HTMLDivElement | nul
       if (!dragging.current || pointerId.current !== e.pointerId) return;
       const { x, offset, hidden } = dragStart.current;
       if (Math.abs(e.clientX - x) > 6) dragMoved.current = true;
-      applyLeft(el, Math.max(hidden, Math.min(0, offset + (e.clientX - x))), false);
+      applyLeft(el, Math.max(hidden, Math.min(0, offset + (e.clientX - x) / getAppZoom())), false);
     };
 
     const onUp = (e: PointerEvent) => {

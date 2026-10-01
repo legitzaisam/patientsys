@@ -110,7 +110,7 @@ export function RichNotesEditor({
       attributes: {
         class: cn(
           "rich-notes overflow-y-auto px-3.5 py-3 outline-none",
-          fill ? "min-h-0 flex-1" : "max-h-[min(70vh,36rem)] min-h-[140px]",
+          fill ? "min-h-0 flex-1" : "max-h-[min(calc(70*var(--app-vh)),36rem)] min-h-[140px]",
           theme.text,
           FONTS[prefs.font].cls,
         ),

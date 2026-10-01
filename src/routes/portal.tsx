@@ -136,7 +136,7 @@ function PortalLogin() {
   if (handoff) return null;
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="grid min-h-app-screen lg:grid-cols-2">
       <div className="relative hidden flex-col justify-between overflow-hidden border-r border-edge bg-gradient-to-br from-lane-4/45 via-glass-2 to-70% to-lane-7/40 p-12 shadow-inset-hi lg:flex">
         <div className="flex items-center gap-2 text-foreground">
           <BrandLockup />

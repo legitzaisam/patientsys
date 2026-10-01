@@ -76,7 +76,7 @@ function ResetPasswordPage() {
   const mismatch = confirm.length > 0 && password !== confirm;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
+    <div className="flex min-h-app-screen flex-col items-center justify-center px-6 py-16">
       <BrandLockup />
       <div className="glass-card mt-8 w-full max-w-sm p-8">
         <h1 className="text-[19px] font-semibold tracking-[-0.016em] text-foreground">

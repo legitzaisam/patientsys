@@ -817,7 +817,7 @@ function NewTaskPicker({
     : [];
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-[rgba(47,63,102,0.28)] p-4 pt-[12vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-[rgba(47,63,102,0.28)] p-4 pt-[calc(12*var(--app-vh))]"
       role="dialog"
       aria-modal="true"
       aria-label="New task"

@@ -142,7 +142,7 @@ export function TimeField({
         align="start"
         sideOffset={6}
         onOpenAutoFocus={(e) => e.preventDefault()}
-        className="w-[calc(100vw-2rem)] rounded-[20px] border-edge-2 bg-card p-2 sm:w-auto"
+        className="w-[calc(calc(100*var(--app-vw))-2rem)] rounded-[20px] border-edge-2 bg-card p-2 sm:w-auto"
         data-qc="time-picker"
       >
         <div className="flex gap-1.5 rounded-2xl bg-glass-2 p-1 shadow-inset-hi">

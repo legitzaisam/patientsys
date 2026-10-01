@@ -162,7 +162,7 @@ export function AssignTaskDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] max-w-[540px] grid-rows-[minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[22px] p-0"
+        className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-[540px] grid-rows-[minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[22px] p-0"
         data-qc="assign-task-dialog"
       >
         {/* The body scrolls on its own so the close button and the footer stay put. */}

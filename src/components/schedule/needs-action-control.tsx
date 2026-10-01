@@ -105,7 +105,7 @@ export function NeedsActionControl({
             sideOffset={8}
             data-qc="needs-action-menu"
             // Full width on a phone, a compact menu everywhere else.
-            className="w-[calc(100vw-2rem)] rounded-2xl p-1.5 sm:w-[250px]"
+            className="w-[calc(calc(100*var(--app-vw))-2rem)] rounded-2xl p-1.5 sm:w-[250px]"
           >
             <MenuItem
               swatch="bg-destructive-ink"

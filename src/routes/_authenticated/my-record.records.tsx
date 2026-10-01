@@ -364,7 +364,7 @@ function GalleryModal({
         aria-label="Your before and after gallery"
         data-qc="photo-gallery"
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[88vh] w-[min(820px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
+        className="max-h-[calc(88*var(--app-vh))] w-[min(820px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
       >
         <div className="flex items-start gap-2.5">
           <div className="min-w-0 flex-1">
@@ -482,7 +482,7 @@ function EditProfileModal({ patient, onClose }: { patient: any; onClose: () => v
           setPhoneError(null);
           save.mutate({ data: form });
         }}
-        className="max-h-[80vh] w-[min(460px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
+        className="max-h-[calc(80*var(--app-vh))] w-[min(460px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
       >
         <div className="flex items-start gap-2.5">
           <div className="min-w-0 flex-1">

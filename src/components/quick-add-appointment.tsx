@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { startPointerDrag } from "@/lib/pointer-drag";
 
 function toLocalTime(d: Date) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -266,7 +267,6 @@ export function QuickAddAppointment({
   const [day, setDay] = useState(toLocalDate(defaultStart ?? date));
   const [duration, setDuration] = useState("30");
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const scrollSnapRef = useRef<ScrollSnap | null>(null);
 
   function handleOpenChange(next: boolean) {
@@ -451,35 +451,11 @@ export function QuickAddAppointment({
   }, [isOpen]);
 
   function onDragHandleDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
-    if ((event.target as HTMLElement).closest("button")) return;
-    event.preventDefault();
-    dragRef.current = {
-      startX: event.clientX,
-      startY: event.clientY,
-      origX: offset.x,
-      origY: offset.y,
-    };
-    document.body.classList.add("select-none", "cursor-grabbing");
-
-    function onMove(moveEvent: globalThis.PointerEvent) {
-      const drag = dragRef.current;
-      if (!drag) return;
-      setOffset({
-        x: drag.origX + (moveEvent.clientX - drag.startX),
-        y: drag.origY + (moveEvent.clientY - drag.startY),
-      });
-    }
-
-    function onUp() {
-      dragRef.current = null;
-      document.body.classList.remove("select-none", "cursor-grabbing");
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    }
-
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    if ((event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+    const origin = offset;
+    startPointerDrag(event, {
+      onMove: (dx, dy) => setOffset({ x: origin.x + dx, y: origin.y + dy }),
+    });
   }
 
   const field = "h-9 min-w-0 rounded-xl text-xs";
@@ -487,7 +463,7 @@ export function QuickAddAppointment({
   const form = (
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
           <div
-            className="flex shrink-0 cursor-grab items-center justify-between px-4 pt-4 active:cursor-grabbing"
+            className="drag-handle flex shrink-0 cursor-grab items-center justify-between px-4 pt-4 active:cursor-grabbing"
             onPointerDown={onDragHandleDown}
           >
             <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -726,8 +702,13 @@ export function QuickAddAppointment({
         <DialogTrigger asChild>{children}</DialogTrigger>
         <DialogContent
           tabIndex={-1}
-          className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-0 shadow-popover sm:rounded-[22px] [&>button]:hidden"
-          style={{ translate: `calc(-50% + ${offset.x}px) calc(-50% + ${offset.y}px)` }}
+          className="flex max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-0 shadow-popover sm:rounded-[22px] [&>button]:hidden"
+          // No transition: the dialog's duration-200 would otherwise animate every
+          // drag step, leaving the panel trailing behind the finger.
+          style={{
+            translate: `calc(-50% + ${offset.x}px) calc(-50% + ${offset.y}px)`,
+            transitionProperty: "none",
+          }}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             (e.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
@@ -749,8 +730,8 @@ export function QuickAddAppointment({
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent
         align={align}
-        className="flex max-h-[min(90dvh,var(--radix-popover-content-available-height))] w-[480px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0"
-        style={{ translate: `${offset.x}px ${offset.y}px` }}
+        className="flex max-h-[min(calc(90*var(--app-dvh)),calc(var(--radix-popover-content-available-height)/var(--app-zoom)))] w-[480px] max-w-[calc(calc(100*var(--app-vw))-2rem)] flex-col overflow-hidden rounded-2xl p-0"
+        style={{ translate: `${offset.x}px ${offset.y}px`, transitionProperty: "none" }}
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
       >

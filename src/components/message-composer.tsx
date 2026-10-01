@@ -266,7 +266,7 @@ export function MessageComposer({
             <FileText className="h-3.5 w-3.5" />
           </Button>
         </DialogTrigger>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl sm:max-w-2xl">
+        <DialogContent className="max-h-[calc(85*var(--app-vh))] overflow-y-auto rounded-xl sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Message templates</DialogTitle>
           </DialogHeader>

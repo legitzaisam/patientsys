@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
+import { getAppZoom } from "@/lib/app-zoom";
 
 const RECENT_CHANGE_PREVIEW = 5;
 
@@ -178,7 +179,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
         const box = row.getBoundingClientRect();
         const straddles = box.top < edge - 1 && box.bottom > edge + 1;
         row.style.visibility = straddles ? "hidden" : "";
-        if (straddles) leftover = Math.max(leftover, Math.ceil(box.bottom - edge));
+        if (straddles) leftover = Math.max(leftover, Math.ceil((box.bottom - edge) / getAppZoom()));
       }
       head.style.setProperty("--access-leftover", `${leftover}px`);
     };

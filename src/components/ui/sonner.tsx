@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { toast, Toaster as Sonner } from "sonner";
 import { cn } from "@/lib/utils";
+import { getAppZoom } from "@/lib/app-zoom";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
@@ -223,12 +224,13 @@ function useTightToastStack() {
           )
           .sort((a, b) => Number(a.getAttribute("data-index")) - Number(b.getAttribute("data-index")));
         let offset = 0;
+        const zoom = getAppZoom();
         for (const el of visible) {
           const next = `${offset}px`;
           if (el.style.getPropertyValue("--aetheria-offset") !== next) {
             el.style.setProperty("--aetheria-offset", next);
           }
-          offset += el.getBoundingClientRect().height + TOAST_STACK_GAP;
+          offset += el.getBoundingClientRect().height / zoom + TOAST_STACK_GAP;
         }
       };
 

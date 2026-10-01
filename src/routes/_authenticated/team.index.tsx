@@ -811,7 +811,7 @@ function EditStaffDialog({
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
+      <DialogContent className="flex max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
         <DialogHeader className="shrink-0 pr-8 text-left">
           <DialogTitle>
             Edit {member.fullName || member.email}

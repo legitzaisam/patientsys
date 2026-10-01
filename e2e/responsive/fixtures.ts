@@ -82,7 +82,7 @@ export function shotPath(project: string, slug: string) {
  */
 export async function expandShell(page: Page) {
   await page.evaluate(() => {
-    const shell = document.querySelector<HTMLElement>(".flex.h-dvh");
+    const shell = document.querySelector<HTMLElement>(".flex.h-app-screen, .flex.h-dvh");
     const main = document.getElementById("app-main-scroll");
     if (shell) {
       shell.style.height = "auto";

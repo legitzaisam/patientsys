@@ -331,8 +331,13 @@
     border-bottom: 0;
   }
 
-  .glass-table tbody tr:hover {
-    background: rgba(47, 63, 102, 0.08);
+  /* Hover only where there is a real pointer: on iPad a tap leaves :hover
+     stuck on whatever row ends up under the finger after navigating, which
+     read as the wrong patient being highlighted. */
+  @media (hover: hover) and (pointer: fine) {
+    .glass-table tbody tr:hover {
+      background: rgba(47, 63, 102, 0.08);
+    }
   }
 
   /* Earnings tree: light navy wash on the open month, day and treatments.
@@ -343,9 +348,11 @@
   .glass-table.earnings-open-rows tbody tr[data-opened] {
     background: rgba(47, 63, 102, 0.04);
   }
-  .glass-table.earnings-open-rows tbody tr:hover,
-  .glass-table.earnings-open-rows tbody tr[data-opened]:hover {
-    background: rgba(47, 63, 102, 0.08);
+  @media (hover: hover) and (pointer: fine) {
+    .glass-table.earnings-open-rows tbody tr:hover,
+    .glass-table.earnings-open-rows tbody tr[data-opened]:hover {
+      background: rgba(47, 63, 102, 0.08);
+    }
   }
   .glass-table.earnings-open-rows tbody tr[data-opened]:has(+ tr[data-opened]) td {
     border-bottom-color: transparent;
@@ -1152,13 +1159,13 @@ input:-webkit-autofill {
     height: 0;
   }
   to {
-    height: var(--radix-collapsible-content-height);
+    height: calc(var(--radix-collapsible-content-height) / var(--app-zoom));
   }
 }
 
 @keyframes collapsible-up {
   from {
-    height: var(--radix-collapsible-content-height);
+    height: calc(var(--radix-collapsible-content-height) / var(--app-zoom));
   }
   to {
     height: 0;
@@ -1260,4 +1267,142 @@ input:-webkit-autofill {
     size: A4;
     margin: 14mm;
   }
+}
+
+/*
+ * Default app zoom — the app renders at 90% on laptop, desktop and iPad
+ * (landscape) widths, which shows noticeably more of each screen at once.
+ * Phones and narrow windows stay at 100%.
+ *
+ * `zoom` scales every length (px, rem, and viewport units alike), so:
+ *  - Viewport units would also shrink to 90% and full-height layouts would
+ *    stop short of the bottom of the screen. Use the --app-vh/--app-dvh/
+ *    --app-svh/--app-vw units (or the h-app-* utilities below) instead of raw
+ *    vh/dvh/svh/vw — they divide the zoom back out.
+ *  - Pointer coordinates and getBoundingClientRect() are in screen pixels
+ *    while CSS lengths are pre-zoom, so JS that turns a pointer/rect delta into
+ *    a CSS length must divide by getAppZoom() from src/lib/app-zoom.ts.
+ *
+ * To change the level, edit --app-zoom here only.
+ */
+:root {
+  --app-zoom: 1;
+  --app-vh: calc(1vh / var(--app-zoom));
+  --app-dvh: calc(1dvh / var(--app-zoom));
+  --app-svh: calc(1svh / var(--app-zoom));
+  --app-vw: calc(1vw / var(--app-zoom));
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --app-zoom: 0.9;
+  }
+
+  html {
+    zoom: var(--app-zoom);
+  }
+}
+
+@media print {
+  :root {
+    --app-zoom: 1;
+  }
+
+  html {
+    zoom: 1;
+  }
+}
+
+/*
+ * Radix (popovers, menus, selects, tooltips) positions its floating layer in
+ * screen pixels, which a zoomed page would shrink by --app-zoom and so pull
+ * every popover up and left of its trigger. Undo the zoom on the positioned
+ * wrapper and re-apply it to the content inside, so placement is exact and
+ * the content still renders at the app's size. The size variables Radix
+ * measures (--radix-*-available-height, --radix-select-trigger-*) are also in
+ * screen pixels — divide them by --app-zoom where they are used.
+ */
+[data-radix-popper-content-wrapper] {
+  zoom: calc(1 / var(--app-zoom));
+}
+
+[data-radix-popper-content-wrapper] > * {
+  zoom: var(--app-zoom);
+}
+
+@utility h-app-screen {
+  height: calc(100 * var(--app-dvh));
+}
+
+@utility min-h-app-screen {
+  min-height: calc(100 * var(--app-dvh));
+}
+
+/*
+ * Diary cards on touch screens (iPad, phones). A press-and-hold moves the card
+ * (src/lib/diary-drag.ts), so the long-press must not also start iOS text
+ * selection, the link preview on the patient name, or double-tap zoom.
+ * Scoped to touch input so desktop text behaviour is unchanged.
+ */
+@media (hover: none), (pointer: coarse) {
+  .diary-event,
+  .diary-event * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .diary-event {
+    touch-action: manipulation;
+  }
+}
+
+.diary-event a {
+  -webkit-user-drag: none;
+}
+
+/*
+ * Drag handles (Quick book header, My notes header and resize edges, the
+ * sidebar edge). `touch-action: none` hands the gesture to the page from the
+ * first touch, so iPad Safari never turns a drag into a page scroll — that
+ * takeover is what made panels jump. See src/lib/pointer-drag.ts.
+ */
+.drag-handle {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* While anything is being dragged: nothing on the page selects. */
+html.diary-dragging,
+html.diary-dragging *,
+html.app-dragging,
+html.app-dragging * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+html.diary-dragging,
+html.app-dragging {
+  cursor: grabbing;
+}
+
+/*
+ * On-screen keyboard open (iPad / iPhone — see src/lib/keyboard-viewport.ts):
+ * centre dialogs in the area above the keyboard and cap their height to it.
+ * Dialog bodies already scroll, so every field stays reachable.
+ */
+html[data-keyboard="open"] [role="dialog"][data-overlay-keys] {
+  top: calc(var(--vv-top, 0px) + var(--vv-height, 100%) / 2) !important;
+  max-height: calc(var(--vv-height, 100%) - 1.5rem) !important;
+}
+
+/* Journey board patient pills: a press opens the patient, never the iOS
+   link preview / context menu. */
+[data-qc="board-pill"] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }

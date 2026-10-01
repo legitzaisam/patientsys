@@ -90,7 +90,7 @@ export function OfferAutomationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto rounded-xl" data-qc="offer-automation">
+      <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-2xl overflow-y-auto rounded-xl" data-qc="offer-automation">
         <DialogHeader>
           <DialogTitle>
             {enabled ? "Automation is on" : "Switch on automation"}: {STAGE_LABEL[stage]}

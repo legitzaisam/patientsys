@@ -498,7 +498,7 @@ function PatientRecord() {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Dialog open={treatmentOpen} onOpenChange={setTreatmentOpen}>
-                  <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
+                  <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
                     <DialogHeader>
                       <DialogTitle>Record treatment</DialogTitle>
                     </DialogHeader>
@@ -560,7 +560,7 @@ function PatientRecord() {
                 </Dialog>
 
                 {canSee(identity, "patient-send-documents") && <Dialog open={docOpen} onOpenChange={setDocOpen}>
-                  <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
+                  <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
                     <DialogHeader>
                       <DialogTitle>Send to patient</DialogTitle>
                     </DialogHeader>
@@ -618,7 +618,7 @@ function PatientRecord() {
 
                 {identity.isManager && !p.deleted_at ? (
                   <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
-                    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
+                    <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
                       <DialogHeader>
                         <DialogTitle>Archive this patient</DialogTitle>
                       </DialogHeader>

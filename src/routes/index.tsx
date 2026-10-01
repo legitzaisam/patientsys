@@ -42,7 +42,7 @@ function Landing() {
   if (handoff) return null;
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-app-screen">
       <header className="sticky top-0 z-30 border-b border-edge bg-sidebar shadow-inset-hi backdrop-blur-glass backdrop-saturate-150">
         <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
           <BrandLockup />

@@ -296,7 +296,7 @@ export function TreatmentFormDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
       <DialogContent
-        className="max-h-[92vh] w-[min(920px,calc(100vw-2rem))] max-w-none overflow-hidden p-0 sm:rounded-[26px]"
+        className="max-h-[calc(92*var(--app-vh))] w-[min(920px,calc(calc(100*var(--app-vw))-2rem))] max-w-none overflow-hidden p-0 sm:rounded-[26px]"
         data-qc="treatment-form"
       >
         <DialogHeader className="border-b border-edge-2 px-6 pb-4 pt-5">
@@ -355,7 +355,7 @@ export function TreatmentFormDialog({
           </ol>
         </DialogHeader>
 
-        <div className="max-h-[calc(92vh-9.5rem)] overflow-y-auto px-6 py-5">
+        <div className="max-h-[calc(calc(92*var(--app-vh))-9.5rem)] overflow-y-auto px-6 py-5">
           {error ? (
             <p className="rounded-xl bg-destructive-bg px-3 py-2 text-sm text-destructive-ink">
               {(error as Error).message}

@@ -198,7 +198,7 @@ export function InvoiceDialog({
       <InvoicePrintSheet doc={open ? doc : null} />
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="max-h-[calc(100dvh-2rem)] max-w-[1000px] gap-0 overflow-y-auto p-0 md:grid-cols-[380px_minmax(0,1fr)]"
+          className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-[1000px] gap-0 overflow-y-auto p-0 md:grid-cols-[380px_minmax(0,1fr)]"
           data-qc="invoice-dialog"
         >
           <div className="flex flex-col gap-5 p-7">

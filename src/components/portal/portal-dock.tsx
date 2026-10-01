@@ -131,7 +131,7 @@ function PanelShell({
       role="dialog"
       aria-label={title}
       data-qc={qc}
-      className="absolute bottom-[calc(100%+12px)] right-0 flex max-h-[70vh] w-[min(340px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-[20px] border border-edge bg-popover shadow-popover backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:w-auto max-sm:max-h-[min(70dvh,32rem)]"
+      className="absolute bottom-[calc(100%+12px)] right-0 flex max-h-[calc(70*var(--app-vh))] w-[min(340px,calc(calc(100*var(--app-vw))-2.5rem))] flex-col overflow-hidden rounded-[20px] border border-edge bg-popover shadow-popover backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:w-auto max-sm:max-h-[min(calc(70*var(--app-dvh)),32rem)]"
     >
       <header className="flex shrink-0 items-center gap-2 border-b border-edge-2 px-3.5 py-3">
         <div className="min-w-0 flex-1">

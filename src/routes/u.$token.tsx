@@ -34,7 +34,7 @@ function UnsubscribePage() {
   });
 
   return (
-    <div className="flex min-h-dvh flex-col items-center bg-background px-4 py-10">
+    <div className="flex min-h-app-screen flex-col items-center bg-background px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 flex justify-center">
           <BrandLockup />

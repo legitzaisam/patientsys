@@ -13,9 +13,9 @@ import { Button } from "@/components/ui/button";
 type Rules = { leadDays: string; percent: string };
 
 /**
- * Payments and deposits. The two rules the dashboard and the money model
- * read: how many days before a visit the deposit is due, and what share of
- * the price the deposit is.
+ * Settings → Rules → Deposits. The two rules the dashboard and the money model
+ * read: what share of the price the deposit is, and how many days before a
+ * visit it is due.
  */
 export function PaymentsDepositsSettings({ canEdit }: { canEdit: boolean }) {
   const queryClient = useQueryClient();
@@ -37,8 +37,15 @@ export function PaymentsDepositsSettings({ canEdit }: { canEdit: boolean }) {
 
   const save = useMutation({
     mutationFn: useServerFn(updateDepositRules),
-    onSuccess: () => {
-      setSaved(form);
+    onSuccess: (result) => {
+      // Show what the server stored, so the form never drifts from the database.
+      const stored = result as { deposit_lead_days?: number; deposit_percent?: number } | undefined;
+      const next = {
+        leadDays: String(stored?.deposit_lead_days ?? leadDays),
+        percent: String(stored?.deposit_percent ?? percent),
+      };
+      setForm(next);
+      setSaved(next);
       queryClient.invalidateQueries({ queryKey: ["clinic-details"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Deposit rules saved");
@@ -46,8 +53,10 @@ export function PaymentsDepositsSettings({ canEdit }: { canEdit: boolean }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const leadDays = Number.parseInt(form.leadDays, 10);
-  const percent = Number.parseInt(form.percent, 10);
+  // Whole numbers only: a blank box or "3.5" is not a rule the server will take.
+  const asWhole = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : Number.NaN);
+  const leadDays = asWhole(form.leadDays);
+  const percent = asWhole(form.percent);
   const valid =
     Number.isInteger(leadDays) &&
     leadDays >= 0 &&
@@ -62,57 +71,106 @@ export function PaymentsDepositsSettings({ canEdit }: { canEdit: boolean }) {
     "deposit-rules-unsaved",
   );
 
+  // A worked example so the two numbers read as one rule, not two settings.
+  const examplePrice = 300;
+  const exampleDeposit = Number.isInteger(percent)
+    ? Math.round((examplePrice * percent) / 100)
+    : null;
+  const dayWord = (n: number) => (n === 1 ? "day" : "days");
+
   return (
-    <Card className="space-y-4 p-5" data-qc="deposit-rules">
+    <Card className="space-y-5 p-5" data-qc="deposit-rules">
       {leaveGuard}
-      <div className="flex items-center gap-2">
-        <Wallet className="h-4 w-4 text-ink-3" />
+      <div className="flex items-start gap-2.5">
+        <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden />
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Payments and deposits</h2>
-          <p className="text-xs text-muted-foreground">
-            The dashboard chases deposits by these rules, and collected money is counted with them.
+          <h2 className="text-sm font-semibold text-foreground">Deposits</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            How much deposit a patient pays to secure a booking, and how long before the appointment
+            it must be paid.
           </p>
         </div>
       </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="field-stack">
-          <Label htmlFor="deposit-lead-days" className="text-xs text-muted-foreground">
-            Deposit due (days before the appointment)
+          <Label htmlFor="deposit-percent" className="text-xs text-muted-foreground">
+            Deposit amount
           </Label>
-          <Input
-            id="deposit-lead-days"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={30}
-            value={form.leadDays}
-            disabled={!canEdit}
-            onChange={(e) => setForm({ ...form, leadDays: e.target.value })}
-          />
-          <p className="text-2xs text-muted-foreground">
-            Unpaid bookings inside this window show as Urgent on the dashboard; further out they sit
-            under This week until 10 days out.
+          <div className="relative">
+            <Input
+              id="deposit-percent"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={100}
+              value={form.percent}
+              disabled={!canEdit}
+              className="pr-44"
+              aria-describedby="deposit-percent-unit deposit-percent-help"
+              onChange={(e) => setForm({ ...form, percent: e.target.value })}
+            />
+            <span
+              id="deposit-percent-unit"
+              className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground"
+            >
+              % of the treatment price
+            </span>
+          </div>
+          <p id="deposit-percent-help" className="text-2xs text-muted-foreground">
+            When a booking is marked{" "}
+            <span className="font-medium text-foreground">Deposit paid</span>, this amount counts as
+            money collected in your reports.
           </p>
         </div>
         <div className="field-stack">
-          <Label htmlFor="deposit-percent" className="text-xs text-muted-foreground">
-            Deposit (% of the treatment price)
+          <Label htmlFor="deposit-lead-days" className="text-xs text-muted-foreground">
+            Deposit due
           </Label>
-          <Input
-            id="deposit-percent"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={100}
-            value={form.percent}
-            disabled={!canEdit}
-            onChange={(e) => setForm({ ...form, percent: e.target.value })}
-          />
-          <p className="text-2xs text-muted-foreground">
-            A booking marked deposit paid counts this share of its price as collected.
+          <div className="relative">
+            <Input
+              id="deposit-lead-days"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={30}
+              value={form.leadDays}
+              disabled={!canEdit}
+              className="pr-52"
+              aria-describedby="deposit-lead-days-unit deposit-lead-days-help"
+              onChange={(e) => setForm({ ...form, leadDays: e.target.value })}
+            />
+            <span
+              id="deposit-lead-days-unit"
+              className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground"
+            >
+              days before the appointment
+            </span>
+          </div>
+          <p id="deposit-lead-days-help" className="text-2xs text-muted-foreground">
+            Unpaid deposits are flagged <span className="font-medium text-foreground">Urgent</span>{" "}
+            on the dashboard once the appointment is this close. Before that, they show under{" "}
+            <span className="font-medium text-foreground">This week</span> from 10 days out.
           </p>
         </div>
       </div>
+
+      {valid && exampleDeposit !== null ? (
+        <p
+          className="rounded-xl bg-accent-wash px-3.5 py-2.5 text-xs text-foreground shadow-[inset_0_0_0_1px_var(--accent-line)]"
+          data-qc="deposit-rules-example"
+        >
+          <span className="font-semibold">Example:</span>{" "}
+          {percent === 0
+            ? "No deposit is taken, so nothing is chased before appointments."
+            : `a £${examplePrice} treatment needs a £${exampleDeposit} deposit, paid at least ${leadDays} ${dayWord(leadDays)} before the appointment.`}
+        </p>
+      ) : (
+        <p className="text-2xs text-destructive" role="alert" data-qc="deposit-rules-error">
+          Enter a deposit between 0 and 100%, due 0 to 30 days before the appointment.
+        </p>
+      )}
+
       {canEdit && (
         <div className="flex justify-end">
           <Button

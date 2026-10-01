@@ -91,6 +91,8 @@ import { VisitNoteChip, isPreAppointmentNote } from "@/components/visit-note-chi
 import { useTreatmentColours } from "@/lib/use-treatment-colours";
 import { getClinicDetails, resendDocument, sendMessage, sendPaymentRequest } from "@/lib/clinic.functions";
 import { bookingNotifyDescription, formatMoney } from "@/lib/payment-link";
+import { getAppZoom } from "@/lib/app-zoom";
+import { createDiaryDrag, type DiaryDragOptions } from "@/lib/diary-drag";
 
 export const Route = createFileRoute("/_authenticated/schedule")({
   head: () => ({
@@ -551,7 +553,7 @@ function SchedulePage() {
               <Button>New booking</Button>
             </DialogTrigger>
             <DialogContent
-              className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
+              className="flex max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
               onCloseAutoFocus={(e) => e.preventDefault()}
             >
               <DialogHeader className="shrink-0 pr-8 text-left">
@@ -1694,52 +1696,61 @@ function DayPlanner({
     ? sorted.find((a) => minutesFromMidnight(new Date(a.starts_at)) > nowMin)
     : sorted[0];
 
-  // ---- Drag handling.
+  // ---- Drag handling (mouse, pen and touch — see src/lib/diary-drag.ts).
+  const dragOptions = useRef<DiaryDragOptions | null>(null);
+  dragOptions.current = {
+    minuteAt: (clientY) => {
+      const rect = gridRef.current?.getBoundingClientRect();
+      return minuteFor((clientY - (rect?.top ?? 0)) / getAppZoom());
+    },
+    columnAt: (clientX) => {
+      for (const c of columns) {
+        const r = colRefs.current[c.id]?.getBoundingClientRect();
+        if (r && clientX >= r.left && clientX <= r.right) return c.id;
+      }
+      return null;
+    },
+    clampMinute: (minute, duration) => Math.max(startMin, Math.min(endMin - duration, minute)),
+    onPreview: setDrag,
+    onDrop: (d) => {
+      const appointment = visible.find((x) => x.id === d.id);
+      if (appointment) setConfirmDrop({ appointment, minute: d.minute, colId: d.colId });
+    },
+  };
+  const [dragger] = useState(() => createDiaryDrag(() => dragOptions.current!));
+  const attachedGrid = useRef<{ el: HTMLElement | null; off?: () => void }>({ el: null });
+  useEffect(() => {
+    const el = gridRef.current;
+    if (attachedGrid.current.el === el) return;
+    attachedGrid.current.off?.();
+    attachedGrid.current = { el, ...(el ? { off: dragger.attach(el) } : {}) };
+  });
+  useEffect(
+    () => () => {
+      attachedGrid.current.off?.();
+      dragger.dispose();
+    },
+    [dragger],
+  );
+
   const beginDrag = (e: React.PointerEvent, a: any, colId: string) => {
-    if (e.button !== 0) return;
-    const target = e.target as HTMLElement;
-    if (target.closest("a,button,[role='button']")) return;
+    // Chips and other controls on the card keep their own tap behaviour.
+    if ((e.target as HTMLElement).closest("button,[role='button'],input,textarea,select")) return;
     const s = new Date(a.starts_at);
-    const duration = Math.max(5, Math.round((+new Date(a.ends_at) - +s) / 60000));
-    setDrag({
+    dragger.start(e, {
       id: a.id,
-      duration,
-      minute: minutesFromMidnight(s),
+      startMinute: minutesFromMidnight(s),
+      duration: Math.max(5, Math.round((+new Date(a.ends_at) - +s) / 60000)),
       colId,
-      originMinute: minutesFromMidnight(s),
-      originColId: colId,
-      moved: false,
     });
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-  };
-
-  const moveDrag = (e: React.PointerEvent) => {
-    if (!drag || !gridRef.current) return;
-    const rect = gridRef.current.getBoundingClientRect();
-    const minute = Math.max(startMin, Math.min(endMin - drag.duration, minuteFor(e.clientY - rect.top)));
-    let colId = drag.colId;
-    for (const c of columns) {
-      const el = colRefs.current[c.id];
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      if (e.clientX >= r.left && e.clientX <= r.right) colId = c.id;
-    }
-    if (minute !== drag.minute || colId !== drag.colId) setDrag({ ...drag, minute, colId, moved: true });
-  };
-
-  const endDrag = (a: any) => {
-    if (!drag) return;
-    const changed = drag.moved && (drag.minute !== drag.originMinute || drag.colId !== drag.originColId);
-    if (changed) setConfirmDrop({ appointment: a, minute: drag.minute, colId: drag.colId });
-    setDrag(null);
   };
 
   useEffect(() => {
     if (!drag) return;
-    const cancel = (e: KeyboardEvent) => { if (e.key === "Escape") setDrag(null); };
+    const cancel = (e: KeyboardEvent) => { if (e.key === "Escape") dragger.cancel(); };
     window.addEventListener("keydown", cancel);
     return () => window.removeEventListener("keydown", cancel);
-  }, [drag]);
+  }, [drag, dragger]);
 
   const dropTarget = confirmDrop
     ? (() => {
@@ -1899,7 +1910,10 @@ function DayPlanner({
                   <div
                     key={col.id}
                     ref={(el) => { colRefs.current[col.id] = el; }}
-                    className="relative z-0 min-w-0 flex-1 border-l border-glass-line"
+                    data-diary-col={col.id}
+                    className={`relative min-w-0 flex-1 border-l border-glass-line ${
+                      drag?.originColId === col.id ? "z-20" : "z-0"
+                    }`}
                   >
                     {offsets.map((o, i) =>
                       o.row.type === "slot" ? (
@@ -1912,7 +1926,7 @@ function DayPlanner({
                             const colRect = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
                             setQuickAdd({
                               top: o.top,
-                              left: colRect.left - rect.left + colRect.width / 2,
+                              left: (colRect.left - rect.left + colRect.width / 2) / getAppZoom(),
                               minute: (o.row as { minute: number }).minute,
                               colId: col.id,
                             });
@@ -1962,7 +1976,12 @@ function DayPlanner({
                       const dragging = drag?.id === a.id;
                       const startAt = dragging ? drag!.minute : minutesFromMidnight(s);
                       const duration = Math.max(5, Math.round((+e - +s) / 60000));
-                      if (dragging && drag!.colId !== col.id) return null;
+                      // A card dragged to another practitioner stays in its own column's
+                      // DOM (so the touch keeps its target) and is shifted across.
+                      const shiftX =
+                        dragging && drag!.colId !== col.id
+                          ? (colRefs.current[drag!.colId]?.offsetLeft ?? 0) - (colRefs.current[col.id]?.offsetLeft ?? 0)
+                          : 0;
                       const top = yFor(startAt);
                       const durationHeight = yFor(startAt + duration) - top - 6;
                       const match = needs.matches(a.id, needsAction);
@@ -1974,10 +1993,14 @@ function DayPlanner({
                         <div
                           key={a.id}
                           data-needs-action={filtering ? (match ? "match" : "faded") : undefined}
-                          style={{ top, height, ...treatmentTone.style }}
+                          data-diary-event={a.id}
+                          style={{
+                            top,
+                            height,
+                            ...(shiftX ? { transform: `translateX(${shiftX}px)` } : {}),
+                            ...treatmentTone.style,
+                          }}
                           onPointerDown={(ev) => beginDrag(ev, a, col.id)}
-                          onPointerMove={moveDrag}
-                          onPointerUp={() => endDrag(a)}
                           className={`diary-event glass-card group absolute inset-x-1.5 z-[2] flex cursor-grab flex-col overflow-hidden !rounded-xl px-3 py-2.5 transition-[shadow,opacity,filter] hover:shadow-lift ${
                             dragging ? "!z-30 cursor-grabbing opacity-90 shadow-lift" : ""
                           } ${isCurrent ? "shadow-lift" : ""} ${needsActionCardClass(filtering, match)}`}
@@ -2000,6 +2023,7 @@ function DayPlanner({
                           <Link
                             to="/patients/$id"
                             params={{ id: a.patient_id }}
+                            draggable={false}
                             className="relative mt-1 block break-words text-xs font-semibold leading-tight text-foreground hover:text-accent-ink"
                           >
                             {a.patients?.first_name} {a.patients?.last_name}
@@ -2067,12 +2091,12 @@ function DayPlanner({
 
       <ColourKey appointments={visible} colours={treatmentColours} />
       <div className="border-t border-glass-line bg-glass-2 px-5 py-2 text-2xs text-muted-foreground">
-        Drag an appointment to move it · click an empty slot to book · Esc cancels a drag
+        Drag an appointment to move it (press and hold on touch screens) · click an empty slot to book · Esc cancels a drag
       </div>
 
       {/* Confirm move */}
       <Dialog open={!!confirmDrop} onOpenChange={(v) => { if (!v) setConfirmDrop(null); }}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl sm:max-w-md">
+        <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Move this appointment?</DialogTitle>
           </DialogHeader>
@@ -2285,8 +2309,8 @@ function WeekView({
     const startAt = new Date(day);
     startAt.setHours(9, 0, 0, 0);
     setQuickAdd({
-      top: event.clientY - (rect?.top ?? 0),
-      left: event.clientX - (rect?.left ?? 0),
+      top: (event.clientY - (rect?.top ?? 0)) / getAppZoom(),
+      left: (event.clientX - (rect?.left ?? 0)) / getAppZoom(),
       day: startAt,
     });
   }
@@ -2635,7 +2659,7 @@ function MonthView({
                     {items.length} booked
                   </p>
                 </div>
-                <div className="max-h-[50vh] space-y-2 overflow-y-auto p-3">
+                <div className="max-h-[calc(50*var(--app-vh))] space-y-2 overflow-y-auto p-3">
                   {items.map((a) => (
                     <MonthPeekCard key={a.id} a={a} treatmentColours={treatmentColours} />
                   ))}

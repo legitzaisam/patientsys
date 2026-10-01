@@ -116,7 +116,7 @@ function AuthPage() {
   if (handoff) return null;
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="grid min-h-app-screen lg:grid-cols-2">
       <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-accent-hi via-accent to-70% to-lane-6 p-12 text-accent-foreground lg:flex">
         <span
           aria-hidden

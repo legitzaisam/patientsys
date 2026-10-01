@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AlertBubble } from "./alert-bubble";
 import { ChatBubble } from "./chat-bubble";
+import { getAppZoom } from "@/lib/app-zoom";
 
 /**
  * The single owner of the bottom-right corner on staff pages: two launchers
@@ -28,7 +29,7 @@ export function FloatingDock({ roles }: { roles: string[] }) {
           top = Math.min(top, b.getBoundingClientRect().top);
         },
       );
-      root.style.setProperty("--dock-h", `${Math.ceil(bottom - top) + 20}px`);
+      root.style.setProperty("--dock-h", `${Math.ceil((bottom - top) / getAppZoom()) + 20}px`);
     };
     update();
     const ro = new ResizeObserver(update);

@@ -791,7 +791,7 @@ export const getDashboard = createServerFn({ method: "GET" })
     }
 
     // Deposits must be paid at least `deposit_lead_days` clinic days before the
-    // appointment (Settings → Payments and deposits). Inside that window →
+    // appointment (Settings → Rules → Deposits). Inside that window →
     // urgent chase; after that, This week up to 10 clinic days out.
     const DEPOSIT_LEAD_DAYS = Number(clinicRow.data?.deposit_lead_days ?? 3);
     for (const a of unpaidDeposits) {
@@ -8611,7 +8611,10 @@ export const getClinicDetails = createServerFn({ method: "GET" })
     return data ?? null;
   });
 
-/** Payments and deposits: how many days before the visit a deposit is due, and its share of the price. */
+/**
+ * Settings → Rules → Deposits: the deposit's share of the treatment price and
+ * how many days before the visit it is due. Returns the saved values.
+ */
 export const updateDepositRules = createServerFn({ method: "POST" })
   .validator((data: { deposit_lead_days: number; deposit_percent: number }) =>
     parseInput(schemas.UpdateDepositRules, data),
@@ -8620,16 +8623,27 @@ export const updateDepositRules = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as Ctx;
     await authorize(ctx, "updateDepositRules");
-    const { error } = await ctx.supabase
+    const clinicId = clinicIdOf(context);
+    const { data: before } = await ctx.supabase
+      .from("clinics")
+      .select("deposit_lead_days, deposit_percent")
+      .eq("id", clinicId)
+      .maybeSingle();
+    const { data: saved, error } = await ctx.supabase
       .from("clinics")
       .update({ deposit_lead_days: data.deposit_lead_days, deposit_percent: data.deposit_percent })
-      .eq("id", clinicIdOf(context));
+      .eq("id", clinicId)
+      .select("deposit_lead_days, deposit_percent")
+      .maybeSingle();
     if (error) throw new Error(error.message);
-    await audit(ctx, "update", "clinic", clinicIdOf(context), null, {
-      deposit_lead_days: data.deposit_lead_days,
-      deposit_percent: data.deposit_percent,
+    // Row-level security turns a refused update into "0 rows", not an error.
+    if (!saved) throw new Error("Deposit rules were not saved. Check you can still change clinic settings.");
+    await audit(ctx, "update", "clinic", clinicId, null, {
+      setting: "deposit_rules",
+      before: before ?? null,
+      after: saved,
     });
-    return { ok: true };
+    return { ok: true as const, ...saved };
   });
 
 /** Manager-only: update the clinic's contact details. */

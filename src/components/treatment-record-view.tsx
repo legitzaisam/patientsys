@@ -45,7 +45,7 @@ export function TreatmentRecordDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[92vh] w-[min(860px,calc(100vw-2rem))] max-w-none overflow-hidden p-0 print:max-h-none print:w-full print:overflow-visible print:shadow-none sm:rounded-[26px]"
+        className="max-h-[calc(92*var(--app-vh))] w-[min(860px,calc(calc(100*var(--app-vw))-2rem))] max-w-none overflow-hidden p-0 print:max-h-none print:w-full print:overflow-visible print:shadow-none sm:rounded-[26px]"
         data-qc="treatment-record"
       >
         <DialogHeader className="border-b border-edge-2 px-6 pb-4 pt-5 print:hidden">
@@ -74,7 +74,7 @@ export function TreatmentRecordDialog({
             </Button>
           </div>
         </DialogHeader>
-        <div className="max-h-[calc(92vh-6rem)] overflow-y-auto px-6 py-5 print:max-h-none print:overflow-visible">
+        <div className="max-h-[calc(calc(92*var(--app-vh))-6rem)] overflow-y-auto px-6 py-5 print:max-h-none print:overflow-visible">
           {error ? (
             <p className="rounded-xl bg-destructive-bg px-3 py-2 text-sm text-destructive-ink">
               {(error as Error).message}

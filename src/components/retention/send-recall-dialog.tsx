@@ -252,7 +252,7 @@ export function SendRecallDialog({
           )}
         </DialogTrigger>
       )}
-      <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl sm:max-w-xl">
+      <DialogContent className="max-h-[calc(85*var(--app-vh))] overflow-y-auto rounded-xl sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Send recall to {patientName}</DialogTitle>
         </DialogHeader>

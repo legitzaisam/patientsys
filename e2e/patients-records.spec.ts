@@ -249,7 +249,7 @@ test.describe("owner", () => {
     }
   });
 
-  test("below the xl breakpoint the drawer is a sheet that opens from the row", async ({
+  test("below the xl breakpoint the drawer is a centred popup that opens from the row", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1024, height: 900 });
@@ -263,6 +263,12 @@ test.describe("owner", () => {
     const sheet = page.locator('[data-qc="records-drawer-sheet"]');
     await expect(sheet).toBeVisible();
     await expect(sheet.locator('[data-qc="drawer-name"]')).toContainText(name[0]!);
+    // A centred popup, not a panel sliding in from the side.
+    const box = await sheet.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { cx: r.left + r.width / 2, w: window.innerWidth };
+    });
+    expect(Math.abs(box.cx - box.w / 2)).toBeLessThan(4);
     await page.keyboard.press("Escape");
     await expect(sheet).toHaveCount(0);
   });
