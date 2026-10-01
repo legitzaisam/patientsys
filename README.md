@@ -191,6 +191,38 @@ To show it from outside your Mac, `launch-plan/ngrok/start-public.sh` does steps
 | Website shows old content | The static build is stale; rebuild (step 3) and hard-reload. |
 | Only the app, no website, is wanted | `npm run dev:demo` on port 8080 (Quick start above). |
 
+## Redeploying www.sqinos.com after a change
+
+The public site runs from this Mac through a Cloudflare Tunnel: `caffeinate -dims ./launch-plan/cloudflare/start-public.sh` inside `tmux attach -t sqinos` serves **snapshots** of the website and the demo app (under `launch-plan/.run/`) behind the gateway on 8099, and `cloudflared` carries them to **https://www.sqinos.com** (HTTP/2 to Cloudflare). Pulling new code does not change what visitors see until a snapshot is swapped, so after every change:
+
+```sh
+cd ~/Downloads/"Lovable project"
+git pull                                   # the connected branch (e2e_exp)
+npm ci                                     # only when package.json / package-lock.json changed
+./launch-plan/cloudflare/redeploy.sh app   # clinic portal or patient portal changed (src/**, fixtures)
+```
+
+Run it from the repo root in any terminal; the tmux window keeps running. Pick the argument by what changed:
+
+| You changed | Run | Effect |
+| --- | --- | --- |
+| The app: clinic portal or patient portal (`src/**`, fixtures in `src/lib/demo`, demo options in `launch-plan/.env.local`) | `./launch-plan/cloudflare/redeploy.sh app` | Rebuilds the demo bundle (1–2 min, the old app keeps serving), then restarts it (~3 s of "not reachable"). Demo data resets |
+| The website (`launch-plan/website/src/**`, `public/**`, `website/.env.local`) | `./launch-plan/cloudflare/redeploy.sh website` | Rebuilds Astro (~5 s) and swaps the snapshot. No restart |
+| Both, or not sure | `./launch-plan/cloudflare/redeploy.sh all` | Website first, then the app |
+| The gateway (`launch-plan/gateway/*`) | `./launch-plan/cloudflare/stop.sh`, then `caffeinate -dims ./launch-plan/cloudflare/start-public.sh` again in tmux | The gateway is not snapshotted; run `node launch-plan/gateway/test.mjs` first |
+| Nothing, but the site is unreachable after a VPN or Wi-Fi change | `./launch-plan/cloudflare/redeploy.sh tunnel` | Restarts only `cloudflared` |
+
+Before a `website` redeploy, make sure `launch-plan/website/.env.local` carries the contact address the site should show: `PUBLIC_CONTACT_EMAIL=contact.sqinos@gmail.com` (the build falls back to that address when the variable is empty).
+
+Then check it took:
+
+```sh
+./launch-plan/cloudflare/status.sh                 # processes, local and public health
+curl -sI https://www.sqinos.com/healthz | head -1  # HTTP/2 200
+```
+
+Cloudflare needs no cache purge: asset file names are content-hashed and HTML is not cached at the edge. A tab that was open during an `app` redeploy may say **"server function not found"** on its next click because it still holds the old bundle; a hard reload (`Cmd-Shift-R`) fixes it. Logs are in `launch-plan/.run/logs/` (`app`, `app-build`, `gateway`, `cloudflared`, `website-build`). The full runbook, first-time setup and troubleshooting table are in [`launch-plan/cloudflare/README.md`](launch-plan/cloudflare/README.md).
+
 ## Local development (live Supabase)
 
 ```sh
