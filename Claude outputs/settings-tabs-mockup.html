@@ -1,0 +1,117 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Settings mockup</title><style>
+:root{--fg:#2f3f66;--ink3:#6a7390;--muted:#46557a;--accent:#eed488;--accent-ink:#7a6220;--wash:rgba(238,212,136,.14);--line:rgba(214,183,92,.42)}
+*{box-sizing:border-box}html{zoom:.9}@media (max-width:1023px){html{zoom:1}aside{display:none}main{padding:18px 16px 90px}.grid{grid-template-columns:1fr!important}}
+body{margin:0;font-family:"Space Grotesk",Inter,system-ui,sans-serif;color:var(--fg);background:#f6f7f8;
+ background-image:radial-gradient(900px 560px at 8% -10%,rgba(250,226,200,.55),transparent 68%),radial-gradient(820px 520px at 96% 2%,rgba(246,215,226,.5),transparent 66%),repeating-linear-gradient(0deg,rgba(47,63,102,.035) 0 1px,transparent 1px 14px);font-size:13.5px;-webkit-font-smoothing:antialiased}
+.shell{display:flex;min-height:111.2vh}
+aside{width:280px;padding:22px 18px;background:rgba(255,255,255,.35);border-right:1px solid rgba(47,63,102,.06)}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.12em;font-size:18px;margin:6px 8px 26px}
+.logo i{width:24px;height:24px;border:3px solid var(--fg);border-radius:50%;display:inline-block;position:relative}
+.logo i:after{content:"";position:absolute;width:8px;height:8px;background:var(--accent);border-radius:50%;right:-5px;bottom:-5px}
+.search{background:rgba(255,255,255,.7);border-radius:12px;padding:11px 14px;color:var(--ink3);margin-bottom:26px}
+.sec{color:var(--muted);font-size:15px;margin:20px 8px 12px}
+.nav{padding:12px 14px;border-radius:12px;font-weight:500;font-size:14.5px;display:flex;gap:12px;align-items:center}
+.nav b{width:14px;height:14px;border:1.5px solid var(--ink3);border-radius:3px;display:inline-block}
+main{flex:1;padding:22px 36px 40px}
+.top{display:flex;justify-content:flex-end;align-items:center;gap:22px;color:var(--ink3);height:44px}
+.av{width:34px;height:34px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-size:11px;font-weight:600;color:var(--fg)}
+h1{font-size:27px;font-weight:500;margin:16px 0 6px;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:15px;margin:0 0 26px}
+.tabs{display:inline-flex;gap:4px;background:rgba(255,255,255,.6);padding:5px;border-radius:14px;margin-bottom:26px}
+.tab{cursor:pointer;user-select:none;padding:8px 16px;border-radius:10px;font-weight:500;font-size:14.5px}
+.tab.on{background:var(--wash);background:#fbf3dc;box-shadow:inset 0 0 0 1px var(--line)}
+.intro{color:var(--muted);font-size:14.5px;margin:0 0 16px}
+.card{background:rgba(255,255,255,.82);border-radius:20px;padding:24px 26px;box-shadow:0 1px 2px rgba(47,63,102,.05),0 12px 30px -18px rgba(47,63,102,.25);border:1px solid rgba(255,255,255,.7)}
+.hd{display:flex;gap:11px;align-items:flex-start;margin-bottom:22px}
+.wallet{width:18px;height:15px;border:1.6px solid var(--ink3);border-radius:4px;margin-top:3px;position:relative}
+.wallet:after{content:"";position:absolute;right:-1.6px;top:4px;width:6px;height:5px;border:1.6px solid var(--ink3);border-radius:2px;background:#fff}
+h2{font-size:16px;font-weight:600;margin:0}
+.hd p{margin:3px 0 0;color:var(--muted);font-size:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+label{display:block;font-size:14px;color:var(--muted);margin-bottom:8px}
+.inp{position:relative;background:rgba(255,255,255,.7);border-radius:12px;height:44px;display:flex;align-items:center;padding:0 14px;font-size:15px;box-shadow:inset 0 0 0 1px rgba(47,63,102,.08)}
+.inp span{position:absolute;right:14px;color:var(--muted);font-size:13.5px}
+.help{font-size:12.5px;color:var(--muted);margin:9px 0 0;line-height:1.5}
+.help strong{color:var(--fg);font-weight:500}
+.ex{margin:22px 0 0;background:#fdf8ea;box-shadow:inset 0 0 0 1px var(--line);border-radius:14px;padding:12px 15px;font-size:14px}
+.ex b{font-weight:600}
+.foot{display:flex;justify-content:flex-end;margin-top:20px}
+.btn{background:var(--accent);opacity:.5;border-radius:999px;padding:9px 16px;font-weight:500;font-size:14px;color:var(--accent-ink)}
+.pill{position:fixed;bottom:22px;right:96px;background:#f4bfd3;color:#7a2a4a;border-radius:999px;padding:12px 20px;font-weight:600}
+.demo{position:fixed;bottom:22px;left:22px;background:#fff;border-radius:999px;padding:12px 20px;color:var(--muted)}
+.callout{position:absolute;font:500 13px Inter,sans-serif;background:#2f3f66;color:#fff;padding:7px 11px;border-radius:9px;zoom:1.111}
+.callout:before{content:"";position:absolute;width:10px;height:10px;background:#2f3f66;transform:rotate(45deg)}
+.inp input{border:0;background:transparent;font:inherit;color:inherit;width:60%;outline:none}
+.inp:focus-within{box-shadow:inset 0 0 0 1.5px #d6b75c}
+.panel{display:none}.panel.on{display:block}
+.row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(47,63,102,.07);font-size:14px}
+.row:last-child{border:0}.row span{color:var(--muted)}
+.btn.on{opacity:1;cursor:pointer}.err{color:#b3415e;font-size:13px;margin:22px 0 0}
+#subtitle{transition:opacity .15s}
+.note{font:12px Inter,sans-serif;color:#8a90a6;margin-top:18px}
+</style></head><body>
+<div class="shell">
+<aside>
+ <div class="logo"><i></i>SQINOS</div>
+ <div class="search">⌕&nbsp; Search patients</div>
+ <div class="sec">Clinic</div>
+ <div class="nav"><b></b>Dashboard</div><div class="nav"><b></b>Diary</div><div class="nav"><b></b>Patients</div><div class="nav"><b></b>Tasks</div>
+ <div class="sec">Reports</div>
+ <div class="nav"><b></b>Insights</div><div class="nav"><b></b>Retention</div><div class="nav"><b></b>Performance</div>
+</aside>
+<main>
+ <div class="top"><span>⚑</span><span>▢</span><span>✉</span><span>🔔︎</span><div class="av">DA</div><div style="color:var(--fg);line-height:1.2"><b style="font-weight:500">Dr Amara Osei</b><br><small style="color:var(--ink3)">Clinic Owner</small></div></div>
+ <h1>Settings</h1>
+ <p class="sub" id="subtitle"></p>
+ <div class="tabs" id="tabs"><span class="tab" data-k="clinic">Clinic</span><span class="tab" data-k="treatments">Treatments</span><span class="tab" data-k="products">Products</span><span class="tab" data-k="rules">Rules</span></div>
+
+ <div class="panel" data-p="clinic"><div class="card">
+  <div class="hd"><div class="wallet" style="border-radius:3px"></div><div><h2>Clinic details</h2><p>Used on consent forms, receipts and patient messages.</p></div></div>
+  <div class="grid"><div><label>Clinic name</label><div class="inp">Aetheria Aesthetics</div></div><div><label>Phone</label><div class="inp">020 7000 0000</div></div>
+  <div><label>Email</label><div class="inp">hello@aetheria.clinic</div></div><div><label>Address</label><div class="inp">12 Harley Street, London</div></div></div></div></div>
+
+ <div class="panel" data-p="treatments"><div class="card">
+  <div class="hd"><div class="wallet" style="border-radius:3px"></div><div><h2>Treatments offered</h2><p>Add treatments, set prices, appointment length, recall intervals, consent rules and diary colours.</p></div></div>
+  <div class="row"><b style="font-weight:500">Lip Filler</b><span>£300 · 45 min · recall 6 months</span></div>
+  <div class="row"><b style="font-weight:500">Chemical Peel</b><span>£150 · 45 min · recall 4 weeks</span></div>
+  <div class="row"><b style="font-weight:500">Microneedling with PRP</b><span>£350 · 75 min · recall 6 weeks</span></div></div></div>
+
+ <div class="panel" data-p="products"><div class="card">
+  <div class="hd"><div class="wallet" style="border-radius:3px"></div><div><h2>Retail products</h2><p>Physical products shown on the patient portal and counted in Insights.</p></div></div>
+  <div class="row"><b style="font-weight:500">Hydrating serum 30ml</b><span>£42</span></div>
+  <div class="row"><b style="font-weight:500">Mineral SPF 50</b><span>£28</span></div></div></div>
+
+ <div class="panel" data-p="rules"><div class="card">
+  <div class="hd"><div class="wallet"></div><div><h2>Deposits</h2><p>How much deposit a patient pays to secure a booking, and how long before the appointment it must be paid.</p></div></div>
+  <div class="grid">
+   <div><label for="pct">Deposit amount</label><div class="inp"><input id="pct" type="number" min="0" max="100" value="30" inputmode="numeric"><span>% of the treatment price</span></div>
+    <p class="help">When a booking is marked <strong>Deposit paid</strong>, this amount counts as money collected in your reports.</p></div>
+   <div><label for="days">Deposit due</label><div class="inp"><input id="days" type="number" min="0" max="30" value="3" inputmode="numeric"><span>days before the appointment</span></div>
+    <p class="help">Unpaid deposits are flagged <strong>Urgent</strong> on the dashboard once the appointment is this close. Before that, they show under <strong>This week</strong> from 10 days out.</p></div>
+  </div>
+  <p class="ex" id="ex"></p>
+  <div class="foot"><span class="btn" id="save">Save deposit rules</span></div>
+ </div></div>
+ <p class="note">Mockup — try the tabs, and change the deposit numbers.</p>
+</main></div>
+<div class="demo">● Demo: Clinic owner</div><div class="pill">⌛ 6 Alerts ⌃</div>
+<script>
+const SUB={clinic:"Your clinic's name and contact details, used on consent forms, receipts and patient messages.",
+ treatments:"The treatments you offer, with prices, appointment lengths, recall intervals and diary colours.",
+ products:"Retail products shown on the patient portal and counted in Insights.",
+ rules:"Rules your clinic sets once and SQINOS follows everywhere: the dashboard, the diary and your reports."};
+const sub=document.getElementById('subtitle');
+function show(k){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.k===k));
+ document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.dataset.p===k));
+ sub.style.opacity=0;setTimeout(()=>{sub.textContent=SUB[k];sub.style.opacity=1},120);}
+document.getElementById('tabs').addEventListener('click',e=>{const t=e.target.closest('.tab');if(t)show(t.dataset.k)});
+const pct=document.getElementById('pct'),days=document.getElementById('days'),ex=document.getElementById('ex'),save=document.getElementById('save');
+const saved={p:'30',d:'3'};
+function upd(){const p=+pct.value,d=+days.value;const ok=pct.value!==''&&days.value!==''&&Number.isInteger(p)&&p>=0&&p<=100&&Number.isInteger(d)&&d>=0&&d<=30;
+ if(!ok){ex.className='err';ex.textContent='Enter a deposit between 0 and 100%, due 0 to 30 days before the appointment.';}
+ else{ex.className='ex';ex.innerHTML=p===0?'<b>Example:</b> No deposit is taken, so nothing is chased before appointments.':`<b>Example:</b> a £300 treatment needs a £${Math.round(300*p/100)} deposit, paid at least ${d} ${d===1?'day':'days'} before the appointment.`;}
+ save.classList.toggle('on',ok&&(pct.value!==saved.p||days.value!==saved.d));}
+pct.oninput=days.oninput=upd;
+save.onclick=()=>{if(!save.classList.contains('on'))return;saved.p=pct.value;saved.d=days.value;save.textContent='Saved ✓';upd();setTimeout(()=>save.textContent='Save deposit rules',1200)};
+show('rules');upd();
+</script></body></html>

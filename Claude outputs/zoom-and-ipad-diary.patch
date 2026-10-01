@@ -1,0 +1,2190 @@
+diff --git a/e2e/changelog/commit-captures.spec.ts b/e2e/changelog/commit-captures.spec.ts
+index 9ee4f93..4179bab 100644
+--- a/e2e/changelog/commit-captures.spec.ts
++++ b/e2e/changelog/commit-captures.spec.ts
+@@ -269,7 +269,7 @@ export const SCENES: Scene[] = [
+   { id: "retention", persona: "owner", path: "/retention", settle: '[data-qc="metric:retention.oneVisitOnly"], h1', what: "Retention" },
+   { id: "offers", persona: "owner", path: "/offers", settle: '[data-qc="offer-stage-count"], h1', what: "Offers" },
+   { id: "settings", persona: "owner", path: "/settings", settle: '[data-qc="settings-tabs"], h1', what: "Settings, Clinic" },
+-  { id: "settings-payments", persona: "owner", path: "/settings?tab=payments", settle: '[data-qc="settings-tabs"], h1', what: "Settings, Payments and deposits" },
++  { id: "settings-rules", persona: "owner", path: "/settings?tab=rules", settle: '[data-qc="settings-tabs"], h1', what: "Settings, Rules (deposits)" },
+ 
+   // Floating dock, alerts, bell, sidebar
+   { id: "dock-chat", persona: "owner", path: "/dashboard", settle: "h1", keepDock: true, viewport: true, what: "Floating dock, chat window", open: openChat },
+diff --git a/e2e/patients-records.spec.ts b/e2e/patients-records.spec.ts
+index 767ab5d..c331cbd 100644
+--- a/e2e/patients-records.spec.ts
++++ b/e2e/patients-records.spec.ts
+@@ -249,7 +249,7 @@ test.describe("owner", () => {
+     }
+   });
+ 
+-  test("below the xl breakpoint the drawer is a sheet that opens from the row", async ({
++  test("below the xl breakpoint the drawer is a centred popup that opens from the row", async ({
+     page,
+   }) => {
+     await page.setViewportSize({ width: 1024, height: 900 });
+@@ -263,6 +263,12 @@ test.describe("owner", () => {
+     const sheet = page.locator('[data-qc="records-drawer-sheet"]');
+     await expect(sheet).toBeVisible();
+     await expect(sheet.locator('[data-qc="drawer-name"]')).toContainText(name[0]!);
++    // A centred popup, not a panel sliding in from the side.
++    const box = await sheet.evaluate((el) => {
++      const r = el.getBoundingClientRect();
++      return { cx: r.left + r.width / 2, w: window.innerWidth };
++    });
++    expect(Math.abs(box.cx - box.w / 2)).toBeLessThan(4);
+     await page.keyboard.press("Escape");
+     await expect(sheet).toHaveCount(0);
+   });
+diff --git a/e2e/responsive/fixtures.ts b/e2e/responsive/fixtures.ts
+index d6190b3..533dd61 100644
+--- a/e2e/responsive/fixtures.ts
++++ b/e2e/responsive/fixtures.ts
+@@ -82,7 +82,7 @@ export function shotPath(project: string, slug: string) {
+  */
+ export async function expandShell(page: Page) {
+   await page.evaluate(() => {
+-    const shell = document.querySelector<HTMLElement>(".flex.h-dvh");
++    const shell = document.querySelector<HTMLElement>(".flex.h-app-screen, .flex.h-dvh");
+     const main = document.getElementById("app-main-scroll");
+     if (shell) {
+       shell.style.height = "auto";
+diff --git a/package.json b/package.json
+index 6a3c845..7e5ba38 100644
+--- a/package.json
++++ b/package.json
+@@ -23,6 +23,9 @@
+     "test:metrics": "playwright test --config playwright.metrics.config.ts",
+     "review:captures": "playwright test --config playwright.review.config.ts",
+     "test:responsive": "playwright test --config playwright.responsive.config.ts",
++    "test:ipad": "playwright test --config playwright.responsive.config.ts --project=ipad-mini-portrait --project=ipad-pro-landscape",
++    "test:drag": "playwright test --config playwright.responsive.config.ts e2e/responsive/diary-drag.spec.ts e2e/responsive/panel-drag.spec.ts",
++    "test:journey-tap": "playwright test --config playwright.responsive.config.ts e2e/responsive/journey-pill-tap.spec.ts",
+     "test:responsive:gate": "RESPONSIVE_GATE=major playwright test --config playwright.responsive.config.ts e2e/responsive/matrix.spec.ts",
+     "qc:responsive": "npm run test:responsive; node scripts/responsive-report.mjs",
+     "verify": "npm run check:policy && npm run check:validators && npm run check:tenancy && npm run check:metrics && npm run test:unit && npm run test:e2e"
+diff --git a/src/components/access-control-settings.tsx b/src/components/access-control-settings.tsx
+index 25987a3..fcc8067 100644
+--- a/src/components/access-control-settings.tsx
++++ b/src/components/access-control-settings.tsx
+@@ -29,6 +29,7 @@ import {
+   DialogTitle,
+ } from "@/components/ui/dialog";
+ import { isStepUpRequired, useStepUp } from "@/components/step-up-dialog";
++import { getAppZoom } from "@/lib/app-zoom";
+ 
+ const RECENT_CHANGE_PREVIEW = 5;
+ 
+@@ -178,7 +179,7 @@ export function AccessControlSettings({ canEdit }: { canEdit: boolean }) {
+         const box = row.getBoundingClientRect();
+         const straddles = box.top < edge - 1 && box.bottom > edge + 1;
+         row.style.visibility = straddles ? "hidden" : "";
+-        if (straddles) leftover = Math.max(leftover, Math.ceil(box.bottom - edge));
++        if (straddles) leftover = Math.max(leftover, Math.ceil((box.bottom - edge) / getAppZoom()));
+       }
+       head.style.setProperty("--access-leftover", `${leftover}px`);
+     };
+diff --git a/src/components/app-shell.tsx b/src/components/app-shell.tsx
+index 783a6ea..ca1be41 100644
+--- a/src/components/app-shell.tsx
++++ b/src/components/app-shell.tsx
+@@ -52,6 +52,7 @@ import { canSee, isAccessAdmin } from "@/lib/access-catalogue";
+ import { initialsOf, laneFor } from "@/lib/practitioner-colours";
+ import { useStaffPresence } from "@/lib/use-staff-presence";
+ import { cn } from "@/lib/utils";
++import { startPointerDrag } from "@/lib/pointer-drag";
+ 
+ type Identity = {
+   userId?: string;
+@@ -511,7 +512,6 @@ export function AppShell({ identity, children }: { identity: Identity; children:
+   const [sidebarOpen, setSidebarOpen] = useState(true);
+   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
+   const [scrollBlend, setScrollBlend] = useState(0);
+-  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+ 
+   useEffect(() => {
+     const main = mainScrollRef.current;
+@@ -682,25 +682,10 @@ export function AppShell({ identity, children }: { identity: Identity; children:
+   }
+ 
+   function onResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+-    event.preventDefault();
+-    dragRef.current = { startX: event.clientX, startWidth: sidebarWidth };
+-    document.body.classList.add("select-none", "cursor-col-resize");
+-
+-    function onMove(moveEvent: globalThis.PointerEvent) {
+-      const drag = dragRef.current;
+-      if (!drag) return;
+-      persistWidth(drag.startWidth + (moveEvent.clientX - drag.startX));
+-    }
+-
+-    function onUp() {
+-      dragRef.current = null;
+-      document.body.classList.remove("select-none", "cursor-col-resize");
+-      window.removeEventListener("pointermove", onMove);
+-      window.removeEventListener("pointerup", onUp);
+-    }
+-
+-    window.addEventListener("pointermove", onMove);
+-    window.addEventListener("pointerup", onUp);
++    const startWidth = sidebarWidth;
++    startPointerDrag(event, {
++      onMove: (dx) => persistWidth(startWidth + dx),
++    });
+   }
+ 
+   useEffect(() => {
+@@ -743,12 +728,12 @@ export function AppShell({ identity, children }: { identity: Identity; children:
+   };
+ 
+   return (
+-    <div className="flex h-dvh overflow-hidden">
++    <div className="flex h-app-screen overflow-hidden">
+       {narrow && (
+         <Sheet open={sidebarOpen} onOpenChange={setOpen}>
+           <SheetContent
+             side="left"
+-            className="w-[min(20rem,88vw)] gap-0 border-edge bg-sidebar p-0 shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass [&>button]:hidden"
++            className="w-[min(20rem,calc(88*var(--app-vw)))] gap-0 border-edge bg-sidebar p-0 shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass [&>button]:hidden"
+             data-qc="sidebar-drawer"
+           >
+             <SheetTitle className="sr-only">Navigation</SheetTitle>
+@@ -761,7 +746,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
+       )}
+       {!narrow && sidebarOpen && (
+         <aside
+-          className="relative flex h-dvh shrink-0 flex-col border-r border-edge bg-sidebar shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass"
++          className="relative flex h-app-screen shrink-0 flex-col border-r border-edge bg-sidebar shadow-[inset_-1px_0_0_var(--edge-hi)] backdrop-blur-glass"
+           style={{ width: sidebarWidth }}
+         >
+           <SidebarChrome {...chrome} searchRef={searchRef} />
+@@ -785,7 +770,7 @@ export function AppShell({ identity, children }: { identity: Identity; children:
+                 persistWidth(sidebarWidth + 16);
+               }
+             }}
+-            className="absolute inset-y-0 right-0 z-10 w-1 cursor-col-resize touch-none hover:bg-accent-soft"
++            className="drag-handle absolute inset-y-0 right-0 z-10 w-1 cursor-col-resize touch-none hover:bg-accent-soft"
+           />
+         </aside>
+       )}
+diff --git a/src/components/chat-quick-reply-toast.tsx b/src/components/chat-quick-reply-toast.tsx
+index c70af10..ae72a3b 100644
+--- a/src/components/chat-quick-reply-toast.tsx
++++ b/src/components/chat-quick-reply-toast.tsx
+@@ -4,6 +4,7 @@ import { toast } from "sonner";
+ import { formatTeamAlertToast, isStaffAlertReply } from "@/lib/staff-alert-title";
+ import { pinAetheriaToast, unpinAetheriaToast } from "@/components/ui/sonner";
+ import { cn } from "@/lib/utils";
++import { getAppZoom } from "@/lib/app-zoom";
+ 
+ type ChatQuickReplyToastProps = {
+   toastId: string | number;
+@@ -92,7 +93,7 @@ function useQuickReplyToastDock(contentRef: React.RefObject<HTMLDivElement | nul
+       if (!dragging.current || pointerId.current !== e.pointerId) return;
+       const { x, offset, hidden } = dragStart.current;
+       if (Math.abs(e.clientX - x) > 6) dragMoved.current = true;
+-      applyLeft(el, Math.max(hidden, Math.min(0, offset + (e.clientX - x))), false);
++      applyLeft(el, Math.max(hidden, Math.min(0, offset + (e.clientX - x) / getAppZoom())), false);
+     };
+ 
+     const onUp = (e: PointerEvent) => {
+diff --git a/src/components/consent-in-clinic-dialog.tsx b/src/components/consent-in-clinic-dialog.tsx
+index 6df3447..ec37c09 100644
+--- a/src/components/consent-in-clinic-dialog.tsx
++++ b/src/components/consent-in-clinic-dialog.tsx
+@@ -83,7 +83,7 @@ export function ConsentInClinicDialog({
+ 
+   return (
+     <Dialog open={open} onOpenChange={onOpenChange}>
+-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto" data-qc="consent-in-clinic">
++      <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-lg overflow-y-auto" data-qc="consent-in-clinic">
+         <DialogHeader>
+           <DialogTitle className="flex items-center gap-2">
+             <ShieldCheck className="h-4 w-4 text-accent-ink" aria-hidden />
+@@ -99,7 +99,7 @@ export function ConsentInClinicDialog({
+         </DialogHeader>
+ 
+         {data ? (
+-          <div className="max-h-[min(62dvh,560px)] space-y-4 overflow-y-auto pr-1">
++          <div className="max-h-[min(calc(62*var(--app-dvh)),560px)] space-y-4 overflow-y-auto pr-1">
+             <div className="rounded-2xl bg-glass-2 p-4 shadow-inset-hi">
+               <p className="text-sm font-semibold text-foreground">{data.document.title}</p>
+               <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{data.document.body}</p>
+diff --git a/src/components/dashboard/floating-notes.tsx b/src/components/dashboard/floating-notes.tsx
+index 9e420f1..9be4bbc 100644
+--- a/src/components/dashboard/floating-notes.tsx
++++ b/src/components/dashboard/floating-notes.tsx
+@@ -19,6 +19,8 @@ import { RichNotesEditor } from "@/components/notes/rich-notes-editor";
+ import { Button } from "@/components/ui/button";
+ import { useIdentity } from "@/lib/use-identity";
+ import { cn } from "@/lib/utils";
++import { getAppZoom } from "@/lib/app-zoom";
++import { startPointerDrag } from "@/lib/pointer-drag";
+ 
+ /**
+  * "My notes" as a movable, resizable floating card.
+@@ -51,26 +53,34 @@ type NotesFloatApi = {
+ 
+ const NotesFloatContext = createContext<NotesFloatApi | null>(null);
+ 
++/** Viewport size in CSS pixels (the app may be zoomed — see src/lib/app-zoom.ts). */
++function viewportCss() {
++  const zoom = getAppZoom();
++  return { w: window.innerWidth / zoom, h: window.innerHeight / zoom };
++}
++
+ function clampSize(size: Size): Size {
+   if (typeof window === "undefined") return size;
++  const vp = viewportCss();
+   return {
+-    w: Math.min(Math.max(MIN_W, size.w), Math.max(MIN_W, window.innerWidth)),
+-    h: Math.min(Math.max(MIN_H, size.h), Math.max(MIN_H, window.innerHeight - EDGE_Y * 2)),
++    w: Math.min(Math.max(MIN_W, size.w), Math.max(MIN_W, vp.w)),
++    h: Math.min(Math.max(MIN_H, size.h), Math.max(MIN_H, vp.h - EDGE_Y * 2)),
+   };
+ }
+ 
+ function clampPos(pos: Pos, size: Size): Pos {
+   if (typeof window === "undefined") return pos;
+   const { w, h } = clampSize(size);
++  const vp = viewportCss();
+   return {
+-    x: Math.min(Math.max(0, pos.x), Math.max(0, window.innerWidth - w)),
+-    y: Math.min(Math.max(EDGE_Y, pos.y), Math.max(EDGE_Y, window.innerHeight - h - EDGE_Y)),
++    x: Math.min(Math.max(0, pos.x), Math.max(0, vp.w - w)),
++    y: Math.min(Math.max(EDGE_Y, pos.y), Math.max(EDGE_Y, vp.h - h - EDGE_Y)),
+   };
+ }
+ 
+ function defaultPos(size: Size): Pos {
+   if (typeof window === "undefined") return { x: 600, y: 80 };
+-  return clampPos({ x: window.innerWidth - size.w - 40, y: 64 }, size);
++  return clampPos({ x: viewportCss().w - size.w - 40, y: 64 }, size);
+ }
+ 
+ function loadSize(): Size {
+@@ -121,16 +131,6 @@ export function FloatingNotesProvider({ children }: { children: ReactNode }) {
+   const sizeRef = useRef(size);
+   sizeRef.current = size;
+ 
+-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+-  const resizeRef = useRef<{
+-    edge: ResizeEdge;
+-    startX: number;
+-    startY: number;
+-    origW: number;
+-    origH: number;
+-    origX: number;
+-    origY: number;
+-  } | null>(null);
+ 
+   const toggle = useCallback(() => {
+     setOpen((current) => {
+@@ -165,87 +165,43 @@ export function FloatingNotesProvider({ children }: { children: ReactNode }) {
+     return () => window.removeEventListener("resize", onWin);
+   }, []);
+ 
+-  function onDragHandleDown(event: ReactPointerEvent<HTMLDivElement>) {
+-    if (!pos || (event.target as HTMLElement).closest("button")) return;
+-    event.preventDefault();
+-    dragRef.current = { startX: event.clientX, startY: event.clientY, origX: pos.x, origY: pos.y };
+-    document.body.classList.add("select-none");
+-
+-    function onMove(moveEvent: globalThis.PointerEvent) {
+-      const drag = dragRef.current;
+-      if (!drag) return;
+-      setPos(
+-        clampPos(
+-          {
+-            x: drag.origX + (moveEvent.clientX - drag.startX),
+-            y: drag.origY + (moveEvent.clientY - drag.startY),
+-          },
+-          sizeRef.current,
+-        ),
+-      );
+-    }
+-
+-    function onUp() {
+-      dragRef.current = null;
+-      document.body.classList.remove("select-none");
+-      window.removeEventListener("pointermove", onMove);
+-      window.removeEventListener("pointerup", onUp);
+-      setPos((current) => {
+-        if (current) persist(POS_KEY, current);
+-        return current;
+-      });
+-    }
++  const savePlacement = () => {
++    setSize((current) => {
++      persist(SIZE_KEY, current);
++      return current;
++    });
++    setPos((current) => {
++      if (current) persist(POS_KEY, current);
++      return current;
++    });
++  };
+ 
+-    window.addEventListener("pointermove", onMove);
+-    window.addEventListener("pointerup", onUp);
++  function onDragHandleDown(event: ReactPointerEvent<HTMLDivElement>) {
++    if (!pos || (event.target as HTMLElement).closest("button, a, input, textarea")) return;
++    const origin = pos;
++    startPointerDrag(event, {
++      onMove: (dx, dy) =>
++        setPos(clampPos({ x: origin.x + dx, y: origin.y + dy }, sizeRef.current)),
++      onEnd: savePlacement,
++    });
+   }
+ 
+   function onResizeDown(edge: ResizeEdge) {
+     return (event: ReactPointerEvent<HTMLDivElement>) => {
+       if (!pos) return;
+-      event.preventDefault();
+       event.stopPropagation();
+-      resizeRef.current = {
+-        edge,
+-        startX: event.clientX,
+-        startY: event.clientY,
+-        origW: size.w,
+-        origH: size.h,
+-        origX: pos.x,
+-        origY: pos.y,
+-      };
+-      document.body.classList.add("select-none");
+-
+-      function onMove(moveEvent: globalThis.PointerEvent) {
+-        const resize = resizeRef.current;
+-        if (!resize) return;
+-        const dx = moveEvent.clientX - resize.startX;
+-        const dy = moveEvent.clientY - resize.startY;
+-        const next = clampSize({
+-          w: resize.edge === "s" ? resize.origW : resize.origW + dx,
+-          h: resize.edge === "e" ? resize.origH : resize.origH + dy,
+-        });
+-        setSize(next);
+-        setPos(clampPos({ x: resize.origX, y: resize.origY }, next));
+-      }
+-
+-      function onUp() {
+-        resizeRef.current = null;
+-        document.body.classList.remove("select-none");
+-        window.removeEventListener("pointermove", onMove);
+-        window.removeEventListener("pointerup", onUp);
+-        setSize((current) => {
+-          persist(SIZE_KEY, current);
+-          return current;
+-        });
+-        setPos((current) => {
+-          if (current) persist(POS_KEY, current);
+-          return current;
+-        });
+-      }
+-
+-      window.addEventListener("pointermove", onMove);
+-      window.addEventListener("pointerup", onUp);
++      const origin = { w: size.w, h: size.h, x: pos.x, y: pos.y };
++      startPointerDrag(event, {
++        onMove: (dx, dy) => {
++          const next = clampSize({
++            w: edge === "s" ? origin.w : origin.w + dx,
++            h: edge === "e" ? origin.h : origin.h + dy,
++          });
++          setSize(next);
++          setPos(clampPos({ x: origin.x, y: origin.y }, next));
++        },
++        onEnd: savePlacement,
++      });
+     };
+   }
+ 
+@@ -275,7 +231,7 @@ export function FloatingNotesProvider({ children }: { children: ReactNode }) {
+               <div className="glass-card relative flex h-full flex-col p-0 !bg-[rgba(255,255,255,0.94)] shadow-[var(--shadow-popover)]">
+                 <div
+                   onPointerDown={onDragHandleDown}
+-                  className="flex shrink-0 cursor-grab items-center gap-1.5 border-b border-edge-2 px-4 py-3 active:cursor-grabbing"
++                  className="drag-handle flex shrink-0 cursor-grab items-center gap-1.5 border-b border-edge-2 px-4 py-3 active:cursor-grabbing"
+                 >
+                   <GripVertical className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                   <p className="text-sm font-semibold text-foreground">My notes</p>
+@@ -299,20 +255,20 @@ export function FloatingNotesProvider({ children }: { children: ReactNode }) {
+                   aria-orientation="vertical"
+                   aria-label="Resize notes width"
+                   onPointerDown={onResizeDown("e")}
+-                  className="absolute inset-y-3 right-0 z-10 w-2 cursor-ew-resize touch-none"
++                  className="drag-handle absolute inset-y-3 right-0 z-10 w-2 cursor-ew-resize touch-none pointer-coarse:w-4"
+                 />
+                 <div
+                   role="separator"
+                   aria-orientation="horizontal"
+                   aria-label="Resize notes height"
+                   onPointerDown={onResizeDown("s")}
+-                  className="absolute inset-x-3 bottom-0 z-10 h-2 cursor-ns-resize touch-none"
++                  className="drag-handle absolute inset-x-3 bottom-0 z-10 h-2 cursor-ns-resize touch-none pointer-coarse:h-4"
+                 />
+                 <div
+                   role="separator"
+                   aria-label="Resize notes"
+                   onPointerDown={onResizeDown("se")}
+-                  className="absolute bottom-0 right-0 z-20 flex h-5 w-5 cursor-nwse-resize touch-none items-end justify-end p-1"
++                  className="drag-handle absolute bottom-0 right-0 z-20 flex h-5 w-5 cursor-nwse-resize touch-none pointer-coarse:h-8 pointer-coarse:w-8 items-end justify-end p-1"
+                 >
+                   <span
+                     aria-hidden
+diff --git a/src/components/dashboard/today-snapshot.tsx b/src/components/dashboard/today-snapshot.tsx
+index 7ddb4f7..d30bdf2 100644
+--- a/src/components/dashboard/today-snapshot.tsx
++++ b/src/components/dashboard/today-snapshot.tsx
+@@ -48,6 +48,7 @@ import {
+   DialogHeader,
+   DialogTitle,
+ } from "@/components/ui/dialog";
++import { getAppZoom } from "@/lib/app-zoom";
+ 
+ type Stage = "booked" | "arrived" | "waiting" | "in_treatment" | "aftercare" | "complete" | "no_show";
+ 
+@@ -153,17 +154,20 @@ function AppointmentCarousel({
+     startX: number;
+     startY: number;
+     startScroll: number;
++    zoom: number;
+     moved: boolean;
+   } | null>(null);
+ 
+   const slides = () =>
+     Array.from(scrollerRef.current?.querySelectorAll<HTMLElement>("[data-diary-slide]") ?? []);
+ 
++  /** Horizontal padding in screen pixels, to compare with getBoundingClientRect(). */
+   const padX = (el: HTMLElement) => {
+     const styles = getComputedStyle(el);
++    const zoom = getAppZoom();
+     return {
+-      left: Number.parseFloat(styles.paddingLeft) || 0,
+-      right: Number.parseFloat(styles.paddingRight) || 0,
++      left: (Number.parseFloat(styles.paddingLeft) || 0) * zoom,
++      right: (Number.parseFloat(styles.paddingRight) || 0) * zoom,
+     };
+   };
+ 
+@@ -218,7 +222,7 @@ function AppointmentCarousel({
+     if (!slide) return;
+     const delta =
+       slide.getBoundingClientRect().left - (el.getBoundingClientRect().left + padX(el).left);
+-    el.scrollBy({ left: delta, behavior });
++    el.scrollBy({ left: delta / getAppZoom(), behavior });
+     requestAnimationFrame(syncEdges);
+     if (behavior === "smooth") {
+       const onEnd = () => {
+@@ -316,6 +320,9 @@ function AppointmentCarousel({
+   };
+ 
+   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
++    // Fingers and pens scroll the strip natively; driving scrollLeft as well
++    // made it move twice as far and jump on iPad.
++    if (event.pointerType !== "mouse") return;
+     if (event.button !== 0) return;
+     const target = event.target as HTMLElement;
+     if (target.closest("a, button, input, textarea, select, label")) return;
+@@ -326,6 +333,7 @@ function AppointmentCarousel({
+       startX: event.clientX,
+       startY: event.clientY,
+       startScroll: el.scrollLeft,
++      zoom: getAppZoom(),
+       moved: false,
+     };
+     // Capture is taken only once a drag is under way (see onPointerMove).
+@@ -353,7 +361,7 @@ function AppointmentCarousel({
+     }
+     if (!drag.moved) return;
+     event.preventDefault();
+-    el.scrollLeft = drag.startScroll - dx;
++    el.scrollLeft = drag.startScroll - dx / drag.zoom;
+     syncEdges();
+   };
+ 
+@@ -652,7 +660,7 @@ function TodayCard({
+         }}
+       >
+         <DialogContent
+-          className="max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md gap-0 overflow-y-auto overscroll-contain rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
++          className="max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md gap-0 overflow-y-auto overscroll-contain rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
+         >
+           <DialogHeader className="pr-8 text-left">
+             <DialogTitle>
+diff --git a/src/components/floating-dock/alert-bubble.tsx b/src/components/floating-dock/alert-bubble.tsx
+index d1fdea1..6709abf 100644
+--- a/src/components/floating-dock/alert-bubble.tsx
++++ b/src/components/floating-dock/alert-bubble.tsx
+@@ -143,7 +143,7 @@ export function AlertBubble({ roles }: { roles: string[] }) {
+         }}
+         className={
+           showPanel
+-            ? "pointer-events-auto flex w-[min(18rem,calc(100vw-2.5rem))] flex-col items-end gap-3"
++            ? "pointer-events-auto flex w-[min(18rem,calc(calc(100*var(--app-vw))-2.5rem))] flex-col items-end gap-3"
+             : "hidden"
+         }
+       >
+diff --git a/src/components/floating-dock/chat-bubble.tsx b/src/components/floating-dock/chat-bubble.tsx
+index 82b0f2b..3fc56c1 100644
+--- a/src/components/floating-dock/chat-bubble.tsx
++++ b/src/components/floating-dock/chat-bubble.tsx
+@@ -235,7 +235,7 @@ function ChatWindow({
+             : "Patient conversations"
+       }
+       data-qc="chat-window"
+-      className="pointer-events-auto absolute bottom-[calc(100%+0.75rem)] right-0 flex h-[560px] max-h-[70vh] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-edge bg-popover shadow-[var(--shadow-popover)] backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:h-auto max-sm:max-h-[min(70dvh,32rem)] max-sm:w-auto max-sm:max-w-none"
++      className="pointer-events-auto absolute bottom-[calc(100%+0.75rem)] right-0 flex h-[560px] max-h-[calc(70*var(--app-vh))] w-[380px] max-w-[calc(calc(100*var(--app-vw))-2.5rem)] flex-col overflow-hidden rounded-2xl border border-edge bg-popover shadow-[var(--shadow-popover)] backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:h-auto max-sm:max-h-[min(calc(70*var(--app-dvh)),32rem)] max-sm:w-auto max-sm:max-w-none"
+     >
+       <header
+         className={cn(
+diff --git a/src/components/floating-dock/floating-dock.tsx b/src/components/floating-dock/floating-dock.tsx
+index a83c97d..48725b2 100644
+--- a/src/components/floating-dock/floating-dock.tsx
++++ b/src/components/floating-dock/floating-dock.tsx
+@@ -1,6 +1,7 @@
+ import { useEffect, useRef } from "react";
+ import { AlertBubble } from "./alert-bubble";
+ import { ChatBubble } from "./chat-bubble";
++import { getAppZoom } from "@/lib/app-zoom";
+ 
+ /**
+  * The single owner of the bottom-right corner on staff pages: two launchers
+@@ -28,7 +29,7 @@ export function FloatingDock({ roles }: { roles: string[] }) {
+           top = Math.min(top, b.getBoundingClientRect().top);
+         },
+       );
+-      root.style.setProperty("--dock-h", `${Math.ceil(bottom - top) + 20}px`);
++      root.style.setProperty("--dock-h", `${Math.ceil((bottom - top) / getAppZoom()) + 20}px`);
+     };
+     update();
+     const ro = new ResizeObserver(update);
+diff --git a/src/components/force-password-change-gate.tsx b/src/components/force-password-change-gate.tsx
+index cc6994c..9860882 100644
+--- a/src/components/force-password-change-gate.tsx
++++ b/src/components/force-password-change-gate.tsx
+@@ -198,7 +198,7 @@ export function StaffWelcomeDialog({
+         if (!next) dismiss();
+       }}
+     >
+-      <DialogContent className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
++      <DialogContent className="flex w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
+         <DialogHeader className="shrink-0 pr-8 text-left">
+           <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl border border-edge bg-glass-2 text-foreground">
+             <Sparkles className="h-4 w-4" aria-hidden />
+diff --git a/src/components/invite-staff-dialog.tsx b/src/components/invite-staff-dialog.tsx
+index 1fab5f5..3d5b7fa 100644
+--- a/src/components/invite-staff-dialog.tsx
++++ b/src/components/invite-staff-dialog.tsx
+@@ -236,7 +236,7 @@ export function InviteStaffDialog({ onInvited }: { onInvited?: () => void }) {
+       </Button>
+ 
+       <Dialog open={open} onOpenChange={setOpen}>
+-        <DialogContent className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-[28rem] flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-6 shadow-popover sm:rounded-[22px]">
++        <DialogContent className="flex max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-[28rem] flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-6 shadow-popover sm:rounded-[22px]">
+           <DialogHeader className="shrink-0 pr-8 text-left">
+             <DialogTitle>
+               {result
+diff --git a/src/components/message-composer.tsx b/src/components/message-composer.tsx
+index 9348f8b..568edb9 100644
+--- a/src/components/message-composer.tsx
++++ b/src/components/message-composer.tsx
+@@ -266,7 +266,7 @@ export function MessageComposer({
+             <FileText className="h-3.5 w-3.5" />
+           </Button>
+         </DialogTrigger>
+-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl sm:max-w-2xl">
++        <DialogContent className="max-h-[calc(85*var(--app-vh))] overflow-y-auto rounded-xl sm:max-w-2xl">
+           <DialogHeader>
+             <DialogTitle>Message templates</DialogTitle>
+           </DialogHeader>
+diff --git a/src/components/no-show-followup-dialog.tsx b/src/components/no-show-followup-dialog.tsx
+index 3e566a2..27baa9d 100644
+--- a/src/components/no-show-followup-dialog.tsx
++++ b/src/components/no-show-followup-dialog.tsx
+@@ -102,7 +102,7 @@ export function NoShowFollowUpDialog({
+         }
+       }}
+     >
+-      <DialogContent className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
++      <DialogContent className="flex w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
+         <DialogHeader className="shrink-0 pr-8 text-left">
+           <DialogTitle>Marked as no show</DialogTitle>
+           <DialogDescription>
+diff --git a/src/components/notes/rich-notes-editor.tsx b/src/components/notes/rich-notes-editor.tsx
+index 58c8832..8b57fbd 100644
+--- a/src/components/notes/rich-notes-editor.tsx
++++ b/src/components/notes/rich-notes-editor.tsx
+@@ -110,7 +110,7 @@ export function RichNotesEditor({
+       attributes: {
+         class: cn(
+           "rich-notes overflow-y-auto px-3.5 py-3 outline-none",
+-          fill ? "min-h-0 flex-1" : "max-h-[min(70vh,36rem)] min-h-[140px]",
++          fill ? "min-h-0 flex-1" : "max-h-[min(calc(70*var(--app-vh)),36rem)] min-h-[140px]",
+           theme.text,
+           FONTS[prefs.font].cls,
+         ),
+diff --git a/src/components/notes/share-note-button.tsx b/src/components/notes/share-note-button.tsx
+index 32c2d93..41e74c9 100644
+--- a/src/components/notes/share-note-button.tsx
++++ b/src/components/notes/share-note-button.tsx
+@@ -106,7 +106,7 @@ export function ShareNoteButton({
+           <Send className="h-3.5 w-3.5" />
+         </button>
+       </DialogTrigger>
+-      <DialogContent className="flex max-h-[min(90dvh,560px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge bg-card/95 p-5 shadow-popover backdrop-blur-glass backdrop-saturate-150 sm:rounded-[22px]">
++      <DialogContent className="flex max-h-[min(calc(90*var(--app-dvh)),560px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge bg-card/95 p-5 shadow-popover backdrop-blur-glass backdrop-saturate-150 sm:rounded-[22px]">
+         <DialogHeader className="shrink-0 pr-8 text-left">
+           <DialogTitle>Share note</DialogTitle>
+           <DialogDescription>
+diff --git a/src/components/offers/offer-automation-dialog.tsx b/src/components/offers/offer-automation-dialog.tsx
+index 1f44b03..75e40b0 100644
+--- a/src/components/offers/offer-automation-dialog.tsx
++++ b/src/components/offers/offer-automation-dialog.tsx
+@@ -90,7 +90,7 @@ export function OfferAutomationDialog({
+ 
+   return (
+     <Dialog open={open} onOpenChange={onOpenChange}>
+-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto rounded-xl" data-qc="offer-automation">
++      <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-2xl overflow-y-auto rounded-xl" data-qc="offer-automation">
+         <DialogHeader>
+           <DialogTitle>
+             {enabled ? "Automation is on" : "Switch on automation"}: {STAGE_LABEL[stage]}
+diff --git a/src/components/offers/offer-send-history.tsx b/src/components/offers/offer-send-history.tsx
+index bdf653e..7743d42 100644
+--- a/src/components/offers/offer-send-history.tsx
++++ b/src/components/offers/offer-send-history.tsx
+@@ -40,7 +40,7 @@ export function OfferSendHistoryDialog({
+   const counts = template.counts ?? {};
+   return (
+     <Dialog open={open} onOpenChange={onOpenChange}>
+-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto rounded-xl" data-qc="offer-history">
++      <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-2xl overflow-y-auto rounded-xl" data-qc="offer-history">
+         <DialogHeader>
+           <DialogTitle>{template.name}: who received it</DialogTitle>
+           <DialogDescription>
+diff --git a/src/components/offers/send-offer-dialog.tsx b/src/components/offers/send-offer-dialog.tsx
+index 2886d82..0c94953 100644
+--- a/src/components/offers/send-offer-dialog.tsx
++++ b/src/components/offers/send-offer-dialog.tsx
+@@ -143,7 +143,7 @@ export function SendOfferDialog({
+ 
+   return (
+     <Dialog open={open} onOpenChange={onOpenChange}>
+-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-3xl overflow-y-auto rounded-xl" data-qc="send-offer">
++      <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-3xl overflow-y-auto rounded-xl" data-qc="send-offer">
+         <DialogHeader>
+           <DialogTitle>
+             {result
+diff --git a/src/components/patients/records-tab.tsx b/src/components/patients/records-tab.tsx
+index 9c87829..bfe1bed 100644
+--- a/src/components/patients/records-tab.tsx
++++ b/src/components/patients/records-tab.tsx
+@@ -1,4 +1,4 @@
+-import { useEffect, useMemo, useState } from "react";
++import { useEffect, useMemo, useRef, useState } from "react";
+ import { useNavigate } from "@tanstack/react-router";
+ import { useQuery } from "@tanstack/react-query";
+ import { useServerFn } from "@tanstack/react-start";
+@@ -6,7 +6,7 @@ import { Send } from "lucide-react";
+ import { useIsMobile } from "@/hooks/use-mobile";
+ import { Button } from "@/components/ui/button";
+ import { Card } from "@/components/ui/card";
+-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
++import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+ import { PaginationBar } from "@/components/pagination-bar";
+ import { SendOfferDialog } from "@/components/offers/send-offer-dialog";
+ import { SendRecallDialog } from "@/components/retention/send-recall-dialog";
+@@ -70,7 +70,7 @@ export function RecordsTab({
+ }) {
+   const navigate = useNavigate();
+   useTasksLiveSync();
+-  // Below the xl breakpoint the drawer is a right-hand sheet instead of a side column.
++  // Below the xl breakpoint the drawer is a centred popup instead of a side column.
+   const narrow = useIsMobile(1280);
+   // One clock per render of the list, so every row and the drawer agree on "today".
+   const now = useMemo(() => new Date(), []);
+@@ -197,6 +197,24 @@ export function RecordsTab({
+   const selected = pageRows.find((p) => p.id === selectedId) ?? null;
+   const [sheetOpen, setSheetOpen] = useState(false);
+ 
++  // Arriving from a deep link (a Journey board pill, the dashboard): bring the
++  // patient's row into view so the highlighted row is the one asked for, not
++  // just somewhere further down the page.
++  const scrolledFor = useRef<string | null>(null);
++  useEffect(() => {
++    const sel = search.sel;
++    if (!sel || scrolledFor.current === sel || selectedId !== sel) return;
++    scrolledFor.current = sel;
++    requestAnimationFrame(() => {
++      const row = document.querySelector('[data-qc="records-row"][data-selected="true"]');
++      if (!row) return;
++      // A row the user just tapped is already on screen; leave the page still.
++      const r = row.getBoundingClientRect();
++      if (r.top >= 0 && r.bottom <= window.innerHeight - 80) return;
++      row.scrollIntoView({ block: "center", behavior: "smooth" });
++    });
++  }, [search.sel, selectedId]);
++
+   const [selectMode, setSelectMode] = useState(false);
+   const [checked, setChecked] = useState<Set<string>>(new Set());
+   useEffect(() => {
+@@ -420,16 +438,19 @@ export function RecordsTab({
+         {narrow === false ? <div>{drawer}</div> : null}
+       </div>
+ 
+-      <Sheet open={narrow === true && sheetOpen && !!selected} onOpenChange={setSheetOpen}>
+-        <SheetContent
+-          side="right"
+-          className="w-[min(100vw-12px,420px)] overflow-y-auto border-l-0 bg-transparent p-3 shadow-none sm:max-w-none"
++      {/* Below xl (iPad, small laptops, phones) the patient card opens as a centred popup. */}
++      <Dialog open={narrow === true && sheetOpen && !!selected} onOpenChange={setSheetOpen}>
++        <DialogContent
++          className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] w-[min(calc(calc(100*var(--app-vw))-2rem),440px)] max-w-none gap-0 overflow-y-auto overscroll-contain rounded-[20px] border-0 bg-transparent p-0 shadow-none backdrop-blur-none backdrop-saturate-100 sm:rounded-[20px] [&_header]:pr-8"
+           data-qc="records-drawer-sheet"
+         >
+-          <SheetTitle className="sr-only">Patient details</SheetTitle>
++          <DialogTitle className="sr-only">Patient details</DialogTitle>
++          <DialogDescription className="sr-only">
++            Summary, next step, open tasks and recent activity for this patient.
++          </DialogDescription>
+           {drawer}
+-        </SheetContent>
+-      </Sheet>
++        </DialogContent>
++      </Dialog>
+ 
+       <AssignTaskDialog
+         open={!!assignFor}
+diff --git a/src/components/payments-deposits-settings.tsx b/src/components/payments-deposits-settings.tsx
+index f1bbf92..58a5f2e 100644
+--- a/src/components/payments-deposits-settings.tsx
++++ b/src/components/payments-deposits-settings.tsx
+@@ -13,9 +13,9 @@ import { Button } from "@/components/ui/button";
+ type Rules = { leadDays: string; percent: string };
+ 
+ /**
+- * Payments and deposits. The two rules the dashboard and the money model
+- * read: how many days before a visit the deposit is due, and what share of
+- * the price the deposit is.
++ * Settings → Rules → Deposits. The two rules the dashboard and the money model
++ * read: what share of the price the deposit is, and how many days before a
++ * visit it is due.
+  */
+ export function PaymentsDepositsSettings({ canEdit }: { canEdit: boolean }) {
+   const queryClient = useQueryClient();
+@@ -37,8 +37,15 @@ export function PaymentsDepositsSettings({ canEdit }: { canEdit: boolean }) {
+ 
+   const save = useMutation({
+     mutationFn: useServerFn(updateDepositRules),
+-    onSuccess: () => {
+-      setSaved(form);
++    onSuccess: (result) => {
++      // Show what the server stored, so the form never drifts from the database.
++      const stored = result as { deposit_lead_days?: number; deposit_percent?: number } | undefined;
++      const next = {
++        leadDays: String(stored?.deposit_lead_days ?? leadDays),
++        percent: String(stored?.deposit_percent ?? percent),
++      };
++      setForm(next);
++      setSaved(next);
+       queryClient.invalidateQueries({ queryKey: ["clinic-details"] });
+       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+       toast.success("Deposit rules saved");
+@@ -46,8 +53,10 @@ export function PaymentsDepositsSettings({ canEdit }: { canEdit: boolean }) {
+     onError: (e: Error) => toast.error(e.message),
+   });
+ 
+-  const leadDays = Number.parseInt(form.leadDays, 10);
+-  const percent = Number.parseInt(form.percent, 10);
++  // Whole numbers only: a blank box or "3.5" is not a rule the server will take.
++  const asWhole = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : Number.NaN);
++  const leadDays = asWhole(form.leadDays);
++  const percent = asWhole(form.percent);
+   const valid =
+     Number.isInteger(leadDays) &&
+     leadDays >= 0 &&
+@@ -62,57 +71,106 @@ export function PaymentsDepositsSettings({ canEdit }: { canEdit: boolean }) {
+     "deposit-rules-unsaved",
+   );
+ 
++  // A worked example so the two numbers read as one rule, not two settings.
++  const examplePrice = 300;
++  const exampleDeposit = Number.isInteger(percent)
++    ? Math.round((examplePrice * percent) / 100)
++    : null;
++  const dayWord = (n: number) => (n === 1 ? "day" : "days");
++
+   return (
+-    <Card className="space-y-4 p-5" data-qc="deposit-rules">
++    <Card className="space-y-5 p-5" data-qc="deposit-rules">
+       {leaveGuard}
+-      <div className="flex items-center gap-2">
+-        <Wallet className="h-4 w-4 text-ink-3" />
++      <div className="flex items-start gap-2.5">
++        <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden />
+         <div>
+-          <h2 className="text-sm font-semibold text-foreground">Payments and deposits</h2>
+-          <p className="text-xs text-muted-foreground">
+-            The dashboard chases deposits by these rules, and collected money is counted with them.
++          <h2 className="text-sm font-semibold text-foreground">Deposits</h2>
++          <p className="mt-0.5 text-xs text-muted-foreground">
++            How much deposit a patient pays to secure a booking, and how long before the appointment
++            it must be paid.
+           </p>
+         </div>
+       </div>
++
+       <div className="grid gap-4 sm:grid-cols-2">
+         <div className="field-stack">
+-          <Label htmlFor="deposit-lead-days" className="text-xs text-muted-foreground">
+-            Deposit due (days before the appointment)
++          <Label htmlFor="deposit-percent" className="text-xs text-muted-foreground">
++            Deposit amount
+           </Label>
+-          <Input
+-            id="deposit-lead-days"
+-            type="number"
+-            inputMode="numeric"
+-            min={0}
+-            max={30}
+-            value={form.leadDays}
+-            disabled={!canEdit}
+-            onChange={(e) => setForm({ ...form, leadDays: e.target.value })}
+-          />
+-          <p className="text-2xs text-muted-foreground">
+-            Unpaid bookings inside this window show as Urgent on the dashboard; further out they sit
+-            under This week until 10 days out.
++          <div className="relative">
++            <Input
++              id="deposit-percent"
++              type="number"
++              inputMode="numeric"
++              min={0}
++              max={100}
++              value={form.percent}
++              disabled={!canEdit}
++              className="pr-44"
++              aria-describedby="deposit-percent-unit deposit-percent-help"
++              onChange={(e) => setForm({ ...form, percent: e.target.value })}
++            />
++            <span
++              id="deposit-percent-unit"
++              className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground"
++            >
++              % of the treatment price
++            </span>
++          </div>
++          <p id="deposit-percent-help" className="text-2xs text-muted-foreground">
++            When a booking is marked{" "}
++            <span className="font-medium text-foreground">Deposit paid</span>, this amount counts as
++            money collected in your reports.
+           </p>
+         </div>
+         <div className="field-stack">
+-          <Label htmlFor="deposit-percent" className="text-xs text-muted-foreground">
+-            Deposit (% of the treatment price)
++          <Label htmlFor="deposit-lead-days" className="text-xs text-muted-foreground">
++            Deposit due
+           </Label>
+-          <Input
+-            id="deposit-percent"
+-            type="number"
+-            inputMode="numeric"
+-            min={0}
+-            max={100}
+-            value={form.percent}
+-            disabled={!canEdit}
+-            onChange={(e) => setForm({ ...form, percent: e.target.value })}
+-          />
+-          <p className="text-2xs text-muted-foreground">
+-            A booking marked deposit paid counts this share of its price as collected.
++          <div className="relative">
++            <Input
++              id="deposit-lead-days"
++              type="number"
++              inputMode="numeric"
++              min={0}
++              max={30}
++              value={form.leadDays}
++              disabled={!canEdit}
++              className="pr-52"
++              aria-describedby="deposit-lead-days-unit deposit-lead-days-help"
++              onChange={(e) => setForm({ ...form, leadDays: e.target.value })}
++            />
++            <span
++              id="deposit-lead-days-unit"
++              className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground"
++            >
++              days before the appointment
++            </span>
++          </div>
++          <p id="deposit-lead-days-help" className="text-2xs text-muted-foreground">
++            Unpaid deposits are flagged <span className="font-medium text-foreground">Urgent</span>{" "}
++            on the dashboard once the appointment is this close. Before that, they show under{" "}
++            <span className="font-medium text-foreground">This week</span> from 10 days out.
+           </p>
+         </div>
+       </div>
++
++      {valid && exampleDeposit !== null ? (
++        <p
++          className="rounded-xl bg-accent-wash px-3.5 py-2.5 text-xs text-foreground shadow-[inset_0_0_0_1px_var(--accent-line)]"
++          data-qc="deposit-rules-example"
++        >
++          <span className="font-semibold">Example:</span>{" "}
++          {percent === 0
++            ? "No deposit is taken, so nothing is chased before appointments."
++            : `a £${examplePrice} treatment needs a £${exampleDeposit} deposit, paid at least ${leadDays} ${dayWord(leadDays)} before the appointment.`}
++        </p>
++      ) : (
++        <p className="text-2xs text-destructive" role="alert" data-qc="deposit-rules-error">
++          Enter a deposit between 0 and 100%, due 0 to 30 days before the appointment.
++        </p>
++      )}
++
+       {canEdit && (
+         <div className="flex justify-end">
+           <Button
+diff --git a/src/components/portal/portal-dock.tsx b/src/components/portal/portal-dock.tsx
+index c879ef5..2918eec 100644
+--- a/src/components/portal/portal-dock.tsx
++++ b/src/components/portal/portal-dock.tsx
+@@ -131,7 +131,7 @@ function PanelShell({
+       role="dialog"
+       aria-label={title}
+       data-qc={qc}
+-      className="absolute bottom-[calc(100%+12px)] right-0 flex max-h-[70vh] w-[min(340px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-[20px] border border-edge bg-popover shadow-popover backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:w-auto max-sm:max-h-[min(70dvh,32rem)]"
++      className="absolute bottom-[calc(100%+12px)] right-0 flex max-h-[calc(70*var(--app-vh))] w-[min(340px,calc(calc(100*var(--app-vw))-2.5rem))] flex-col overflow-hidden rounded-[20px] border border-edge bg-popover shadow-popover backdrop-blur-glass backdrop-saturate-150 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[5.25rem] max-sm:w-auto max-sm:max-h-[min(calc(70*var(--app-dvh)),32rem)]"
+     >
+       <header className="flex shrink-0 items-center gap-2 border-b border-edge-2 px-3.5 py-3">
+         <div className="min-w-0 flex-1">
+diff --git a/src/components/profile/invoice-dialog.tsx b/src/components/profile/invoice-dialog.tsx
+index fd30af2..0d638f9 100644
+--- a/src/components/profile/invoice-dialog.tsx
++++ b/src/components/profile/invoice-dialog.tsx
+@@ -198,7 +198,7 @@ export function InvoiceDialog({
+       <InvoicePrintSheet doc={open ? doc : null} />
+       <Dialog open={open} onOpenChange={onOpenChange}>
+         <DialogContent
+-          className="max-h-[calc(100dvh-2rem)] max-w-[1000px] gap-0 overflow-y-auto p-0 md:grid-cols-[380px_minmax(0,1fr)]"
++          className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-[1000px] gap-0 overflow-y-auto p-0 md:grid-cols-[380px_minmax(0,1fr)]"
+           data-qc="invoice-dialog"
+         >
+           <div className="flex flex-col gap-5 p-7">
+diff --git a/src/components/quick-add-appointment.tsx b/src/components/quick-add-appointment.tsx
+index 861b8f6..3bbe47f 100644
+--- a/src/components/quick-add-appointment.tsx
++++ b/src/components/quick-add-appointment.tsx
+@@ -18,6 +18,7 @@ import {
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
+ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
++import { startPointerDrag } from "@/lib/pointer-drag";
+ 
+ function toLocalTime(d: Date) {
+   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+@@ -266,7 +267,6 @@ export function QuickAddAppointment({
+   const [day, setDay] = useState(toLocalDate(defaultStart ?? date));
+   const [duration, setDuration] = useState("30");
+   const [offset, setOffset] = useState({ x: 0, y: 0 });
+-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+   const scrollSnapRef = useRef<ScrollSnap | null>(null);
+ 
+   function handleOpenChange(next: boolean) {
+@@ -451,35 +451,11 @@ export function QuickAddAppointment({
+   }, [isOpen]);
+ 
+   function onDragHandleDown(event: ReactPointerEvent<HTMLDivElement>) {
+-    if (event.button !== 0) return;
+-    if ((event.target as HTMLElement).closest("button")) return;
+-    event.preventDefault();
+-    dragRef.current = {
+-      startX: event.clientX,
+-      startY: event.clientY,
+-      origX: offset.x,
+-      origY: offset.y,
+-    };
+-    document.body.classList.add("select-none", "cursor-grabbing");
+-
+-    function onMove(moveEvent: globalThis.PointerEvent) {
+-      const drag = dragRef.current;
+-      if (!drag) return;
+-      setOffset({
+-        x: drag.origX + (moveEvent.clientX - drag.startX),
+-        y: drag.origY + (moveEvent.clientY - drag.startY),
+-      });
+-    }
+-
+-    function onUp() {
+-      dragRef.current = null;
+-      document.body.classList.remove("select-none", "cursor-grabbing");
+-      window.removeEventListener("pointermove", onMove);
+-      window.removeEventListener("pointerup", onUp);
+-    }
+-
+-    window.addEventListener("pointermove", onMove);
+-    window.addEventListener("pointerup", onUp);
++    if ((event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
++    const origin = offset;
++    startPointerDrag(event, {
++      onMove: (dx, dy) => setOffset({ x: origin.x + dx, y: origin.y + dy }),
++    });
+   }
+ 
+   const field = "h-9 min-w-0 rounded-xl text-xs";
+@@ -487,7 +463,7 @@ export function QuickAddAppointment({
+   const form = (
+         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
+           <div
+-            className="flex shrink-0 cursor-grab items-center justify-between px-4 pt-4 active:cursor-grabbing"
++            className="drag-handle flex shrink-0 cursor-grab items-center justify-between px-4 pt-4 active:cursor-grabbing"
+             onPointerDown={onDragHandleDown}
+           >
+             <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+@@ -726,8 +702,13 @@ export function QuickAddAppointment({
+         <DialogTrigger asChild>{children}</DialogTrigger>
+         <DialogContent
+           tabIndex={-1}
+-          className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-0 shadow-popover sm:rounded-[22px] [&>button]:hidden"
+-          style={{ translate: `calc(-50% + ${offset.x}px) calc(-50% + ${offset.y}px)` }}
++          className="flex max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-0 shadow-popover sm:rounded-[22px] [&>button]:hidden"
++          // No transition: the dialog's duration-200 would otherwise animate every
++          // drag step, leaving the panel trailing behind the finger.
++          style={{
++            translate: `calc(-50% + ${offset.x}px) calc(-50% + ${offset.y}px)`,
++            transitionProperty: "none",
++          }}
+           onOpenAutoFocus={(e) => {
+             e.preventDefault();
+             (e.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
+@@ -749,8 +730,8 @@ export function QuickAddAppointment({
+       <PopoverTrigger asChild>{children}</PopoverTrigger>
+       <PopoverContent
+         align={align}
+-        className="flex max-h-[min(90dvh,var(--radix-popover-content-available-height))] w-[480px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0"
+-        style={{ translate: `${offset.x}px ${offset.y}px` }}
++        className="flex max-h-[min(calc(90*var(--app-dvh)),calc(var(--radix-popover-content-available-height)/var(--app-zoom)))] w-[480px] max-w-[calc(calc(100*var(--app-vw))-2rem)] flex-col overflow-hidden rounded-2xl p-0"
++        style={{ translate: `${offset.x}px ${offset.y}px`, transitionProperty: "none" }}
+         onOpenAutoFocus={(e) => e.preventDefault()}
+         onCloseAutoFocus={(e) => e.preventDefault()}
+       >
+diff --git a/src/components/retention/send-recall-dialog.tsx b/src/components/retention/send-recall-dialog.tsx
+index 70e3006..6826e1c 100644
+--- a/src/components/retention/send-recall-dialog.tsx
++++ b/src/components/retention/send-recall-dialog.tsx
+@@ -252,7 +252,7 @@ export function SendRecallDialog({
+           )}
+         </DialogTrigger>
+       )}
+-      <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl sm:max-w-xl">
++      <DialogContent className="max-h-[calc(85*var(--app-vh))] overflow-y-auto rounded-xl sm:max-w-xl">
+         <DialogHeader>
+           <DialogTitle>Send recall to {patientName}</DialogTitle>
+         </DialogHeader>
+diff --git a/src/components/route-error-boundary.tsx b/src/components/route-error-boundary.tsx
+index 6d364e0..da4a333 100644
+--- a/src/components/route-error-boundary.tsx
++++ b/src/components/route-error-boundary.tsx
+@@ -31,7 +31,7 @@ export function RouteErrorBoundary({
+   }, [error, area]);
+ 
+   return (
+-    <div className="flex min-h-[60vh] items-center justify-center px-4">
++    <div className="flex min-h-[calc(60*var(--app-vh))] items-center justify-center px-4">
+       <Card className="max-w-md p-8 text-center">
+         <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-glass-2">
+           <AlertTriangle className="h-5 w-5 text-ink-3" aria-hidden />
+diff --git a/src/components/schedule/needs-action-control.tsx b/src/components/schedule/needs-action-control.tsx
+index df72c39..b511509 100644
+--- a/src/components/schedule/needs-action-control.tsx
++++ b/src/components/schedule/needs-action-control.tsx
+@@ -105,7 +105,7 @@ export function NeedsActionControl({
+             sideOffset={8}
+             data-qc="needs-action-menu"
+             // Full width on a phone, a compact menu everywhere else.
+-            className="w-[calc(100vw-2rem)] rounded-2xl p-1.5 sm:w-[250px]"
++            className="w-[calc(calc(100*var(--app-vw))-2rem)] rounded-2xl p-1.5 sm:w-[250px]"
+           >
+             <MenuItem
+               swatch="bg-destructive-ink"
+diff --git a/src/components/staff-alert-dialog.tsx b/src/components/staff-alert-dialog.tsx
+index 35a3a63..dffdf88 100644
+--- a/src/components/staff-alert-dialog.tsx
++++ b/src/components/staff-alert-dialog.tsx
+@@ -152,7 +152,7 @@ export function StaffAlertDialog({
+   return (
+     <Dialog open={isOpen} onOpenChange={setOpen}>
+       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
+-      <DialogContent className="flex w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
++      <DialogContent className="flex w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
+         <DialogHeader className="shrink-0 pr-8 text-left">
+           <DialogTitle>
+             {recipientName ? `Message ${recipientName}` : "Alert the team"}
+diff --git a/src/components/step-up-dialog.tsx b/src/components/step-up-dialog.tsx
+index 4a779de..2ab7564 100644
+--- a/src/components/step-up-dialog.tsx
++++ b/src/components/step-up-dialog.tsx
+@@ -73,7 +73,7 @@ export function useStepUp() {
+ 
+   const dialog = (
+     <Dialog open={open} onOpenChange={setOpen}>
+-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[22px] border-edge-2 bg-card/95 sm:max-w-md">
++      <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-[22px] border-edge-2 bg-card/95 sm:max-w-md">
+         <DialogHeader>
+           <DialogTitle>Confirm it is you</DialogTitle>
+           <DialogDescription>{STEP_UP_COPY[kind]}</DialogDescription>
+diff --git a/src/components/tasks/assign-task-dialog.tsx b/src/components/tasks/assign-task-dialog.tsx
+index a68a2a7..4700b6a 100644
+--- a/src/components/tasks/assign-task-dialog.tsx
++++ b/src/components/tasks/assign-task-dialog.tsx
+@@ -162,7 +162,7 @@ export function AssignTaskDialog({
+   return (
+     <Dialog open={open} onOpenChange={onOpenChange}>
+       <DialogContent
+-        className="max-h-[calc(100dvh-2rem)] max-w-[540px] grid-rows-[minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[22px] p-0"
++        className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] max-w-[540px] grid-rows-[minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[22px] p-0"
+         data-qc="assign-task-dialog"
+       >
+         {/* The body scrolls on its own so the close button and the footer stay put. */}
+diff --git a/src/components/treatment-form-dialog.tsx b/src/components/treatment-form-dialog.tsx
+index b233d7e..91994ea 100644
+--- a/src/components/treatment-form-dialog.tsx
++++ b/src/components/treatment-form-dialog.tsx
+@@ -296,7 +296,7 @@ export function TreatmentFormDialog({
+   return (
+     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
+       <DialogContent
+-        className="max-h-[92vh] w-[min(920px,calc(100vw-2rem))] max-w-none overflow-hidden p-0 sm:rounded-[26px]"
++        className="max-h-[calc(92*var(--app-vh))] w-[min(920px,calc(calc(100*var(--app-vw))-2rem))] max-w-none overflow-hidden p-0 sm:rounded-[26px]"
+         data-qc="treatment-form"
+       >
+         <DialogHeader className="border-b border-edge-2 px-6 pb-4 pt-5">
+@@ -355,7 +355,7 @@ export function TreatmentFormDialog({
+           </ol>
+         </DialogHeader>
+ 
+-        <div className="max-h-[calc(92vh-9.5rem)] overflow-y-auto px-6 py-5">
++        <div className="max-h-[calc(calc(92*var(--app-vh))-9.5rem)] overflow-y-auto px-6 py-5">
+           {error ? (
+             <p className="rounded-xl bg-destructive-bg px-3 py-2 text-sm text-destructive-ink">
+               {(error as Error).message}
+diff --git a/src/components/treatment-record-view.tsx b/src/components/treatment-record-view.tsx
+index c01f1ed..b17f072 100644
+--- a/src/components/treatment-record-view.tsx
++++ b/src/components/treatment-record-view.tsx
+@@ -45,7 +45,7 @@ export function TreatmentRecordDialog({
+   return (
+     <Dialog open={open} onOpenChange={onOpenChange}>
+       <DialogContent
+-        className="max-h-[92vh] w-[min(860px,calc(100vw-2rem))] max-w-none overflow-hidden p-0 print:max-h-none print:w-full print:overflow-visible print:shadow-none sm:rounded-[26px]"
++        className="max-h-[calc(92*var(--app-vh))] w-[min(860px,calc(calc(100*var(--app-vw))-2rem))] max-w-none overflow-hidden p-0 print:max-h-none print:w-full print:overflow-visible print:shadow-none sm:rounded-[26px]"
+         data-qc="treatment-record"
+       >
+         <DialogHeader className="border-b border-edge-2 px-6 pb-4 pt-5 print:hidden">
+@@ -74,7 +74,7 @@ export function TreatmentRecordDialog({
+             </Button>
+           </div>
+         </DialogHeader>
+-        <div className="max-h-[calc(92vh-6rem)] overflow-y-auto px-6 py-5 print:max-h-none print:overflow-visible">
++        <div className="max-h-[calc(calc(92*var(--app-vh))-6rem)] overflow-y-auto px-6 py-5 print:max-h-none print:overflow-visible">
+           {error ? (
+             <p className="rounded-xl bg-destructive-bg px-3 py-2 text-sm text-destructive-ink">
+               {(error as Error).message}
+diff --git a/src/components/ui/context-menu.tsx b/src/components/ui/context-menu.tsx
+index e4e71c1..a62f24f 100644
+--- a/src/components/ui/context-menu.tsx
++++ b/src/components/ui/context-menu.tsx
+@@ -60,7 +60,7 @@ const ContextMenuContent = React.forwardRef<
+     <ContextMenuPrimitive.Content
+       ref={ref}
+       className={cn(
+-        "z-50 max-h-(--radix-context-menu-content-available-height) min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-(--radix-context-menu-content-transform-origin)",
++        "z-50 max-h-[calc(var(--radix-context-menu-content-available-height)/var(--app-zoom))] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-(--radix-context-menu-content-transform-origin)",
+         className,
+       )}
+       {...props}
+diff --git a/src/components/ui/date-field.tsx b/src/components/ui/date-field.tsx
+index 311c8ce..70c7a15 100644
+--- a/src/components/ui/date-field.tsx
++++ b/src/components/ui/date-field.tsx
+@@ -117,7 +117,7 @@ export function DateField({
+         align="start"
+         sideOffset={6}
+         onOpenAutoFocus={(e) => e.preventDefault()}
+-        className="w-[calc(100vw-2rem)] rounded-[20px] border-edge-2 bg-card p-2 sm:w-auto"
++        className="w-[calc(calc(100*var(--app-vw))-2rem)] rounded-[20px] border-edge-2 bg-card p-2 sm:w-auto"
+         data-qc="date-picker"
+       >
+         <div className="rounded-2xl bg-glass-2 p-1 shadow-inset-hi">
+diff --git a/src/components/ui/dialog.tsx b/src/components/ui/dialog.tsx
+index 186d43d..753bf3e 100644
+--- a/src/components/ui/dialog.tsx
++++ b/src/components/ui/dialog.tsx
+@@ -68,7 +68,7 @@ const DialogContent = React.forwardRef<
+       className={cn(
+         // grid-cols minmax(0,1fr): a wide child (a long radio row, a table) may
+         // scroll inside the dialog but can never widen it past the screen.
+-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg grid-cols-[minmax(0,1fr)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border border-edge bg-popover p-6 shadow-popover backdrop-blur-glass backdrop-saturate-150 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 max-sm:w-[calc(100vw-2rem)] sm:rounded-lg",
++        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg grid-cols-[minmax(0,1fr)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border border-edge bg-popover p-6 shadow-popover backdrop-blur-glass backdrop-saturate-150 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 max-sm:w-[calc(calc(100*var(--app-vw))-2rem)] sm:rounded-lg",
+         className,
+       )}
+       {...props}
+diff --git a/src/components/ui/dropdown-menu.tsx b/src/components/ui/dropdown-menu.tsx
+index e4bbea4..59dae98 100644
+--- a/src/components/ui/dropdown-menu.tsx
++++ b/src/components/ui/dropdown-menu.tsx
+@@ -63,7 +63,7 @@ const DropdownMenuContent = React.forwardRef<
+       ref={ref}
+       sideOffset={sideOffset}
+       className={cn(
+-        "z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-xl border border-edge bg-popover p-1 text-popover-foreground shadow-popover backdrop-blur-glass backdrop-saturate-150",
++        "z-50 max-h-[calc(var(--radix-dropdown-menu-content-available-height)/var(--app-zoom))] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-xl border border-edge bg-popover p-1 text-popover-foreground shadow-popover backdrop-blur-glass backdrop-saturate-150",
+         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-(--radix-dropdown-menu-content-transform-origin)",
+         className,
+       )}
+diff --git a/src/components/ui/select.tsx b/src/components/ui/select.tsx
+index c701be2..3b880bc 100644
+--- a/src/components/ui/select.tsx
++++ b/src/components/ui/select.tsx
+@@ -68,7 +68,7 @@ const SelectContent = React.forwardRef<
+     <SelectPrimitive.Content
+       ref={ref}
+       className={cn(
+-        "relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-xl border border-edge bg-popover text-popover-foreground shadow-popover backdrop-blur-glass backdrop-saturate-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-(--radix-select-content-transform-origin)",
++        "relative z-50 max-h-[calc(var(--radix-select-content-available-height)/var(--app-zoom))] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-xl border border-edge bg-popover text-popover-foreground shadow-popover backdrop-blur-glass backdrop-saturate-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-(--radix-select-content-transform-origin)",
+         position === "popper" &&
+           "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
+         className,
+@@ -81,7 +81,7 @@ const SelectContent = React.forwardRef<
+         className={cn(
+           "p-1",
+           position === "popper" &&
+-            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]",
++            "h-[calc(var(--radix-select-trigger-height)/var(--app-zoom))] w-full min-w-[calc(var(--radix-select-trigger-width)/var(--app-zoom))]",
+         )}
+       >
+         {children}
+diff --git a/src/components/ui/sidebar.tsx b/src/components/ui/sidebar.tsx
+index 3922680..deaf09a 100644
+--- a/src/components/ui/sidebar.tsx
++++ b/src/components/ui/sidebar.tsx
+@@ -135,7 +135,7 @@ const SidebarProvider = React.forwardRef<
+               } as React.CSSProperties
+             }
+             className={cn(
+-              "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar",
++              "group/sidebar-wrapper flex min-h-app-screen w-full has-[[data-variant=inset]]:bg-sidebar",
+               className,
+             )}
+             ref={ref}
+@@ -232,7 +232,7 @@ const Sidebar = React.forwardRef<
+         />
+         <div
+           className={cn(
+-            "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
++            "fixed inset-y-0 z-10 hidden h-app-screen w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+             side === "left"
+               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
+               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
+diff --git a/src/components/ui/sonner.tsx b/src/components/ui/sonner.tsx
+index 556d93a..a600d5f 100644
+--- a/src/components/ui/sonner.tsx
++++ b/src/components/ui/sonner.tsx
+@@ -8,6 +8,7 @@ import {
+ } from "lucide-react";
+ import { toast, Toaster as Sonner } from "sonner";
+ import { cn } from "@/lib/utils";
++import { getAppZoom } from "@/lib/app-zoom";
+ 
+ type ToasterProps = React.ComponentProps<typeof Sonner>;
+ 
+@@ -223,12 +224,13 @@ function useTightToastStack() {
+           )
+           .sort((a, b) => Number(a.getAttribute("data-index")) - Number(b.getAttribute("data-index")));
+         let offset = 0;
++        const zoom = getAppZoom();
+         for (const el of visible) {
+           const next = `${offset}px`;
+           if (el.style.getPropertyValue("--aetheria-offset") !== next) {
+             el.style.setProperty("--aetheria-offset", next);
+           }
+-          offset += el.getBoundingClientRect().height + TOAST_STACK_GAP;
++          offset += el.getBoundingClientRect().height / zoom + TOAST_STACK_GAP;
+         }
+       };
+ 
+diff --git a/src/components/ui/time-field.tsx b/src/components/ui/time-field.tsx
+index 11c630c..78ee7c4 100644
+--- a/src/components/ui/time-field.tsx
++++ b/src/components/ui/time-field.tsx
+@@ -142,7 +142,7 @@ export function TimeField({
+         align="start"
+         sideOffset={6}
+         onOpenAutoFocus={(e) => e.preventDefault()}
+-        className="w-[calc(100vw-2rem)] rounded-[20px] border-edge-2 bg-card p-2 sm:w-auto"
++        className="w-[calc(calc(100*var(--app-vw))-2rem)] rounded-[20px] border-edge-2 bg-card p-2 sm:w-auto"
+         data-qc="time-picker"
+       >
+         <div className="flex gap-1.5 rounded-2xl bg-glass-2 p-1 shadow-inset-hi">
+diff --git a/src/lib/clinic.functions.demo.ts b/src/lib/clinic.functions.demo.ts
+index a54a367..7ff4f8c 100644
+--- a/src/lib/clinic.functions.demo.ts
++++ b/src/lib/clinic.functions.demo.ts
+@@ -669,7 +669,7 @@ export const getDashboard = createServerFn({ method: "GET" }).handler(async () =
+     }
+   }
+ 
+-  // Settings → Payments and deposits.
++  // Settings → Rules → Deposits.
+   const DEPOSIT_LEAD_DAYS = Number(db.clinic["deposit_lead_days"] ?? 3);
+   const depositHorizonDays = attentionDepositHorizonDays(DEPOSIT_LEAD_DAYS) + 1;
+   let unpaidDeposits = sortAsc(
+@@ -6545,7 +6545,11 @@ export const updateDepositRules = createServerFn({ method: "POST" })
+     requireSettings();
+     db.clinic["deposit_lead_days"] = data.deposit_lead_days;
+     db.clinic["deposit_percent"] = data.deposit_percent;
+-    return { ok: true };
++    return {
++      ok: true as const,
++      deposit_lead_days: data.deposit_lead_days,
++      deposit_percent: data.deposit_percent,
++    };
+   });
+ 
+ export const updateClinicDetails = createServerFn({ method: "POST" })
+diff --git a/src/lib/clinic.functions.ts b/src/lib/clinic.functions.ts
+index d0171a2..f164a61 100644
+--- a/src/lib/clinic.functions.ts
++++ b/src/lib/clinic.functions.ts
+@@ -791,7 +791,7 @@ export const getDashboard = createServerFn({ method: "GET" })
+     }
+ 
+     // Deposits must be paid at least `deposit_lead_days` clinic days before the
+-    // appointment (Settings → Payments and deposits). Inside that window →
++    // appointment (Settings → Rules → Deposits). Inside that window →
+     // urgent chase; after that, This week up to 10 clinic days out.
+     const DEPOSIT_LEAD_DAYS = Number(clinicRow.data?.deposit_lead_days ?? 3);
+     for (const a of unpaidDeposits) {
+@@ -8611,7 +8611,10 @@ export const getClinicDetails = createServerFn({ method: "GET" })
+     return data ?? null;
+   });
+ 
+-/** Payments and deposits: how many days before the visit a deposit is due, and its share of the price. */
++/**
++ * Settings → Rules → Deposits: the deposit's share of the treatment price and
++ * how many days before the visit it is due. Returns the saved values.
++ */
+ export const updateDepositRules = createServerFn({ method: "POST" })
+   .validator((data: { deposit_lead_days: number; deposit_percent: number }) =>
+     parseInput(schemas.UpdateDepositRules, data),
+@@ -8620,16 +8623,27 @@ export const updateDepositRules = createServerFn({ method: "POST" })
+   .handler(async ({ data, context }) => {
+     const ctx = context as Ctx;
+     await authorize(ctx, "updateDepositRules");
+-    const { error } = await ctx.supabase
++    const clinicId = clinicIdOf(context);
++    const { data: before } = await ctx.supabase
++      .from("clinics")
++      .select("deposit_lead_days, deposit_percent")
++      .eq("id", clinicId)
++      .maybeSingle();
++    const { data: saved, error } = await ctx.supabase
+       .from("clinics")
+       .update({ deposit_lead_days: data.deposit_lead_days, deposit_percent: data.deposit_percent })
+-      .eq("id", clinicIdOf(context));
++      .eq("id", clinicId)
++      .select("deposit_lead_days, deposit_percent")
++      .maybeSingle();
+     if (error) throw new Error(error.message);
+-    await audit(ctx, "update", "clinic", clinicIdOf(context), null, {
+-      deposit_lead_days: data.deposit_lead_days,
+-      deposit_percent: data.deposit_percent,
++    // Row-level security turns a refused update into "0 rows", not an error.
++    if (!saved) throw new Error("Deposit rules were not saved. Check you can still change clinic settings.");
++    await audit(ctx, "update", "clinic", clinicId, null, {
++      setting: "deposit_rules",
++      before: before ?? null,
++      after: saved,
+     });
+-    return { ok: true };
++    return { ok: true as const, ...saved };
+   });
+ 
+ /** Manager-only: update the clinic's contact details. */
+diff --git a/src/lib/metrics/money.ts b/src/lib/metrics/money.ts
+index c1fdb5f..b46dda4 100644
+--- a/src/lib/metrics/money.ts
++++ b/src/lib/metrics/money.ts
+@@ -42,7 +42,7 @@ export type MoneyAppointment = {
+ };
+ 
+ export type MoneyOptions = {
+-  /** Deposit share of the price, from Settings (Payments and deposits). */
++  /** Deposit share of the price, from Settings (Rules → Deposits). */
+   depositPercent: number;
+   /** A treatment with no booking has no payment record; walk-ins pay at the desk. */
+   unlinkedCountsAs?: "paid" | "unpaid";
+diff --git a/src/lib/validation/schemas.ts b/src/lib/validation/schemas.ts
+index 9fc1121..1c94eb5 100644
+--- a/src/lib/validation/schemas.ts
++++ b/src/lib/validation/schemas.ts
+@@ -681,7 +681,7 @@ export const UpdateClinicDetails = z.object({
+   reminder_offsets: z.array(z.number().int().min(1).max(2160)).max(6).optional(),
+ });
+ 
+-/** Payments and deposits settings: lead days before the visit, deposit share of the price. */
++/** Settings → Rules → Deposits: lead days before the visit, deposit share of the price. */
+ export const UpdateDepositRules = z.object({
+   deposit_lead_days: z.number().int().min(0).max(30),
+   deposit_percent: z.number().int().min(0).max(100),
+diff --git a/src/routes/__root.tsx b/src/routes/__root.tsx
+index 95a7f43..084c309 100644
+--- a/src/routes/__root.tsx
++++ b/src/routes/__root.tsx
+@@ -16,10 +16,11 @@ import { Toaster } from "@/components/ui/sonner";
+ import { supabase } from "@/integrations/supabase/client";
+ import { DEMO_MODE } from "@/lib/demo/enabled";
+ import { onDocumentTabBetweenFields } from "@/lib/tab-fields";
++import { installKeyboardViewport } from "@/lib/keyboard-viewport";
+ 
+ function NotFoundComponent() {
+   return (
+-    <div className="flex min-h-screen items-center justify-center px-4">
++    <div className="flex min-h-app-screen items-center justify-center px-4">
+       <div className="glass-card max-w-md p-10 text-center">
+         <h1 className="text-7xl font-semibold tracking-[-0.03em] text-accent-ink">404</h1>
+         <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+@@ -47,7 +48,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+   }, [error]);
+ 
+   return (
+-    <div className="flex min-h-screen items-center justify-center px-4">
++    <div className="flex min-h-app-screen items-center justify-center px-4">
+       <div className="glass-card max-w-md p-10 text-center">
+         <h1 className="text-xl font-semibold tracking-tight text-foreground">
+           This page didn't load
+@@ -151,6 +152,8 @@ function RootComponent() {
+   }, [router, queryClient]);
+ 
+   useEffect(() => installClientErrorReporting(), []);
++  // Keep dialogs above the iPad / iPhone keyboard (src/lib/keyboard-viewport.ts).
++  useEffect(() => installKeyboardViewport(), []);
+ 
+   useEffect(() => {
+     document.addEventListener("keydown", onDocumentTabBetweenFields);
+diff --git a/src/routes/_authenticated/my-record.records.tsx b/src/routes/_authenticated/my-record.records.tsx
+index 0366db6..57febab 100644
+--- a/src/routes/_authenticated/my-record.records.tsx
++++ b/src/routes/_authenticated/my-record.records.tsx
+@@ -364,7 +364,7 @@ function GalleryModal({
+         aria-label="Your before and after gallery"
+         data-qc="photo-gallery"
+         onClick={(e) => e.stopPropagation()}
+-        className="max-h-[88vh] w-[min(820px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
++        className="max-h-[calc(88*var(--app-vh))] w-[min(820px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
+       >
+         <div className="flex items-start gap-2.5">
+           <div className="min-w-0 flex-1">
+@@ -482,7 +482,7 @@ function EditProfileModal({ patient, onClose }: { patient: any; onClose: () => v
+           setPhoneError(null);
+           save.mutate({ data: form });
+         }}
+-        className="max-h-[80vh] w-[min(460px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
++        className="max-h-[calc(80*var(--app-vh))] w-[min(460px,100%)] overflow-y-auto rounded-[22px] border border-edge bg-white/95 p-[18px] shadow-popover"
+       >
+         <div className="flex items-start gap-2.5">
+           <div className="min-w-0 flex-1">
+diff --git a/src/routes/_authenticated/patients.$id.tsx b/src/routes/_authenticated/patients.$id.tsx
+index f37a1c2..fad84d6 100644
+--- a/src/routes/_authenticated/patients.$id.tsx
++++ b/src/routes/_authenticated/patients.$id.tsx
+@@ -498,7 +498,7 @@ function PatientRecord() {
+                   </DropdownMenuContent>
+                 </DropdownMenu>
+                 <Dialog open={treatmentOpen} onOpenChange={setTreatmentOpen}>
+-                  <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
++                  <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
+                     <DialogHeader>
+                       <DialogTitle>Record treatment</DialogTitle>
+                     </DialogHeader>
+@@ -560,7 +560,7 @@ function PatientRecord() {
+                 </Dialog>
+ 
+                 {canSee(identity, "patient-send-documents") && <Dialog open={docOpen} onOpenChange={setDocOpen}>
+-                  <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
++                  <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
+                     <DialogHeader>
+                       <DialogTitle>Send to patient</DialogTitle>
+                     </DialogHeader>
+@@ -618,7 +618,7 @@ function PatientRecord() {
+ 
+                 {identity.isManager && !p.deleted_at ? (
+                   <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+-                    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
++                    <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
+                       <DialogHeader>
+                         <DialogTitle>Archive this patient</DialogTitle>
+                       </DialogHeader>
+diff --git a/src/routes/_authenticated/patients.index.tsx b/src/routes/_authenticated/patients.index.tsx
+index 75d2b1e..6b83c7f 100644
+--- a/src/routes/_authenticated/patients.index.tsx
++++ b/src/routes/_authenticated/patients.index.tsx
+@@ -270,7 +270,7 @@ function PatientsPage() {
+       )}
+ 
+       <Dialog open={open} onOpenChange={setOpen}>
+-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl">
++        <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
+           <DialogHeader>
+             <DialogTitle>New patient</DialogTitle>
+           </DialogHeader>
+diff --git a/src/routes/_authenticated/route.tsx b/src/routes/_authenticated/route.tsx
+index 9636f9d..d51ba90 100644
+--- a/src/routes/_authenticated/route.tsx
++++ b/src/routes/_authenticated/route.tsx
+@@ -120,7 +120,7 @@ function AuthenticatedLayout() {
+ 
+   if (!ready) {
+     return (
+-      <div className="flex min-h-screen items-center justify-center">
++      <div className="flex min-h-app-screen items-center justify-center">
+         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
+       </div>
+     );
+@@ -220,7 +220,7 @@ function IdentityGate() {
+ 
+   if (signingOutRevoked) {
+     return (
+-      <div className="flex min-h-screen items-center justify-center">
++      <div className="flex min-h-app-screen items-center justify-center">
+         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
+       </div>
+     );
+@@ -228,7 +228,7 @@ function IdentityGate() {
+ 
+   if (isError) {
+     return (
+-      <div className="flex min-h-screen items-center justify-center px-4">
++      <div className="flex min-h-app-screen items-center justify-center px-4">
+         <div className="glass-card max-w-md p-8 text-center">
+           <h1 className="page-title">
+             We could not load your account
+@@ -256,7 +256,7 @@ function IdentityGate() {
+ 
+   if (isLoading || !identity || signingOutRevoked) {
+     return (
+-      <div className="flex min-h-screen items-center justify-center">
++      <div className="flex min-h-app-screen items-center justify-center">
+         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
+       </div>
+     );
+@@ -272,7 +272,7 @@ function IdentityGate() {
+   }
+   if (lostStaffAccess) {
+     return (
+-      <div className="flex min-h-screen items-center justify-center">
++      <div className="flex min-h-app-screen items-center justify-center">
+         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-deep border-t-transparent" />
+       </div>
+     );
+diff --git a/src/routes/_authenticated/schedule.tsx b/src/routes/_authenticated/schedule.tsx
+index 851ab6e..a650035 100644
+--- a/src/routes/_authenticated/schedule.tsx
++++ b/src/routes/_authenticated/schedule.tsx
+@@ -91,6 +91,8 @@ import { VisitNoteChip, isPreAppointmentNote } from "@/components/visit-note-chi
+ import { useTreatmentColours } from "@/lib/use-treatment-colours";
+ import { getClinicDetails, resendDocument, sendMessage, sendPaymentRequest } from "@/lib/clinic.functions";
+ import { bookingNotifyDescription, formatMoney } from "@/lib/payment-link";
++import { getAppZoom } from "@/lib/app-zoom";
++import { createDiaryDrag, type DiaryDragOptions } from "@/lib/diary-drag";
+ 
+ export const Route = createFileRoute("/_authenticated/schedule")({
+   head: () => ({
+@@ -551,7 +553,7 @@ function SchedulePage() {
+               <Button>New booking</Button>
+             </DialogTrigger>
+             <DialogContent
+-              className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
++              className="flex max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 pb-5 shadow-popover sm:rounded-[22px]"
+               onCloseAutoFocus={(e) => e.preventDefault()}
+             >
+               <DialogHeader className="shrink-0 pr-8 text-left">
+@@ -1694,52 +1696,61 @@ function DayPlanner({
+     ? sorted.find((a) => minutesFromMidnight(new Date(a.starts_at)) > nowMin)
+     : sorted[0];
+ 
+-  // ---- Drag handling.
++  // ---- Drag handling (mouse, pen and touch — see src/lib/diary-drag.ts).
++  const dragOptions = useRef<DiaryDragOptions | null>(null);
++  dragOptions.current = {
++    minuteAt: (clientY) => {
++      const rect = gridRef.current?.getBoundingClientRect();
++      return minuteFor((clientY - (rect?.top ?? 0)) / getAppZoom());
++    },
++    columnAt: (clientX) => {
++      for (const c of columns) {
++        const r = colRefs.current[c.id]?.getBoundingClientRect();
++        if (r && clientX >= r.left && clientX <= r.right) return c.id;
++      }
++      return null;
++    },
++    clampMinute: (minute, duration) => Math.max(startMin, Math.min(endMin - duration, minute)),
++    onPreview: setDrag,
++    onDrop: (d) => {
++      const appointment = visible.find((x) => x.id === d.id);
++      if (appointment) setConfirmDrop({ appointment, minute: d.minute, colId: d.colId });
++    },
++  };
++  const [dragger] = useState(() => createDiaryDrag(() => dragOptions.current!));
++  const attachedGrid = useRef<{ el: HTMLElement | null; off?: () => void }>({ el: null });
++  useEffect(() => {
++    const el = gridRef.current;
++    if (attachedGrid.current.el === el) return;
++    attachedGrid.current.off?.();
++    attachedGrid.current = { el, ...(el ? { off: dragger.attach(el) } : {}) };
++  });
++  useEffect(
++    () => () => {
++      attachedGrid.current.off?.();
++      dragger.dispose();
++    },
++    [dragger],
++  );
++
+   const beginDrag = (e: React.PointerEvent, a: any, colId: string) => {
+-    if (e.button !== 0) return;
+-    const target = e.target as HTMLElement;
+-    if (target.closest("a,button,[role='button']")) return;
++    // Chips and other controls on the card keep their own tap behaviour.
++    if ((e.target as HTMLElement).closest("button,[role='button'],input,textarea,select")) return;
+     const s = new Date(a.starts_at);
+-    const duration = Math.max(5, Math.round((+new Date(a.ends_at) - +s) / 60000));
+-    setDrag({
++    dragger.start(e, {
+       id: a.id,
+-      duration,
+-      minute: minutesFromMidnight(s),
++      startMinute: minutesFromMidnight(s),
++      duration: Math.max(5, Math.round((+new Date(a.ends_at) - +s) / 60000)),
+       colId,
+-      originMinute: minutesFromMidnight(s),
+-      originColId: colId,
+-      moved: false,
+     });
+-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+-  };
+-
+-  const moveDrag = (e: React.PointerEvent) => {
+-    if (!drag || !gridRef.current) return;
+-    const rect = gridRef.current.getBoundingClientRect();
+-    const minute = Math.max(startMin, Math.min(endMin - drag.duration, minuteFor(e.clientY - rect.top)));
+-    let colId = drag.colId;
+-    for (const c of columns) {
+-      const el = colRefs.current[c.id];
+-      if (!el) continue;
+-      const r = el.getBoundingClientRect();
+-      if (e.clientX >= r.left && e.clientX <= r.right) colId = c.id;
+-    }
+-    if (minute !== drag.minute || colId !== drag.colId) setDrag({ ...drag, minute, colId, moved: true });
+-  };
+-
+-  const endDrag = (a: any) => {
+-    if (!drag) return;
+-    const changed = drag.moved && (drag.minute !== drag.originMinute || drag.colId !== drag.originColId);
+-    if (changed) setConfirmDrop({ appointment: a, minute: drag.minute, colId: drag.colId });
+-    setDrag(null);
+   };
+ 
+   useEffect(() => {
+     if (!drag) return;
+-    const cancel = (e: KeyboardEvent) => { if (e.key === "Escape") setDrag(null); };
++    const cancel = (e: KeyboardEvent) => { if (e.key === "Escape") dragger.cancel(); };
+     window.addEventListener("keydown", cancel);
+     return () => window.removeEventListener("keydown", cancel);
+-  }, [drag]);
++  }, [drag, dragger]);
+ 
+   const dropTarget = confirmDrop
+     ? (() => {
+@@ -1899,7 +1910,10 @@ function DayPlanner({
+                   <div
+                     key={col.id}
+                     ref={(el) => { colRefs.current[col.id] = el; }}
+-                    className="relative z-0 min-w-0 flex-1 border-l border-glass-line"
++                    data-diary-col={col.id}
++                    className={`relative min-w-0 flex-1 border-l border-glass-line ${
++                      drag?.originColId === col.id ? "z-20" : "z-0"
++                    }`}
+                   >
+                     {offsets.map((o, i) =>
+                       o.row.type === "slot" ? (
+@@ -1912,7 +1926,7 @@ function DayPlanner({
+                             const colRect = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+                             setQuickAdd({
+                               top: o.top,
+-                              left: colRect.left - rect.left + colRect.width / 2,
++                              left: (colRect.left - rect.left + colRect.width / 2) / getAppZoom(),
+                               minute: (o.row as { minute: number }).minute,
+                               colId: col.id,
+                             });
+@@ -1962,7 +1976,12 @@ function DayPlanner({
+                       const dragging = drag?.id === a.id;
+                       const startAt = dragging ? drag!.minute : minutesFromMidnight(s);
+                       const duration = Math.max(5, Math.round((+e - +s) / 60000));
+-                      if (dragging && drag!.colId !== col.id) return null;
++                      // A card dragged to another practitioner stays in its own column's
++                      // DOM (so the touch keeps its target) and is shifted across.
++                      const shiftX =
++                        dragging && drag!.colId !== col.id
++                          ? (colRefs.current[drag!.colId]?.offsetLeft ?? 0) - (colRefs.current[col.id]?.offsetLeft ?? 0)
++                          : 0;
+                       const top = yFor(startAt);
+                       const durationHeight = yFor(startAt + duration) - top - 6;
+                       const match = needs.matches(a.id, needsAction);
+@@ -1974,10 +1993,14 @@ function DayPlanner({
+                         <div
+                           key={a.id}
+                           data-needs-action={filtering ? (match ? "match" : "faded") : undefined}
+-                          style={{ top, height, ...treatmentTone.style }}
++                          data-diary-event={a.id}
++                          style={{
++                            top,
++                            height,
++                            ...(shiftX ? { transform: `translateX(${shiftX}px)` } : {}),
++                            ...treatmentTone.style,
++                          }}
+                           onPointerDown={(ev) => beginDrag(ev, a, col.id)}
+-                          onPointerMove={moveDrag}
+-                          onPointerUp={() => endDrag(a)}
+                           className={`diary-event glass-card group absolute inset-x-1.5 z-[2] flex cursor-grab flex-col overflow-hidden !rounded-xl px-3 py-2.5 transition-[shadow,opacity,filter] hover:shadow-lift ${
+                             dragging ? "!z-30 cursor-grabbing opacity-90 shadow-lift" : ""
+                           } ${isCurrent ? "shadow-lift" : ""} ${needsActionCardClass(filtering, match)}`}
+@@ -2000,6 +2023,7 @@ function DayPlanner({
+                           <Link
+                             to="/patients/$id"
+                             params={{ id: a.patient_id }}
++                            draggable={false}
+                             className="relative mt-1 block break-words text-xs font-semibold leading-tight text-foreground hover:text-accent-ink"
+                           >
+                             {a.patients?.first_name} {a.patients?.last_name}
+@@ -2067,12 +2091,12 @@ function DayPlanner({
+ 
+       <ColourKey appointments={visible} colours={treatmentColours} />
+       <div className="border-t border-glass-line bg-glass-2 px-5 py-2 text-2xs text-muted-foreground">
+-        Drag an appointment to move it · click an empty slot to book · Esc cancels a drag
++        Drag an appointment to move it (press and hold on touch screens) · click an empty slot to book · Esc cancels a drag
+       </div>
+ 
+       {/* Confirm move */}
+       <Dialog open={!!confirmDrop} onOpenChange={(v) => { if (!v) setConfirmDrop(null); }}>
+-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl sm:max-w-md">
++        <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl sm:max-w-md">
+           <DialogHeader>
+             <DialogTitle>Move this appointment?</DialogTitle>
+           </DialogHeader>
+@@ -2285,8 +2309,8 @@ function WeekView({
+     const startAt = new Date(day);
+     startAt.setHours(9, 0, 0, 0);
+     setQuickAdd({
+-      top: event.clientY - (rect?.top ?? 0),
+-      left: event.clientX - (rect?.left ?? 0),
++      top: (event.clientY - (rect?.top ?? 0)) / getAppZoom(),
++      left: (event.clientX - (rect?.left ?? 0)) / getAppZoom(),
+       day: startAt,
+     });
+   }
+@@ -2635,7 +2659,7 @@ function MonthView({
+                     {items.length} booked
+                   </p>
+                 </div>
+-                <div className="max-h-[50vh] space-y-2 overflow-y-auto p-3">
++                <div className="max-h-[calc(50*var(--app-vh))] space-y-2 overflow-y-auto p-3">
+                   {items.map((a) => (
+                     <MonthPeekCard key={a.id} a={a} treatmentColours={treatmentColours} />
+                   ))}
+diff --git a/src/routes/_authenticated/settings.tsx b/src/routes/_authenticated/settings.tsx
+index 9309d44..0483cb7 100644
+--- a/src/routes/_authenticated/settings.tsx
++++ b/src/routes/_authenticated/settings.tsx
+@@ -8,17 +8,39 @@ import { ClinicDetailsSettings } from "@/components/clinic-details-settings";
+ import { RetailProductSettings } from "@/components/retail-product-settings";
+ import { PaymentsDepositsSettings } from "@/components/payments-deposits-settings";
+ 
+-type SettingsTab = "clinic" | "treatments" | "products" | "payments";
+-const TABS: { key: SettingsTab; label: string }[] = [
+-  { key: "clinic", label: "Clinic" },
+-  { key: "treatments", label: "Treatments" },
+-  { key: "products", label: "Products" },
+-  { key: "payments", label: "Payments and deposits" },
++type SettingsTab = "clinic" | "treatments" | "products" | "rules";
++/** Each tab carries the line shown under the Settings title while it is open. */
++const TABS: { key: SettingsTab; label: string; subtitle: string }[] = [
++  {
++    key: "clinic",
++    label: "Clinic",
++    subtitle:
++      "Your clinic's name and contact details, used on consent forms, receipts and patient messages.",
++  },
++  {
++    key: "treatments",
++    label: "Treatments",
++    subtitle:
++      "The treatments you offer, with prices, appointment lengths, recall intervals and diary colours.",
++  },
++  {
++    key: "products",
++    label: "Products",
++    subtitle: "Retail products shown on the patient portal and counted in Insights.",
++  },
++  {
++    key: "rules",
++    label: "Rules",
++    subtitle:
++      "Rules your clinic sets once and SQINOS follows everywhere: the dashboard, the diary and your reports.",
++  },
+ ];
+ 
+ export const Route = createFileRoute("/_authenticated/settings")({
+   validateSearch: (search: Record<string, unknown>): { tab?: SettingsTab } => {
+-    const tab = String(search?.["tab"] ?? "");
++    // `payments` was this tab's old name; keep old links and bookmarks working.
++    const raw = String(search?.["tab"] ?? "");
++    const tab = raw === "payments" ? "rules" : raw;
+     return TABS.some((t) => t.key === tab) ? { tab: tab as SettingsTab } : {};
+   },
+   head: () => ({
+@@ -55,10 +77,9 @@ function SettingsPage() {
+     <AppShell identity={identity}>
+       <div className="mb-6">
+         <h1 className="page-title">Settings</h1>
+-        <p className="page-subtitle">
+-          {identity.isManager
+-            ? "Clinic-wide preferences. Changes here apply to everyone on the team."
+-            : "Clinic preferences set by your manager."}
++        <p className="page-subtitle" data-qc="settings-subtitle">
++          {TABS.find((t) => t.key === active)?.subtitle}
++          {identity.isManager ? "" : " Set by your manager."}
+         </p>
+       </div>
+       {/* One section per tab so the page never becomes one long scroll. The tab lives in the URL. */}
+@@ -91,7 +112,8 @@ function SettingsPage() {
+         <TabsContent value="products">
+           <RetailProductSettings canEdit={canEditClinic} />
+         </TabsContent>
+-        <TabsContent value="payments">
++        <TabsContent value="rules" className="space-y-4">
++          {/* Clinic-wide rules the system follows. New customisable rules get their own card here. */}
+           <PaymentsDepositsSettings canEdit={canEditClinic} />
+         </TabsContent>
+       </Tabs>
+diff --git a/src/routes/_authenticated/tasks.tsx b/src/routes/_authenticated/tasks.tsx
+index 3babd0f..82c7830 100644
+--- a/src/routes/_authenticated/tasks.tsx
++++ b/src/routes/_authenticated/tasks.tsx
+@@ -817,7 +817,7 @@ function NewTaskPicker({
+     : [];
+   return (
+     <div
+-      className="fixed inset-0 z-50 flex items-start justify-center bg-[rgba(47,63,102,0.28)] p-4 pt-[12vh]"
++      className="fixed inset-0 z-50 flex items-start justify-center bg-[rgba(47,63,102,0.28)] p-4 pt-[calc(12*var(--app-vh))]"
+       role="dialog"
+       aria-modal="true"
+       aria-label="New task"
+diff --git a/src/routes/_authenticated/team.index.tsx b/src/routes/_authenticated/team.index.tsx
+index 2850de8..e0e3605 100644
+--- a/src/routes/_authenticated/team.index.tsx
++++ b/src/routes/_authenticated/team.index.tsx
+@@ -811,7 +811,7 @@ function EditStaffDialog({
+           <Pencil className="h-4 w-4" />
+         </Button>
+       </DialogTrigger>
+-      <DialogContent className="flex max-h-[min(90dvh,720px)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
++      <DialogContent className="flex max-h-[min(calc(90*var(--app-dvh)),720px)] w-[calc(calc(100*var(--app-vw))-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-[22px] border-edge-2 bg-card/95 p-5 shadow-popover sm:rounded-[22px]">
+         <DialogHeader className="shrink-0 pr-8 text-left">
+           <DialogTitle>
+             Edit {member.fullName || member.email}
+diff --git a/src/routes/auth.callback.tsx b/src/routes/auth.callback.tsx
+index 25b106a..d2aa532 100644
+--- a/src/routes/auth.callback.tsx
++++ b/src/routes/auth.callback.tsx
+@@ -52,7 +52,7 @@ function AuthCallback() {
+   }, [fetchMe, navigate]);
+ 
+   return (
+-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6">
++    <div className="flex min-h-app-screen flex-col items-center justify-center gap-4 px-6">
+       <BrandLockup />
+       {error ? (
+         <div className="glass-card max-w-sm p-6 text-center">
+diff --git a/src/routes/auth.reset.tsx b/src/routes/auth.reset.tsx
+index b47ab0b..3bc56f0 100644
+--- a/src/routes/auth.reset.tsx
++++ b/src/routes/auth.reset.tsx
+@@ -76,7 +76,7 @@ function ResetPasswordPage() {
+   const mismatch = confirm.length > 0 && password !== confirm;
+ 
+   return (
+-    <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
++    <div className="flex min-h-app-screen flex-col items-center justify-center px-6 py-16">
+       <BrandLockup />
+       <div className="glass-card mt-8 w-full max-w-sm p-8">
+         <h1 className="text-[19px] font-semibold tracking-[-0.016em] text-foreground">
+diff --git a/src/routes/auth.tsx b/src/routes/auth.tsx
+index 5573e45..4b0fff4 100644
+--- a/src/routes/auth.tsx
++++ b/src/routes/auth.tsx
+@@ -116,7 +116,7 @@ function AuthPage() {
+   if (handoff) return null;
+ 
+   return (
+-    <div className="grid min-h-screen lg:grid-cols-2">
++    <div className="grid min-h-app-screen lg:grid-cols-2">
+       <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-accent-hi via-accent to-70% to-lane-6 p-12 text-accent-foreground lg:flex">
+         <span
+           aria-hidden
+diff --git a/src/routes/d.$token.tsx b/src/routes/d.$token.tsx
+index 03cf15e..2be0c24 100644
+--- a/src/routes/d.$token.tsx
++++ b/src/routes/d.$token.tsx
+@@ -83,7 +83,7 @@ function PublicDocumentPage() {
+     : (link.data ?? { state: "not_found" });
+ 
+   return (
+-    <div className="flex min-h-dvh flex-col items-center bg-background px-4 py-10">
++    <div className="flex min-h-app-screen flex-col items-center bg-background px-4 py-10">
+       <div className="w-full max-w-xl">
+         <div className="mb-6 flex justify-center">
+           <BrandLockup />
+diff --git a/src/routes/index.tsx b/src/routes/index.tsx
+index 6162a78..0d32fa0 100644
+--- a/src/routes/index.tsx
++++ b/src/routes/index.tsx
+@@ -42,7 +42,7 @@ function Landing() {
+   if (handoff) return null;
+ 
+   return (
+-    <div className="min-h-screen">
++    <div className="min-h-app-screen">
+       <header className="sticky top-0 z-30 border-b border-edge bg-sidebar shadow-inset-hi backdrop-blur-glass backdrop-saturate-150">
+         <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
+           <BrandLockup />
+diff --git a/src/routes/portal.tsx b/src/routes/portal.tsx
+index 0e9f06b..81f41ed 100644
+--- a/src/routes/portal.tsx
++++ b/src/routes/portal.tsx
+@@ -136,7 +136,7 @@ function PortalLogin() {
+   if (handoff) return null;
+ 
+   return (
+-    <div className="grid min-h-screen lg:grid-cols-2">
++    <div className="grid min-h-app-screen lg:grid-cols-2">
+       <div className="relative hidden flex-col justify-between overflow-hidden border-r border-edge bg-gradient-to-br from-lane-4/45 via-glass-2 to-70% to-lane-7/40 p-12 shadow-inset-hi lg:flex">
+         <div className="flex items-center gap-2 text-foreground">
+           <BrandLockup />
+diff --git a/src/routes/u.$token.tsx b/src/routes/u.$token.tsx
+index 8e790d4..25ee1d1 100644
+--- a/src/routes/u.$token.tsx
++++ b/src/routes/u.$token.tsx
+@@ -34,7 +34,7 @@ function UnsubscribePage() {
+   });
+ 
+   return (
+-    <div className="flex min-h-dvh flex-col items-center bg-background px-4 py-10">
++    <div className="flex min-h-app-screen flex-col items-center bg-background px-4 py-10">
+       <div className="w-full max-w-md">
+         <div className="mb-6 flex justify-center">
+           <BrandLockup />
+diff --git a/src/styles.css b/src/styles.css
+index 81ff407..c23a638 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -331,8 +331,13 @@
+     border-bottom: 0;
+   }
+ 
+-  .glass-table tbody tr:hover {
+-    background: rgba(47, 63, 102, 0.08);
++  /* Hover only where there is a real pointer: on iPad a tap leaves :hover
++     stuck on whatever row ends up under the finger after navigating, which
++     read as the wrong patient being highlighted. */
++  @media (hover: hover) and (pointer: fine) {
++    .glass-table tbody tr:hover {
++      background: rgba(47, 63, 102, 0.08);
++    }
+   }
+ 
+   /* Earnings tree: light navy wash on the open month, day and treatments.
+@@ -343,9 +348,11 @@
+   .glass-table.earnings-open-rows tbody tr[data-opened] {
+     background: rgba(47, 63, 102, 0.04);
+   }
+-  .glass-table.earnings-open-rows tbody tr:hover,
+-  .glass-table.earnings-open-rows tbody tr[data-opened]:hover {
+-    background: rgba(47, 63, 102, 0.08);
++  @media (hover: hover) and (pointer: fine) {
++    .glass-table.earnings-open-rows tbody tr:hover,
++    .glass-table.earnings-open-rows tbody tr[data-opened]:hover {
++      background: rgba(47, 63, 102, 0.08);
++    }
+   }
+   .glass-table.earnings-open-rows tbody tr[data-opened]:has(+ tr[data-opened]) td {
+     border-bottom-color: transparent;
+@@ -1152,13 +1159,13 @@ input:-webkit-autofill {
+     height: 0;
+   }
+   to {
+-    height: var(--radix-collapsible-content-height);
++    height: calc(var(--radix-collapsible-content-height) / var(--app-zoom));
+   }
+ }
+ 
+ @keyframes collapsible-up {
+   from {
+-    height: var(--radix-collapsible-content-height);
++    height: calc(var(--radix-collapsible-content-height) / var(--app-zoom));
+   }
+   to {
+     height: 0;
+@@ -1261,3 +1268,141 @@ input:-webkit-autofill {
+     margin: 14mm;
+   }
+ }
++
++/*
++ * Default app zoom — the app renders at 90% on laptop, desktop and iPad
++ * (landscape) widths, which shows noticeably more of each screen at once.
++ * Phones and narrow windows stay at 100%.
++ *
++ * `zoom` scales every length (px, rem, and viewport units alike), so:
++ *  - Viewport units would also shrink to 90% and full-height layouts would
++ *    stop short of the bottom of the screen. Use the --app-vh/--app-dvh/
++ *    --app-svh/--app-vw units (or the h-app-* utilities below) instead of raw
++ *    vh/dvh/svh/vw — they divide the zoom back out.
++ *  - Pointer coordinates and getBoundingClientRect() are in screen pixels
++ *    while CSS lengths are pre-zoom, so JS that turns a pointer/rect delta into
++ *    a CSS length must divide by getAppZoom() from src/lib/app-zoom.ts.
++ *
++ * To change the level, edit --app-zoom here only.
++ */
++:root {
++  --app-zoom: 1;
++  --app-vh: calc(1vh / var(--app-zoom));
++  --app-dvh: calc(1dvh / var(--app-zoom));
++  --app-svh: calc(1svh / var(--app-zoom));
++  --app-vw: calc(1vw / var(--app-zoom));
++}
++
++@media (min-width: 1024px) {
++  :root {
++    --app-zoom: 0.9;
++  }
++
++  html {
++    zoom: var(--app-zoom);
++  }
++}
++
++@media print {
++  :root {
++    --app-zoom: 1;
++  }
++
++  html {
++    zoom: 1;
++  }
++}
++
++/*
++ * Radix (popovers, menus, selects, tooltips) positions its floating layer in
++ * screen pixels, which a zoomed page would shrink by --app-zoom and so pull
++ * every popover up and left of its trigger. Undo the zoom on the positioned
++ * wrapper and re-apply it to the content inside, so placement is exact and
++ * the content still renders at the app's size. The size variables Radix
++ * measures (--radix-*-available-height, --radix-select-trigger-*) are also in
++ * screen pixels — divide them by --app-zoom where they are used.
++ */
++[data-radix-popper-content-wrapper] {
++  zoom: calc(1 / var(--app-zoom));
++}
++
++[data-radix-popper-content-wrapper] > * {
++  zoom: var(--app-zoom);
++}
++
++@utility h-app-screen {
++  height: calc(100 * var(--app-dvh));
++}
++
++@utility min-h-app-screen {
++  min-height: calc(100 * var(--app-dvh));
++}
++
++/*
++ * Diary cards on touch screens (iPad, phones). A press-and-hold moves the card
++ * (src/lib/diary-drag.ts), so the long-press must not also start iOS text
++ * selection, the link preview on the patient name, or double-tap zoom.
++ * Scoped to touch input so desktop text behaviour is unchanged.
++ */
++@media (hover: none), (pointer: coarse) {
++  .diary-event,
++  .diary-event * {
++    -webkit-user-select: none;
++    user-select: none;
++    -webkit-touch-callout: none;
++  }
++
++  .diary-event {
++    touch-action: manipulation;
++  }
++}
++
++.diary-event a {
++  -webkit-user-drag: none;
++}
++
++/*
++ * Drag handles (Quick book header, My notes header and resize edges, the
++ * sidebar edge). `touch-action: none` hands the gesture to the page from the
++ * first touch, so iPad Safari never turns a drag into a page scroll — that
++ * takeover is what made panels jump. See src/lib/pointer-drag.ts.
++ */
++.drag-handle {
++  touch-action: none;
++  -webkit-user-select: none;
++  user-select: none;
++  -webkit-touch-callout: none;
++}
++
++/* While anything is being dragged: nothing on the page selects. */
++html.diary-dragging,
++html.diary-dragging *,
++html.app-dragging,
++html.app-dragging * {
++  -webkit-user-select: none !important;
++  user-select: none !important;
++  -webkit-touch-callout: none !important;
++}
++
++html.diary-dragging,
++html.app-dragging {
++  cursor: grabbing;
++}
++
++/*
++ * On-screen keyboard open (iPad / iPhone — see src/lib/keyboard-viewport.ts):
++ * centre dialogs in the area above the keyboard and cap their height to it.
++ * Dialog bodies already scroll, so every field stays reachable.
++ */
++html[data-keyboard="open"] [role="dialog"][data-overlay-keys] {
++  top: calc(var(--vv-top, 0px) + var(--vv-height, 100%) / 2) !important;
++  max-height: calc(var(--vv-height, 100%) - 1.5rem) !important;
++}
++
++/* Journey board patient pills: a press opens the patient, never the iOS
++   link preview / context menu. */
++[data-qc="board-pill"] {
++  -webkit-touch-callout: none;
++  -webkit-user-select: none;
++  user-select: none;
++}
