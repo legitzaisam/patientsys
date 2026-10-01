@@ -9,6 +9,9 @@ import {
   setBookableTreatments,
   updateStaffMember,
 } from "@/lib/clinic.functions";
+import { toneForTreatment } from "@/lib/practitioner-colours";
+import { useTreatmentColours } from "@/lib/use-treatment-colours";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,6 +38,7 @@ export function QualificationsCard({
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [editingBookable, setEditingBookable] = useState(false);
   const [picked, setPicked] = useState<string[]>(() => subject.bookable.map((b) => b.catalogueId));
+  const colours = useTreatmentColours();
 
   useEffect(() => {
     setItems(splitQualifications(subject.qualifications));
@@ -205,15 +209,25 @@ export function QualificationsCard({
           {subject.bookable.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing set yet.</p>
           ) : (
-            subject.bookable.map((b) => (
-              <span
-                key={b.catalogueId}
-                className="inline-flex h-9 items-center rounded-full bg-glass-2 px-3.5 text-sm text-foreground shadow-inset-hi"
-                data-qc="bookable-chip"
-              >
-                {b.name}
-              </span>
-            ))
+            subject.bookable.map((b) => {
+              // Same colour the treatment wears in the diary (Settings → Treatments).
+              const tone = toneForTreatment(b.name, colours);
+              return (
+                <span
+                  key={b.catalogueId}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold shadow-inset-hi",
+                    tone.softBg,
+                    tone.text,
+                  )}
+                  style={tone.style}
+                  data-qc="bookable-chip"
+                >
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", tone.dot)} aria-hidden />
+                  {b.name}
+                </span>
+              );
+            })
           )}
         </div>
       ) : (

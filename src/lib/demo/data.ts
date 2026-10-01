@@ -125,7 +125,7 @@ export const clinic: Row = {
   name: "Aetheria Medical",
   address: "42 Marylebone High Street, London W1U 5HD",
   phone: "020 7946 0812",
-  email: "hello@aetheria.clinic",
+  email: "contact.sqinos@gmail.com",
   reminder_offsets: [168, 24],
   deposit_lead_days: 3,
   deposit_percent: 30,

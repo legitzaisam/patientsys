@@ -15,7 +15,8 @@ export const links = {
   practitioner: demo("/demo/enter?role=practitioner"),
   frontDesk: demo("/demo/enter?role=front_desk"),
   showPersonas: (env.PUBLIC_DEMO_PERSONAS ?? "true") !== "false",
-  contactEmail: env.PUBLIC_CONTACT_EMAIL || "",
+  // Sqinos's contact address; override per deployment with PUBLIC_CONTACT_EMAIL.
+  contactEmail: env.PUBLIC_CONTACT_EMAIL || "contact.sqinos@gmail.com",
   // /contact posts to a form service (Web3Forms by default). Without a key the
   // form falls back to a prefilled email to contactEmail.
   contactFormKey: env.PUBLIC_CONTACT_FORM_KEY || "",

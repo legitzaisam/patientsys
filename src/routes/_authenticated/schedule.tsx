@@ -235,7 +235,6 @@ function StageTracker({
                 </span>
                 <span className="min-w-0 flex-1">
                   {s.label}
-                  {option?.opensForm ? <span className="ml-1 text-2xs text-ink-3">· opens the form</span> : null}
                   {disabled && option?.reason ? <span className="block text-2xs leading-snug text-ink-3">{option.reason}</span> : null}
                 </span>
               </button>

@@ -70,7 +70,12 @@ export function FunnelChart({ monthly }: { monthly: InsightsResult["monthly"] | 
                 interval={monthly.length > 16 ? 2 : 0}
               />
               <YAxis tickLine={false} axisLine={false} fontSize={11} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: "rgba(47,63,102,0.05)" }} />
+              <Tooltip
+                contentStyle={tooltipStyle()}
+                labelStyle={{ color: "var(--foreground)", fontWeight: 600 }}
+                itemStyle={{ color: "var(--foreground)" }}
+                cursor={{ fill: "rgba(47,63,102,0.05)" }}
+              />
               <Bar dataKey="signUps" name="Online enquiries" fill={SIGNUPS} radius={[6, 6, 0, 0]} />
               <Bar dataKey="firstBookings" name="First bookings" fill={BOOKINGS} radius={[6, 6, 0, 0]} />
               <Bar dataKey="firstConsults" name="First consults" fill={CONSULTS} radius={[6, 6, 0, 0]} />

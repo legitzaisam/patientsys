@@ -66,14 +66,18 @@ test("arrived without consent stays arrived; the menu says why; signing in clini
   await page.locator('[data-stage-option="arrived"]').first().click();
   await expect(stageOf(page, "Olivia Bennett")).toHaveText(/Arrived/, { timeout: 10_000 });
 
-  // Guided menu: Waiting is disabled with a reason; In treatment opens the form.
+  // Guided menu: Waiting is disabled with a reason; In treatment stays enabled
+  // (it opens the form, without saying so).
   await page.mouse.move(10, 10);
   await page.waitForTimeout(400);
   await openStageMenu(page, "Olivia Bennett");
   const waiting = page.locator('[data-stage-option="waiting"]').first();
   await expect(waiting).toBeDisabled();
   await expect(waiting).toContainText(/Consent is outstanding/);
-  await expect(page.locator('[data-stage-option="in_treatment"]').first()).toContainText(/opens the form/);
+  await expect(page.locator('[data-stage-option="in_treatment"]').first()).toBeEnabled();
+  await expect(page.locator('[data-stage-option="in_treatment"]').first()).not.toContainText(
+    /opens the form/,
+  );
   await page.mouse.move(10, 10);
   await page.waitForTimeout(400);
 

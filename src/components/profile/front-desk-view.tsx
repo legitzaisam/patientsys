@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getCatalogue, listPatients, listPractitioners } from "@/lib/clinic.functions";
+import { toneForTreatment } from "@/lib/practitioner-colours";
 import { timeOffLabel } from "@/lib/staff-schedule";
+import { useTreatmentColours } from "@/lib/use-treatment-colours";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -40,6 +42,15 @@ export function FrontDeskView({ subject, treats }: { subject: ProfileSubject; tr
     queryFn: () => fetchCatalogue(),
     enabled: treats,
   });
+  const colours = useTreatmentColours();
+
+  // "Book with" offers only what the manager tagged under Can be booked for.
+  // With nothing tagged yet the full list stays, so the front desk is not stuck.
+  const bookableIds = new Set(subject.bookable.map((b) => b.catalogueId));
+  const bookableCatalogue =
+    bookableIds.size > 0
+      ? ((catalogue ?? []) as { id: string }[]).filter((c) => bookableIds.has(c.id))
+      : ((catalogue ?? []) as { id: string }[]);
 
   const first = firstName(subject.fullName);
   const compliance = subject.compliance;
@@ -96,7 +107,7 @@ export function FrontDeskView({ subject, treats }: { subject: ProfileSubject; tr
           <QuickAddAppointment
             patients={(patients ?? []) as never[]}
             practitioners={(practitioners ?? []) as never[]}
-            catalogue={(catalogue ?? []) as never[]}
+            catalogue={bookableCatalogue as never[]}
             date={new Date()}
             defaultPractitionerId={subject.userId}
             open={booking}
@@ -116,15 +127,25 @@ export function FrontDeskView({ subject, treats }: { subject: ProfileSubject; tr
           <h3 className="text-lg font-semibold text-foreground">Can be booked for</h3>
           {subject.bookable.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {subject.bookable.map((b) => (
-                <span
-                  key={b.catalogueId}
-                  className="rounded-full bg-glass-2 px-3.5 py-2 text-sm text-foreground shadow-inset-hi"
-                  data-qc="bookable-chip"
-                >
-                  {b.name}
-                </span>
-              ))}
+              {subject.bookable.map((b) => {
+                // Same colour the treatment wears in the diary (Settings → Treatments).
+                const tone = toneForTreatment(b.name, colours);
+                return (
+                  <span
+                    key={b.catalogueId}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold shadow-inset-hi",
+                      tone.softBg,
+                      tone.text,
+                    )}
+                    style={tone.style}
+                    data-qc="bookable-chip"
+                  >
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", tone.dot)} aria-hidden />
+                    {b.name}
+                  </span>
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">

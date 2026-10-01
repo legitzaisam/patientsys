@@ -45,7 +45,7 @@ Set these in `website/.env.local` (see `.env.example`). Defaults use the gateway
 | `PUBLIC_CLINIC_SIGNIN_URL`  | `/demo/enter?role=owner`                                       |
 | `PUBLIC_PATIENT_SIGNIN_URL` | `/demo/enter?role=patient`                                     |
 | `PUBLIC_DEMO_PERSONAS`      | `true` (owner / manager / practitioner / front desk buttons on `/login`) |
-| `PUBLIC_CONTACT_EMAIL`      | empty (shown on `/contact`; the form's fallback address)       |
+| `PUBLIC_CONTACT_EMAIL`      | `contact.sqinos@gmail.com` (shown on `/contact`; the form's fallback address) |
 | `PUBLIC_CONTACT_FORM_KEY`   | empty (Web3Forms access key; without it the form uses mailto)  |
 | `PUBLIC_CONTACT_FORM_ENDPOINT` | `https://api.web3forms.com/submit`                          |
 | `SITE_URL`                  | used for canonical and Open Graph URLs                         |

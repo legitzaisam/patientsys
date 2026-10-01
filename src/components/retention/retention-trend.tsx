@@ -102,7 +102,8 @@ export function RetentionTrend({ points, subtitle }: { points: MonthPoint[]; sub
                   color: "var(--foreground)",
                   fontSize: "12px",
                 }}
-                labelStyle={{ color: "var(--muted-foreground)" }}
+                labelStyle={{ color: "var(--foreground)", fontWeight: 600 }}
+                itemStyle={{ color: "var(--foreground)" }}
                 labelFormatter={(v) => labelAt(labels, v)}
                 formatter={(v: number, _n, item: any) => [
                   `${v}% · ${item?.payload?.returning ?? 0} of ${item?.payload?.active ?? 0} patients`,
