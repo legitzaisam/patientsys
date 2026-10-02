@@ -1089,6 +1089,28 @@ input:-webkit-autofill {
   animation-duration: 1ms;
 }
 
+/*
+ * Date and time fields carry a leading icon, and the field reserves room for it
+ * with padding-left. iOS Safari draws these controls natively and lays the
+ * value out itself, ignoring that padding, so on iPad the date slid under the
+ * icon. Dropping the native appearance makes the padding apply, and pinning
+ * ::-webkit-date-and-time-value keeps the value at the text start instead of
+ * centred in whatever width the control gives itself.
+ */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value {
+  margin: 0;
+  text-align: start;
+}
+
 /* A summary card was clicked: ring the detail it points at, then let go. */
 @keyframes focus-flash {
   0%,
