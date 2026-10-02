@@ -77,12 +77,17 @@ export function relativeAgo(iso: string, now: Date = new Date()): string {
   return `${years} ${years === 1 ? "year" : "years"} ago`;
 }
 
+// Built once: toLocaleDateString makes a formatter per call, and these run for
+// every row of the records list and every summary the server builds.
+const SHORT_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+const MONTH_YEAR = new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" });
+
 function shortDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return SHORT_DATE.format(new Date(iso));
 }
 
 function monthYear(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+  return MONTH_YEAR.format(new Date(iso));
 }
 
 export type NextTreatmentState =

@@ -49,9 +49,12 @@ function tasksKey(p: PatientRow) {
   return p.summary?.openTasks?.length ?? p.openTasks?.length ?? 0;
 }
 
-function cmp(a: number | string, b: number | string) {
-  if (typeof a === "string" && typeof b === "string") return a.localeCompare(b, "en-GB");
-  return (a as number) - (b as number);
+/** One collator for every comparison: `localeCompare` builds one per call. */
+const collator = new Intl.Collator("en-GB");
+
+/** Subtraction would give NaN for two rows with nothing planned (∞ − ∞). */
+function cmpNumber(a: number, b: number) {
+  return a === b ? 0 : a < b ? -1 : 1;
 }
 
 export function sortRecords(
@@ -61,15 +64,24 @@ export function sortRecords(
   now: Date,
 ): PatientRow[] {
   const sign = dir === "desc" ? -1 : 1;
-  return [...rows].sort((a, b) => {
+  // Keys are worked out once per row rather than once per comparison: a list
+  // this size makes thousands of comparisons, and nextKey formats dates.
+  const keyed = rows.map((row) => ({
+    row,
+    name: nameKey(row),
+    value:
+      sort === "last"
+        ? lastKey(row)
+        : sort === "next"
+          ? nextKey(row, now)
+          : sort === "tasks"
+            ? tasksKey(row)
+            : 0,
+  }));
+  keyed.sort((a, b) => {
     const key =
-      sort === "patient"
-        ? cmp(nameKey(a), nameKey(b))
-        : sort === "last"
-          ? cmp(lastKey(a), lastKey(b))
-          : sort === "next"
-            ? cmp(nextKey(a, now), nextKey(b, now))
-            : cmp(tasksKey(a), tasksKey(b));
-    return key === 0 ? cmp(nameKey(a), nameKey(b)) : key * sign;
+      sort === "patient" ? collator.compare(a.name, b.name) : cmpNumber(a.value, b.value);
+    return key === 0 ? collator.compare(a.name, b.name) : key * sign;
   });
+  return keyed.map((k) => k.row);
 }

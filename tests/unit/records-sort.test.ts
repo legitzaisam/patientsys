@@ -80,6 +80,14 @@ describe("sortRecords", () => {
     expect(sortRecords(rows, "next", "asc", now).map((p) => p.id)).toEqual(["over", "booked", "later"]);
   });
 
+  it("falls back to the name when two rows have nothing planned", () => {
+    const rows = [
+      row({ id: "z", first_name: "Ada", last_name: "Zephyr" }),
+      row({ id: "a", first_name: "Ada", last_name: "Appleby" }),
+    ];
+    expect(sortRecords(rows, "next", "asc", now).map((p) => p.id)).toEqual(["a", "z"]);
+  });
+
   it("sorts Tasks by open count, most first on the default dir", () => {
     const rows = [
       row({

@@ -7,14 +7,29 @@ function tzOffsetMs(date: Date, timeZone: string) {
   return asLocal.getTime() - asUTC.getTime();
 }
 
+/**
+ * An Intl formatter costs far more to build than to use, and these run per row
+ * — per comparison, when a list sorts on a date — so keep one per timezone.
+ */
+const dayKeyFormats = new Map<string, Intl.DateTimeFormat>();
+
+function dayKeyFormat(timeZone: string) {
+  let format = dayKeyFormats.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    dayKeyFormats.set(timeZone, format);
+  }
+  return format;
+}
+
 /** Local calendar day (yyyy-mm-dd) in the clinic timezone. */
 export function clinicDayKey(now: Date = new Date(), timeZone: string = CLINIC_TZ) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
+  return dayKeyFormat(timeZone).format(now);
 }
 
 /** Whole clinic-local days from `fromKey` to `toKey` (yyyy-mm-dd). */
@@ -46,14 +61,25 @@ export function clinicDayRangeForKey(key: string, timeZone: string = CLINIC_TZ) 
   return clinicDayRange(new Date(`${key}T12:00:00Z`), timeZone);
 }
 
+const minutesFormats = new Map<string, Intl.DateTimeFormat>();
+
+function minutesFormat(timeZone: string) {
+  let format = minutesFormats.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    minutesFormats.set(timeZone, format);
+  }
+  return format;
+}
+
 /** Minutes since clinic-local midnight for an instant. */
 export function clinicMinutesOfDay(at: Date, timeZone: string = CLINIC_TZ) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(at);
+  const parts = minutesFormat(timeZone).formatToParts(at);
   const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
   const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
   return hour * 60 + minute;
