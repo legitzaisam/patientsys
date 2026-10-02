@@ -50,6 +50,13 @@ import { StepDetails } from "@/components/patients/record/step-details";
 import { EditStepDialog } from "@/components/patients/record/edit-step-dialog";
 import { TreatmentHistory } from "@/components/patients/record/treatment-history";
 import {
+  UrgentCheckinsCard,
+  type CheckinRow,
+} from "@/components/patients/record/urgent-checkins-card";
+import { AllCheckinsTable } from "@/components/patients/record/all-checkins-table";
+import { JournalList } from "@/components/patients/record/journal-list";
+import { PatientUpdatesCard } from "@/components/patients/record/patient-updates-card";
+import {
   ReadyToTreatCard,
   type ReadyToTreatVisit,
 } from "@/components/patients/record/ready-to-treat-card";
@@ -486,6 +493,7 @@ function PatientRecord() {
   // them a plan step claims, and the readiness rows for the hero.
   const todayVisit = (data.todayVisit ?? null) as ReadyToTreatVisit | null;
   const upcoming = (data.upcoming ?? []) as UpcomingBooking[];
+  const checkins = (data.checkins ?? []) as CheckinRow[];
   const onPlanIds = onPlanAppointmentIds(
     (planDetail?.milestoneAppointmentIds ?? []).map((appointmentId) => ({
       appointment_id: appointmentId,
@@ -1358,59 +1366,38 @@ function PatientRecord() {
 
             {/* What the patient wrote in their portal: their journal and the
                 recovery readings they submit between visits. */}
+            {/* From the patient: what came through the portal. Flagged
+                check-ins wait at the top until reviewed; the full list and the
+                shared journal sit side by side beneath. */}
             <TabsContent value="portal" className="space-y-4">
-              <Card className="p-5">
-                <h2 className="section-title">Recovery check-ins</h2>
-                <p className="text-xs text-muted-foreground">
-                  Self-reported between visits. Anything moderate or worse is flagged.
-                </p>
-                <ul className="mt-3 divide-y divide-glass-line">
-                  {((data as any).checkins ?? []).map((c: any) => (
-                    <li key={c.id} className="flex items-center gap-3 py-2.5">
-                      <span className="w-24 shrink-0 text-xs tabular-nums text-muted-foreground">
-                        {new Date(c.checkin_date).toLocaleDateString("en-GB")}
-                      </span>
-                      <span className="flex-1 text-xs">
-                        Redness {c.redness} · Sensitivity {c.sensitivity} · Dryness {c.dryness}
-                      </span>
-                      {c.needsAttention && (
-                        <Badge variant="outline" className="rounded-xl text-2xs uppercase text-destructive">
-                          Review
-                        </Badge>
-                      )}
-                    </li>
-                  ))}
-                  {((data as any).checkins ?? []).length === 0 && (
-                    <li className="py-5 text-sm text-muted-foreground">No check-ins submitted yet.</li>
-                  )}
-                </ul>
-              </Card>
-
-              <Card className="p-5">
-                <h2 className="section-title">Patient journal</h2>
-                <p className="text-xs text-muted-foreground">
-                  Entries the patient chose to share with the clinic.
-                </p>
-                <ul className="mt-3 divide-y divide-glass-line">
-                  {((data as any).journal ?? []).map((j: any) => (
-                    <li key={j.id} className="py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-foreground">{j.title}</p>
-                        <span className="text-xs tabular-nums text-muted-foreground">
-                          {new Date(j.entry_date).toLocaleDateString("en-GB")}
-                        </span>
-                      </div>
-                      {j.body && <p className="mt-1 text-xs text-muted-foreground">{j.body}</p>}
-                    </li>
-                  ))}
-                  {((data as any).journal ?? []).length === 0 && (
-                    <li className="py-5 text-sm text-muted-foreground">No journal entries shared yet.</li>
-                  )}
-                </ul>
-              </Card>
+              <UrgentCheckinsCard
+                checkins={checkins}
+                treatments={data.treatments ?? []}
+                phone={p.phone ?? null}
+                patientId={id}
+                canReview={can(identity, "treatments.record")}
+              />
+              <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+                <AllCheckinsTable checkins={checkins} />
+                <JournalList
+                  journal={(data.journal ?? []) as JournalEntryRow[]}
+                  treatments={data.treatments ?? []}
+                />
+              </div>
             </TabsContent>
 
-            <TabsContent value="history">
+            <TabsContent value="history" className="space-y-4">
+              <PatientUpdatesCard
+                history={data.history ?? []}
+                patient={{
+                  allergies: p.allergies ?? null,
+                  medications: p.medications ?? null,
+                  conditions: p.conditions ?? null,
+                }}
+                patientId={id}
+                canAccept={can(identity, "treatments.record")}
+                onBackToOverview={() => changeTab("overview")}
+              />
               <Card className="p-5">
                 <ul className="divide-y divide-glass-line">
                   {data.history.map((h: any) => (

@@ -145,6 +145,38 @@ function firstClause(value: string) {
     .join(" ");
 }
 
+export type PendingHistoryField = {
+  key: "allergies" | "medications" | "conditions";
+  label: string;
+  value: string;
+};
+
+const PENDING_FIELD_LABEL = {
+  allergies: "New allergy",
+  medications: "New medication",
+  conditions: "New condition",
+} as const;
+
+/**
+ * What accepting a patient's update would write: the three clinical fields
+ * the merge touches, only where the submitted text differs from the record.
+ * Diet, pregnancy and the rest stay in the version for reading.
+ */
+export function pendingHistoryFields(
+  version: HistoryVersionLike,
+  patient: { allergies?: string | null; medications?: string | null; conditions?: string | null },
+): PendingHistoryField[] {
+  const data = (version.data ?? {}) as Record<string, unknown>;
+  const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const out: PendingHistoryField[] = [];
+  for (const key of ["allergies", "medications", "conditions"] as const) {
+    const value = text(data[key]);
+    if (!value || value === text(patient[key])) continue;
+    out.push({ key, label: PENDING_FIELD_LABEL[key], value });
+  }
+  return out;
+}
+
 /**
  * The hero card's checklist, most urgent first: unreviewed check-ins and
  * pending medical updates, the visit's money and consent, the step's patient

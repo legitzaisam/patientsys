@@ -9,6 +9,7 @@ import {
   journalDayLabel,
   longDate,
   onPlanAppointmentIds,
+  pendingHistoryFields,
   planMonths,
   readinessItems,
   recordTabBadges,
@@ -455,6 +456,26 @@ describe("badges and wording", () => {
     expect(relativeDays("2026-10-02", now)).toBe("tomorrow");
     expect(relativeDays("2026-10-01", now)).toBe("today");
     expect(relativeDays("2026-09-29", now)).toBe("2 days ago");
+  });
+
+  it("lists only the clinical fields an accepted update would change", () => {
+    const record = { allergies: "None known", medications: null, conditions: null };
+    expect(pendingHistoryFields(pendingHistory, record)).toEqual([
+      { key: "allergies", label: "New allergy", value: "Lidocaine, itchy rash (2019)" },
+      { key: "medications", label: "New medication", value: "Tretinoin 0.025% cream, nightly" },
+    ]);
+    // Already on file: nothing to accept for that field.
+    expect(
+      pendingHistoryFields(pendingHistory, {
+        ...record,
+        allergies: "Lidocaine, itchy rash (2019)",
+      }),
+    ).toEqual([
+      { key: "medications", label: "New medication", value: "Tretinoin 0.025% cream, nightly" },
+    ]);
+    expect(
+      pendingHistoryFields({ ...pendingHistory, data: { diet: "Vegetarian" } }, record),
+    ).toEqual([]);
   });
 
   it("labels a journal entry by the patient's own day count, else days since treatment", () => {
