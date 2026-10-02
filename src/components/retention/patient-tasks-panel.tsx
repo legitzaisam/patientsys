@@ -201,13 +201,23 @@ function TaskRow({
         disabled={!canTick}
         aria-label={closed ? "Done" : `Mark ${task.title} as handled`}
         data-qc="patient-task-tick"
+        // The circle is 18px as drawn; the button around it is the tap target
+        // (28px, so it is still 24px once the iPad's 0.9 zoom applies).
         className={cn(
-          "mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[10px] text-white",
-          closed ? "bg-success" : "border-[1.5px] border-[rgba(70,85,122,0.4)]",
-          canTick ? "cursor-pointer hover:border-success" : "cursor-default",
+          "group/tick -m-[5px] mt-[-4px] flex h-7 w-7 shrink-0 items-center justify-center",
+          canTick ? "cursor-pointer" : "cursor-default",
         )}
       >
-        {closed ? "✓" : ""}
+        <span
+          className={cn(
+            "flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] text-white",
+            closed ? "bg-success" : "border-[1.5px] border-[rgba(70,85,122,0.4)]",
+            canTick && !closed && "group-hover/tick:border-success",
+          )}
+          aria-hidden
+        >
+          {closed ? "✓" : ""}
+        </span>
       </button>
       <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
         <Link

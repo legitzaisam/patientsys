@@ -43,17 +43,21 @@ export function SkinPlanSummaryCard({
   detail,
   now,
   canBook,
+  missed = false,
   onBook,
   onOpenRoadmap,
 }: {
   detail: PlanDetail | null | undefined;
   now: Date;
   canBook: boolean;
+  /** The journey board says the patient missed the current step's booking. */
+  missed?: boolean;
   onBook: (stepId: string) => void;
   onOpenRoadmap: () => void;
 }) {
   const months = detail ? planMonths(detail.roadmap) : null;
   const next = detail ? upNextStep(detail.roadmap) : null;
+  const rebook = Boolean(next) && missed;
   const phase = detail?.plan.phase
     ? (JOURNEY_PHASE_META[detail.plan.phase as JourneyPhaseKey]?.label ?? detail.plan.phase)
     : null;
@@ -163,7 +167,9 @@ export function SkinPlanSummaryCard({
                   ) : (
                     <span>No due date</span>
                   )}
-                  {next.booked ? (
+                  {rebook ? (
+                    <ToneChip tone="alert">No show</ToneChip>
+                  ) : next.booked ? (
                     <ToneChip tone="done">
                       Booked{next.bookedAt ? ` ${shortDay(next.bookedAt)}` : ""}
                     </ToneChip>
@@ -174,7 +180,7 @@ export function SkinPlanSummaryCard({
                   ) : null}
                 </div>
               </div>
-              {next.needsBooking && canBook ? (
+              {(next.needsBooking || rebook) && canBook ? (
                 <Button
                   type="button"
                   className="h-auto rounded-full px-[15px] py-[7px] text-[12.5px]"

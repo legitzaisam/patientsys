@@ -401,13 +401,18 @@ export function stepNeedsBooking(step: RoadmapStepLike) {
   );
 }
 
-/** The roadmap row's date line: "Completed 2 Sep", "Booked Sun 4 Oct · 11:30", "Due 4 Oct" or "No date yet". */
-export function stepDateLine(step: RoadmapStepLike) {
+/**
+ * The roadmap row's date line: "Completed 2 Sep", "Booked Sun 4 Oct · 11:30",
+ * "Due 4 Oct" or "No date yet". A missed booking is not a booking, so the
+ * step falls back to its due date (the no-show line sits beneath it).
+ */
+export function stepDateLine(step: RoadmapStepLike, opts: { missed?: boolean } = {}) {
   if (stepTone(step.status) === "done") {
     const when = step.completedAt ?? step.date;
     return when ? `Completed ${shortDate(when)}` : "Completed";
   }
-  if (step.bookedAt) return `Booked ${shortDay(step.bookedAt)} · ${clockTime(step.bookedAt)}`;
+  if (step.bookedAt && !opts.missed)
+    return `Booked ${shortDay(step.bookedAt)} · ${clockTime(step.bookedAt)}`;
   return step.date ? `Due ${shortDate(step.date)}` : "No date yet";
 }
 

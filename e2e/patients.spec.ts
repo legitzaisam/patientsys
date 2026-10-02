@@ -62,7 +62,11 @@ test.describe("record: what the list promises, the record shows", () => {
     await expect(page.locator('[data-qc="drawer-task"]')).toHaveCount(pillCount);
     await page.locator('[data-qc="drawer-name"]').click();
     await expect(page).toHaveURL(/\/patients\/[^/?]+/);
-    await page.getByRole("tab", { name: "Treatments" }).click();
+    // The record opens on Overview, where the Tasks and recalls card lives.
+    await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     const panel = page.locator('[data-qc="patient-tasks"]');
     await expect(panel).toBeVisible();
     await expect.poll(async () => Number(await panel.getAttribute("data-open"))).toBe(pillCount);
@@ -85,7 +89,8 @@ test.describe("record: what the list promises, the record shows", () => {
       /£[\d,]+ lifetime spend/,
     );
 
-    // The Treatments badge counts the bookings still to chase, listed below.
+    // The Treatments badge counts the bookings still to chase, listed on the
+    // Overview's Upcoming card.
     const badge = page.locator('[data-qc="treatments-badge"]');
     if ((await badge.count()) > 0) {
       const n = Number(await badge.innerText());
@@ -111,6 +116,8 @@ test.describe("record: what the list promises, the record shows", () => {
     await page.goto("/patients?q=Bennett");
     await page.locator('[data-qc="records-row"]', { hasText: /Bennett, .*Olivia/ }).click();
     await page.locator('[data-qc="drawer-name"]', { hasText: /Olivia Bennett/ }).click();
+    // The roadmap and its "n of m milestones" live on the Treatments tab.
+    await page.getByRole("tab", { name: /^Treatments/ }).click();
     const progress = page.locator('[data-qc="plan-progress"]').first();
     await expect(progress).toBeVisible();
     const [done, total] = (await progress.innerText()).match(/\d+/g)!.map(Number);
@@ -275,7 +282,8 @@ test.describe("a booking only counts when it is for the step", () => {
       /^Did not attend \d{1,2} \w+$/,
     );
     await expect(page.locator('[data-qc="plan-book"]').first()).toBeVisible();
-    // The record's tasks card carries the rebook task the rule created.
+    // The record's tasks card (on Overview) carries the rebook task the rule created.
+    await page.getByRole("tab", { name: "Overview" }).click();
     const rebook = page.locator('[data-qc="patient-task"][data-status="open"]', {
       hasText: "Rebook missed",
     });

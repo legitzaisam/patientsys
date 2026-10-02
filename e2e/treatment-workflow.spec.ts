@@ -202,9 +202,12 @@ test("the three-page form drives the stage and fans out into the record", async 
   await expect(record.getByText(/^Signed/)).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // Fan-out on the record page.
-  await expect(page.locator('[data-qc="today-visit"]')).toHaveCount(0);
-  const historyRow = page.locator("main li", { hasText: "Chemical Peel" }).first();
+  // Fan-out on the record page: the Overview hero reads complete and no longer
+  // offers the form; the history row on Treatments carries the record.
+  await expect(page.locator('[data-qc="today-visit"]')).toHaveAttribute("data-stage", "complete");
+  await expect(page.locator('[data-qc="open-treatment-form"]')).toHaveCount(0);
+  await page.getByRole("tab", { name: "Treatments" }).click();
+  const historyRow = page.locator('[data-qc="history-row"]', { hasText: "Chemical Peel" }).first();
   await expect(historyRow).toContainText("Full face");
   await expect(historyRow.locator('[data-qc="view-treatment-record"]')).toBeVisible();
   await page.getByRole("tab", { name: "Documents" }).click();

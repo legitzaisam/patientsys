@@ -137,7 +137,9 @@ export function SkinPlanRoadmap({
                         <div className="text-[13px] font-semibold text-foreground">
                           {step.title}
                         </div>
-                        <div className="text-[11.5px] text-ink-2">{stepDateLine(step)}</div>
+                        <div className="text-[11.5px] text-ink-2">
+                          {stepDateLine(step, { missed })}
+                        </div>
                         {isCurrent && note ? (
                           <div className="text-[11.5px] text-ink-2" data-qc="plan-booking-note">
                             {note}

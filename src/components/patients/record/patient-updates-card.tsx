@@ -118,7 +118,7 @@ export function PatientUpdatesCard({
       })}
       <button
         type="button"
-        className="self-start cursor-pointer text-xs font-semibold text-accent-ink hover:underline"
+        className="inline-flex min-h-6 cursor-pointer items-center self-start text-xs font-semibold text-accent-ink hover:underline"
         onClick={onBackToOverview}
         data-qc="patient-updates-back"
       >

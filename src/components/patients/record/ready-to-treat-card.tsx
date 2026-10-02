@@ -94,6 +94,8 @@ export function ReadyToTreatCard({
       : null;
   const pct = total === 0 ? 0 : Math.round((clear / total) * 100);
   const treating = visit?.stage === "in_treatment" || visit?.stage === "aftercare";
+  // A finished visit keeps its place in the hero but no longer offers the form.
+  const complete = visit?.stage === "complete";
   const consentHold = visit?.consentState === "outstanding";
 
   const linkFor = (item: ReadinessItem): ReactNode => {
@@ -132,9 +134,16 @@ export function ReadyToTreatCard({
           background: "linear-gradient(160deg, rgba(250,237,194,0.95), rgba(238,212,136,0.35))",
         }}
         data-qc="today-visit"
+        data-stage={visit?.stage ?? "none"}
       >
         <span className="text-[11px] font-semibold tracking-[0.06em] text-accent-ink">
-          {visit ? "TODAY'S VISIT" : nextAppointmentAt ? "NEXT VISIT" : "NO VISIT TODAY"}
+          {visit
+            ? complete
+              ? "TODAY'S VISIT · COMPLETE"
+              : "TODAY'S VISIT"
+            : nextAppointmentAt
+              ? "NEXT VISIT"
+              : "NO VISIT TODAY"}
         </span>
         <span className="text-[44px] font-medium leading-none tracking-[-0.03em] text-foreground">
           {visit
@@ -214,7 +223,11 @@ export function ReadyToTreatCard({
           })}
         </ul>
 
-        {visit && canTreat ? (
+        {visit && complete ? (
+          <p className="text-right text-xs text-ink-2" data-qc="visit-complete-note">
+            Treatment recorded. The record and its forms are under Treatments.
+          </p>
+        ) : visit && canTreat ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <span className="text-xs text-ink-2">
               {consentHold

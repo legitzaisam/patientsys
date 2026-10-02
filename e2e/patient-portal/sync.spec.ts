@@ -153,7 +153,7 @@ test("a journal entry the patient writes is visible to the clinic", async ({ pag
   await page.getByRole("tab", { name: "From the patient" }).click();
   await expect(page.getByText(title)).toBeVisible();
   // The readings the patient submits land beside it.
-  await expect(page.getByRole("heading", { name: "Recovery check-ins" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All check-ins" })).toBeVisible();
 });
 
 test("a pause request the patient raises reaches the clinic", async ({ page }) => {

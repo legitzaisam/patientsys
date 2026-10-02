@@ -279,10 +279,15 @@ function PatientRecord() {
       setActiveTab("treatments");
   }, [identity, activeTab]);
 
+  // Wait for the plan as well: the hero and the Skin plan card above the
+  // Upcoming card change height when it lands, which would undo an early scroll.
   useEffect(() => {
-    if (activeTab !== "overview" || !chaseFocus) return;
-    bookingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [activeTab, chaseFocus, data]);
+    if (activeTab !== "overview" || !chaseFocus || !data || planDetail === undefined) return;
+    const timer = window.setTimeout(() => {
+      bookingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, chaseFocus, data, planDetail]);
 
   // Deep links: #plan is the roadmap on Treatments; #tasks and #recall are the
   // Tasks and recalls card on Overview. The anchors render once the tab has
@@ -959,6 +964,7 @@ function PatientRecord() {
                   detail={planDetail}
                   now={now}
                   canBook={can(identity, "appointments.edit")}
+                  missed={Boolean(planRisk?.noShowAt)}
                   onBook={(stepId) => setBookingStep(stepId)}
                   onOpenRoadmap={() => changeTab("treatments")}
                 />
@@ -1478,7 +1484,7 @@ function PatientRecord() {
 
 function Detail({ label, value, alert }: { label: string; value?: string | null; alert?: boolean }) {
   return (
-    <div>
+    <div data-qc="record-detail" data-field={label.toLowerCase()}>
       <p className="text-xs tracking-[0.02em] text-muted-foreground">{label}</p>
       <p className={`mt-1 text-sm ${alert && value ? "text-destructive" : "text-foreground"}`}>
         {value || "None recorded"}

@@ -24,6 +24,11 @@ export function JournalList({
         entries.map((entry) => {
           const photo = entry.attachments?.find((a) => a.kind === "photo") ?? null;
           const photos = entry.attachments?.filter((a) => a.kind === "photo").length ?? 0;
+          const day = journalDayLabel(entry, treatments);
+          // A title of the patient's own ("Sync journal", "First week") shows above the body;
+          // a "Day 4" title is already the day label.
+          const title =
+            entry.title?.trim() && entry.title.trim() !== day ? entry.title.trim() : null;
           return (
             <article
               key={entry.id}
@@ -47,10 +52,13 @@ export function JournalList({
               ) : null}
               <div className="flex min-w-0 flex-col gap-[3px]">
                 <span className="text-[11.5px] text-ink-2">
-                  {journalDayLabel(entry, treatments)} · {shortDate(entry.entry_date)}
+                  {day} · {shortDate(entry.entry_date)}
                 </span>
+                {title && entry.body?.trim() ? (
+                  <span className="text-[13px] font-semibold text-foreground">{title}</span>
+                ) : null}
                 <span className="text-[13px] leading-[1.5] text-foreground [text-wrap:pretty]">
-                  {entry.body?.trim() || entry.title}
+                  {entry.body?.trim() || title}
                 </span>
               </div>
             </article>

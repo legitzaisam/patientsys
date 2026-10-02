@@ -66,10 +66,11 @@ export function StepDetails({
   const done = stepTone(step.status) === "done";
   const chip = stepChip(step);
   const missed = Boolean(risk?.noShowAt) && step.status === "current";
-  const needsBooking = stepNeedsBooking(step);
+  // A missed booking leaves the step unbooked: pink tile, Book this step again.
+  const needsBooking = stepNeedsBooking(step) || missed;
   const checklist = step.checklist ?? [];
   const ticked = checklist.filter((c) => c.done).length;
-  const canBookThis = canBook && !done && !step.bookedAt && !step.appointment;
+  const canBookThis = canBook && !done && (missed || (!step.bookedAt && !step.appointment));
 
   return (
     <section
@@ -111,7 +112,7 @@ export function StepDetails({
                 : "border-edge-2 bg-[rgba(255,255,255,0.6)]",
             )}
             data-qc="step-booked-for"
-            data-booked={step.bookedAt ? "true" : "false"}
+            data-booked={step.bookedAt && !missed ? "true" : "false"}
           >
             <div className="text-[11.5px] text-ink-2">Booked for</div>
             <div
@@ -120,10 +121,10 @@ export function StepDetails({
                 needsBooking ? "text-destructive-ink" : "text-foreground",
               )}
             >
-              {step.bookedAt
-                ? `${shortDay(step.bookedAt)} · ${clockTime(step.bookedAt)}`
-                : missed && risk?.noShowAt
-                  ? `Missed ${shortDate(risk.noShowAt)}`
+              {missed && risk?.noShowAt
+                ? `Missed ${shortDate(risk.noShowAt)}`
+                : step.bookedAt
+                  ? `${shortDay(step.bookedAt)} · ${clockTime(step.bookedAt)}`
                   : "Not booked"}
             </div>
           </div>
@@ -164,7 +165,7 @@ export function StepDetails({
             return (
               <div
                 key={item.id}
-                className="flex items-center gap-2 text-[12.5px] text-foreground"
+                className="flex min-h-6 items-center gap-2 text-[12.5px] text-foreground"
                 data-qc="step-checklist-item"
                 data-done={item.done ? "true" : "false"}
                 data-owner={item.byClinic ? "clinic" : "patient"}
@@ -172,7 +173,7 @@ export function StepDetails({
                 {clinicCanTick ? (
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left disabled:cursor-default"
+                    className="flex min-h-6 min-w-0 flex-1 cursor-pointer items-center gap-2 text-left disabled:cursor-default"
                     onClick={() => tick.mutate({ data: { id: item.id, done: !item.done } })}
                     disabled={tick.isPending}
                     aria-pressed={item.done}

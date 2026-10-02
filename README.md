@@ -331,7 +331,7 @@ The linked project is `aljozsxrdqfxiqczhbqn`, clinic **Aetheria Medical**. This 
 
 Two things the roster showed, worth acting on:
 
-- **The live database is behind the code.** `profiles.clinic_role_id` does not exist in the project, so the five migrations dated `20260930…` (profile governance, clinic set-up and named roles, approvals opt-in, inbox cleared, alert replies) have not been applied. The current code will fail on the Team page and anywhere it reads those columns until `supabase db push` or `scripts/apply-migrations.mjs` has run.
+- **The live database is behind the code.** `profiles.clinic_role_id` does not exist in the project, so the five migrations dated `20260930…` (profile governance, clinic set-up and named roles, approvals opt-in, inbox cleared, alert replies) have not been applied. The current code will fail on the Team page and anywhere it reads those columns until `supabase db push` or `scripts/apply-migrations.mjs` has run. The patient record redesign adds `20261004000100_record_overview.sql` (check-in `reviewed_at`/`reviewed_by`, checklist `done_by_kind`/`done_by`, the `view.patients.overview` grant) to that list.
 - `z.bassim@hotmail.com` is an orphaned account (auth user and profile, no role), as first noted in `docs/WORKLOG.md`.
 
 ## npm scripts
@@ -378,6 +378,12 @@ scripts/                  # One-off provision / migration helpers
 | `/schedule` | Diary |
 | `/patients`, `/patients/:id` | Records |
 | `/team`, `/team/:id` | Staff |
+
+#### The patient record (`/patients/:id`)
+
+Opens on **Overview**: today's visit and what still stands in the way of treating (flagged check-ins, portal updates, balance, consent, the step's checklist, photos), then the skin plan summary, every upcoming booking, the tasks and recalls, and the patient's latest journal entry. **Treatments** holds the full skin plan roadmap with a Step details panel (checklist attribution, Book this step, Edit step) and the treatment history with its forms. **From the patient** lists urgent recovery check-ins (Mark reviewed), every check-in and the shared journal; **Medical history** starts with the patient's pending portal updates and **Accept into record**. The tab is kept in the address (`?tab=treatments|photos|documents|history|portal|contact`); `?chase=1` opens Overview on the Upcoming card and `#plan` opens the roadmap. The Overview tab is its own visibility key (`view.patients.overview`), on for every staff role by default.
+
+The redesign is logged phase by phase under `docs/patient-record/` (work logs, WebKit iPad and Chromium captures, a contact sheet against the mockups). `scripts/capture-patient-record.mjs` re-takes the captures against a running demo server, and `e2e/patient-record.spec.ts` covers the layout and every action. **Live database:** the record's Overview, check-in review and clinic checklist ticks need `supabase/migrations/20261004000100_record_overview.sql` (`supabase db push`); demo mode works without it.
 | `/retention`, `/performance`, `/earnings` | Reports |
 | `/settings`, `/profile` | Clinic / account |
 | `/my-record` | Patient’s own record |

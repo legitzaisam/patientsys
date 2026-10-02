@@ -714,6 +714,8 @@ export const PAGES: PageEntry[] = [
     settle: "h1",
     states: [
       sidebarClosed,
+      recordTab("overview", "Overview"),
+      recordTab("treatments", /^Treatments/),
       recordTab("photos", "Before and after"),
       recordTab("documents", "Documents"),
       recordTab("history", "Medical history"),
@@ -725,7 +727,7 @@ export const PAGES: PageEntry[] = [
       sendOffer,
       treatmentForm,
     ],
-    coreStates: ["sidebar-closed", "tab-contact", "tab-documents", "record-menu"],
+    coreStates: ["sidebar-closed", "tab-treatments", "tab-contact", "tab-documents", "record-menu"],
   },
   {
     id: "insights",
