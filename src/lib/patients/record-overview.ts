@@ -411,6 +411,12 @@ export function isPendingHistory(v: HistoryVersionLike) {
   return v.source === "patient" && !v.reviewed_at;
 }
 
+/** The portal's wording as a tone key for bars and chips. */
+export function severityTone(value: number): "severe" | "moderate" | "mild" {
+  const label = severityLabel(value);
+  return label === "Severe" ? "severe" : label === "Moderate" ? "moderate" : "mild";
+}
+
 export type CheckinStatus = "open" | "reviewed" | "none";
 
 export function checkinStatus(c: CheckinLike): CheckinStatus {
