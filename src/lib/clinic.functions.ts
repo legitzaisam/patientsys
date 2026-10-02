@@ -1303,7 +1303,7 @@ export const getPatient = createServerFn({ method: "GET" })
         supabase
           .from("appointments")
           .select(
-            "id, starts_at, treatment_name, status, payment_status, notes, profiles(full_name), documents(status, title), appointment_notes(body)",
+            "id, starts_at, treatment_name, status, payment_status, price, notes, profiles(full_name), documents(status, title), appointment_notes(body)",
           )
           .eq("patient_id", data.id)
           .gte("starts_at", new Date().toISOString())
@@ -1350,31 +1350,44 @@ export const getPatient = createServerFn({ method: "GET" })
       })
       .filter(Boolean);
 
-    const bookingChase = (bookingAppts.data ?? [])
-      .map((a: any) => {
-        const docStatus = a.documents?.status;
-        const issues: string[] = [];
-        if (a.payment_status === "unpaid") issues.push("Deposit unpaid");
-        if (a.payment_status === "deposit_paid") issues.push("Balance due");
-        if (docStatus !== "signed") issues.push("Consent due");
-        const embedded = a.appointment_notes;
-        const noteRow = Array.isArray(embedded) ? embedded[0] : embedded;
-        const bookingNote =
-          String(a.notes ?? "")
-            .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
-            .trim() || plainVisitNote(noteRow?.body);
-        return {
-          id: a.id as string,
-          startsAt: a.starts_at as string,
-          treatmentName: (a.treatment_name as string) || "Treatment",
-          practitionerName: (a.profiles?.full_name as string) ?? null,
-          paymentStatus: (a.payment_status as string) ?? "unpaid",
-          consentSigned: docStatus === "signed",
-          issues,
-          bookingNote,
-        };
-      })
-      .filter((b) => b.issues.length > 0 || b.bookingNote);
+    // Every future booking for the Overview's Upcoming card; the chase list
+    // below is the subset that still has something to sort out.
+    type BookingRow = {
+      id: string;
+      starts_at: string;
+      treatment_name: string | null;
+      payment_status: string | null;
+      price: number | string | null;
+      notes: string | null;
+      profiles?: { full_name: string | null } | null;
+      documents?: { status?: string | null } | null;
+      appointment_notes?: { body?: string | null }[] | { body?: string | null } | null;
+    };
+    const upcomingBookings = ((bookingAppts.data ?? []) as BookingRow[]).map((a) => {
+      const docStatus = a.documents?.status;
+      const issues: string[] = [];
+      if (a.payment_status === "unpaid") issues.push("Deposit unpaid");
+      if (a.payment_status === "deposit_paid") issues.push("Balance due");
+      if (docStatus !== "signed") issues.push("Consent due");
+      const embedded = a.appointment_notes;
+      const noteRow = Array.isArray(embedded) ? embedded[0] : embedded;
+      const bookingNote =
+        String(a.notes ?? "")
+          .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
+          .trim() || plainVisitNote(noteRow?.body);
+      return {
+        id: a.id as string,
+        startsAt: a.starts_at as string,
+        treatmentName: (a.treatment_name as string) || "Treatment",
+        practitionerName: (a.profiles?.full_name as string) ?? null,
+        paymentStatus: (a.payment_status as string) ?? "unpaid",
+        price: a.price == null ? null : Number(a.price),
+        consentSigned: docStatus === "signed",
+        issues,
+        bookingNote,
+      };
+    });
+    const bookingChase = upcomingBookings.filter((b) => b.issues.length > 0 || b.bookingNote);
 
     // What the patient wrote in their portal. Journal entries they kept
     // private are excluded at the query, not filtered in the UI.
@@ -1394,6 +1407,32 @@ export const getPatient = createServerFn({ method: "GET" })
         .limit(14),
     ]);
 
+    // Photo thumbnails for the journal, signed like the portal signs them.
+    type JournalFile = { id: string; entry_id: string; storage_path: string; kind: string };
+    type JournalRow = {
+      id: string;
+      entry_date: string;
+      title: string | null;
+      body: string | null;
+      kind: string;
+      shared_with_clinic: boolean;
+      created_at: string;
+    };
+    const journalRows = (journal ?? []) as JournalRow[];
+    const journalIds = journalRows.map((e) => e.id);
+    const { data: journalFiles } = journalIds.length
+      ? await supabase.from("journal_attachments").select("*").in("entry_id", journalIds)
+      : { data: [] as JournalFile[] };
+    const attachmentsFor = new Map<string, (JournalFile & { url: string | null })[]>();
+    for (const file of (journalFiles ?? []) as JournalFile[]) {
+      const { data: url } = await supabase.storage
+        .from("patient-photos")
+        .createSignedUrl(file.storage_path, 3600);
+      const list = attachmentsFor.get(file.entry_id) ?? [];
+      list.push({ ...file, url: url?.signedUrl ?? null });
+      attachmentsFor.set(file.entry_id, list);
+    }
+
     // Which treatments came through the form (and so have a viewable record),
     // and today's visit if there is one, so the record page can offer the form.
     const day = clinicDayRange(new Date());
@@ -1406,7 +1445,7 @@ export const getPatient = createServerFn({ method: "GET" })
       supabase
         .from("appointments")
         .select(
-          "id, starts_at, treatment_name, stage, status, practitioner_id, documents(status), treatment_catalogue(requires_consent), profiles(full_name)",
+          "id, starts_at, ends_at, treatment_name, stage, status, payment_status, price, practitioner_id, documents(status), treatment_catalogue(requires_consent), profiles(full_name)",
         )
         .eq("patient_id", data.id)
         .gte("starts_at", day.startISO)
@@ -1429,10 +1468,18 @@ export const getPatient = createServerFn({ method: "GET" })
       documents: documents.data ?? [],
       messages: messages.data ?? [],
       history: history.data ?? [],
+      // Patient-submitted versions nobody has accepted or reviewed yet.
+      pendingHistory: (
+        (history.data ?? []) as { source: string | null; reviewed_at: string | null }[]
+      ).filter((h) => h.source === "patient" && !h.reviewed_at),
       visitNotes,
       bookingChase,
+      upcoming: upcomingBookings,
       retention,
-      journal: journal ?? [],
+      journal: journalRows.map((e) => ({
+        ...e,
+        attachments: attachmentsFor.get(e.id) ?? [],
+      })),
       checkins: (checkins ?? []).map((c: any) => ({
         ...c,
         needsAttention: portal.checkinNeedsAttention(c),
@@ -1442,6 +1489,7 @@ export const getPatient = createServerFn({ method: "GET" })
         ? {
             id: todayVisit.id,
             startsAt: todayVisit.starts_at,
+            endsAt: (todayVisit.ends_at as string | null) ?? null,
             treatment: todayVisit.treatment_name,
             stage: stageHeldForConsent(
               todayVisit.stage ?? "booked",
@@ -1449,6 +1497,8 @@ export const getPatient = createServerFn({ method: "GET" })
             ),
             practitionerName: (todayVisit as any).profiles?.full_name ?? null,
             consentState: consentStateOf(todayVisit as any),
+            paymentStatus: (todayVisit.payment_status as string | null) ?? null,
+            price: todayVisit.price == null ? null : Number(todayVisit.price),
           }
         : null,
     };
@@ -3638,6 +3688,76 @@ export const reviewHistory = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Accept into record: the patient's portal version becomes the live
+ * allergies / medications / conditions, and the version is stamped reviewed.
+ * `reviewHistory` above acknowledges without merging; this one merges.
+ */
+export const acceptHistoryUpdate = createServerFn({ method: "POST" })
+  .validator((data: { id: string; patient_id: string }) =>
+    parseInput(schemas.AcceptHistoryUpdate, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "acceptHistoryUpdate");
+    const { data: version, error: readError } = await ctx.supabase
+      .from("medical_history_versions")
+      .select("id, patient_id, data")
+      .eq("id", data.id)
+      .eq("patient_id", data.patient_id)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!version) throw new Error("Medical history update not found");
+
+    const fields = (version.data ?? {}) as Record<string, unknown>;
+    const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    const patch: Record<string, unknown> = {};
+    const allergies = text(fields["allergies"]);
+    const medications = text(fields["medications"]);
+    const conditions = text(fields["conditions"]);
+    if (allergies) patch["allergies"] = allergies;
+    if (medications) patch["medications"] = medications;
+    if (conditions) patch["conditions"] = conditions;
+    if (Object.keys(patch).length > 0) {
+      const { error } = await ctx.supabase
+        .from("patients")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", data.patient_id);
+      if (error) throw new Error(error.message);
+    }
+    const { error } = await ctx.supabase
+      .from("medical_history_versions")
+      .update({ reviewed_by: ctx.userId, reviewed_at: new Date().toISOString() })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "accept", "medical_history", data.id, data.patient_id, {
+      fields: Object.keys(patch),
+    });
+    return { ok: true, applied: Object.keys(patch) };
+  });
+
+/** A clinician has looked at a flagged recovery check-in; it leaves the urgent list. */
+export const reviewRecoveryCheckin = createServerFn({ method: "POST" })
+  .validator((data: { patient_id: string; checkin_date: string }) =>
+    parseInput(schemas.ReviewRecoveryCheckin, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "reviewRecoveryCheckin");
+    const { error } = await ctx.supabase
+      .from("recovery_checkins")
+      .update({ reviewed_by: ctx.userId, reviewed_at: new Date().toISOString() })
+      .eq("patient_id", data.patient_id)
+      .eq("checkin_date", data.checkin_date);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "review", "recovery_checkin", null, data.patient_id, {
+      checkin_date: data.checkin_date,
+    });
+    return { ok: true };
+  });
+
 /* ---------- Patient portal ---------- */
 
 export const getMyRecord = createServerFn({ method: "GET" })
@@ -4689,7 +4809,12 @@ export const toggleChecklistItem = createServerFn({ method: "POST" })
 
     const { error } = await ctx.supabase
       .from("plan_milestone_checklist")
-      .update({ done: data.done, done_at: data.done ? new Date().toISOString() : null })
+      .update({
+        done: data.done,
+        done_at: data.done ? new Date().toISOString() : null,
+        done_by_kind: data.done ? "patient" : null,
+        done_by: data.done ? ctx.userId : null,
+      })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -9700,6 +9825,196 @@ export const updatePlanMilestone = createServerFn({ method: "POST" })
       status: data.status,
     });
     return { ok: true };
+  });
+
+/**
+ * Edit step on the record: title, due date and detail. A status change goes
+ * through setMilestoneStatus so the next step is promoted and the plan closes
+ * exactly as it does from the treatment form.
+ */
+export const updatePlanMilestoneDetails = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      id: string;
+      title: string;
+      due_date?: string;
+      detail?: string;
+      status?: "upcoming" | "current" | "done" | "skipped";
+    }) => parseInput(schemas.UpdatePlanMilestoneDetails, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "updatePlanMilestoneDetails");
+    const fields = {
+      title: data.title.trim(),
+      due_date: data.due_date ?? null,
+      detail: data.detail?.trim() || null,
+    };
+    const { data: current, error: readError } = await ctx.supabase
+      .from("plan_milestones")
+      .select("id, status")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!current) throw new Error("Milestone not found.");
+    if (data.status && data.status !== current.status) {
+      await setMilestoneStatus(ctx.supabase, data.id, data.status, fields);
+    } else {
+      const { error } = await ctx.supabase.from("plan_milestones").update(fields).eq("id", data.id);
+      if (error) throw new Error(error.message);
+    }
+    await audit(ctx, "plan_milestone.edit", "plan_milestones", data.id, null, {
+      ...fields,
+      ...(data.status ? { status: data.status } : {}),
+    });
+    return { ok: true };
+  });
+
+/** The clinic ticks a step's checklist item on the record; clinic-owned items are theirs to tick. */
+export const setMilestoneChecklistItem = createServerFn({ method: "POST" })
+  .validator((data: { id: string; done: boolean }) =>
+    parseInput(schemas.SetMilestoneChecklistItem, data),
+  )
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "setMilestoneChecklistItem");
+    const { error } = await ctx.supabase
+      .from("plan_milestone_checklist")
+      .update({
+        done: data.done,
+        done_at: data.done ? new Date().toISOString() : null,
+        done_by_kind: data.done ? "clinic" : null,
+        done_by: data.done ? ctx.userId : null,
+      })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await audit(ctx, "plan_checklist.update", "plan_milestone_checklist", data.id, null, {
+      done: data.done,
+    });
+    return { ok: true };
+  });
+
+/**
+ * One patient's plan for the record's Overview and Treatments tabs, shaped
+ * exactly as the patient's Timeline (same roadmapFor / stepExtrasFor) plus
+ * what the clinic needs that the portal hides: who ticked each checklist
+ * item, which appointments the steps point at, and the plan's clinician.
+ */
+export const getPatientPlanDetail = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.GetPatientPlanDetail, data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data, context }) => {
+    const ctx = context as Ctx;
+    await authorize(ctx, "getPatientPlanDetail");
+    const plan = await portalPlan(ctx, data.patient_id);
+    if (!plan) return null;
+    type MilestoneRow = portal.MilestoneLike & { appointment_id: string | null };
+    type ChecklistRow = portal.ChecklistLike & {
+      done_at: string | null;
+      done_by_kind: string | null;
+    };
+    const milestones = (await portalMilestones(ctx, plan.id)) as MilestoneRow[];
+    const ids = milestones.map((m) => m.id);
+    const apptIds = milestones.map((m) => m.appointment_id).filter((x): x is string => Boolean(x));
+
+    const [
+      { data: checklistRows },
+      { data: stepAppts },
+      { data: treatments },
+      { data: photos },
+      { data: sessions },
+      { data: clinician },
+    ] = await Promise.all([
+      ids.length
+        ? ctx.supabase.from("plan_milestone_checklist").select("*").in("milestone_id", ids)
+        : Promise.resolve({ data: [] as ChecklistRow[] }),
+      apptIds.length
+        ? ctx.supabase
+            .from("appointments")
+            .select("id, starts_at, treatment_name, documents(status)")
+            .in("id", apptIds)
+        : Promise.resolve({ data: [] as portal.StepAppointment[] }),
+      ctx.supabase
+        .from("treatments")
+        .select("id, name, performed_at, notes")
+        .eq("patient_id", data.patient_id),
+      ctx.supabase.from("treatment_photos").select("*").eq("patient_id", data.patient_id),
+      ctx.supabase
+        .from("treatment_sessions")
+        .select("treatment_id, visit_notes")
+        .eq("patient_id", data.patient_id)
+        .eq("status", "complete"),
+      plan.practitioner_id
+        ? ctx.supabase
+            .from("profiles")
+            .select("id, full_name")
+            .eq("id", plan.practitioner_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const checklist = (checklistRows ?? []) as ChecklistRow[];
+    type StepApptRow = {
+      id: string;
+      starts_at: string;
+      treatment_name: string;
+      documents?: { status?: string | null } | null;
+    };
+    type SessionRow = { treatment_id: string; visit_notes: string | null };
+
+    const visitNoteFor = new Map<string, string | null>(
+      ((sessions ?? []) as SessionRow[]).map((x) => [x.treatment_id, x.visit_notes ?? null]),
+    );
+    const extras = portal.stepExtrasFor({
+      milestones,
+      appointments: ((stepAppts ?? []) as StepApptRow[]).map((a) => ({
+        id: a.id,
+        starts_at: a.starts_at,
+        treatment_name: a.treatment_name,
+        consentSigned: a.documents ? a.documents.status === "signed" : null,
+      })),
+      treatments: ((treatments ?? []) as (portal.StepTreatment & { id: string })[]).map((t) => ({
+        ...t,
+        notes: visitNoteFor.get(t.id) ?? t.notes ?? null,
+      })),
+      photos: ((photos ?? []) as Omit<portal.StepPhoto, "url">[]).map((p) => ({ ...p, url: null })),
+    });
+    const roadmap = portal.roadmapFor(milestones, checklist, extras);
+    // Attribution the portal never shows: who ticked each item, and when.
+    const tickFor = new Map(
+      checklist.map((c) => [
+        c.id,
+        { doneAt: c.done_at ?? null, doneByKind: c.done_by_kind ?? null },
+      ]),
+    );
+    for (const month of roadmap) {
+      for (const step of month.steps) {
+        step.checklist = step.checklist.map((item: { id: string }) => ({
+          ...item,
+          ...(tickFor.get(item.id) ?? {}),
+        }));
+      }
+    }
+    const progress = portal.planProgress(milestones);
+    return {
+      plan: {
+        id: plan.id as string,
+        name: plan.name as string,
+        strapline: (plan.strapline as string | null) ?? null,
+        phase: (plan.phase as string | null) ?? null,
+        status: plan.status as string,
+        startedAt: (plan.started_at as string | null) ?? null,
+        durationDays: (plan.duration_days as number | null) ?? null,
+        practitionerId: (plan.practitioner_id as string | null) ?? null,
+        practitionerName: (clinician as { full_name?: string | null } | null)?.full_name ?? null,
+        milestonesDone: progress.done,
+        milestonesTotal: progress.total,
+        completion: progress.pct,
+      },
+      roadmap,
+      milestoneAppointmentIds: apptIds,
+    };
   });
 
 /**

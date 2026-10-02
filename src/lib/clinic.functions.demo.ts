@@ -1135,30 +1135,32 @@ export const getPatient = createServerFn({ method: "GET" })
         };
       })
       .filter(Boolean);
-    const bookingChase = sortAsc(upcoming, "starts_at")
-      .map((a) => {
-        const view = appointmentView(a);
-        const docStatus = view.documents?.status;
-        const issues: string[] = [];
-        if (a.payment_status === "unpaid") issues.push("Deposit unpaid");
-        if (a.payment_status === "deposit_paid") issues.push("Balance due");
-        if (docStatus !== "signed") issues.push("Consent due");
-        const bookingNote =
-          String(a.notes ?? "")
-            .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
-            .trim() || plainVisitNote(view.appointment_notes?.body);
-        return {
-          id: a.id as string,
-          startsAt: a.starts_at as string,
-          treatmentName: (a.treatment_name as string) || "Treatment",
-          practitionerName: view.profiles?.full_name ?? null,
-          paymentStatus: (a.payment_status as string) ?? "unpaid",
-          consentSigned: docStatus === "signed",
-          issues,
-          bookingNote,
-        };
-      })
-      .filter((b) => b.issues.length > 0 || b.bookingNote);
+    // Every future booking for the Overview's Upcoming card; the chase list
+    // below is the subset that still has something to sort out.
+    const upcomingBookings = sortAsc(upcoming, "starts_at").map((a) => {
+      const view = appointmentView(a);
+      const docStatus = view.documents?.status;
+      const issues: string[] = [];
+      if (a.payment_status === "unpaid") issues.push("Deposit unpaid");
+      if (a.payment_status === "deposit_paid") issues.push("Balance due");
+      if (docStatus !== "signed") issues.push("Consent due");
+      const bookingNote =
+        String(a.notes ?? "")
+          .replace(/^Cancelled:[^\n]*(?:\n\n)?/, "")
+          .trim() || plainVisitNote(view.appointment_notes?.body);
+      return {
+        id: a.id as string,
+        startsAt: a.starts_at as string,
+        treatmentName: (a.treatment_name as string) || "Treatment",
+        practitionerName: view.profiles?.full_name ?? null,
+        paymentStatus: (a.payment_status as string) ?? "unpaid",
+        price: a.price == null ? null : Number(a.price),
+        consentSigned: docStatus === "signed",
+        issues,
+        bookingNote,
+      };
+    });
+    const bookingChase = upcomingBookings.filter((b) => b.issues.length > 0 || b.bookingNote);
     const { patientRetention } = await import("./retention.server");
     return {
       patient,
@@ -1182,8 +1184,16 @@ export const getPatient = createServerFn({ method: "GET" })
         medicalHistory.filter((h) => h.patient_id === data.id),
         "created_at",
       ),
+      // Patient-submitted versions nobody has accepted or reviewed yet.
+      pendingHistory: sortDesc(
+        medicalHistory.filter(
+          (h) => h.patient_id === data.id && h.source === "patient" && !h.reviewed_at,
+        ),
+        "created_at",
+      ),
       visitNotes,
       bookingChase,
+      upcoming: upcomingBookings,
       retention: patientRetention(
         mine.map((t) => ({ performed_at: t.performed_at, next_due_at: t.next_due_at })),
         upcoming.length > 0,
@@ -1191,7 +1201,14 @@ export const getPatient = createServerFn({ method: "GET" })
       journal: sortDesc(
         journalEntries.filter((e) => e.patient_id === data.id && e.shared_with_clinic),
         "entry_date",
-      ).slice(0, 20),
+      )
+        .slice(0, 20)
+        .map((e) => ({
+          ...e,
+          attachments: journalAttachments
+            .filter((a) => a.entry_id === e.id)
+            .map((a) => ({ ...a, url: a.storage_path })),
+        })),
       checkins: sortDesc(
         recoveryCheckins.filter((c) => c.patient_id === data.id),
         "checkin_date",
@@ -1215,10 +1232,13 @@ export const getPatient = createServerFn({ method: "GET" })
           ? {
               id: visit.id,
               startsAt: visit.starts_at,
+              endsAt: (visit.ends_at as string | null) ?? null,
               treatment: visit.treatment_name,
               stage: stageHeldForConsent(visit.stage ?? "booked", demoConsentStateOf(visit)),
               practitionerName: visit.practitioner_id ? profileName(visit.practitioner_id) : null,
               consentState: demoConsentStateOf(visit),
+              paymentStatus: (visit.payment_status as string | null) ?? null,
+              price: visit.price == null ? null : Number(visit.price),
             }
           : null;
       })(),
@@ -3088,6 +3108,53 @@ export const reviewHistory = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Demo twin of acceptHistoryUpdate: merge the patient's version into the live fields. */
+export const acceptHistoryUpdate = createServerFn({ method: "POST" })
+  .validator((data: { id: string; patient_id: string }) =>
+    parseInput(schemas.AcceptHistoryUpdate, data),
+  )
+  .handler(async ({ data }) => {
+    requireCapability("treatments.record");
+    const me = identity();
+    const version = medicalHistory.find(
+      (h) => h.id === data.id && h.patient_id === data.patient_id,
+    );
+    if (!version) throw new Error("Medical history update not found");
+    const patient = patientById(data.patient_id);
+    if (!patient) throw new Error("Patient not found");
+    const fields = (version.data ?? {}) as Record<string, unknown>;
+    const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    const applied: string[] = [];
+    for (const key of ["allergies", "medications", "conditions"] as const) {
+      const value = text(fields[key]);
+      if (value) {
+        patient[key] = value;
+        applied.push(key);
+      }
+    }
+    if (applied.length) patient.updated_at = new Date().toISOString();
+    version.reviewed_by = me.userId;
+    version.reviewed_at = new Date().toISOString();
+    return { ok: true, applied };
+  });
+
+/** Demo twin of reviewRecoveryCheckin. */
+export const reviewRecoveryCheckin = createServerFn({ method: "POST" })
+  .validator((data: { patient_id: string; checkin_date: string }) =>
+    parseInput(schemas.ReviewRecoveryCheckin, data),
+  )
+  .handler(async ({ data }) => {
+    requireCapability("treatments.record");
+    const me = identity();
+    for (const c of recoveryCheckins) {
+      if (c.patient_id === data.patient_id && c.checkin_date === data.checkin_date) {
+        c.reviewed_by = me.userId;
+        c.reviewed_at = new Date().toISOString();
+      }
+    }
+    return { ok: true };
+  });
+
 export const getMyRecord = createServerFn({ method: "GET" }).handler(async () => {
   const me = identity();
   const patient = patients.find((p) => p.user_id === me.userId) ?? null;
@@ -3766,6 +3833,8 @@ export const toggleChecklistItem = createServerFn({ method: "POST" })
     if (item.clinic_owned) throw new Error("This step is completed by your clinic");
     item.done = data.done;
     item.done_at = data.done ? new Date().toISOString() : null;
+    item.done_by_kind = data.done ? "patient" : null;
+    item.done_by = data.done ? identity().userId : null;
     return { ok: true };
   });
 
@@ -7217,6 +7286,126 @@ export const updatePlanMilestone = createServerFn({ method: "POST" })
     requireCapability("treatments.record");
     demoSetMilestoneStatus(data.id, data.status);
     return { ok: true };
+  });
+
+/** Demo twin of updatePlanMilestoneDetails. */
+export const updatePlanMilestoneDetails = createServerFn({ method: "POST" })
+  .validator(
+    (data: {
+      id: string;
+      title: string;
+      due_date?: string;
+      detail?: string;
+      status?: "upcoming" | "current" | "done" | "skipped";
+    }) => parseInput(schemas.UpdatePlanMilestoneDetails, data),
+  )
+  .handler(async ({ data }) => {
+    requireCapability("treatments.record");
+    const milestone = planMilestones.find((m) => m.id === data.id);
+    if (!milestone) throw new Error("Milestone not found.");
+    const fields = {
+      title: data.title.trim(),
+      due_date: data.due_date ?? null,
+      detail: data.detail?.trim() || null,
+    };
+    if (data.status && data.status !== milestone.status) {
+      demoSetMilestoneStatus(data.id, data.status, fields);
+    } else {
+      Object.assign(milestone, fields);
+    }
+    return { ok: true };
+  });
+
+/** Demo twin of setMilestoneChecklistItem. */
+export const setMilestoneChecklistItem = createServerFn({ method: "POST" })
+  .validator((data: { id: string; done: boolean }) =>
+    parseInput(schemas.SetMilestoneChecklistItem, data),
+  )
+  .handler(async ({ data }) => {
+    requireCapability("treatments.record");
+    const item = planMilestoneChecklist.find((c) => c.id === data.id);
+    if (!item) throw new Error("Checklist item not found");
+    item.done = data.done;
+    item.done_at = data.done ? new Date().toISOString() : null;
+    item.done_by_kind = data.done ? "clinic" : null;
+    item.done_by = data.done ? identity().userId : null;
+    return { ok: true };
+  });
+
+/** Demo twin of getPatientPlanDetail: the patient's Timeline roadmap, with attribution. */
+export const getPatientPlanDetail = createServerFn({ method: "GET" })
+  .validator((data: { patient_id: string }) => parseInput(schemas.GetPatientPlanDetail, data))
+  .handler(async ({ data }) => {
+    requireCapability("view.patients.treatments");
+    const plan = demoPortalPlan(data.patient_id);
+    if (!plan) return null;
+    const milestones = planMilestones.filter(
+      (m) => m.plan_id === plan.id,
+    ) as (portal.MilestoneLike & { appointment_id: string | null })[];
+    const ids = new Set(milestones.map((m) => m.id));
+    const checklist = planMilestoneChecklist.filter((c) =>
+      ids.has(c.milestone_id),
+    ) as (portal.ChecklistLike & { done_at: string | null; done_by_kind: string | null })[];
+    const apptIds = milestones.map((m) => m.appointment_id).filter((x): x is string => Boolean(x));
+    const apptSet = new Set(apptIds);
+    const extras = portal.stepExtrasFor({
+      milestones,
+      appointments: appointments
+        .filter((a) => apptSet.has(a.id))
+        .map((a) => ({
+          id: a.id,
+          starts_at: a.starts_at,
+          treatment_name: a.treatment_name,
+          consentSigned: a.consent_document_id
+            ? (documents.find((d) => d.id === a.consent_document_id)?.status ?? null) === "signed"
+            : null,
+        })),
+      treatments: treatments
+        .filter((t) => t.patient_id === data.patient_id)
+        .map((t) => {
+          const session = treatmentSessions.find(
+            (x) => x.treatment_id === t.id && x.status === "complete",
+          );
+          return { ...t, notes: session?.visit_notes ?? t.notes ?? null };
+        }) as portal.StepTreatment[],
+      photos: photos
+        .filter((p) => p.patient_id === data.patient_id)
+        .map((p) => ({ ...p, url: p.storage_path })) as portal.StepPhoto[],
+    });
+    const roadmap = portal.roadmapFor(milestones, checklist, extras);
+    const tickFor = new Map(
+      checklist.map((c) => [
+        c.id,
+        { doneAt: c.done_at ?? null, doneByKind: c.done_by_kind ?? null },
+      ]),
+    );
+    for (const month of roadmap) {
+      for (const step of month.steps) {
+        step.checklist = step.checklist.map((item: { id: string }) => ({
+          ...item,
+          ...(tickFor.get(item.id) ?? {}),
+        }));
+      }
+    }
+    const progress = portal.planProgress(milestones);
+    return {
+      plan: {
+        id: plan.id as string,
+        name: plan.name as string,
+        strapline: (plan.strapline as string | null) ?? null,
+        phase: (plan.phase as string | null) ?? null,
+        status: plan.status as string,
+        startedAt: (plan.started_at as string | null) ?? null,
+        durationDays: (plan.duration_days as number | null) ?? null,
+        practitionerId: (plan.practitioner_id as string | null) ?? null,
+        practitionerName: plan.practitioner_id ? profileName(plan.practitioner_id) : null,
+        milestonesDone: progress.done,
+        milestonesTotal: progress.total,
+        completion: progress.pct,
+      },
+      roadmap,
+      milestoneAppointmentIds: apptIds,
+    };
   });
 
 /** Demo twin of linkMilestoneToAppointment. */

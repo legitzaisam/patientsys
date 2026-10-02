@@ -82,12 +82,20 @@ export const POLICY = {
   archivePatient: { kind: "manager" },
   addTreatment: { kind: "capability", key: "treatments.record" },
   reviewHistory: { kind: "capability", key: "treatments.record" },
+  // Accepting a patient's portal edit rewrites allergies/medications/conditions:
+  // the same clinical capability as reviewing it, since it is review plus merge.
+  acceptHistoryUpdate: { kind: "capability", key: "treatments.record" },
+  reviewRecoveryCheckin: { kind: "capability", key: "treatments.record" },
 
   /* Treatment plans (journeys). Reading the board is any-staff; writing a plan
      is clinical work, so it shares the treatments.record capability. */
   listTreatmentPlans: { kind: "staff" },
+  // The record's roadmap is the Treatments tab's content, so it follows that tab's grant.
+  getPatientPlanDetail: { kind: "capability", key: "view.patients.treatments" },
   createTreatmentPlan: { kind: "capability", key: "treatments.record" },
   updatePlanMilestone: { kind: "capability", key: "treatments.record" },
+  updatePlanMilestoneDetails: { kind: "capability", key: "treatments.record" },
+  setMilestoneChecklistItem: { kind: "capability", key: "treatments.record" },
   getTreatmentSession: { kind: "staff" },
   startTreatment: { kind: "capability", key: "treatments.record" },
   moveToAftercare: { kind: "capability", key: "treatments.record" },
