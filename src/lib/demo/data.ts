@@ -1691,9 +1691,10 @@ const TODAY_PLAN: {
     treatment: "Microneedling with PRP",
     hour: 10,
     minute: 15,
-    duration: 75,
+    duration: 60,
     stage: "aftercare",
-    payment: "deposit_paid",
+    // Nothing paid yet: the record's Ready to treat card has a balance to take.
+    payment: "unpaid",
     consent: "signed",
   },
   // Treatment cannot start without consent, so the in-treatment card is signed.
@@ -2507,15 +2508,17 @@ export const medicalHistory: Row[] = [
     id: id("i1"),
     clinic_id: CLINIC_ID,
     patient_id: patients[9]!["id"] as string,
+    // Waiting on the record's Medical history tab: nothing merges until a
+    // clinician accepts it, so the header still reads "None known".
     data: {
-      medications: "Iron supplement",
-      allergies: "None known",
-      conditions: "None",
+      medications: "Tretinoin 0.025% cream, nightly",
+      allergies: "Lidocaine, itchy rash (2019)",
+      conditions: "",
       diet: "Vegetarian",
       pregnancy: "No",
-      other: "Bloods done last month — ferritin low-normal.",
+      other: "",
     },
-    summary: "Patient updated their medical and lifestyle information",
+    summary: "New allergy and medication added in the portal",
     source: "patient",
     changed_by: null,
     reviewed_by: null,
@@ -4409,7 +4412,12 @@ const PRE_READ_NOTES = [
 /* treatment plans (journeys)                                        */
 /* ---------------------------------------------------------------- */
 
-type PlanStepSpec = { t: string; k?: "session" | "task" | "conditional" };
+type PlanStepSpec = {
+  t: string;
+  k?: "session" | "task" | "conditional";
+  /** Days from today this step is due (upcoming steps only); defaults to the recipe's spacing. */
+  dueIn?: number;
+};
 type PlanRecipe = {
   /** Index into PATIENT_SPECS / patients. */
   patient: number;
@@ -4433,6 +4441,21 @@ const MICRONEEDLING_STEPS: PlanStepSpec[] = [
   { t: "Microneedling session 2", k: "session" },
   { t: "Microneedling session 3", k: "session" },
   { t: "Review & results photos", k: "task" },
+];
+
+/**
+ * Grace Adeyemi's plan, the patient record redesign's example: three months
+ * of 3 / 3 / 2 steps, five done, session 2 current and not yet booked.
+ */
+const GRACE_STEPS: PlanStepSpec[] = [
+  { t: "Consultation & consent", k: "task" },
+  { t: "Skin assessment & photos", k: "task" },
+  { t: "Microneedling session 1", k: "session" },
+  { t: "Microneedling with PRP", k: "session" },
+  { t: "One-week review", k: "task" },
+  { t: "Microneedling session 2", k: "session" },
+  { t: "Three-week review", k: "task", dueIn: 23 },
+  { t: "Maintenance review", k: "task", dueIn: 74 },
 ];
 
 const PLAN_RECIPES: PlanRecipe[] = [
@@ -4508,7 +4531,14 @@ const PLAN_RECIPES: PlanRecipe[] = [
       { t: "Treatment plan agreed", k: "task" },
     ],
   },
-  { patient: 9, name: "3-Month Microneedling Plan", phase: "build", done: 5, nextDueIn: 4, steps: MICRONEEDLING_STEPS },
+  {
+    patient: 9,
+    name: "3-Month Microneedling Plan",
+    phase: "build",
+    done: 5,
+    nextDueIn: 3,
+    steps: GRACE_STEPS,
+  },
   {
     patient: 11,
     name: "Rosacea Management Programme",
@@ -4964,7 +4994,7 @@ for (const recipe of PLAN_RECIPES) {
         status === "current" && recipe.nextDueIn != null
           ? iso(recipe.nextDueIn).slice(0, 10)
           : status === "upcoming"
-            ? iso(recipe.nextDueIn ?? 7 + (i - recipe.done) * 14).slice(0, 10)
+            ? iso(step.dueIn ?? recipe.nextDueIn ?? 7 + (i - recipe.done) * 14).slice(0, 10)
             : null,
       appointment_id: linkedVisit?.["id"] ?? null,
       completed_at:
@@ -5825,6 +5855,279 @@ export const patientOffers: Row[] = [];
 
 export const clinicRoles: Row[] = [];
 export const clinicRolePermissions: Row[] = [];
+
+/* ---------------------------------------------------------------- */
+/* Grace Adeyemi: the patient record redesign's example patient       */
+/* ---------------------------------------------------------------- */
+
+/**
+ * Everything the Overview, Treatments, From the patient and Medical history
+ * tabs show for Grace, laid on top of what the generators above produced:
+ * a second booking off the plan, a plain microneedling visit with no depth
+ * recorded, forms behind every treatment, six before photos, three recovery
+ * check-ins (one still open), two shared journal entries and a recall.
+ * Dates are relative to the demo clock, so the record reads the same any day.
+ */
+{
+  const grace = patients[9]!;
+  const gid = grace["id"] as string;
+  const nadia = USERS.practitioner;
+
+  // A second future booking, unpaid and unconsented, so Upcoming shows both
+  // chip sets. Neither booking is for the plan's own treatment, so both read
+  // "Not on skin plan".
+  makeAppointment({
+    patient: grace,
+    practitionerId: nadia,
+    treatmentName: "Microneedling with PRP",
+    dayOffset: day(22).getDay() === 0 ? 23 : 22,
+    hour: 11,
+    minute: 30,
+    durationMinutes: 45,
+    status: "booked",
+    stage: "booked",
+    paymentStatus: "unpaid",
+  });
+
+  // The plan generator gave session 1 a plain microneedling visit; strip its
+  // product and depth so the history's "Forms missing" filter has a row to
+  // catch ("Depth not recorded").
+  const plain = treatments.find((t) => t["patient_id"] === gid && t["name"] === "Microneedling");
+  if (plain) {
+    plain["product"] = null;
+    plain["dose"] = null;
+    plain["area"] = "Full face";
+    plain["price"] = 220;
+    plain["notes"] = PLAN_VISIT_NOTES[1];
+  }
+
+  const mine = treatments
+    .filter((t) => t["patient_id"] === gid && new Date(t["performed_at"]) <= NOW)
+    .sort((a, b) => (a["performed_at"] < b["performed_at"] ? 1 : -1));
+  const latest = mine[0]!;
+  const daysAgoOf = (isoAt: string) =>
+    Math.round((TODAY.getTime() - new Date(isoAt).getTime()) / DAY);
+
+  for (const t of mine) {
+    const ago = daysAgoOf(t["performed_at"] as string);
+    // A signed consent behind every treatment; aftercare sent after the latest.
+    if (!t["consent_document_id"]) {
+      const consent = makeDocument(gid, "consent", `${t["name"]} — consent form`, "signed", ago);
+      consent["treatment_id"] = t["id"];
+      consent["signed_name"] = "Grace Adeyemi";
+      consent["signature_data"] = consent["signed_name"];
+      t["consent_document_id"] = consent["id"];
+    }
+    if (t === latest) {
+      const aftercare = makeDocument(gid, "aftercare", `${t["name"]} — aftercare`, "sent", ago);
+      aftercare["treatment_id"] = t["id"];
+    }
+    // Every treatment went through the form, so "View record" opens on each.
+    const hasSession = treatmentSessions.some((s) => s["treatment_id"] === t["id"]);
+    if (!hasSession) {
+      let booking = t["appointment_id"]
+        ? appointments.find((a) => a["id"] === t["appointment_id"])
+        : undefined;
+      if (!booking) {
+        const starts = new Date(t["performed_at"] as string);
+        booking = makeAppointment({
+          patient: grace,
+          practitionerId: nadia,
+          treatmentName: t["name"] as string,
+          dayOffset: -ago,
+          hour: starts.getHours(),
+          minute: starts.getMinutes(),
+          durationMinutes: 60,
+          status: "attended",
+          stage: "complete",
+          paymentStatus: "paid",
+          consentDocumentId: t["consent_document_id"] as string,
+        });
+        t["appointment_id"] = booking["id"];
+      } else if (!booking["consent_document_id"]) {
+        booking["consent_document_id"] = t["consent_document_id"];
+      }
+      const startedAt = booking["starts_at"] as string;
+      const plus = (mins: number) =>
+        new Date(new Date(startedAt).getTime() + mins * 60000).toISOString();
+      treatmentSessions.push({
+        id: id("s1"),
+        clinic_id: CLINIC_ID,
+        appointment_id: booking["id"],
+        patient_id: gid,
+        practitioner_id: nadia,
+        catalogue_id: t["catalogue_id"],
+        treatment_id: t["id"],
+        pre_checks: {
+          changes_since_last: { answer: "no" },
+          anything_today: { answer: "no" },
+          reason_to_wait: { answer: "no" },
+        },
+        results: { area: t["area"], product: t["product"], dose: t["dose"] },
+        treatment_notes: t["product"]
+          ? `${t["product"]} to ${t["area"]}, ${t["dose"]}. Tolerated well; no immediate reaction.`
+          : `${t["area"]}. Tolerated well; no immediate reaction.`,
+        visit_notes: t["notes"] ?? null,
+        aftercare_points: [],
+        aftercare_extra: null,
+        status: "complete",
+        started_at: startedAt,
+        treating_at: plus(8),
+        aftercare_at: plus(35),
+        completed_at: plus(45),
+        created_at: startedAt,
+        updated_at: plus(45),
+      });
+    }
+  }
+  appointments.sort((a, b) => (a["starts_at"] < b["starts_at"] ? -1 : 1));
+
+  // Six before photos from the latest visit; the earlier generic set goes.
+  for (let i = photos.length - 1; i >= 0; i--)
+    if (photos[i]!["patient_id"] === gid) photos.splice(i, 1);
+  const latestAt = new Date(latest["performed_at"] as string);
+  for (let i = 0; i < 6; i++) {
+    photos.push({
+      id: id("g1"),
+      clinic_id: CLINIC_ID,
+      patient_id: gid,
+      treatment_id: latest["id"],
+      storage_path: PHOTO_ASSETS[(i * 2) % PHOTO_ASSETS.length],
+      kind: "before",
+      caption: [
+        "Front, relaxed",
+        "Left profile",
+        "Right profile",
+        "Front, animated",
+        "Left cheek, close",
+        "Right cheek, close",
+      ][i],
+      taken_at: new Date(latestAt.getTime() - (30 - i * 2) * 60000).toISOString(),
+      marketing_consent: false,
+      visible_to_patient: true,
+      created_at: latest["performed_at"],
+    });
+  }
+
+  // Recovery check-ins after the latest treatment: the newest flagged and
+  // still open, one reviewed, one quiet.
+  for (const c of [
+    {
+      daysAgo: 2,
+      redness: 76,
+      sensitivity: 48,
+      dryness: 20,
+      note: "Cheeks still red and warm in the evening. Is that normal on day 4?",
+      reviewed: false,
+    },
+    { daysAgo: 4, redness: 45, sensitivity: 22, dryness: 18, note: null, reviewed: true },
+    { daysAgo: 5, redness: 14, sensitivity: 12, dryness: 10, note: null, reviewed: false },
+  ]) {
+    recoveryCheckins.push({
+      id: id("e4"),
+      clinic_id: CLINIC_ID,
+      patient_id: gid,
+      checkin_date: iso(-c.daysAgo).slice(0, 10),
+      redness: c.redness,
+      sensitivity: c.sensitivity,
+      dryness: c.dryness,
+      note: c.note,
+      reviewed_at: c.reviewed ? iso(-c.daysAgo + 1, 9, 10) : null,
+      reviewed_by: c.reviewed ? nadia : null,
+      created_at: iso(-c.daysAgo, 19, 12),
+    });
+  }
+
+  // Two journal entries she chose to share, the latest with photos.
+  for (const entry of [
+    {
+      daysAgo: 2,
+      title: "Day 4",
+      body: "Cheeks still red and warm in the evening. Using the hydrating serum twice a day. Skipped the gym like you said.",
+      photos: 2,
+      hour: 19,
+      minute: 20,
+    },
+    {
+      daysAgo: 5,
+      title: "Day 1",
+      body: "Mild pinkness, no swelling. Skin feels tight but fine.",
+      photos: 0,
+      hour: 21,
+      minute: 5,
+    },
+  ]) {
+    const entryId = id("e2");
+    journalEntries.push({
+      id: entryId,
+      clinic_id: CLINIC_ID,
+      patient_id: gid,
+      kind: "skin_change",
+      title: entry.title,
+      body: entry.body,
+      entry_date: iso(-entry.daysAgo).slice(0, 10),
+      shared_with_clinic: true,
+      created_at: iso(-entry.daysAgo, entry.hour, entry.minute),
+    });
+    for (let i = 0; i < entry.photos; i++) {
+      journalAttachments.push({
+        id: id("e3"),
+        clinic_id: CLINIC_ID,
+        entry_id: entryId,
+        kind: "photo",
+        storage_path: PHOTO_ASSETS[(2 + i) % PHOTO_ASSETS.length],
+        duration_seconds: null,
+        created_at: iso(-entry.daysAgo, entry.hour, entry.minute),
+      });
+    }
+  }
+
+  // The current step's checklist: one patient tick two days ago, one open,
+  // and the clinic's own item.
+  const plan = treatmentPlans.find((p) => p["patient_id"] === gid);
+  const current = planMilestones.find(
+    (m) => m["plan_id"] === plan?.["id"] && m["status"] === "current",
+  );
+  if (current) {
+    for (let i = planMilestoneChecklist.length - 1; i >= 0; i--)
+      if (planMilestoneChecklist[i]!["milestone_id"] === current["id"])
+        planMilestoneChecklist.splice(i, 1);
+    [
+      { label: "Pause retinoids 2 days before", done: true, clinic: false },
+      { label: "Arrive with clean skin", done: false, clinic: false },
+      { label: "Session confirmed by clinic", done: false, clinic: true },
+    ].forEach((item, position) => {
+      planMilestoneChecklist.push({
+        id: id("e1"),
+        clinic_id: CLINIC_ID,
+        milestone_id: current["id"],
+        label: item.label,
+        position,
+        done: item.done,
+        clinic_owned: item.clinic,
+        done_at: item.done ? iso(-2, 15, 0) : null,
+        done_by_kind: item.done ? "patient" : null,
+        done_by: null,
+        created_at: plan?.["created_at"] ?? iso(-36, 10, 0),
+      });
+    });
+  }
+
+  // The recall the latest treatment set up, waiting in the front desk pool.
+  // It is for the three-month review, not the sessions she has already booked,
+  // so those bookings must not close it.
+  const recallId = addManualTask({
+    patientIndex: 9,
+    type: "recall",
+    title: `3-month review after ${latest["name"]}`,
+    context: `Auto-created from ${new Date(latest["performed_at"] as string).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
+    assignee: null,
+    dueInDays: 90 - daysAgoOf(latest["performed_at"] as string),
+    createdDaysAgo: daysAgoOf(latest["performed_at"] as string),
+  });
+  const recall = tasks.find((t) => t["id"] === recallId);
+  if (recall) recall["auto_close"] = false;
+}
 
 export const db = {
   clinic,
