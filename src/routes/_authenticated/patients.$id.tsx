@@ -15,6 +15,7 @@ import {
   getPatientPlanDetail,
   getUnreadMessages,
   listPractitioners,
+  listTreatmentPlans,
   markMessagesRead,
   resendDocument,
   reviewHistory,
@@ -40,7 +41,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TasksRecallsCard } from "@/components/retention/patient-tasks-panel";
-import { TreatmentPlanCard } from "@/components/patients/treatment-plan-card";
+import {
+  SkinPlanRoadmap,
+  type PlanRiskRow,
+  type RoadmapStep,
+} from "@/components/patients/record/skin-plan-roadmap";
+import { StepDetails } from "@/components/patients/record/step-details";
+import { EditStepDialog } from "@/components/patients/record/edit-step-dialog";
+import { TreatmentHistory } from "@/components/patients/record/treatment-history";
 import {
   ReadyToTreatCard,
   type ReadyToTreatVisit,
@@ -192,9 +200,21 @@ function PatientRecord() {
     queryFn: () => fetchPractitioners(),
     enabled: !!identity?.isStaff,
   });
+  // The journey board's reading of the same plan: whether the current step is
+  // booked, booked for something else, or was missed. The roadmap repeats it.
+  const fetchPlans = useServerFn(listTreatmentPlans);
+  const { data: planRows } = useQuery({
+    queryKey: ["treatment-plans", "patient", id],
+    queryFn: () => fetchPlans({ data: { patient_id: id } }) as Promise<PlanRiskRow[]>,
+    enabled: !!identity?.isStaff,
+  });
   // One clock per render of the record, so every card agrees on "today".
   const now = useMemo(() => new Date(), []);
   const [bookingStep, setBookingStep] = useState<string | null>(null);
+  // Treatments: the roadmap step open in Step details (the current step until
+  // a row is clicked), and the one being edited.
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [editStep, setEditStep] = useState<RoadmapStep | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["patient", id] });
   const [treatmentOpen, setTreatmentOpen] = useState(false);
@@ -472,6 +492,10 @@ function PatientRecord() {
     })),
   );
   const nextStep = planDetail ? upNextStep(planDetail.roadmap) : null;
+  const roadmapSteps = (planDetail?.roadmap.flatMap((m) => m.steps) ?? []) as RoadmapStep[];
+  const selectedStep = roadmapSteps.find((s) => s.id === (selectedStepId ?? nextStep?.id)) ?? null;
+  const planRisk =
+    (planRows ?? []).find((row) => row.id === planDetail?.plan.id) ?? planRows?.[0] ?? null;
   const nextStepChecklist = nextStep
     ? (planDetail?.roadmap.flatMap((m) => m.steps).find((s) => s.id === nextStep.id)?.checklist ??
       [])
@@ -956,72 +980,39 @@ function PatientRecord() {
                   onAllEntries={() => changeTab("portal")}
                 />
               </div>
-              {bookingStep ? (
-                <QuickAddAppointment
-                  patients={[p]}
-                  practitioners={practitioners ?? []}
-                  catalogue={catalogue ?? []}
-                  date={now}
-                  defaultPatientId={id}
-                  defaultPractitionerId={planDetail?.plan.practitionerId ?? undefined}
-                  milestoneId={bookingStep}
-                  open
-                  onOpenChange={(v) => {
-                    if (!v) {
-                      setBookingStep(null);
-                      void queryClient.invalidateQueries({ queryKey: ["patient-plan", id] });
-                      invalidate();
-                    }
-                  }}
-                  centered
-                  title="Book this step"
-                >
-                  <span className="sr-only">Book</span>
-                </QuickAddAppointment>
-              ) : null}
             </TabsContent>
 
+            {/* Treatments: the full roadmap with the selected step beside it,
+                then every recorded treatment with its note and forms. The
+                diary and the tasks moved to Overview. */}
             <TabsContent value="treatments" className="space-y-4">
-              <TreatmentPlanCard patientId={id} />
-              <Card className="p-5">
-                <div className="mb-3">
-                  <h3 className="section-title">Treatment history</h3>
-                  <p className="text-xs text-muted-foreground">Recorded treatments and follow-up dates.</p>
+              {planDetail ? (
+                <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.55fr_1fr]">
+                  <SkinPlanRoadmap
+                    detail={planDetail}
+                    risk={planRisk}
+                    selectedId={selectedStep?.id ?? null}
+                    onSelect={setSelectedStepId}
+                  />
+                  <StepDetails
+                    step={selectedStep}
+                    risk={planRisk}
+                    patientId={id}
+                    canTick={can(identity, "treatments.record")}
+                    canBook={can(identity, "appointments.edit")}
+                    canEdit={can(identity, "treatments.record")}
+                    onBook={(stepId) => setBookingStep(stepId)}
+                    onEdit={(step) => setEditStep(step)}
+                  />
                 </div>
-                <ul className="divide-y divide-glass-line">
-                  {history.map((t: any) => (
-                    <li key={t.id} className="py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm text-foreground">{t.name}</p>
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {t.hasRecord && canSee(identity, "patient-edit-clinical") ? (
-                            <button
-                              type="button"
-                              data-qc="view-treatment-record"
-                              onClick={() => setRecordOpen(t.id)}
-                              className="cursor-pointer font-semibold text-accent-ink hover:underline"
-                            >
-                              View record
-                            </button>
-                          ) : null}
-                          {new Date(t.performed_at).toLocaleDateString("en-GB")}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {[t.area, t.product, t.dose, t.price ? `£${t.price}` : null].filter(Boolean).join(" · ")}
-                        {t.next_due_at
-                          ? ` · due ${new Date(t.next_due_at).toLocaleDateString("en-GB")}`
-                          : ""}
-                      </p>
-                      {t.notes && <p className="mt-1 text-xs text-foreground/80">{t.notes}</p>}
-                    </li>
-                  ))}
-                  {history.length === 0 && (
-                    <li className="py-6 text-sm text-muted-foreground">No treatments recorded.</li>
-                  )}
-                </ul>
-              </Card>
-
+              ) : null}
+              <TreatmentHistory
+                rows={history}
+                documents={data.documents ?? []}
+                photos={data.photos ?? []}
+                canViewRecord={canSee(identity, "patient-edit-clinical")}
+                onViewRecord={(treatmentId) => setRecordOpen(treatmentId)}
+              />
             </TabsContent>
 
             <TabsContent value="photos">
@@ -1459,6 +1450,32 @@ function PatientRecord() {
           </Tabs>
         </div>
 
+        {/* Book a plan step (Overview's Book, Treatments' Book this step) and edit one. */}
+        {bookingStep ? (
+          <QuickAddAppointment
+            patients={[p]}
+            practitioners={practitioners ?? []}
+            catalogue={catalogue ?? []}
+            date={now}
+            defaultPatientId={id}
+            defaultPractitionerId={planDetail?.plan.practitionerId ?? undefined}
+            milestoneId={bookingStep}
+            open
+            onOpenChange={(v) => {
+              if (!v) {
+                setBookingStep(null);
+                void queryClient.invalidateQueries({ queryKey: ["patient-plan", id] });
+                void queryClient.invalidateQueries({ queryKey: ["treatment-plans"] });
+                invalidate();
+              }
+            }}
+            centered
+            title="Book this step"
+          >
+            <span className="sr-only">Book</span>
+          </QuickAddAppointment>
+        ) : null}
+        <EditStepDialog step={editStep} patientId={id} onClose={() => setEditStep(null)} />
         <TreatmentFormDialog
           appointmentId={treatOpen}
           patientId={id}

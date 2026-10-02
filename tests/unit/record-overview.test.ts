@@ -16,6 +16,7 @@ import {
   shortDate,
   shortDay,
   stepChip,
+  stepDateLine,
   stepNeedsBooking,
   treatmentDetailLine,
   treatmentFormChips,
@@ -320,6 +321,21 @@ describe("skin plan", () => {
     expect(stepChip(roadmap[0]!.steps[0]!)).toEqual({ label: "Completed", tone: "done" });
     expect(stepChip({ ...step, status: "skipped" })).toEqual({ label: "Skipped", tone: "done" });
     expect(stepChip(roadmap[2]!.steps[0]!)).toEqual({ label: "Upcoming", tone: "upcoming" });
+  });
+
+  it("writes the roadmap row's date line from the step's state", () => {
+    const step = roadmap[1]!.steps[2]!;
+    expect(stepDateLine(step)).toBe("Due 4 Oct");
+    expect(stepDateLine({ ...step, bookedAt: "2026-10-04T10:30:00" })).toBe(
+      "Booked Sun 4 Oct · 10:30",
+    );
+    expect(stepDateLine({ ...step, date: null })).toBe("No date yet");
+    expect(stepDateLine({ ...step, status: "done", completedAt: "2026-09-02T09:00:00" })).toBe(
+      "Completed 2 Sep",
+    );
+    expect(stepDateLine({ ...step, status: "skipped", date: "2026-09-18" })).toBe(
+      "Completed 18 Sep",
+    );
   });
 
   it("knows which bookings belong to the plan", () => {

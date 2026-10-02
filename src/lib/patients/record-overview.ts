@@ -369,6 +369,16 @@ export function stepNeedsBooking(step: RoadmapStepLike) {
   );
 }
 
+/** The roadmap row's date line: "Completed 2 Sep", "Booked Sun 4 Oct · 11:30", "Due 4 Oct" or "No date yet". */
+export function stepDateLine(step: RoadmapStepLike) {
+  if (stepTone(step.status) === "done") {
+    const when = step.completedAt ?? step.date;
+    return when ? `Completed ${shortDate(when)}` : "Completed";
+  }
+  if (step.bookedAt) return `Booked ${shortDay(step.bookedAt)} · ${clockTime(step.bookedAt)}`;
+  return step.date ? `Due ${shortDate(step.date)}` : "No date yet";
+}
+
 /** The step the plan is on, numbered across every month: "STEP 6 OF 8". */
 export function upNextStep(roadmap: RoadmapMonthLike[]) {
   const all = roadmap.flatMap((m) => m.steps);
