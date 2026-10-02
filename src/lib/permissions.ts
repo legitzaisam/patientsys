@@ -34,6 +34,7 @@ export const PERMISSION_KEYS = [
   "view.patients.board",
   "view.tasks",
   "view.patients.record",
+  "view.patients.overview",
   "view.patients.treatments",
   "view.patients.photos",
   "view.patients.documents",
@@ -197,6 +198,11 @@ export const PERMISSION_META: Record<
     description: "Open the Tasks page: one list of what needs doing for patients, by role.",
   },
   "view.patients.record": { label: "Patient record", description: "Open an individual patient record." },
+  "view.patients.overview": {
+    label: "Overview tab",
+    description:
+      "See the record's Overview: today's visit, readiness, skin plan, upcoming bookings, tasks and the latest journal entry.",
+  },
   "view.patients.treatments": { label: "Treatments tab", description: "See the treatments tab on a patient record." },
   "view.patients.photos": { label: "Before and after tab", description: "See clinical photos on a patient record." },
   "view.patients.documents": { label: "Documents tab", description: "See documents on a patient record." },
@@ -260,6 +266,7 @@ export const PERMISSION_GROUPS: { label: string; keys: PermissionKey[] }[] = [
       "view.patients.board",
       "view.tasks",
       "view.patients.record",
+      "view.patients.overview",
       "view.patients.treatments",
       "view.patients.photos",
       "view.patients.documents",

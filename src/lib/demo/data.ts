@@ -4940,6 +4940,9 @@ for (const recipe of PLAN_RECIPES) {
         done: status === "done",
         clinic_owned: ci === 2,
         done_at: status === "done" ? iso(-((recipe.done - i) * 9), 15, 0) : null,
+        // Finished steps were ticked by whoever owns the item.
+        done_by_kind: status === "done" ? (ci === 2 ? "clinic" : "patient") : null,
+        done_by: null,
         created_at: iso(-45 + recipe.patient, 10, 0),
       });
     });
@@ -5427,6 +5430,9 @@ export const planPauseRequests: Row[] = [];
       sensitivity: Math.min(100, 24 + d * 2),
       dryness: Math.min(100, 18 + d * 2),
       note: d === 0 ? null : null,
+      // Older readings were reviewed as they came in; the latest is still open.
+      reviewed_at: d === 0 ? null : iso(-d + 1, 9, 0),
+      reviewed_by: d === 0 ? null : USERS.practitioner,
       created_at: iso(-d, 20, 0),
     });
   }

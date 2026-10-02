@@ -242,6 +242,9 @@ export const MarkStaffChatRead = z.object({ peerUserId: id });
 
 export const ReviewHistory = z.object({ id, patient_id: id });
 
+/** Accept into record: merge the patient's version into the live fields and stamp it reviewed. */
+export const AcceptHistoryUpdate = z.object({ id, patient_id: id });
+
 export const SubmitHistoryUpdate = z.object({
   medications: text(20_000),
   allergies: text(20_000),
@@ -719,6 +722,9 @@ export const SubmitRecoveryCheckin = z.object({
   note: optionalText(2000),
 });
 
+/** A clinician marks a flagged check-in reviewed on the patient record. */
+export const ReviewRecoveryCheckin = z.object({ patient_id: id, checkin_date: dateString });
+
 export const ConfirmAppointment = z.object({
   appointment_id: id,
 });
@@ -751,6 +757,9 @@ export const SaveRoutineOverride = z.object({
 export const ClearRoutineOverride = z.object({ routine_item_id: id });
 
 export const ToggleChecklistItem = z.object({ id, done: z.boolean() });
+
+/** The clinic ticks a step's checklist item on the record, including clinic-owned ones. */
+export const SetMilestoneChecklistItem = z.object({ id, done: z.boolean() });
 
 export const UpdatePortalProfile = z.object({
   address_line1: optionalText(200),
@@ -813,6 +822,18 @@ export const UpdatePlanMilestone = z.object({
   id,
   status: z.enum(["upcoming", "current", "done", "skipped"]),
 });
+
+/** Edit step on the record: title, due date and detail, and optionally its status. */
+export const UpdatePlanMilestoneDetails = z.object({
+  id,
+  title: requiredText(200),
+  due_date: optionalDateString,
+  detail: optionalText(2000),
+  status: z.enum(["upcoming", "current", "done", "skipped"]).optional(),
+});
+
+/** The clinic-side view of one patient's active plan, as the patient's Timeline sees it. */
+export const GetPatientPlanDetail = z.object({ patient_id: id });
 
 /* Notes */
 
