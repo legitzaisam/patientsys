@@ -164,8 +164,9 @@ function hrefFor(item: AttentionRaw) {
   return "/patients";
 }
 
+/** The record opens on Overview and scrolls to its Upcoming card. */
 function patientBookingsChaseHref(patientId: string) {
-  return `/patients/${patientId}?tab=treatments&chase=1`;
+  return `/patients/${patientId}?tab=overview&chase=1`;
 }
 
 function displaySubtitle(person: TaskPerson, kind: string) {

@@ -1,6 +1,6 @@
 import { RiskBadge } from "@/components/retention/risk-badge";
 import { dateTime, daysAgoLabel, displayName, moneyWhole } from "@/lib/format";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -48,6 +48,8 @@ import { TreatmentRecordDialog } from "@/components/treatment-record-view";
 import { STAGE_LABEL } from "@/lib/visit-stage";
 import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
+import { recordTabBadges } from "@/lib/patients/record-overview";
+import { TabBadge } from "@/components/patients/record/chips";
 import {
   Dialog,
   DialogContent,
@@ -122,7 +124,29 @@ function PatientRecord() {
   const fetchPatient = useServerFn(getPatient);
   const fetchCatalogue = useServerFn(getCatalogue);
   const bookingsRef = useRef<HTMLDivElement>(null);
-  const [activeTab, setActiveTab] = useState(() => tabSearch ?? "treatments");
+  // Overview is the record's front page; `bookings` / `visit-notes` are old
+  // names for Treatments and a chase lands on Overview's Upcoming card.
+  const tabFor = (tab: string | undefined, chase: boolean | undefined) => {
+    if (chase) return "overview";
+    if (tab === "bookings" || tab === "visit-notes") return "treatments";
+    return tab ?? "overview";
+  };
+  const [activeTab, setActiveTab] = useState(() => tabFor(tabSearch, chaseFocus));
+  // A tab change is a navigation: the address keeps the tab so Back and a
+  // copied link land where the reader was.
+  const changeTab = (tab: string) => {
+    setActiveTab(tab);
+    void navigate({
+      to: "/patients/$id",
+      params: { id },
+      search: (prev: ReturnType<typeof Route.useSearch>) => ({
+        ...prev,
+        tab: tab === "overview" ? undefined : tab,
+        chase: undefined,
+      }),
+      replace: true,
+    });
+  };
 
   const { data } = useQuery({
     queryKey: ["patient", id],
@@ -180,26 +204,38 @@ function PatientRecord() {
     )?.count ?? 0;
 
   useEffect(() => {
-    if (tabSearch === "bookings" || tabSearch === "visit-notes" || chaseFocus) setActiveTab("treatments");
-    else if (tabSearch) setActiveTab(tabSearch);
+    if (tabSearch || chaseFocus) setActiveTab(tabFor(tabSearch, chaseFocus));
   }, [tabSearch, chaseFocus]);
 
+  // A reader without the Overview grant opens on Treatments instead.
   useEffect(() => {
-    if (activeTab !== "treatments" || !chaseFocus) return;
+    if (identity && activeTab === "overview" && !canSee(identity, "patient-overview"))
+      setActiveTab("treatments");
+  }, [identity, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "overview" || !chaseFocus) return;
     bookingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [activeTab, chaseFocus, data]);
 
-  // Deep links from the list pill (#recall) and the journey cards (#plan):
-  // the anchors render once the tab has data, so scroll then.
+  // Deep links: #plan is the roadmap on Treatments; #tasks and #recall are the
+  // Tasks and recalls card on Overview. The anchors render once the tab has
+  // data, so switch tab first and scroll then.
+  const hash = useLocation({ select: (l) => l.hash });
   useEffect(() => {
-    if (activeTab !== "treatments" || !data) return;
-    const hash = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
-    if (hash !== "recall" && hash !== "plan") return;
+    if (!data) return;
+    const target =
+      hash === "plan" ? "treatments" : hash === "recall" || hash === "tasks" ? "overview" : null;
+    if (!target) return;
+    if (activeTab !== target) {
+      setActiveTab(target);
+      return;
+    }
     const timer = window.setTimeout(() => {
       document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [activeTab, data]);
+  }, [activeTab, data, hash]);
 
   const createTreatment = useMutation({
     mutationFn: useServerFn(addTreatment),
@@ -381,6 +417,12 @@ function PatientRecord() {
     bookingNote: string;
   }>;
   const history = historyWithVisitNotes(data.treatments ?? [], data.visitNotes ?? []);
+  // Tab counts: bookings to chase, unreviewed urgent check-ins, pending patient updates.
+  const badges = recordTabBadges({
+    bookingChase,
+    checkins: data.checkins ?? [],
+    history: data.history ?? [],
+  });
   // Owner-only: what this patient has spent with the clinic, from recorded treatments.
   const lifetimeSpend = ((data.treatments ?? []) as { price?: number | null }[]).reduce(
     (sum, t) => sum + Number(t.price ?? 0),
@@ -679,27 +721,47 @@ function PatientRecord() {
             </div>
           </Card>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs value={activeTab} onValueChange={changeTab}>
             {/* Let the pill wrap on narrower layouts rather than run under the docked chat panel. */}
             <TabsList className="h-auto max-w-full flex-wrap justify-start">
+              {canSee(identity, "patient-overview") && (
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+              )}
               {canSee(identity, "patient-treatments") && (
-                <TabsTrigger value="treatments" className="items-center pr-2.5">
+                <TabsTrigger value="treatments" className="gap-1.5">
                   Treatments
-                  {bookingChase.length > 0 ? (
-                    <span
-                      data-qc="treatments-badge"
-                      title={`${bookingChase.length} upcoming booking${bookingChase.length === 1 ? "" : "s"} still need${bookingChase.length === 1 ? "s" : ""} chasing (deposit, balance or consent)`}
-                      className="ml-1.5 inline-flex h-[15px] min-w-[15px] shrink-0 items-center justify-center rounded-full bg-destructive-bg px-0.5 text-[10px] font-semibold leading-none text-destructive-ink tabular-nums"
-                    >
-                      {bookingChase.length}
-                    </span>
-                  ) : null}
+                  <TabBadge
+                    count={badges.treatments}
+                    tone="gold"
+                    data-qc="treatments-badge"
+                    title={`${bookingChase.length} upcoming booking${bookingChase.length === 1 ? "" : "s"} still need${bookingChase.length === 1 ? "s" : ""} chasing (deposit, balance or consent)`}
+                  />
                 </TabsTrigger>
               )}
               {canSee(identity, "patient-photos") && <TabsTrigger value="photos">Before and after</TabsTrigger>}
               {canSee(identity, "patient-documents") && <TabsTrigger value="documents">Documents</TabsTrigger>}
-              {canSee(identity, "patient-history") && <TabsTrigger value="history">Medical history</TabsTrigger>}
-              {canSee(identity, "patient-from-patient") && <TabsTrigger value="portal">From the patient</TabsTrigger>}
+              {canSee(identity, "patient-history") && (
+                <TabsTrigger value="history" className="gap-1.5">
+                  Medical history
+                  <TabBadge
+                    count={badges.history}
+                    tone="pink"
+                    data-qc="history-badge"
+                    title={`${badges.history} patient update${badges.history === 1 ? "" : "s"} waiting to be accepted into the record`}
+                  />
+                </TabsTrigger>
+              )}
+              {canSee(identity, "patient-from-patient") && (
+                <TabsTrigger value="portal" className="gap-1.5">
+                  From the patient
+                  <TabBadge
+                    count={badges.portal}
+                    tone="pink"
+                    data-qc="portal-badge"
+                    title={`${badges.portal} recovery check-in${badges.portal === 1 ? "" : "s"} flagged and not yet reviewed`}
+                  />
+                </TabsTrigger>
+              )}
               {canSee(identity, "patient-contact") && <TabsTrigger value="contact">Contact</TabsTrigger>}
             </TabsList>
 
@@ -734,8 +796,9 @@ function PatientRecord() {
               ) : null}
             </TabsContent>
 
-            <TabsContent value="treatments" className="space-y-4">
-              <TreatmentPlanCard patientId={id} />
+            {/* Overview: today's visit, the bookings to chase and the open tasks.
+                Phase 7 of the record redesign turns these into the designed cards. */}
+            <TabsContent value="overview" className="space-y-4">
               {(data as any).todayVisit && (data as any).todayVisit.stage !== "complete" ? (
                 <Card className="flex flex-wrap items-center gap-3 p-4" data-qc="today-visit">
                   <div className="min-w-0 flex-1">
@@ -765,45 +828,6 @@ function PatientRecord() {
                   ) : null}
                 </Card>
               ) : null}
-
-              <Card className="p-5">
-                <div className="mb-3">
-                  <h3 className="section-title">Treatment history</h3>
-                  <p className="text-xs text-muted-foreground">Recorded treatments and follow-up dates.</p>
-                </div>
-                <ul className="divide-y divide-glass-line">
-                  {history.map((t: any) => (
-                    <li key={t.id} className="py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm text-foreground">{t.name}</p>
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {t.hasRecord && canSee(identity, "patient-edit-clinical") ? (
-                            <button
-                              type="button"
-                              data-qc="view-treatment-record"
-                              onClick={() => setRecordOpen(t.id)}
-                              className="cursor-pointer font-semibold text-accent-ink hover:underline"
-                            >
-                              View record
-                            </button>
-                          ) : null}
-                          {new Date(t.performed_at).toLocaleDateString("en-GB")}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {[t.area, t.product, t.dose, t.price ? `£${t.price}` : null].filter(Boolean).join(" · ")}
-                        {t.next_due_at
-                          ? ` · due ${new Date(t.next_due_at).toLocaleDateString("en-GB")}`
-                          : ""}
-                      </p>
-                      {t.notes && <p className="mt-1 text-xs text-foreground/80">{t.notes}</p>}
-                    </li>
-                  ))}
-                  {history.length === 0 && (
-                    <li className="py-6 text-sm text-muted-foreground">No treatments recorded.</li>
-                  )}
-                </ul>
-              </Card>
 
               <Card ref={bookingsRef} className="p-5">
                 <div className="mb-4">
@@ -879,6 +903,49 @@ function PatientRecord() {
                 practitionerId={(history[0] as any)?.practitioner_id ?? null}
                 context={history[0]?.name ? `Last treatment ${history[0].name}` : null}
               />
+            </TabsContent>
+
+            <TabsContent value="treatments" className="space-y-4">
+              <TreatmentPlanCard patientId={id} />
+              <Card className="p-5">
+                <div className="mb-3">
+                  <h3 className="section-title">Treatment history</h3>
+                  <p className="text-xs text-muted-foreground">Recorded treatments and follow-up dates.</p>
+                </div>
+                <ul className="divide-y divide-glass-line">
+                  {history.map((t: any) => (
+                    <li key={t.id} className="py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm text-foreground">{t.name}</p>
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {t.hasRecord && canSee(identity, "patient-edit-clinical") ? (
+                            <button
+                              type="button"
+                              data-qc="view-treatment-record"
+                              onClick={() => setRecordOpen(t.id)}
+                              className="cursor-pointer font-semibold text-accent-ink hover:underline"
+                            >
+                              View record
+                            </button>
+                          ) : null}
+                          {new Date(t.performed_at).toLocaleDateString("en-GB")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {[t.area, t.product, t.dose, t.price ? `£${t.price}` : null].filter(Boolean).join(" · ")}
+                        {t.next_due_at
+                          ? ` · due ${new Date(t.next_due_at).toLocaleDateString("en-GB")}`
+                          : ""}
+                      </p>
+                      {t.notes && <p className="mt-1 text-xs text-foreground/80">{t.notes}</p>}
+                    </li>
+                  ))}
+                  {history.length === 0 && (
+                    <li className="py-6 text-sm text-muted-foreground">No treatments recorded.</li>
+                  )}
+                </ul>
+              </Card>
+
             </TabsContent>
 
             <TabsContent value="photos">
