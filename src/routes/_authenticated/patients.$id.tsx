@@ -12,7 +12,9 @@ import {
   archivePatient,
   getCatalogue,
   getPatient,
+  getPatientPlanDetail,
   getUnreadMessages,
+  listPractitioners,
   markMessagesRead,
   resendDocument,
   reviewHistory,
@@ -37,18 +39,36 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PatientTasksPanel } from "@/components/retention/patient-tasks-panel";
+import { TasksRecallsCard } from "@/components/retention/patient-tasks-panel";
 import { TreatmentPlanCard } from "@/components/patients/treatment-plan-card";
+import {
+  ReadyToTreatCard,
+  type ReadyToTreatVisit,
+} from "@/components/patients/record/ready-to-treat-card";
+import {
+  SkinPlanSummaryCard,
+  type PlanDetail,
+} from "@/components/patients/record/skin-plan-summary-card";
+import { UpcomingCard, type UpcomingBooking } from "@/components/patients/record/upcoming-card";
+import {
+  LatestJournalCard,
+  type JournalEntryRow,
+} from "@/components/patients/record/latest-journal-card";
+import { QuickAddAppointment } from "@/components/quick-add-appointment";
 import { CommsPreferencesCard } from "@/components/comms/comms-preferences";
 import { CommsLogCard } from "@/components/comms/comms-log";
 import { SendOfferDialog } from "@/components/offers/send-offer-dialog";
 import { PatientOffersCard } from "@/components/offers/patient-offers-card";
 import { TreatmentFormDialog } from "@/components/treatment-form-dialog";
 import { TreatmentRecordDialog } from "@/components/treatment-record-view";
-import { STAGE_LABEL } from "@/lib/visit-stage";
 import { canSee } from "@/lib/access-catalogue";
 import { can } from "@/lib/permissions";
-import { recordTabBadges } from "@/lib/patients/record-overview";
+import {
+  onPlanAppointmentIds,
+  readinessItems,
+  recordTabBadges,
+  upNextStep,
+} from "@/lib/patients/record-overview";
 import { TabBadge } from "@/components/patients/record/chips";
 import {
   Dialog,
@@ -158,10 +178,29 @@ function PatientRecord() {
     queryFn: () => fetchCatalogue(),
     enabled: !!identity?.isStaff,
   });
+  // The plan as the patient's Timeline sees it, for the Overview card and the
+  // Treatments roadmap; the practitioners list feeds Book on a step.
+  const fetchPlanDetail = useServerFn(getPatientPlanDetail);
+  const { data: planDetail } = useQuery({
+    queryKey: ["patient-plan", id],
+    queryFn: () => fetchPlanDetail({ data: { patient_id: id } }) as Promise<PlanDetail | null>,
+    enabled: !!identity?.isStaff,
+  });
+  const fetchPractitioners = useServerFn(listPractitioners);
+  const { data: practitioners } = useQuery({
+    queryKey: ["practitioners"],
+    queryFn: () => fetchPractitioners(),
+    enabled: !!identity?.isStaff,
+  });
+  // One clock per render of the record, so every card agrees on "today".
+  const now = useMemo(() => new Date(), []);
+  const [bookingStep, setBookingStep] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["patient", id] });
   const [treatmentOpen, setTreatmentOpen] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
+  // "Send consent forms" opens the sender already on the consent kind, titled for the visit.
+  const [docPreset, setDocPreset] = useState<{ kind: string; title: string } | null>(null);
   const [offerOpen, setOfferOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -423,6 +462,45 @@ function PatientRecord() {
     checkins: data.checkins ?? [],
     history: data.history ?? [],
   });
+  // What the Overview reads: today's visit, every future booking, which of
+  // them a plan step claims, and the readiness rows for the hero.
+  const todayVisit = (data.todayVisit ?? null) as ReadyToTreatVisit | null;
+  const upcoming = (data.upcoming ?? []) as UpcomingBooking[];
+  const onPlanIds = onPlanAppointmentIds(
+    (planDetail?.milestoneAppointmentIds ?? []).map((appointmentId) => ({
+      appointment_id: appointmentId,
+    })),
+  );
+  const nextStep = planDetail ? upNextStep(planDetail.roadmap) : null;
+  const nextStepChecklist = nextStep
+    ? (planDetail?.roadmap.flatMap((m) => m.steps).find((s) => s.id === nextStep.id)?.checklist ??
+      [])
+    : [];
+  const readiness = readinessItems({
+    visit: todayVisit
+      ? {
+          treatment: todayVisit.treatment,
+          startsAt: todayVisit.startsAt,
+          consentState: todayVisit.consentState,
+          paymentStatus: todayVisit.paymentStatus,
+          price: todayVisit.price,
+        }
+      : null,
+    checkins: data.checkins ?? [],
+    history: data.history ?? [],
+    checklist: nextStepChecklist as Parameters<typeof readinessItems>[0]["checklist"],
+    beforePhotos: ((data.photos ?? []) as { kind: string; taken_at: string }[]).filter(
+      (ph) => ph.kind === "before",
+    ),
+    now,
+  });
+  const lastPractitionerId =
+    (history[0] as { practitioner_id?: string | null } | undefined)?.practitioner_id ?? null;
+  const openConsentForm = () => {
+    const treatment = todayVisit?.treatment ?? upcoming[0]?.treatmentName ?? "Treatment";
+    setDocPreset({ kind: "consent", title: `${treatment} — consent form` });
+    setDocOpen(true);
+  };
   // Owner-only: what this patient has spent with the clinic, from recorded treatments.
   const lifetimeSpend = ((data.treatments ?? []) as { price?: number | null }[]).reduce(
     (sum, t) => sum + Number(t.price ?? 0),
@@ -601,58 +679,76 @@ function PatientRecord() {
                   </DialogContent>
                 </Dialog>
 
-                {canSee(identity, "patient-send-documents") && <Dialog open={docOpen} onOpenChange={setDocOpen}>
-                  <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
-                    <DialogHeader>
-                      <DialogTitle>Send to patient</DialogTitle>
-                    </DialogHeader>
-                    <form
-                      id="doc-form"
-                      className="space-y-4"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const f = new FormData(e.currentTarget as HTMLFormElement);
-                        issueDocument.mutate({
-                          data: {
-                            patient_id: id,
-                            kind: String(f.get("kind")) as any,
-                            title: String(f.get("title")),
-                            body: String(f.get("body") ?? ""),
-                            app_origin: window.location.origin,
-                          },
-                        });
-                      }}
-                    >
-                      <div className="field-stack">
-                        <Label htmlFor="kind">Type</Label>
-                        <select
-                          id="kind"
-                          name="kind"
-                          className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-sm"
-                        >
-                          <option value="consent">Consent form</option>
-                          <option value="consultation">Consultation form</option>
-                          <option value="treatment_plan">Treatment plan</option>
-                          <option value="aftercare">Aftercare advice</option>
-                          <option value="other">Payment link / other</option>
-                        </select>
-                      </div>
-                      <div className="field-stack">
-                        <Label htmlFor="title">Title</Label>
-                        <Input id="title" name="title" required className="rounded-xl" />
-                      </div>
-                      <div className="field-stack">
-                        <Label htmlFor="body">Content</Label>
-                        <Textarea id="body" name="body" rows={5} className="rounded-xl" />
-                      </div>
-                    </form>
-                    <DialogFooter>
-                      <Button type="submit" form="doc-form">
-                        Send
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>}
+                {canSee(identity, "patient-send-documents") && (
+                  <Dialog
+                    open={docOpen}
+                    onOpenChange={(v) => {
+                      setDocOpen(v);
+                      if (!v) setDocPreset(null);
+                    }}
+                  >
+                    <DialogContent className="max-h-[calc(calc(100*var(--app-dvh))-2rem)] overflow-y-auto rounded-xl">
+                      <DialogHeader>
+                        <DialogTitle>Send to patient</DialogTitle>
+                      </DialogHeader>
+                      <form
+                        id="doc-form"
+                        key={docPreset?.title ?? "blank"}
+                        className="space-y-4"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const f = new FormData(e.currentTarget as HTMLFormElement);
+                          issueDocument.mutate({
+                            data: {
+                              patient_id: id,
+                              kind: String(f.get("kind")) as Parameters<
+                                typeof issueDocument.mutate
+                              >[0]["data"]["kind"],
+                              title: String(f.get("title")),
+                              body: String(f.get("body") ?? ""),
+                              app_origin: window.location.origin,
+                            },
+                          });
+                        }}
+                      >
+                        <div className="field-stack">
+                          <Label htmlFor="kind">Type</Label>
+                          <select
+                            id="kind"
+                            name="kind"
+                            defaultValue={docPreset?.kind ?? "consent"}
+                            className="h-10 w-full rounded-xl border border-edge-2 bg-glass-2 shadow-inset-hi px-3 text-sm"
+                          >
+                            <option value="consent">Consent form</option>
+                            <option value="consultation">Consultation form</option>
+                            <option value="treatment_plan">Treatment plan</option>
+                            <option value="aftercare">Aftercare advice</option>
+                            <option value="other">Payment link / other</option>
+                          </select>
+                        </div>
+                        <div className="field-stack">
+                          <Label htmlFor="title">Title</Label>
+                          <Input
+                            id="title"
+                            name="title"
+                            required
+                            defaultValue={docPreset?.title ?? ""}
+                            className="rounded-xl"
+                          />
+                        </div>
+                        <div className="field-stack">
+                          <Label htmlFor="body">Content</Label>
+                          <Textarea id="body" name="body" rows={5} className="rounded-xl" />
+                        </div>
+                      </form>
+                      <DialogFooter>
+                        <Button type="submit" form="doc-form">
+                          Send
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                )}
 
                 {can(identity, "comms.send") && !p.deleted_at ? (
                   <SendOfferDialog open={offerOpen} onOpenChange={setOfferOpen} patients={[p]} source="one_off" />
@@ -796,113 +892,93 @@ function PatientRecord() {
               ) : null}
             </TabsContent>
 
-            {/* Overview: today's visit, the bookings to chase and the open tasks.
-                Phase 7 of the record redesign turns these into the designed cards. */}
+            {/* Overview: readable in a few seconds before a visit. The hero is
+                today's visit and what still stands in the way; the four cards
+                are the plan, the diary, the tasks and the patient's own words. */}
             <TabsContent value="overview" className="space-y-4">
-              {(data as any).todayVisit && (data as any).todayVisit.stage !== "complete" ? (
-                <Card className="flex flex-wrap items-center gap-3 p-4" data-qc="today-visit">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">Today's visit</p>
-                    <p className="text-sm font-semibold text-foreground">
-                      {(data as any).todayVisit.treatment} ·{" "}
-                      {new Date((data as any).todayVisit.startsAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                      {(data as any).todayVisit.practitionerName ? ` · ${(data as any).todayVisit.practitionerName}` : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {STAGE_LABEL[(data as any).todayVisit.stage as keyof typeof STAGE_LABEL] ?? (data as any).todayVisit.stage}
-                      {(data as any).todayVisit.consentState === "outstanding" ? " · consent outstanding" : ""}
-                    </p>
-                  </div>
-                  {can(identity, "treatments.record") ? (
-                    <Button
-                      type="button"
-                      data-qc="open-treatment-form"
-                      disabled={(data as any).todayVisit.consentState === "outstanding" || (data as any).todayVisit.stage === "no_show"}
-                      title={(data as any).todayVisit.consentState === "outstanding" ? "Consent is outstanding" : undefined}
-                      onClick={() => setTreatOpen((data as any).todayVisit.id)}
-                    >
-                      {(data as any).todayVisit.stage === "in_treatment" || (data as any).todayVisit.stage === "aftercare"
-                        ? "Continue treatment form"
-                        : "Start treatment"}
-                    </Button>
-                  ) : null}
-                </Card>
-              ) : null}
-
-              <Card ref={bookingsRef} className="p-5">
-                <div className="mb-4">
-                  <h3 className="section-title">Upcoming appointments</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {chaseFocus
-                      ? "These visits still need chasing — deposits, balances or consent."
-                      : "Future diary visits and what still needs chasing."}
-                  </p>
-                </div>
-                {bookingChase.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 px-4 py-6 text-center text-sm text-muted-foreground">
-                    No upcoming appointments need chasing right now.
-                  </div>
-                ) : (
-                  <ul className="space-y-2">
-                    {bookingChase.map((booking) => (
-                      <li
-                        key={booking.id}
-                        data-qc="booking-chase-item"
-                        className="rounded-xl border border-edge bg-glass-2/70 px-4 py-3 shadow-inset-hi"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground">{booking.treatmentName}</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              {new Date(booking.startsAt).toLocaleDateString("en-GB", {
-                                weekday: "short",
-                                day: "numeric",
-                                month: "short",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                              {booking.practitionerName ? ` · ${booking.practitionerName}` : ""}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {booking.issues.map((issue) => (
-                              <Badge
-                                key={issue}
-                                variant="secondary"
-                                className={
-                                  issue === "Consent due"
-                                    ? "rounded-xl bg-warning-bg text-consent-ink"
-                                    : "rounded-xl bg-destructive-bg text-destructive-ink"
-                                }
-                              >
-                                {issue}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        {booking.bookingNote ? (
-                          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
-                            {booking.bookingNote}
-                          </p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div className="mt-4">
-                  <Link to="/schedule" className="text-2xs font-semibold text-accent-ink hover:underline">
-                    Open diary
-                  </Link>
-                </div>
-              </Card>
-              <PatientTasksPanel
-                patientId={id}
-                patientName={patientName || "this patient"}
-                patientFirstName={p?.first_name ?? "the patient"}
-                avatarUrl={p?.avatar_url ?? null}
-                practitionerId={(history[0] as any)?.practitioner_id ?? null}
-                context={history[0]?.name ? `Last treatment ${history[0].name}` : null}
+              <ReadyToTreatCard
+                visit={todayVisit}
+                nextAppointmentAt={data.nextAppointmentAt ?? null}
+                items={readiness.items}
+                clear={readiness.clear}
+                total={readiness.total}
+                payment={
+                  todayVisit
+                    ? {
+                        id: todayVisit.id,
+                        patient_id: id,
+                        starts_at: todayVisit.startsAt,
+                        treatment_name: todayVisit.treatment,
+                        treatment_number: null,
+                        payment_status: todayVisit.paymentStatus,
+                        price: todayVisit.price,
+                        patients: { email: p.email ?? null, phone: p.phone ?? null },
+                      }
+                    : null
+                }
+                canTreat={can(identity, "treatments.record")}
+                onReview={(tab) => changeTab(tab)}
+                onSendConsent={openConsentForm}
+                onContinue={() => todayVisit && setTreatOpen(todayVisit.id)}
               />
+              {/* Two by two, equal height, one column below the laptop breakpoint. */}
+              <div className="grid grid-cols-1 gap-4 [grid-auto-rows:1fr] lg:grid-cols-2">
+                <SkinPlanSummaryCard
+                  detail={planDetail}
+                  now={now}
+                  canBook={can(identity, "appointments.edit")}
+                  onBook={(stepId) => setBookingStep(stepId)}
+                  onOpenRoadmap={() => changeTab("treatments")}
+                />
+                <div id="upcoming" ref={bookingsRef}>
+                  <UpcomingCard
+                    upcoming={upcoming}
+                    onPlanIds={onPlanIds}
+                    chaseFocus={Boolean(chaseFocus)}
+                    canSendForms={canSee(identity, "patient-send-documents")}
+                    onSendConsent={openConsentForm}
+                  />
+                </div>
+                <TasksRecallsCard
+                  patientId={id}
+                  patientName={patientName || "this patient"}
+                  patientFirstName={p?.first_name ?? "the patient"}
+                  avatarUrl={p?.avatar_url ?? null}
+                  practitionerId={lastPractitionerId}
+                  context={history[0]?.name ? `Last treatment ${history[0].name}` : null}
+                />
+                <LatestJournalCard
+                  journal={(data.journal ?? []) as JournalEntryRow[]}
+                  treatments={data.treatments ?? []}
+                  onReply={() =>
+                    requestChat({ patientId: id, patientName: patientName || "Patient" })
+                  }
+                  onAllEntries={() => changeTab("portal")}
+                />
+              </div>
+              {bookingStep ? (
+                <QuickAddAppointment
+                  patients={[p]}
+                  practitioners={practitioners ?? []}
+                  catalogue={catalogue ?? []}
+                  date={now}
+                  defaultPatientId={id}
+                  defaultPractitionerId={planDetail?.plan.practitionerId ?? undefined}
+                  milestoneId={bookingStep}
+                  open
+                  onOpenChange={(v) => {
+                    if (!v) {
+                      setBookingStep(null);
+                      void queryClient.invalidateQueries({ queryKey: ["patient-plan", id] });
+                      invalidate();
+                    }
+                  }}
+                  centered
+                  title="Book this step"
+                >
+                  <span className="sr-only">Book</span>
+                </QuickAddAppointment>
+              ) : null}
             </TabsContent>
 
             <TabsContent value="treatments" className="space-y-4">

@@ -6,6 +6,7 @@ import {
   historyChangeSummary,
   historyFilter,
   isUrgentCheckin,
+  journalDayLabel,
   longDate,
   onPlanAppointmentIds,
   planMonths,
@@ -438,6 +439,24 @@ describe("badges and wording", () => {
     expect(relativeDays("2026-10-02", now)).toBe("tomorrow");
     expect(relativeDays("2026-10-01", now)).toBe("today");
     expect(relativeDays("2026-09-29", now)).toBe("2 days ago");
+  });
+
+  it("labels a journal entry by the patient's own day count, else days since treatment", () => {
+    const treatments = [
+      { name: "Microneedling with PRP", performed_at: "2026-09-26T10:00:00+01:00" },
+    ];
+    expect(
+      journalDayLabel({ title: "Day 4", body: "x", entry_date: "2026-09-30" }, treatments),
+    ).toBe("Day 4");
+    expect(
+      journalDayLabel({ title: "Redness", body: "x", entry_date: "2026-09-30" }, treatments),
+    ).toBe("Day 4");
+    expect(
+      journalDayLabel(
+        { title: "Before anything", body: "x", entry_date: "2026-09-01" },
+        treatments,
+      ),
+    ).toBe("Before anything");
   });
 
   it("spells dates the way the mockup does, whatever the ICU data says", () => {

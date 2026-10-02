@@ -48,6 +48,37 @@ async function tabList(page) {
   return tabs;
 }
 
+/**
+ * The shell scrolls inside #app-main-scroll, so a full-page capture would be
+ * just the viewport. Let the shell grow for the shot (same as the responsive
+ * suite's expandShell), then put it back.
+ */
+async function expandShell(page) {
+  await page.evaluate(() => {
+    const shell = document.querySelector(".flex.h-app-screen, .flex.h-dvh");
+    const main = document.getElementById("app-main-scroll");
+    const grow = (el, extra = {}) => {
+      if (!el) return;
+      el.dataset.captureStyle = el.getAttribute("style") ?? "";
+      Object.assign(el.style, { height: "auto", overflow: "visible", ...extra });
+    };
+    grow(shell, { minHeight: "100vh" });
+    grow(main, { maxHeight: "none", flex: "none" });
+    grow(document.body);
+    grow(document.documentElement);
+  });
+  await page.waitForTimeout(250);
+}
+
+async function restoreShell(page) {
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll("[data-capture-style]")) {
+      el.setAttribute("style", el.dataset.captureStyle);
+      delete el.dataset.captureStyle;
+    }
+  });
+}
+
 async function findPatientPath(page) {
   await page.goto(`${BASE}/patients?q=${encodeURIComponent(PATIENT)}`, { waitUntil: "domcontentloaded" });
   const link = page.locator('[data-qc="records-name"]').first();
@@ -86,9 +117,11 @@ for (const role of ROLES) {
       await page.waitForTimeout(900);
       const slug = tab.value.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
       const file = `${OUT}/${role}--${device.slug}--${slug}.png`;
-      await page.screenshot({ path: file, fullPage: true });
       const width = await page.evaluate(() => document.documentElement.scrollWidth);
       const vw = await page.evaluate(() => window.innerWidth);
+      await expandShell(page);
+      await page.screenshot({ path: file, fullPage: true });
+      await restoreShell(page);
       console.log(
         `${role.padEnd(12)} ${device.slug.padEnd(19)} ${slug.padEnd(11)} captured${width > vw ? `  OVERFLOW ${width}>${vw}` : ""}`,
       );

@@ -1,25 +1,42 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, Plus } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { CheckCheck } from "lucide-react";
+import { ToneChip, type ChipTone } from "@/components/patients/record/chips";
+import {
+  RecordCard,
+  recordLinkClass,
+  recordRowClass,
+} from "@/components/patients/record/record-card";
 import { AssignTaskDialog } from "@/components/tasks/assign-task-dialog";
+import { useTaskActions } from "@/components/tasks/use-task-actions";
 import { listPatientTasks } from "@/lib/clinic.functions";
 import { can } from "@/lib/permissions";
 import { staffLane } from "@/lib/staff-lane";
 import type { TaskView_ } from "@/lib/tasks/service";
-import { TASK_TYPE_META } from "@/lib/tasks/types";
+import { TASK_TYPE_META, type TaskType } from "@/lib/tasks/types";
 import { useIdentity } from "@/lib/use-identity";
 import { useTasksLiveSync } from "@/lib/use-tasks-sync";
 import { cn } from "@/lib/utils";
 
+/** The record's type chips: Chase booking in the review purple, Recall in sky, the rest as the Tasks page. */
+const TYPE_TONE: Partial<Record<TaskType, ChipTone>> = {
+  chase_booking: "review",
+  recall: "sky",
+  rebook_no_show: "alert",
+  question: "current",
+  plan_support: "done",
+  send_offer: "moderate",
+};
+
 /**
- * The patient record's tasks card: what is open for this patient, who has
- * it and when it is due, with a way to add one. Actions (complete, hand off,
- * reassign) live on the Tasks page, which each row opens.
+ * The Overview's Tasks and recalls card: what is open for this patient, who
+ * has it and when it is due. A tick on a row completes it (with Undo, through
+ * the same action the Tasks page uses); everything else still happens on the
+ * Tasks page, which each row opens.
  */
-export function PatientTasksPanel({
+export function TasksRecallsCard({
   patientId,
   patientName,
   patientFirstName,
@@ -41,62 +58,92 @@ export function PatientTasksPanel({
     queryKey: ["patient-tasks", patientId],
     queryFn: () => fetchTasks({ data: { patient_id: patientId } }),
   });
+  const actions = useTaskActions();
   const [assignOpen, setAssignOpen] = useState(false);
+  // Rows ticked here read as done at once; the refetch after the server call confirms it.
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
   const tasks = (data ?? []) as TaskView_[];
   const open = tasks.filter((t) => t.status === "open" || t.status === "snoozed");
   const recent = tasks.filter((t) => t.status === "done" || t.status === "auto_closed").slice(0, 3);
+  const openCount = open.filter((t) => !ticked.has(t.id)).length;
+
+  // Ids whose server call has finished; the next refetch carries the truth, so
+  // the local tick comes off then (and Undo, which refetches again, reads fresh).
+  const settled = useRef(new Set<string>());
+  const untick = (id: string) =>
+    setTicked((s) => {
+      const next = new Set(s);
+      next.delete(id);
+      return next;
+    });
+  const toggle = (t: TaskView_) => {
+    if (ticked.has(t.id) || !t.can.complete) return;
+    setTicked((s) => new Set(s).add(t.id));
+    // run() resolves null when the call failed (already rolled back and toasted) or was skipped.
+    void actions.complete(t, "handled", "Handled").then((result) => {
+      if (result === null) untick(t.id);
+      else settled.current.add(t.id);
+    });
+  };
+  useEffect(() => {
+    for (const id of settled.current) {
+      settled.current.delete(id);
+      untick(id);
+    }
+  }, [data]);
 
   return (
-    <Card className="mt-4 min-w-0 p-5" id="tasks" data-qc="patient-tasks" data-open={open.length}>
-      <span id="recall" className="sr-only" aria-hidden />
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="section-title">Tasks</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {open.length === 0
-              ? "Nothing open. Automations are watching this patient."
-              : `${open.length} open · done on the Tasks page`}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <RecordCard
+      icon={<CheckCheck />}
+      tone="warning"
+      title="Tasks and recalls"
+      meta={isLoading ? "…" : openCount === 0 ? "All done" : `${openCount} open`}
+      data-qc="patient-tasks"
+      data-open={String(openCount)}
+      className="scroll-mt-24"
+      footer={
+        <>
           {identity?.isStaff ? (
             <button
               type="button"
               onClick={() => setAssignOpen(true)}
               data-qc="patient-tasks-assign"
-              className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-accent px-3 text-[12px] font-semibold text-accent-foreground shadow-inset-hi transition-[filter] hover:brightness-[0.97]"
+              className="inline-flex cursor-pointer items-center whitespace-nowrap rounded-full bg-primary px-3.5 py-1.5 text-xs font-medium text-primary-foreground shadow-bloom transition-[filter] hover:brightness-[0.97]"
             >
-              <Plus className="h-3.5 w-3.5" aria-hidden />
-              Assign task
+              + Assign task
             </button>
-          ) : null}
-          <Link
-            to="/tasks"
-            className="inline-flex h-8 items-center gap-1 rounded-full bg-[rgba(47,63,102,0.06)] px-3 text-[12px] font-semibold text-foreground hover:bg-[rgba(47,63,102,0.1)]"
-            data-qc="patient-tasks-open"
-          >
-            Open Tasks
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <span />
+          )}
+          <Link to="/tasks" className={recordLinkClass} data-qc="patient-tasks-open">
+            Open Tasks →
           </Link>
-        </div>
-      </div>
-
-      {isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+        </>
+      }
+    >
+      <span id="tasks" className="sr-only" aria-hidden />
+      <span id="recall" className="sr-only" aria-hidden />
+      {isLoading ? <p className="text-sm text-ink-2">Loading…</p> : null}
+      {!isLoading && open.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-edge-2 bg-glass-2 px-4 py-6 text-center text-sm text-ink-2">
+          Nothing open. Automations are watching this patient.
+        </p>
+      ) : null}
       {open.length ? (
-        <ul className="divide-y divide-edge-2">
+        <ul className="flex flex-col gap-2">
           {open.map((t) => (
-            <TaskLine key={t.id} task={t} />
+            <TaskRow key={t.id} task={t} done={ticked.has(t.id)} onToggle={() => toggle(t)} />
           ))}
         </ul>
       ) : null}
       {recent.length ? (
-        <details className="mt-3 text-[12.5px]">
+        <details className="text-[12.5px]">
           <summary className="cursor-pointer text-ink-3 hover:text-foreground">
             Recently closed ({recent.length})
           </summary>
-          <ul className="mt-1 divide-y divide-edge-2 opacity-70">
+          <ul className="mt-2 flex flex-col gap-2 opacity-70">
             {recent.map((t) => (
-              <TaskLine key={t.id} task={t} />
+              <TaskRow key={t.id} task={t} done />
             ))}
           </ul>
         </details>
@@ -116,62 +163,92 @@ export function PatientTasksPanel({
         viewerId={identity?.userId ?? ""}
         canAssignOthers={can(identity, "tasks.assign_any")}
       />
-    </Card>
+    </RecordCard>
   );
 }
 
-function TaskLine({ task }: { task: TaskView_ }) {
+/** Kept for callers that still import the old name. */
+export const PatientTasksPanel = TasksRecallsCard;
+
+function TaskRow({
+  task,
+  done,
+  onToggle,
+}: {
+  task: TaskView_;
+  done: boolean;
+  onToggle?: () => void;
+}) {
   const meta = TASK_TYPE_META[task.type];
   const lane = task.assigneeId ? staffLane(task.assigneeId, task.assigneeName) : null;
-  const done = task.status === "done" || task.status === "auto_closed";
+  const closed = done || task.status === "done" || task.status === "auto_closed";
+  const canTick = Boolean(onToggle) && task.can.complete && !closed;
+  const who =
+    task.assigneeName ?? (task.assigneeRole === "front_desk" ? "Front desk" : "Unassigned");
+  const dueWord = task.dueLabel.charAt(0).toLowerCase() + task.dueLabel.slice(1);
   return (
-    <li className="min-w-0">
-      <Link
-        to="/tasks"
-        search={{ task: task.id } as never}
-        className="flex min-w-0 items-center gap-2.5 overflow-hidden rounded-lg px-1 py-2 transition-colors hover:bg-[rgba(47,63,102,0.05)]"
-        data-qc="patient-task"
-        data-status={task.status}
+    <li
+      className={cn(
+        recordRowClass,
+        "flex items-start gap-3 transition-colors hover:bg-[rgba(255,255,255,0.9)]",
+      )}
+      data-qc="patient-task"
+      data-status={closed ? "done" : task.status}
+    >
+      <button
+        type="button"
+        onClick={canTick ? onToggle : undefined}
+        disabled={!canTick}
+        aria-label={closed ? "Done" : `Mark ${task.title} as handled`}
+        data-qc="patient-task-tick"
+        className={cn(
+          "mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[10px] text-white",
+          closed ? "bg-success" : "border-[1.5px] border-[rgba(70,85,122,0.4)]",
+          canTick ? "cursor-pointer hover:border-success" : "cursor-default",
+        )}
       >
-        <span
+        {closed ? "✓" : ""}
+      </button>
+      <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
+        <Link
+          to="/tasks"
+          search={{ task: task.id } as never}
           className={cn(
-            "inline-flex h-[22px] shrink-0 items-center rounded-full px-2 text-[11px] font-semibold shadow-inset-hi",
-            meta.chip,
-          )}
-        >
-          {meta.label}
-        </span>
-        <span
-          className={cn(
-            "min-w-0 flex-1 break-words text-[13px] text-foreground line-clamp-1",
-            done && "line-through",
+            "break-words text-[13.5px] font-medium text-foreground line-clamp-2 hover:text-accent-ink",
+            closed && "line-through opacity-55",
           )}
         >
           {task.title}
-        </span>
-        <span
-          className={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[7.5px] font-bold text-accent-foreground",
-            lane ? lane.tone.edge : "bg-glass-2 text-ink-3",
-          )}
-          title={task.assigneeName ?? "Front desk pool"}
-          aria-hidden
-        >
-          {lane ? lane.initials : "FD"}
-        </span>
-        <span
-          className={cn(
-            "shrink-0 text-[12px] font-semibold",
-            done
-              ? "text-success-ink"
-              : task.bucket === "overdue"
-                ? "text-destructive-ink"
-                : "text-ink-2",
-          )}
-        >
-          {task.dueLabel}
-        </span>
-      </Link>
+        </Link>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-2">
+          <ToneChip tone={TYPE_TONE[task.type] ?? "upcoming"}>{meta.label}</ToneChip>
+          <span
+            className={cn(
+              "inline-flex h-[18px] w-[18px] items-center justify-center rounded-full text-[9px] font-bold",
+              lane ? lane.tone.edge : "bg-accent-soft text-accent-ink",
+            )}
+            title={who}
+            aria-hidden
+          >
+            {lane ? lane.initials : "FD"}
+          </span>
+          <span>
+            {/* A hand-written context is short ("Auto-created from 27 Sep"); a rule's is a sentence, so show who holds it instead. */}
+            {task.context && task.source === "manual" ? `${task.context} · ` : `${who} · `}
+            <span
+              className={cn(
+                closed
+                  ? "text-success-ink"
+                  : task.bucket === "overdue"
+                    ? "font-semibold text-destructive-ink"
+                    : "",
+              )}
+            >
+              {closed ? task.dueLabel : `due ${dueWord}`}
+            </span>
+          </span>
+        </div>
+      </div>
     </li>
   );
 }

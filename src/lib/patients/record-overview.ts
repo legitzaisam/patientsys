@@ -446,6 +446,27 @@ export function dayAfterTreatment(
 }
 
 /* ---------------------------------------------------------------- */
+/* Journal                                                            */
+/* ---------------------------------------------------------------- */
+
+export type JournalEntryLike = { title: string | null; body: string | null; entry_date: string };
+
+/**
+ * "Day 4": the patient's own day count when they titled the entry that way,
+ * else days since the latest treatment before the entry, else the title.
+ */
+export function journalDayLabel(
+  entry: JournalEntryLike,
+  treatments: { name: string; performed_at: string }[],
+) {
+  const title = entry.title?.trim() ?? "";
+  if (/^day \d+$/i.test(title)) return title;
+  const after = dayAfterTreatment(entry.entry_date, treatments);
+  if (after && after.days >= 0 && after.days <= 60) return `Day ${after.days}`;
+  return title || "Entry";
+}
+
+/* ---------------------------------------------------------------- */
 /* Treatment history                                                  */
 /* ---------------------------------------------------------------- */
 
